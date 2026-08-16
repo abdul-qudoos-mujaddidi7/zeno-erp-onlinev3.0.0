@@ -67,6 +67,32 @@ async function findAll(
   return rows;
 }
 
+async function findByCode(
+  executor,
+  {
+    orgId,
+    code,
+  },
+) {
+  const [rows] = await executor.execute(
+    `
+      SELECT
+        ${CURRENCY_COLUMNS}
+      FROM currencies
+      WHERE org_id = ?
+        AND code = ?
+        AND status = 1
+      LIMIT 1
+    `,
+    [
+      orgId,
+      code,
+    ],
+  );
+
+  return rows[0] || null;
+}
+
 async function findByLocalId(
   executor,
   {
@@ -243,6 +269,7 @@ async function softDelete(
 
 module.exports = {
   findAll,
+  findByCode,
   findByLocalId,
   create,
   update,

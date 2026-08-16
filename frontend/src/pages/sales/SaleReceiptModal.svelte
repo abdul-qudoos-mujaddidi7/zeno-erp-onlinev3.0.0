@@ -1,13 +1,10 @@
 <script>
   import { onMount, createEventDispatcher, tick } from 'svelte';
 import { productUnitApi } from '../../api/productUnitApi.js';
-import { settingsApi } from '../../api/settingsApi.js';
 
   import { productGenericApi } from '../../api/productGenericApi.js';
   import { saleApi } from '../../api/saleApi.js';
-  import { productApi } from '../../api/productApi.js';
   import { accountApi } from '../../api/accountApi.js';
-  import { journalApi } from '../../api/journalApi.js';
   import AppModal from '../../components/common/AppModal.svelte';
 
   import { t, lang, translate_org_type, shortID, settings_all } from '../../i18n/i18n';
@@ -17,18 +14,19 @@ import { settingsApi } from '../../api/settingsApi.js';
 
   import { push } from 'svelte-spa-router';
   
-  import {calculateDiscountAmount} from './SalesHelper.js';
+  import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
+  import { calculateDiscountAmount } from './SalesHelper.js';
 
   import { showDate } from '../../calendar.js';
 import { currencyApi } from '../../api/currencyApi.js';
 
   export let sale = {};
-  let items = [];
-  let payments = [];
-  let customer = {};
-  let settings = [];
-  let units = [];
-  let currencies = [];
+  export let items = [];
+  export let payments = [];
+  export let customer = {};
+  export let units = [];
+  export let currencies = [];
+  $: settings = $settings_all || [];
   let generics = [];
   let addressEl;
 
@@ -44,29 +42,28 @@ import { currencyApi } from '../../api/currencyApi.js';
 
   let allJournals = [];
   async function loadItems() {
-    // load sale items and attach product names
-    
+    const saleResponse = await saleApi.getById(Number(sale.id));
+    const saleItems = ((saleResponse?.data?.items) || [])
+      .filter((item) => Number(item.status) === 1)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
-
-     const saleResponse = await saleApi.getById(Number(sale.id));
-     const saleItems = ((saleResponse?.data?.items) || [])
-  .filter((item) => Number(item.status) === 1)
-  .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-    const genericResponse = await productGenericApi.getAll({ status: 1 });
+    const [products, genericResponse] = await Promise.all([
+      fetchProductsByIds(saleItems.map((item) => item.product_id)),
+      enable_generics
+        ? productGenericApi.getAll({ status: 1 })
+        : Promise.resolve({ data: [] }),
+    ]);
     generics = genericResponse?.data || [];
 
-    const products = (await productApi.getAll({ status: 1 }))?.data || [];
     items = saleItems.map((i) => {
       const product = products.find((p) => Number(p.id) === Number(i.product_id));
       return {
         ...i,
-        product_name: product?.name || 'Unknown',
+        product_name: product?.name || i.product_name || 'Unknown',
         generic_name: generics.find((g) => Number(g.id) === Number(product?.generic_id))?.name || '',
         product_unit_id: i.product_unit_id || product?.product_unit_id,
       };
     });
-    settings = (await settingsApi.getAll({ status: 1 }))?.data || [];
-    allJournals = (await journalApi.getAll({ status: 1 }))?.data || [];
   }
 
   async function loadPayments() {
@@ -98,24 +95,28 @@ import { currencyApi } from '../../api/currencyApi.js';
     return out;
   }
   onMount(async () => {
-    // Load all dependencies in order
-    await loadUnits(); // <-- await this first
-    await loadCurrencies(); // <-- await this second
-    await loadItems(); // items depend on products
-    await loadPayments();
-    await loadCustomer();
+    const tasks = [];
+    if (!units?.length) tasks.push(loadUnits());
+    if (!currencies?.length) tasks.push(loadCurrencies());
+    if (!items?.length && sale?.id) tasks.push(loadItems());
+    if (!payments?.length && sale?.id) tasks.push(loadPayments());
+    if (!customer?.id && sale?.account_id) tasks.push(loadCustomer());
+    if (tasks.length) await Promise.all(tasks);
 
-    showAccountBalance = calculateAccountBalance(sale.account_id, sale.currency);
-
-    // Map unit names directly to items to simplify template
-    items = items.map((it) => ({
+    items = (items || []).map((it) => ({
       ...it,
-      unit_name: units.find((u) => u.id == it.product_unit_id)?.name || '',
-      currency_symbol: currencies.find((c) => c.code == sale?.currency)?.symbol || '',
+      unit_name: it.unit_name || units.find((u) => u.id == it.product_unit_id)?.name || '',
+      currency_symbol:
+        it.currency_symbol ||
+        currencies.find((c) => c.code == sale?.currency)?.symbol ||
+        '',
     }));
 
-    await tick(); // import from 'svelte'
+    if (allJournals.length) {
+      showAccountBalance = calculateAccountBalance(sale.account_id, sale.currency);
+    }
 
+    await tick();
     fitText(addressEl);
   });
   function printReceipt() {

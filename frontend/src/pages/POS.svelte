@@ -61,6 +61,13 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
     });
   }
 
+  import('./sales/SaleReceiptModal.svelte').then((mod) => {
+    SaleReceiptModalCmp = mod.default;
+  });
+  import('./sales/SaleA4ReceiptModal.svelte').then((mod) => {
+    SaleA4ReceiptModalCmp = mod.default;
+  });
+
   async function closeSalesModal() {
     showSalesModal = false;
   }
@@ -139,7 +146,13 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
   let discount_type = 'fixed';
   let barcodeBuffer = '';
   let barcodeTimeout = null;
+  let barcodeLastKeyAt = 0;
   let barcodeListening = true;
+  let barcodeBusy = false;
+  const productByCode = new Map();
+  const BARCODE_MIN_LENGTH = 3;
+  const BARCODE_CHAR_GAP_MS = 50;
+  const BARCODE_COMMIT_MS = 140;
   let selectedWarehouse = null;
   let selectedCategory = null;
   let selectedCustomer = null;
@@ -463,6 +476,7 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
       ...product,
       thumbnailUrl: product.thumbnailUrl || '/img/no-image.png',
     }));
+    for (const product of products) rememberProduct(product);
     productTotal = productPage?.meta?.total || products.length;
 
     if (warehouses.length) selectedWarehouse = warehouses.find((w) => w.isDefault) || warehouses[0];
@@ -476,7 +490,7 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
       console.warn('Failed to load product thumbnails:', error);
     });
 
-    document.addEventListener('keydown', handleKeydown);
+    document.addEventListener('keydown', handleKeydown, true);
     document.addEventListener('click', handlePaymentCurrencyWindowClick);
     document.addEventListener('fullscreenchange', syncFullscreenState);
     window.addEventListener('resize', handlePaymentMenuReposition);
@@ -491,7 +505,7 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
   });
 
   onDestroy(() => {
-    document.removeEventListener('keydown', handleKeydown);
+    document.removeEventListener('keydown', handleKeydown, true);
     document.removeEventListener('click', handlePaymentCurrencyWindowClick);
     document.removeEventListener('fullscreenchange', syncFullscreenState);
     window.removeEventListener('resize', handlePaymentMenuReposition);
@@ -564,6 +578,7 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
       ...product,
       thumbnailUrl: product.thumbnailUrl || '/img/no-image.png',
     }));
+    for (const product of products) rememberProduct(product);
     productTotal = meta?.total || products.length;
     attachProductThumbnails(products).catch((error) => {
       console.warn('Failed to load product thumbnails:', error);
@@ -619,7 +634,7 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
     }
     const selectedUnit = item.availableUnits.find((u) => u.id == item.selected_unit_id);
     const baseQtyNeeded = newQty * (selectedUnit?.multiplier || 1);
-    const stockQty = productStocks[item.id] || 0;
+    const stockQty = getProductStock(item);
     if (enable_stock_minus || baseQtyNeeded <= stockQty || item.type === 'service') {
       cart[idx].quantity = newQty;
     } else {
@@ -627,6 +642,31 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
       toast.error(t('Error'), t(`Cannot exceed stock:`) + ` ${stockQty}`);
     }
     cart = [...cart];
+  }
+
+  async function finalizePosSale(saleId) {
+    try {
+      const indexSetting = (await settingsApi.getAll({ status: 1, key: 'invoice_index' }))?.data?.[0];
+      if (indexSetting) {
+        await settingsApi.update(indexSetting.id, {
+          value: String(Number(indexSetting.value || 0) + 1),
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to bump POS invoice index:', error);
+    }
+
+    try {
+      await calculateRemainingAndBenefit(saleId);
+    } catch (error) {
+      console.warn('Failed to recalculate POS sale totals:', error);
+    }
+
+    try {
+      await loadProductStocks();
+    } catch (error) {
+      console.warn('Failed to refresh POS stock:', error);
+    }
   }
 
   function removeFromCart(item) {
@@ -702,19 +742,7 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
       const createdSale = createResponse?.data;
       savedId = createdSale?.id;
 
-      const _indexSetting = (await settingsApi.getAll({ status: 1, key: 'invoice_index' }))?.data?.[0];
-      if (_indexSetting) {
-        await settingsApi.update(_indexSetting.id, { value: String(Number(_indexSetting.value || 0) + 1) });
-      }
-
-      invoice_index = Number(invoice_index) + 1;
-
-      /*
-       * POS cash payment: posted through the backend which writes the
-       * sale_payment row and the SALES/RECEIVABLE + customer/treasury
-       * journals atomically.
-       */
-      if (paymentAmount) {
+      if (paymentAmount && savedId) {
         const payCurrency = paymentCurrency || selectedCurrency.code;
         await saleApi.addPayment(savedId, {
           account_id: treasury_ID || selectedCustomer.id,
@@ -726,29 +754,59 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
         });
       }
 
-      await calculateRemainingAndBenefit(savedId);
+      const receiptCart = cart;
+      receiptSale = {
+        ...(createdSale || {}),
+        total_amount: payableAmount,
+        discount_amount: Number(discount_amount || 0),
+        discount_type,
+        expense_amount: Number(expense_amount || 0),
+        currency: selectedCurrency.code,
+        invoice_date: createdSale?.invoice_date || payload.invoice_date,
+        invoice_number: createdSale?.invoice_number || payload.invoice_number,
+        remaining: Math.max(Number(payableAmount) - Number(paymentAmount || 0), 0),
+      };
+      receiptItems = receiptCart.map((item) => {
+        const selectedUnit = item.availableUnits?.find((u) => u.id == item.selected_unit_id);
+        return {
+          product_id: item.id,
+          product_name: item.name,
+          product_unit_id: item.selected_unit_id,
+          quantity: item.quantity,
+          unit_price: exchangeRate(item.unit_price, item.unit_currency, selectedCurrency?.code),
+          subtotal: exchangeRate(
+            item.quantity * item.unit_price,
+            item.unit_currency,
+            selectedCurrency?.code,
+          ),
+          currency: selectedCurrency.code,
+          unit_name: selectedUnit?.name || '',
+          currency_symbol: selectedCurrency?.symbol || '',
+          status: 1,
+        };
+      });
+      receiptPayments = Number(paymentAmount)
+        ? [
+            {
+              amount: Number(paymentAmount),
+              currency: paymentCurrency || selectedCurrency.code,
+              status: 1,
+            },
+          ]
+        : [];
 
-      await loadProductStocks();
-      // sale recorded
+      if (enable_a4_default_print_mode) {
+        showA4Receipt = true;
+      } else {
+        showReceipt = true;
+      }
+
+      cart = [];
+      selectWalkinCustomer();
+      invoice_index = Number(invoice_index) + 1;
+
       if (savedId) {
-        // fetch the full sale (items + payments) for the receipt
-        const fullSaleResponse = await saleApi.getById(savedId);
-        const fullSale = fullSaleResponse?.data || createdSale;
-        receiptSale = fullSale;
-        receiptItems = (fullSale?.items || []).map((i) => ({
-          ...i,
-          product_name:
-            products.find((p) => Number(p.id) === Number(i.product_id))?.name || 'Unknown',
-        }));
-        receiptPayments = fullSale?.payments || [];
-        if (enable_a4_default_print_mode) {
-          showA4Receipt = true;
-        } else {
-          showReceipt = true;
-        }
-        // clear cart after preparing receipt and restore walk-in customer
-        cart = [];
-        selectWalkinCustomer();
+        finalizePosSale(savedId);
       }
     } catch (err) {
       console.error(err);
@@ -810,26 +868,78 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
     traverse(unitId);
     return result;
   }
+  function rememberProduct(product) {
+    const code = String(product?.code || '').trim().toLowerCase();
+    if (!code) return;
+    productByCode.set(code, product);
+  }
+
+  function getProductStock(product) {
+    if (!product) return 0;
+    const mapped = productStocks[product.id];
+    if (mapped != null && mapped !== '') return Number(mapped) || 0;
+    return Number(product.quantity || 0);
+  }
+
+  function stripBarcodeFromActiveField(code) {
+    const scanned = String(code || '');
+    if (!scanned) return;
+
+    const el = document.activeElement;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+      const current = String(el.value || '');
+      if (current === scanned || current.endsWith(scanned)) {
+        el.value = current === scanned ? '' : current.slice(0, current.length - scanned.length);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+
+    if (searchQuery === scanned || String(searchQuery || '').endsWith(scanned)) {
+      searchQuery = searchQuery === scanned ? '' : String(searchQuery).slice(0, String(searchQuery).length - scanned.length);
+    }
+  }
+
+  async function commitBarcode(code) {
+    const trimmed = String(code || '').trim();
+    if (!trimmed || trimmed.length < BARCODE_MIN_LENGTH || barcodeBusy) return;
+
+    barcodeBusy = true;
+    stripBarcodeFromActiveField(trimmed);
+
+    try {
+      await handleBarcodeScan(trimmed);
+    } finally {
+      barcodeBusy = false;
+    }
+  }
+
   async function handleBarcodeScan(code) {
     if (!code) return;
 
-    const trimmedCode = code.trim().toLowerCase();
+    const trimmedCode = String(code).trim().toLowerCase();
 
-    let product = products.find((p) => (p.code || '').toLowerCase() === trimmedCode);
+    let product =
+      productByCode.get(trimmedCode) ||
+      products.find((row) => String(row.code || '').trim().toLowerCase() === trimmedCode) ||
+      cart.find((row) => String(row.code || '').trim().toLowerCase() === trimmedCode) ||
+      null;
 
     if (!product) {
-      const matches = await lookupProducts({ search: String(code || ''), limit: 5 });
+      const matches = await lookupProducts({
+        search: String(code).trim(),
+        limit: 10,
+      });
       product =
-        matches.find((row) => (row.code || '').toLowerCase() === trimmedCode) ||
-        matches[0] ||
+        matches.find((row) => String(row.code || '').trim().toLowerCase() === trimmedCode) ||
         null;
     }
 
     if (!product) {
-      toast.error(t('Error'), t(`Product not found for barcode:`) + ` ${code}`);
+      toast.error(t('Error'), t('Product not found for barcode:') + ` ${code}`);
       return;
     }
 
+    rememberProduct(product);
     addOrIncreaseProduct(product);
   }
 
@@ -839,14 +949,19 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
       return;
     }
 
-    const stockQty = productStocks[product.id] || 0;
+    const stockQty = getProductStock(product);
 
-    if (!enable_stock_minus && stockQty <= 0 && product.type !== 'service') {
+    if (
+      !enable_stock_minus &&
+      warehouseStockLoaded &&
+      stockQty <= 0 &&
+      product.type !== 'service'
+    ) {
       toast.error(t('Error'), t(`Out of stock for`) + ` ${product.name}`);
       return;
     }
 
-    const existing = cart.find((i) => i.id === product.id);
+    const existing = cart.find((i) => String(i.id) === String(product.id));
 
     if (existing) {
       const selectedUnit = existing.availableUnits.find((u) => u.id == existing.selected_unit_id);
@@ -855,7 +970,12 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
       const newQty = existing.quantity + 1;
       const baseQtyNeeded = newQty * multiplier;
 
-      if (!enable_stock_minus && baseQtyNeeded > stockQty && product.type !== 'service') {
+      if (
+        !enable_stock_minus &&
+        warehouseStockLoaded &&
+        baseQtyNeeded > stockQty &&
+        product.type !== 'service'
+      ) {
         toast.error(t('Error'), t(`Cannot exceed stock:`) + ` ${stockQty}`);
         return;
       }
@@ -865,50 +985,70 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
     } else {
       const unitHierarchy = getUnitHierarchy(product.product_unit_id);
 
-      cart.push({
-        ...product,
-        quantity: 1,
-        type: product.type,
-        thumbnailUrl: product.thumbnailUrl,
-        buy_price: product.buy_price,
-        buy_price_currency: product.buy_currency,
-        base_price: product.sell_price,
-        selected_unit_id: product.product_unit_id,
-        unit_price: product.sell_price,
-        unit_currency: productSaleCurrencyCode(product),
-        availableUnits: unitHierarchy,
-      });
-
-      cart = [...cart];
+      cart = [
+        ...cart,
+        {
+          ...product,
+          quantity: 1,
+          type: product.type,
+          thumbnailUrl: product.thumbnailUrl,
+          buy_price: product.buy_price,
+          buy_price_currency: product.buy_currency,
+          base_price: product.sell_price,
+          selected_unit_id: product.product_unit_id,
+          unit_price: product.sell_price,
+          unit_currency: productSaleCurrencyCode(product),
+          availableUnits: unitHierarchy,
+        },
+      ];
     }
   }
 
   function handleKeydown(e) {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+
     if (e.key === 'Escape' && showCustomerMenu) {
       closeCustomerMenu();
       e.preventDefault();
       return;
     }
 
-    if (!barcodeListening) return;
+    const now = Date.now();
+    const gap = now - barcodeLastKeyAt;
+    barcodeLastKeyAt = now;
 
     if (e.key === 'Enter') {
-      if (barcodeBuffer.length > 0) {
-        handleBarcodeScan(barcodeBuffer);
+      if (barcodeBuffer.length >= BARCODE_MIN_LENGTH) {
+        e.preventDefault();
+        e.stopPropagation();
+        const code = barcodeBuffer;
         barcodeBuffer = '';
+        clearTimeout(barcodeTimeout);
+        commitBarcode(code);
       }
-      e.preventDefault();
       return;
     }
 
-    if (e.key.length === 1) {
+    if (e.key.length !== 1) return;
+
+    if (gap > BARCODE_CHAR_GAP_MS * 2) {
+      barcodeBuffer = e.key;
+    } else {
       barcodeBuffer += e.key;
+      if (barcodeBuffer.length >= 2) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     }
 
     clearTimeout(barcodeTimeout);
     barcodeTimeout = setTimeout(() => {
+      const code = barcodeBuffer;
       barcodeBuffer = '';
-    }, 50);
+      if (code.length >= BARCODE_MIN_LENGTH) {
+        commitBarcode(code);
+      }
+    }, BARCODE_COMMIT_MS);
   }
 
   $: paymentCurrencyObj = currencies.find((c) => c.code === paymentCurrency) || null;
@@ -1644,6 +1784,8 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
       items={receiptItems}
       payments={receiptPayments}
       customer={selectedCustomer}
+      {units}
+      {currencies}
       on:close={() => ((showReceipt = false), (receiptSale = null), (receiptItems = []), (receiptPayments = []))}
       on:showA4={() => ((showA4Receipt = true), (showReceipt = false))} />
   {/if}

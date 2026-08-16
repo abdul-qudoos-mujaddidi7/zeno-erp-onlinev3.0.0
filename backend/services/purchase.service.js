@@ -30,6 +30,10 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
+const {
+  convertCurrencyAmount,
+} = require('../utils/currency');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -1403,6 +1407,87 @@ async function createPayment({
           `Created supplier/treasury journal for payment ${payment.id}`,
       },
     );
+
+    /*
+     * Cross-currency: when the payment is made in a different
+     * currency than the purchase, also post the converted equivalents
+     * in the purchase's currency. Without these, the supplier's
+     * balance (which lives in the purchase's currency) keeps the full
+     * purchase credit even though the payment settled it.
+     */
+    const purchaseCurrency = purchase.currency || payment.currency || null;
+
+    if (
+      payment.currency &&
+      purchaseCurrency &&
+      payment.currency !== purchaseCurrency &&
+      absAmount > 0
+    ) {
+      const convertedAmount =
+        await convertCurrencyAmount(
+          connection,
+          {
+            orgId,
+            amount: absAmount,
+            fromCurrency: payment.currency,
+            toCurrency: purchaseCurrency,
+          },
+        );
+
+      if (Number(convertedAmount) > 0) {
+        // PURCHASE -> PAYABLE (converted to the purchase's currency)
+        await createJournalEntry(
+          connection,
+          {
+            orgId,
+            userId,
+            requestContext,
+            data: {
+              date: new Date().toISOString(),
+              reference_id: payment.id,
+              reference_type: 'purchase_payment',
+              description: paymentDescription,
+              currency: purchaseCurrency,
+              first_entry_account: purchaseAcct.id,
+              first_entry_debit: purchaseDebit ? convertedAmount : 0,
+              first_entry_credit: purchaseCredit ? convertedAmount : 0,
+              second_entry_account: payableAcct.id,
+              second_entry_debit: payableDebit ? convertedAmount : 0,
+              second_entry_credit: payableCredit ? convertedAmount : 0,
+              status: 1,
+            },
+            description:
+              `Created converted purchase/payable journal for payment ${payment.id}`,
+          },
+        );
+
+        // supplier -> treasury/cash (converted to the purchase's currency)
+        await createJournalEntry(
+          connection,
+          {
+            orgId,
+            userId,
+            requestContext,
+            data: {
+              date: new Date().toISOString(),
+              reference_id: payment.id,
+              reference_type: 'purchase_payment',
+              description: paymentDescription,
+              currency: purchaseCurrency,
+              first_entry_account: purchase.account_id,
+              first_entry_debit: purchaseDebit ? convertedAmount : 0,
+              first_entry_credit: purchaseCredit ? convertedAmount : 0,
+              second_entry_account: data.account_id,
+              second_entry_debit: payableDebit ? convertedAmount : 0,
+              second_entry_credit: payableCredit ? convertedAmount : 0,
+              status: 1,
+            },
+            description:
+              `Created converted supplier/treasury journal for payment ${payment.id}`,
+          },
+        );
+      }
+    }
 
     await activityRepository.create(
       connection,

@@ -30,6 +30,10 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
+const {
+  convertCurrencyAmount,
+} = require('../utils/currency');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -1600,6 +1604,87 @@ async function createPayment({
           `Created customer/treasury journal for payment ${payment.id}`,
       },
     );
+
+    /*
+     * Cross-currency: when the payment is received in a different
+     * currency than the sale, also post the converted equivalents in
+     * the sale's currency. Without these, the customer's balance
+     * (which lives in the sale's currency) keeps the full sale debit
+     * even though the payment settled it.
+     */
+    const saleCurrency = sale.currency || payment.currency || null;
+
+    if (
+      payment.currency &&
+      saleCurrency &&
+      payment.currency !== saleCurrency &&
+      absAmount > 0
+    ) {
+      const convertedAmount =
+        await convertCurrencyAmount(
+          connection,
+          {
+            orgId,
+            amount: absAmount,
+            fromCurrency: payment.currency,
+            toCurrency: saleCurrency,
+          },
+        );
+
+      if (Number(convertedAmount) > 0) {
+        // SALES -> RECEIVABLE (converted to the sale's currency)
+        await createJournalEntry(
+          connection,
+          {
+            orgId,
+            userId,
+            requestContext,
+            data: {
+              date: new Date().toISOString(),
+              reference_id: payment.id,
+              reference_type: 'sale_payment',
+              description: paymentDescription,
+              currency: saleCurrency,
+              first_entry_account: salesAcct.id,
+              first_entry_debit: salesDebit ? convertedAmount : 0,
+              first_entry_credit: salesCredit ? convertedAmount : 0,
+              second_entry_account: receivableAcct.id,
+              second_entry_debit: receivableDebit ? convertedAmount : 0,
+              second_entry_credit: receivableCredit ? convertedAmount : 0,
+              status: 1,
+            },
+            description:
+              `Created converted sales/receivable journal for payment ${payment.id}`,
+          },
+        );
+
+        // customer -> treasury/cash (converted to the sale's currency)
+        await createJournalEntry(
+          connection,
+          {
+            orgId,
+            userId,
+            requestContext,
+            data: {
+              date: new Date().toISOString(),
+              reference_id: payment.id,
+              reference_type: 'sale_payment',
+              description: paymentDescription,
+              currency: saleCurrency,
+              first_entry_account: sale.account_id,
+              first_entry_debit: salesDebit ? convertedAmount : 0,
+              first_entry_credit: salesCredit ? convertedAmount : 0,
+              second_entry_account: data.account_id,
+              second_entry_debit: receivableDebit ? convertedAmount : 0,
+              second_entry_credit: receivableCredit ? convertedAmount : 0,
+              status: 1,
+            },
+            description:
+              `Created converted customer/treasury journal for payment ${payment.id}`,
+          },
+        );
+      }
+    }
 
     await activityRepository.create(
       connection,

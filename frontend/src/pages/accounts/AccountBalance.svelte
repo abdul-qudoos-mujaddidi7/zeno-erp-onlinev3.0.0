@@ -414,9 +414,11 @@ import { accountImageApi } from '../../api/accountImageApi.js';
 
               <small>{t('Current balance')}</small>
 
-              <div class="balance-value" dir="ltr">
-                {cur.balance.toLocaleString()}
-                <em>{t(cur.code)}</em>
+              <div class="balance-value">
+                <span class="amount-inline">
+                  <span dir="ltr">{cur.balance.toLocaleString()}</span>
+                  <em>{t(cur.code)}</em>
+                </span>
               </div>
 
               <div class="money-details">
@@ -426,8 +428,9 @@ import { accountImageApi } from '../../api/accountImageApi.js';
                     {t('Credit')}
                   </span>
 
-                  <strong dir="ltr">
-                    {cur.credit.toLocaleString()}
+                  <strong class="amount-inline">
+                    <span dir="ltr">{cur.credit.toLocaleString()}</span>
+                    <em>{t(cur.code)}</em>
                   </strong>
                 </div>
 
@@ -437,8 +440,9 @@ import { accountImageApi } from '../../api/accountImageApi.js';
                     {t('Debit')}
                   </span>
 
-                  <strong dir="ltr">
-                    {cur.debit.toLocaleString()}
+                  <strong class="amount-inline">
+                    <span dir="ltr">{cur.debit.toLocaleString()}</span>
+                    <em>{t(cur.code)}</em>
                   </strong>
                 </div>
               </div>
@@ -1132,6 +1136,13 @@ import { accountImageApi } from '../../api/accountImageApi.js';
     letter-spacing: -0.03em;
   }
 
+  .amount-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
   .negative .balance-value {
     color: #dc443b;
   }
@@ -1181,7 +1192,7 @@ import { accountImageApi } from '../../api/accountImageApi.js';
   }
 
   .money-details strong {
-    display: block;
+    display: inline-flex;
 
     height: 18px;
     margin: 0;
@@ -1191,6 +1202,12 @@ import { accountImageApi } from '../../api/accountImageApi.js';
     line-height: 18px;
 
     white-space: nowrap;
+  }
+
+  .money-details em {
+    font-size: 8px;
+    font-style: normal;
+    font-weight: 700;
   }
 
   .money-details div:first-child i {

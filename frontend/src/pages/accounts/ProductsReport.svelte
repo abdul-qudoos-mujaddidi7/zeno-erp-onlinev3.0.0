@@ -321,7 +321,7 @@
     Object.entries(pageTotalAmount)
       .map(
         ([currency, amount]) =>
-          `${Number(amount).toLocaleString(undefined, { maximumFractionDigits: 3 })} ${t(currency || '')}`,
+          `<span class="amount-inline"><span dir="ltr">${Number(amount).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span><span>${t(currency || '')}</span></span>`,
       )
       .join('<br />') || '0';
 </script>
@@ -386,8 +386,11 @@
             ? t('Total') + t('-of-') + t('Products & Services')
             : t('Total Products Amount')}
           icon="bi-cash-stack"
-          tone="cyan"
-          value={totalAmountHtml} />
+          tone="cyan">
+          <div class="report-summary-values">
+            {@html totalAmountHtml}
+          </div>
+        </SummaryCard>
       </div>
     </svelte:fragment>
 
@@ -411,9 +414,9 @@
             <th>{t('Invoice #')}</th>
             <th class="cursor-pointer" on:click={() => setSort('product_id')}
               >{enable_services ? t('Product or Service') : t('Product')}</th>
-            <th class="text-end cursor-pointer" on:click={() => setSort('unit_price')}>{t('Unit Price')}</th>
-            <th class="text-end cursor-pointer" on:click={() => setSort('quantity')}>{t('Quantity')}</th>
-            <th class="text-end cursor-pointer" on:click={() => setSort('subtotal')}>{t('Total')}</th>
+            <th class="col-start cursor-pointer" on:click={() => setSort('unit_price')}>{t('Unit Price')}</th>
+            <th class="col-start cursor-pointer" on:click={() => setSort('quantity')}>{t('Quantity')}</th>
+            <th class="col-start cursor-pointer" on:click={() => setSort('subtotal')}>{t('Total')}</th>
           </tr>
         </svelte:fragment>
         {#each paginatedItems as row}
@@ -433,15 +436,24 @@
               <button class="product-link" on:click={() => push(`/dashboard/product/${row.product_id}`)}
                 >{row.product_name || products.find((product) => product.id == row.product_id)?.name || '—'}</button>
             </td>
-            <td class="text-end fw-bold" dir="ltr"
-              >{Number(row.unit_price).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-              {t(row.currency)}</td>
-            <td class="text-end" dir="ltr"
-              >{Number(row.quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-              {row.product_unit_name || units.find((unit) => unit.id == row.product_unit_id)?.name || ''}</td>
-            <td class="text-end fw-bold" dir="ltr"
-              >{Number(row.subtotal).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-              {t(row.currency)}</td>
+            <td class="col-start fw-bold">
+              <span class="amount-inline">
+                <span dir="ltr">{Number(row.unit_price).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                <span>{t(row.currency)}</span>
+              </span>
+            </td>
+            <td class="col-start">
+              <span class="amount-inline">
+                <span dir="ltr">{Number(row.quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                <span>{row.product_unit_name || units.find((unit) => unit.id == row.product_unit_id)?.name || ''}</span>
+              </span>
+            </td>
+            <td class="col-start fw-bold">
+              <span class="amount-inline">
+                <span dir="ltr">{Number(row.subtotal).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                <span>{t(row.currency)}</span>
+              </span>
+            </td>
           </tr>
         {/each}
       </DataTable>
@@ -501,5 +513,21 @@
 
   .cursor-pointer {
     cursor: pointer;
+  }
+
+  .col-start {
+    text-align: start;
+  }
+
+  .amount-inline,
+  :global(.amount-inline) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .report-summary-values {
+    text-align: start;
   }
 </style>

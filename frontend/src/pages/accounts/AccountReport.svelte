@@ -38,6 +38,33 @@
   let journals = [];
   let computedBalance = {}; // per-currency computed balances
 
+  /*
+   * Canonical per-currency balances and credit/debit totals computed
+   * from the journals ledger (accounts.balance is a stale column that
+   * is never maintained in the online version).
+   */
+  let accountBalances = {};
+  let accountCreditDebit = {};
+
+  function buildCanonicalSummary() {
+    const summary = {};
+    const currencies = new Set([
+      ...Object.keys(accountBalances || {}),
+      ...Object.keys(accountCreditDebit || {}),
+    ]);
+
+    for (const currency of currencies) {
+      const cd = accountCreditDebit?.[currency] || { credit: 0, debit: 0 };
+      summary[currency] = {
+        debit: Number(cd.debit) || 0,
+        credit: Number(cd.credit) || 0,
+        balance: Number(accountBalances?.[currency]) || 0,
+      };
+    }
+
+    return summary;
+  }
+
   let modalRef;
 
   let PAYABLE_ID = null;
@@ -179,12 +206,13 @@
     }
 
     /*
-     * Rows arrive newest-first. On page 1, seed from the live account
-     * balance and rewind; later pages use a page-local running total.
+     * Rows arrive newest-first. On page 1, seed the running balance
+     * from the canonical per-currency balances and rewind; later
+     * pages use a page-local running total.
      */
     let bal = {};
-    if (page === 1 && account?.currency != null) {
-      bal[account.currency] = Number(account.balance) || 0;
+    if (page === 1) {
+      bal = { ...(accountBalances || {}) };
     }
 
     return pageRows.map((j) => {
@@ -200,27 +228,6 @@
       }
       return { ...j, debit, credit, running };
     });
-  }
-
-  function buildPageTotals(rows) {
-    const totals = {};
-    for (const j of rows) {
-      const cur = j.currency || account?.currency || 'DEFAULT';
-      const debit = Number(j.debit || 0);
-      const credit = Number(j.credit || 0);
-      if (!totals[cur]) totals[cur] = { debit: 0, credit: 0, balance: 0 };
-      totals[cur].debit += debit;
-      totals[cur].credit += credit;
-      totals[cur].balance += credit - debit;
-    }
-
-    if (account?.currency != null) {
-      const cur = account.currency;
-      if (!totals[cur]) totals[cur] = { debit: 0, credit: 0, balance: 0 };
-      totals[cur].balance = Number(account.balance) || 0;
-    }
-
-    return totals;
   }
 
   async function loadAccount(accountId) {
@@ -249,6 +256,29 @@
         listLoading = false;
         return;
       }
+
+      /*
+       * Load the canonical journal-derived balances (accounts.balance is
+       * a stale column). These drive both the summary cards and the
+       * running-balance seed, so they match the account overview page.
+       */
+      const key = String(accountId);
+      const [balancesRes, creditDebitRes] = await Promise.all([
+        accountApi
+          .getBalances({ status: 1, account_ids: key })
+          .catch(() => null),
+        accountApi
+          .getCreditDebit({ status: 1, account_ids: key })
+          .catch(() => null),
+      ]);
+
+      accountBalances =
+        balancesRes?.data?.[key] || balancesRes?.data?.[accountId] || {};
+      accountCreditDebit =
+        creditDebitRes?.data?.[key] ||
+        creditDebitRes?.data?.[accountId] ||
+        {};
+      computedBalance = buildCanonicalSummary();
 
       accountType = account.account_type_id
         ? (await accountTypeApi.getById(account.account_type_id))?.data || null
@@ -330,7 +360,6 @@
       processed = buildProcessedRows(accountId, rows);
       journals = processed;
       paginated = processed;
-      computedBalance = buildPageTotals(processed);
 
       const hasMore = Boolean(journalResponse?.meta?.hasMore);
       totalPages = hasMore
@@ -375,11 +404,14 @@
     }
   }
 
-  function formatRunningObj(obj) {
+  function formatAmountInline(amount, currency) {
+    return `<span class="amount-inline"><span dir="ltr">${Number(amount || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span><span>${t(currency)}</span></span>`;
+  }
 
+  function formatRunningObj(obj) {
     if (!obj) return '-';
     return Object.keys(obj)
-      .map((k) => `${obj[k].toLocaleString()} ${t(k)}`)
+      .map((k) => formatAmountInline(obj[k], k))
       .join('<br />');
   }
 
@@ -403,7 +435,7 @@
 
   function formatSummaryValues(balance, type) {
     return getCurrencyInfoArray(balance)
-      .map((cur) => `${Number(cur[type] || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })} ${t(cur.code)}`)
+      .map((cur) => formatAmountInline(cur[type], cur.code))
       .join('<br />') || '0';
   }
 
@@ -631,7 +663,7 @@
               label={t('Credit')}
               icon="bi-arrow-down-left"
               tone="green">
-              <div class="report-summary-values" dir="ltr">
+              <div class="report-summary-values">
                 {@html creditSummary}
               </div>
             </SummaryCard>
@@ -640,7 +672,7 @@
               label={t('Debit')}
               icon="bi-arrow-up-right"
               tone="amber">
-              <div class="report-summary-values" dir="ltr">
+              <div class="report-summary-values">
                 {@html debitSummary}
               </div>
             </SummaryCard>
@@ -649,7 +681,7 @@
               label={t('Balance')}
               icon="bi-wallet2"
               tone="cyan">
-              <div class="report-summary-values" dir="ltr">
+              <div class="report-summary-values">
                 {@html balanceSummary}
               </div>
             </SummaryCard>
@@ -789,9 +821,9 @@
           <th>{t('Peer Account')}</th>
           <th>{t('Reference')}</th>
           <th>{t('Description')}</th>
-          <th class="text-end">{t('Debit')}</th>
-          <th class="text-end">{t('Credit')}</th>
-          <th class="text-end">{t('Balance')}</th>
+          <th class="col-start">{t('Debit')}</th>
+          <th class="col-start">{t('Credit')}</th>
+          <th class="col-start">{t('Balance')}</th>
           <th class="text-center">{t('Actions')}</th>
         </tr>
       </svelte:fragment>
@@ -874,17 +906,17 @@
                 {:else}{/if}
               </td>
               <td>{j.description || '-'}</td>
-              <td class="text-end value-cell"
-                ><span class="debit-value"
-                  >{#if j.debit || 0}{j.debit.toLocaleString(undefined, { maximumFractionDigits: 3 }) || 0}
-                    {t(j.currency || '')}{/if}</span
-                ></td>
-              <td class="text-end value-cell"
-                ><span class="credit-value"
-                  >{#if j.credit || 0}{j.credit.toLocaleString(undefined, { maximumFractionDigits: 3 }) || 0}
-                    {t(j.currency || '')}{/if}</span
-                ></td>
-              <td class="text-end fw-bold">{@html formatRunningObj(j.running) || 0}</td>
+              <td class="col-start value-cell"
+                >{#if j.debit || 0}<span class="amount-inline debit-value"
+                    ><span dir="ltr">{j.debit.toLocaleString(undefined, { maximumFractionDigits: 3 }) || 0}</span>
+                    <span>{t(j.currency || '')}</span></span
+                  >{/if}</td>
+              <td class="col-start value-cell"
+                >{#if j.credit || 0}<span class="amount-inline credit-value"
+                    ><span dir="ltr">{j.credit.toLocaleString(undefined, { maximumFractionDigits: 3 }) || 0}</span>
+                    <span>{t(j.currency || '')}</span></span
+                  >{/if}</td>
+              <td class="col-start fw-bold">{@html formatRunningObj(j.running) || 0}</td>
               <td class="text-center">
                 <TableActions actions={getReportActions(j)} />
                 {#if false}
@@ -1049,8 +1081,26 @@
     font-weight: 800;
     line-height: 1.45;
     font-variant-numeric: tabular-nums;
+    text-align: start;
   }
-  .value-cell span{display:inline;background:transparent;border:0;border-radius:0;padding:0;box-shadow:none;font-size:.75rem;font-weight:750;white-space:nowrap}
+
+  .amount-inline,
+  :global(.amount-inline) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .col-start {
+    text-align: start;
+  }
+
+  .value-cell .amount-inline {
+    font-size: 0.75rem;
+    font-weight: 750;
+  }
+
   .debit-value{color:#dc3545}.credit-value{color:#11875d}
 
   @media (max-width: 700px) {
