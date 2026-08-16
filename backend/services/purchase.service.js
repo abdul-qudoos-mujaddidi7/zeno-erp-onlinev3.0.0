@@ -34,6 +34,9 @@ const {
   convertCurrencyAmount,
 } = require('../utils/currency');
 
+const accountService =
+  require('./account.service');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
