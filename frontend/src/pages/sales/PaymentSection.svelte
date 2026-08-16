@@ -44,6 +44,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
   export let saleId;
   export let benefit = null;
+  let isDeletedSale = false;
 
   let payments = [];
   let amount = '';
@@ -118,7 +119,15 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     ]);
 
     sale = saleResponse?.data;
-    payments = (sale?.payments || []).filter((p) => Number(p.status) === 1);
+    isDeletedSale =
+      Number(sale?.status) === 0 ||
+      (
+        (sale?.items || []).length > 0 &&
+        (sale.items || []).every((item) => Number(item.status) === 0)
+      );
+    payments = (sale?.payments || []).filter(
+      (p) => isDeletedSale || Number(p.status) === 1,
+    );
     currencies = currencyResponse?.data || [];
     units = unitResponse?.data || [];
 
@@ -147,7 +156,9 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     );
     mergeAccounts([...seedAccounts, ...paymentAccounts.filter(Boolean)]);
 
-    returns = (sale?.returns || []).filter((r) => Number(r.status) === 1);
+    returns = (sale?.returns || []).filter(
+      (r) => isDeletedSale || Number(r.status) === 1,
+    );
     totalReturnAmount = 0;
     returns.forEach((ret) => {
       totalReturnAmount += Number(ret.total_amount);
@@ -155,14 +166,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
     const returnProductIds = returns.flatMap((ret) =>
       (ret.items || [])
-        .filter((item) => Number(item.status) === 1)
+        .filter((item) => isDeletedSale || Number(item.status) === 1)
         .map((item) => item.product_id),
     );
     products = await fetchProductsByIds(returnProductIds);
 
     returnsWithItems = returns.map((r) => ({
       ...r,
-      returns: (r.items || []).filter((ri) => Number(ri.status) === 1),
+      returns: (r.items || []).filter((ri) => isDeletedSale || Number(ri.status) === 1),
     }));
 
     currency = sale?.currency || defaultCurrency;
@@ -420,13 +431,15 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     </div>
 
     {#if activeLedgerTab === 'payments'}
-      <div class="pd-ledger-panel hide-for-pdf" role="tabpanel">
+        <div class="pd-ledger-panel hide-for-pdf" role="tabpanel">
+        {#if !isDeletedSale}
         <div class="pd-ledger-panel__toolbar">
           <button type="button" class="pd-btn pd-btn--primary pd-btn--sm" on:click={toggleAddPaymentForm}>
             <i class="bi bi-{showAddPaymentForm ? 'x-lg' : 'plus-lg'}"></i>
             {showAddPaymentForm ? t('Close') : t('Add Payment')}
           </button>
         </div>
+        {/if}
 
         {#if showAddPaymentForm}
           <div class="sale-add-payment__body">
@@ -531,10 +544,12 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                     </td>
                     <td class="pd-table__col-account">{getAccountName(p.account_id)}</td>
                     <td class="pd-table__col-actions">
+                      {#if !isDeletedSale}
                       <button type="button" class="pd-btn pd-btn--danger-outline pd-btn--sm" on:click={() => deletePayment(p.id)}>
                         <i class="bi bi-trash"></i>
                         {t('Delete')}
                       </button>
+                      {/if}
                       <button
                         type="button"
                         class="pd-btn pd-btn--outline pd-btn--sm"
@@ -590,10 +605,12 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                       <p class="purchase-return-block__desc">{ret.description}</p>
                     {/if}
                   </div>
+                  {#if !isDeletedSale}
                   <button type="button" class="pd-btn pd-btn--danger-outline pd-btn--sm" on:click={() => deleteReturn(ret.id)}>
                     <i class="bi bi-trash"></i>
                     {t('Delete')}
                   </button>
+                  {/if}
                 </div>
                 <div class="pd-card__scroll">
                   <table class="pd-table pd-table--nested">

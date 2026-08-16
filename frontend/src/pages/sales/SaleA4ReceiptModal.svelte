@@ -18,12 +18,12 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   $: _translate_org_type = $translate_org_type;
 
   export let sale = {};
-  let items = [];
-  let payments = [];
-  let customer = {};
-  let settings = [];
-  let units = [];
-  let currencies = [];
+  export let items = [];
+  export let payments = [];
+  export let customer = {};
+  export let units = [];
+  export let currencies = [];
+  $: settings = $settings_all || [];
 
   
   import {calculateDiscountAmount} from './SalesHelper.js';
@@ -111,8 +111,6 @@ import { productBrandApi } from '../../api/productBrandApi.js';
       };
     });
 
-    settings = (await settingsApi.getAll({ status: 1 }))?.data || [];
-
     allJournals = (await journalApi.getAll({ status: 1 }))?.data || [];
   }
 
@@ -148,18 +146,26 @@ import { productBrandApi } from '../../api/productBrandApi.js';
   }
 
   onMount(async () => {
-    await loadUnits();
-    await loadCurrencies();
-    await loadItems();
-    await loadPayments();
-    await loadCustomer();
-    if (sale?.account_id) {
-    showAccountBalance = calculateAccountBalance(sale.account_id, sale.currency);
+    const tasks = [];
+    if (!units?.length) tasks.push(loadUnits());
+    if (!currencies?.length) tasks.push(loadCurrencies());
+    if (!items?.length && sale?.id) {
+      tasks.push(loadItems());
+      if (!payments?.length) tasks.push(loadPayments());
     }
-    items = items.map((it) => ({
+    if (!customer?.id && sale?.account_id) tasks.push(loadCustomer());
+    if (tasks.length) await Promise.all(tasks);
+
+    if (sale?.account_id && allJournals.length) {
+      showAccountBalance = calculateAccountBalance(sale.account_id, sale.currency);
+    }
+    items = (items || []).map((it) => ({
       ...it,
-      unit_name: units.find((u) => u.id == it.product_unit_id)?.name || '',
-      currency_symbol: currencies.find((c) => c.code == sale?.currency)?.symbol || '',
+      unit_name: it.unit_name || units.find((u) => u.id == it.product_unit_id)?.name || '',
+      currency_symbol:
+        it.currency_symbol ||
+        currencies.find((c) => c.code == sale?.currency)?.symbol ||
+        '',
     }));
   });
 

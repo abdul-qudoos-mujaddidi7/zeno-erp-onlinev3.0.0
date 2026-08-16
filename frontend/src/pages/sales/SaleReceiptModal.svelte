@@ -98,8 +98,10 @@ import { currencyApi } from '../../api/currencyApi.js';
     const tasks = [];
     if (!units?.length) tasks.push(loadUnits());
     if (!currencies?.length) tasks.push(loadCurrencies());
-    if (!items?.length && sale?.id) tasks.push(loadItems());
-    if (!payments?.length && sale?.id) tasks.push(loadPayments());
+    if (!items?.length && sale?.id) {
+      tasks.push(loadItems());
+      if (!payments?.length) tasks.push(loadPayments());
+    }
     if (!customer?.id && sale?.account_id) tasks.push(loadCustomer());
     if (tasks.length) await Promise.all(tasks);
 

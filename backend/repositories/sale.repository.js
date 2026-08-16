@@ -120,6 +120,26 @@ const RETURN_ITEM_COLUMNS = `
 const {
   paginateSelect,
 } = require('../utils/pagination');
+
+function saleListOrderSql(sortBy = 'created_at', sortDir = 'desc') {
+  const dir = String(sortDir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const invoiceSeq = `CAST(SUBSTRING_INDEX(invoice_number, '-', -1) AS UNSIGNED)`;
+
+  if (sortBy === 'invoice_number') {
+    return `ORDER BY ${invoiceSeq} ${dir}, created_at DESC, local_id DESC`;
+  }
+
+  if (sortBy === 'invoice_date' || sortBy === 'due_date') {
+    return `ORDER BY ${sortBy} ${dir}, created_at DESC, local_id DESC`;
+  }
+
+  if (sortBy === 'total_amount' || sortBy === 'remaining' || sortBy === 'benefit' || sortBy === 'items_count') {
+    return `ORDER BY ${sortBy} ${dir}, created_at DESC, local_id DESC`;
+  }
+
+  return `ORDER BY created_at ${dir}, updated_at ${dir}, local_id DESC`;
+}
+
 async function findAll(
   executor,
   {
@@ -131,6 +151,8 @@ async function findAll(
     dateTo,
     skipCount = false,
     pagination = null,
+    sortBy = 'created_at',
+    sortDir = 'desc',
   }) {
   const conditions = [
     'org_id = ?',
@@ -177,7 +199,7 @@ async function findAll(
     tableSql: 'sales',
     whereSql: conditions.join(' AND '),
     values,
-    orderBySql: 'ORDER BY invoice_date DESC, local_id DESC',
+    orderBySql: saleListOrderSql(sortBy, sortDir),
     columnsSql: SALE_COLUMNS,
     pagination,
     skipCount,

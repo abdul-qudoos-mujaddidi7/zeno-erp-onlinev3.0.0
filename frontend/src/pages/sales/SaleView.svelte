@@ -34,6 +34,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
   let paymentSectionKey = 0;
   let sale;
+  let isDeletedSale = false;
   let products;
   let currencies = [];
   let items = [];
@@ -101,8 +102,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
         return;
       }
 
+      isDeletedSale =
+        Number(sale.status) === 0 ||
+        (
+          (sale.items || []).length > 0 &&
+          (sale.items || []).every((item) => Number(item.status) === 0)
+        );
       const saleItems = (sale.items || [])
-        .filter((item) => Number(item.status) === 1)
+        .filter((item) => isDeletedSale || Number(item.status) === 1)
         .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
       const productIds = saleItems.map((i) => i.product_id);
@@ -140,7 +147,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       });
 
       payments = (sale.payments || []).filter(
-        (payment) => Number(payment.status) === 1,
+        (payment) => isDeletedSale || Number(payment.status) === 1,
       );
     } catch (error) {
       console.error('Failed to load sale detail:', error);
@@ -298,7 +305,9 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               <h1 class="pd-header-card__title">
                 {t('Sale #')}: {sale?.invoice_number}
               </h1>
-              {#if sale?.invoice_status === 'draft'}
+              {#if isDeletedSale}
+                <span class="pd-status-badge pd-status-badge--draft">{t('Deleted')}</span>
+              {:else if sale?.invoice_status === 'draft'}
                 <span class="pd-status-badge pd-status-badge--draft">{t('Draft')}</span>
               {:else if sale?.invoice_status === 'confirmed'}
                 <span class="pd-status-badge pd-status-badge--confirmed">{t('confirmed')}</span>
@@ -323,25 +332,25 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                 <i class="bi bi-whatsapp"></i>
                 {t('WhatsApp')}
               </button>
-              {#if permissions?.some((p) => p.code === 'Sales' && p.edit)}
+              {#if !isDeletedSale && permissions?.some((p) => p.code === 'Sales' && p.edit)}
                 <button type="button" class="pd-btn pd-btn--secondary" on:click={() => push(`/dashboard/sale-form/${saleId}`)}>
                   <i class="bi bi-pencil"></i>
                   {t('Edit')}
                 </button>
               {/if}
-              {#if sale?.invoice_status === 'confirmed' && permissions?.some((p) => p.code === 'Sales' && p.edit)}
+              {#if !isDeletedSale && sale?.invoice_status === 'confirmed' && permissions?.some((p) => p.code === 'Sales' && p.edit)}
                 <button type="button" class="pd-btn pd-btn--secondary" on:click={() => (showDraft = true)}>
                   <i class="bi bi-file-earmark"></i>
                   {t('Make Draft')}
                 </button>
               {/if}
-              {#if sale?.invoice_status === 'confirmed'}
+              {#if !isDeletedSale && sale?.invoice_status === 'confirmed'}
                 <button type="button" class="pd-btn pd-btn--outline" on:click={() => (showReturn = true)}>
                   <i class="bi bi-arrow-return-left"></i>
                   {t('Return')}
                 </button>
               {/if}
-              {#if permissions?.some((p) => p.code === 'Sales' && p.delete)}
+              {#if !isDeletedSale && permissions?.some((p) => p.code === 'Sales' && p.delete)}
                 <button type="button" class="pd-btn pd-btn--danger-outline" on:click={() => (showDelete = true)}>
                   <i class="bi bi-trash"></i>
                   {t('Delete')}

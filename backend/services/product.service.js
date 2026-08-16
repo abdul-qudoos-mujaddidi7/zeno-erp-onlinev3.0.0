@@ -111,6 +111,66 @@ async function getProduct({
   return product;
 }
 
+async function reconcileProductStock({
+  user,
+  productId,
+}) {
+  const {
+    orgId,
+    userId,
+  } = getAuthenticatedIdentity(user);
+
+  const connection =
+    await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const product =
+      await productRepository.findByLocalId(
+        connection,
+        {
+          orgId,
+          localId: productId,
+          forUpdate: true,
+        },
+      );
+
+    if (!product) {
+      throw new AppError(
+        'Product not found.',
+        404,
+        'PRODUCT_NOT_FOUND',
+      );
+    }
+
+    await require('./stock-transaction.service').syncWarehouseBalancesToProduct(
+      connection,
+      {
+        orgId,
+        userId,
+        productId,
+        productUnitId: product.product_unit_id,
+      },
+    );
+
+    await connection.commit();
+
+    return productRepository.findByLocalId(
+      db,
+      {
+        orgId,
+        localId: productId,
+      },
+    );
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 async function createProduct({
   user,
   data,
@@ -506,6 +566,7 @@ async function deleteProduct({
 module.exports = {
   listProducts,
   getProduct,
+  reconcileProductStock,
   createProduct,
   updateProduct,
   deleteProduct,

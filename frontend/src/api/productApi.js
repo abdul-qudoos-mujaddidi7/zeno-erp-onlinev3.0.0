@@ -46,6 +46,10 @@ export const productApi = {
     return api.get(`${BASE_URL}/${id}`);
   },
 
+  reconcileStock(id) {
+    return api.post(`${BASE_URL}/${id}/reconcile-stock`);
+  },
+
   create(data) {
     return api.post(BASE_URL, data);
   },

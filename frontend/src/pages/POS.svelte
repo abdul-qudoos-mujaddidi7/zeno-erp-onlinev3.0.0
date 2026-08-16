@@ -168,6 +168,7 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
   let receiptSale = null;
   let receiptItems = [];
   let receiptPayments = [];
+  let receiptCustomer = null;
   let productStocks = {};
   let productTotal = 0;
   let warehouseStockLoaded = false;
@@ -794,6 +795,8 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
             },
           ]
         : [];
+
+      receiptCustomer = selectedCustomer;
 
       if (enable_a4_default_print_mode) {
         showA4Receipt = true;
@@ -1783,10 +1786,10 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
       sale={receiptSale}
       items={receiptItems}
       payments={receiptPayments}
-      customer={selectedCustomer}
+      customer={receiptCustomer}
       {units}
       {currencies}
-      on:close={() => ((showReceipt = false), (receiptSale = null), (receiptItems = []), (receiptPayments = []))}
+      on:close={() => ((showReceipt = false), (receiptSale = null), (receiptItems = []), (receiptPayments = []), (receiptCustomer = null))}
       on:showA4={() => ((showA4Receipt = true), (showReceipt = false))} />
   {/if}
 
@@ -1796,8 +1799,10 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
       sale={receiptSale}
       items={receiptItems}
       payments={receiptPayments}
-      customer={selectedCustomer}
-      on:close={() => ((showA4Receipt = false), (receiptSale = null), (receiptItems = []), (receiptPayments = []))}
+      customer={receiptCustomer}
+      {units}
+      {currencies}
+      on:close={() => ((showA4Receipt = false), (receiptSale = null), (receiptItems = []), (receiptPayments = []), (receiptCustomer = null))}
       on:show80mm={() => ((showReceipt = true), (showA4Receipt = false))} />
   {/if}
 

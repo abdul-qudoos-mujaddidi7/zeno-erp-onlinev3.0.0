@@ -152,6 +152,8 @@ async function listPurchases({
       dateTo: filters.date_to,
       skipCount: Number(filters.skip_count) === 1,
       pagination,
+      sortBy: filters.sort_by,
+      sortDir: filters.sort_dir,
     },
   );
 
@@ -1356,74 +1358,25 @@ async function createPayment({
     const payableDebit = isReceive ? absAmount : 0;
     const payableCredit = isReceive ? 0 : absAmount;
 
-    // PURCHASE -> PAYABLE
-    await createJournalEntry(
-      connection,
-      {
-        orgId,
-        userId,
-        requestContext,
-        data: {
-          date: new Date().toISOString(),
-          reference_id: payment.id,
-          reference_type: 'purchase_payment',
-          description: paymentDescription,
-          currency: payment.currency || null,
-          first_entry_account: purchaseAcct.id,
-          first_entry_debit: purchaseDebit,
-          first_entry_credit: purchaseCredit,
-          second_entry_account: payableAcct.id,
-          second_entry_debit: payableDebit,
-          second_entry_credit: payableCredit,
-          status: 1,
-        },
-        description:
-          `Created purchase/payable journal for payment ${payment.id}`,
-      },
-    );
-
-    // supplier -> treasury/cash (the account chosen on the form)
-    await createJournalEntry(
-      connection,
-      {
-        orgId,
-        userId,
-        requestContext,
-        data: {
-          date: new Date().toISOString(),
-          reference_id: payment.id,
-          reference_type: 'purchase_payment',
-          description: paymentDescription,
-          currency: payment.currency || null,
-          first_entry_account: purchase.account_id,
-          first_entry_debit: purchaseDebit,
-          first_entry_credit: purchaseCredit,
-          second_entry_account: data.account_id,
-          second_entry_debit: payableDebit,
-          second_entry_credit: payableCredit,
-          status: 1,
-        },
-        description:
-          `Created supplier/treasury journal for payment ${payment.id}`,
-      },
-    );
-
     /*
-     * Cross-currency: when the payment is made in a different
-     * currency than the purchase, also post the converted equivalents
-     * in the purchase's currency. Without these, the supplier's
-     * balance (which lives in the purchase's currency) keeps the full
-     * purchase credit even though the payment settled it.
+     * When the payment currency differs from the purchase currency, the
+     * payment is converted to the purchase's currency before posting, so
+     * the supplier's balance only ever moves in the purchase's currency
+     * and no balance is created in the paid currency.
      */
     const purchaseCurrency = purchase.currency || payment.currency || null;
-
-    if (
+    const isCrossCurrency =
       payment.currency &&
       purchaseCurrency &&
       payment.currency !== purchaseCurrency &&
-      absAmount > 0
-    ) {
-      const convertedAmount =
+      absAmount > 0;
+
+    let journalCurrency = payment.currency || null;
+    let journalAmount = absAmount;
+
+    if (isCrossCurrency) {
+      journalCurrency = purchaseCurrency;
+      journalAmount =
         await convertCurrencyAmount(
           connection,
           {
@@ -1433,60 +1386,60 @@ async function createPayment({
             toCurrency: purchaseCurrency,
           },
         );
+    }
 
-      if (Number(convertedAmount) > 0) {
-        // PURCHASE -> PAYABLE (converted to the purchase's currency)
-        await createJournalEntry(
-          connection,
-          {
-            orgId,
-            userId,
-            requestContext,
-            data: {
-              date: new Date().toISOString(),
-              reference_id: payment.id,
-              reference_type: 'purchase_payment',
-              description: paymentDescription,
-              currency: purchaseCurrency,
-              first_entry_account: purchaseAcct.id,
-              first_entry_debit: purchaseDebit ? convertedAmount : 0,
-              first_entry_credit: purchaseCredit ? convertedAmount : 0,
-              second_entry_account: payableAcct.id,
-              second_entry_debit: payableDebit ? convertedAmount : 0,
-              second_entry_credit: payableCredit ? convertedAmount : 0,
-              status: 1,
-            },
-            description:
-              `Created converted purchase/payable journal for payment ${payment.id}`,
+    if (Number(journalAmount) > 0) {
+      // PURCHASE -> PAYABLE
+      await createJournalEntry(
+        connection,
+        {
+          orgId,
+          userId,
+          requestContext,
+          data: {
+            date: new Date().toISOString(),
+            reference_id: payment.id,
+            reference_type: 'purchase_payment',
+            description: paymentDescription,
+            currency: journalCurrency,
+            first_entry_account: purchaseAcct.id,
+            first_entry_debit: purchaseDebit ? journalAmount : 0,
+            first_entry_credit: purchaseCredit ? journalAmount : 0,
+            second_entry_account: payableAcct.id,
+            second_entry_debit: payableDebit ? journalAmount : 0,
+            second_entry_credit: payableCredit ? journalAmount : 0,
+            status: 1,
           },
-        );
+          description:
+            `Created purchase/payable journal for payment ${payment.id}`,
+        },
+      );
 
-        // supplier -> treasury/cash (converted to the purchase's currency)
-        await createJournalEntry(
-          connection,
-          {
-            orgId,
-            userId,
-            requestContext,
-            data: {
-              date: new Date().toISOString(),
-              reference_id: payment.id,
-              reference_type: 'purchase_payment',
-              description: paymentDescription,
-              currency: purchaseCurrency,
-              first_entry_account: purchase.account_id,
-              first_entry_debit: purchaseDebit ? convertedAmount : 0,
-              first_entry_credit: purchaseCredit ? convertedAmount : 0,
-              second_entry_account: data.account_id,
-              second_entry_debit: payableDebit ? convertedAmount : 0,
-              second_entry_credit: payableCredit ? convertedAmount : 0,
-              status: 1,
-            },
-            description:
-              `Created converted supplier/treasury journal for payment ${payment.id}`,
+      // supplier -> treasury/cash (the account chosen on the form)
+      await createJournalEntry(
+        connection,
+        {
+          orgId,
+          userId,
+          requestContext,
+          data: {
+            date: new Date().toISOString(),
+            reference_id: payment.id,
+            reference_type: 'purchase_payment',
+            description: paymentDescription,
+            currency: journalCurrency,
+            first_entry_account: purchase.account_id,
+            first_entry_debit: purchaseDebit ? journalAmount : 0,
+            first_entry_credit: purchaseCredit ? journalAmount : 0,
+            second_entry_account: data.account_id,
+            second_entry_debit: payableDebit ? journalAmount : 0,
+            second_entry_credit: payableCredit ? journalAmount : 0,
+            status: 1,
           },
-        );
-      }
+          description:
+            `Created supplier/treasury journal for payment ${payment.id}`,
+        },
+      );
     }
 
     await activityRepository.create(

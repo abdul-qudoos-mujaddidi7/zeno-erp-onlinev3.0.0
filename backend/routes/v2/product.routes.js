@@ -39,6 +39,16 @@ router.get(
 );
 
 router.post(
+  '/:id/reconcile-stock',
+  validate({
+    params: productIdParamsSchema,
+  }),
+  asyncHandler(
+    productController.reconcileStock,
+  ),
+);
+
+router.post(
   '/',
   validate({
     body: createProductSchema,

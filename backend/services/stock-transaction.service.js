@@ -167,6 +167,15 @@ async function reconcileProductStock(
       );
     }
   } else {
+    const product =
+      await productRepository.findByLocalId(
+        connection,
+        {
+          orgId,
+          localId: productId,
+        },
+      );
+    const openingQty = Math.abs(toNumber(product?.initial_quantity));
     const movements =
       await stockTransactionRepository.findAll(
         connection,
@@ -179,18 +188,41 @@ async function reconcileProductStock(
         },
       );
 
+    let usedOpening = false;
+
     for (const movement of movements) {
       const warehouseKey = String(movement.warehouse_id || '');
       if (!warehouseKey) continue;
 
+      let effect;
+
+      if (!usedOpening && isOpeningStockMovement(movement)) {
+        effect = stockEffect(
+          'adjustment_in',
+          Math.max(Math.abs(toNumber(movement.quantity)), openingQty),
+        );
+        usedOpening = true;
+      } else {
+        effect = stockEffect(
+          movement.transaction_type,
+          movement.quantity,
+        );
+      }
+
       totalsByWarehouse.set(
         warehouseKey,
-        toNumber(totalsByWarehouse.get(warehouseKey)) +
-          stockEffect(
-            movement.transaction_type,
-            movement.quantity,
-          ),
+        toNumber(totalsByWarehouse.get(warehouseKey)) + effect,
       );
+    }
+
+    if (!usedOpening && openingQty > 0) {
+      const warehouseKey = String(product?.initial_warehouse_id || '');
+      if (warehouseKey) {
+        totalsByWarehouse.set(
+          warehouseKey,
+          toNumber(totalsByWarehouse.get(warehouseKey)) + openingQty,
+        );
+      }
     }
   }
 
@@ -204,17 +236,46 @@ async function reconcileProductStock(
       },
     );
 
+  const rowsByWarehouse = new Map();
+
   for (const row of warehouseRows) {
     const warehouseKey = String(row.warehouse_id || '');
-    if (warehouseKey && !totalsByWarehouse.has(warehouseKey)) {
+    if (!warehouseKey) continue;
+
+    if (!totalsByWarehouse.has(warehouseKey)) {
       totalsByWarehouse.set(warehouseKey, 0);
     }
+
+    const grouped = rowsByWarehouse.get(warehouseKey) || [];
+    grouped.push(row);
+    rowsByWarehouse.set(warehouseKey, grouped);
   }
 
   let total = 0;
 
   for (const [warehouseId, quantity] of totalsByWarehouse) {
     total += toNumber(quantity);
+
+    const rows = (rowsByWarehouse.get(String(warehouseId)) || [])
+      .slice()
+      .sort((first, second) => Number(first.id) - Number(second.id));
+    const extras = rows.slice(1);
+
+    /*
+     * Duplicate warehouse_products rows for the same warehouse
+     * were summing on the warehouses tab (e.g. 148 + 1 = 149)
+     * while products.quantity stayed on the kept row.
+     */
+    for (const extra of extras) {
+      await warehouseProductRepository.softDelete(
+        connection,
+        {
+          orgId,
+          localId: extra.id,
+          userId,
+        },
+      );
+    }
 
     await setWarehouseBalance(
       connection,
@@ -238,6 +299,132 @@ async function reconcileProductStock(
       data: {
         quantity: total,
       },
+    },
+  );
+}
+
+/*
+ * Product page heal: duplicate warehouse_products rows were
+ * summing on the warehouses tab while products.quantity stayed
+ * on one row. Keep one row per warehouse and make the warehouse
+ * total match the product quantity.
+ */
+async function syncWarehouseBalancesToProduct(
+  connection,
+  {
+    orgId,
+    userId,
+    productId,
+    productUnitId,
+  },
+) {
+  if (!productId) {
+    return;
+  }
+
+  const product =
+    await productRepository.findByLocalId(
+      connection,
+      {
+        orgId,
+        localId: productId,
+        forUpdate: true,
+      },
+    );
+
+  if (!product) {
+    return;
+  }
+
+  const warehouseRows =
+    await warehouseProductRepository.findAll(
+      connection,
+      {
+        orgId,
+        productId,
+        status: 1,
+      },
+    );
+
+  const rowsByWarehouse = new Map();
+
+  for (const row of warehouseRows) {
+    const warehouseKey = String(row.warehouse_id || '');
+    if (!warehouseKey) continue;
+
+    const grouped = rowsByWarehouse.get(warehouseKey) || [];
+    grouped.push(row);
+    rowsByWarehouse.set(warehouseKey, grouped);
+  }
+
+  const keptRows = [];
+
+  for (const [warehouseId, rows] of rowsByWarehouse) {
+    const sorted = rows
+      .slice()
+      .sort((first, second) => Number(first.id) - Number(second.id));
+    const [primary, ...extras] = sorted;
+
+    for (const extra of extras) {
+      await warehouseProductRepository.softDelete(
+        connection,
+        {
+          orgId,
+          localId: extra.id,
+          userId,
+        },
+      );
+    }
+
+    if (primary) {
+      keptRows.push(primary);
+    } else {
+      keptRows.push({ warehouse_id: warehouseId, quantity: 0 });
+    }
+  }
+
+  const target = toNumber(product.quantity);
+  const primaryWarehouseId = String(
+    product.initial_warehouse_id || keptRows[0]?.warehouse_id || '',
+  );
+
+  if (!primaryWarehouseId) {
+    return;
+  }
+
+  if (keptRows.length <= 1) {
+    await setWarehouseBalance(
+      connection,
+      {
+        orgId,
+        userId,
+        warehouseId: primaryWarehouseId,
+        productId,
+        productUnitId: productUnitId || product.product_unit_id,
+        quantity: target,
+      },
+    );
+    return;
+  }
+
+  let otherTotal = 0;
+
+  for (const row of keptRows) {
+    if (String(row.warehouse_id) === primaryWarehouseId) {
+      continue;
+    }
+    otherTotal += toNumber(row.quantity);
+  }
+
+  await setWarehouseBalance(
+    connection,
+    {
+      orgId,
+      userId,
+      warehouseId: primaryWarehouseId,
+      productId,
+      productUnitId: productUnitId || product.product_unit_id,
+      quantity: target - otherTotal,
     },
   );
 }
@@ -728,4 +915,6 @@ module.exports = {
   createStockTransaction,
   updateStockTransaction,
   deleteStockTransaction,
+  reconcileProductStock,
+  syncWarehouseBalancesToProduct,
 };

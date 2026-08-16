@@ -216,6 +216,18 @@ const purchaseListQuerySchema = z.object({
     .max(1)
     .optional()
     .default(0),
+
+  sort_by: z
+    .string()
+    .trim()
+    .max(50)
+    .optional()
+    .default('created_at'),
+
+  sort_dir: z
+    .enum(['asc', 'desc'])
+    .optional()
+    .default('desc'),
 }).merge(paginationQuerySchema);
 
 const updatePurchaseSchema =

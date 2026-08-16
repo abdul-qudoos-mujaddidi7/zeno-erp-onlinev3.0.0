@@ -537,6 +537,29 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     stockTransactions =
       (await stockTransactionApi.getAll({ status: 1, product_ids: transactionProductIds }))?.data || [];
 
+    const hasOpening = stockTransactions.some((transaction) => isOpeningInputAdjustment(transaction));
+    const openingQuantity = Number(product.initial_quantity || 0);
+
+    if (!hasOpening && openingQuantity > 0) {
+      stockTransactions = [
+        {
+          id: `opening-${product.id}`,
+          warehouse_id: product.initial_warehouse_id,
+          product_id: product.id,
+          product_unit_id: product.product_unit_id,
+          reference_id: product.id,
+          reference_type: 'manual_adjustment',
+          transaction_type: 'adjustment_in',
+          quantity: openingQuantity,
+          date: product.created_at,
+          created_at: product.created_at,
+          description: t('Opening Stock'),
+          status: 1,
+        },
+        ...stockTransactions,
+      ];
+    }
+
     stockTransactions =
       stockTransactions.map(
         (transaction) => {
@@ -682,6 +705,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     let runningOutgoing = 0;
     const runningBalance = {};
     const calculatedTransactions = [];
+    let usedOpeningSeed = false;
 
     for (const transaction of stockTransactions) {
       const convertedQuantity =
@@ -698,9 +722,17 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
           ),
         );
 
-      const quantity = Number(
+      let quantity = Number(
         convertedQuantity || 0,
       );
+
+      if (isOpeningInputAdjustment(transaction) && !usedOpeningSeed) {
+        quantity = Math.max(
+          Math.abs(quantity),
+          Number(product.initial_quantity || 0),
+        );
+        usedOpeningSeed = true;
+      }
 
       const totalCost = Number(
         transaction.total_cost || 0,
@@ -796,17 +828,25 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     balance = { ...runningBalance };
 
     /*
-     * The overview and final report quantity use the canonical value:
-     * CLASSIC -> stock_transactions
-     * FIFO/LIFO -> stock_batches.quantity_remaining
+     * Overview, warehouses tab, and the newest report row must all
+     * show products.quantity. If opening stock is missing from the
+     * movement list, shift the running balances so they end there.
      */
-    const canonicalQuantity = Number(
-      product.quantity,
-    );
+    const canonicalQuantity = Number(product.quantity);
+    if (
+      Number.isFinite(canonicalQuantity) &&
+      calculatedTransactions.length > 0
+    ) {
+      const shift = canonicalQuantity - runningQuantity;
+      if (shift !== 0) {
+        for (const row of calculatedTransactions) {
+          row.qtyBalance = Number(row.qtyBalance || 0) + shift;
+        }
+        runningQuantity = canonicalQuantity;
+      }
+    }
 
-    qtyBalance = Number.isFinite(
-      canonicalQuantity,
-    )
+    qtyBalance = Number.isFinite(canonicalQuantity)
       ? canonicalQuantity
       : runningQuantity;
 
@@ -1117,21 +1157,21 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     const currentThumbnailUrl =
       product.thumbnailUrl;
 
-    /*
-     * calculateProductStock selects the correct source:
-     * CLASSIC   -> stock_transactions
-     * FIFO/LIFO -> stock_batches.quantity_remaining
-     */
     const idsToRefresh =
       productGroupIds.length > 0
         ? productGroupIds
         : [Number(product.id)];
 
     for (const productId of idsToRefresh) {
-      await calculateProductStock(
-        productId,
-        inventoryMethod,
-      );
+      try {
+        await productApi.reconcileStock(productId);
+      } catch (error) {
+        console.warn('Failed to reconcile product stock:', productId, error);
+        await calculateProductStock(
+          productId,
+          inventoryMethod,
+        );
+      }
     }
 
     const freshProduct =

@@ -76,9 +76,15 @@ export async function calculateRemainingAndBenefit(saleId) {
 
   const saleResponse = await saleApi.getById(saleId);
   const sale = saleResponse?.data;
-  if (!sale) return;
+  if (!sale || Number(sale.status) === 0) return;
 
   const saleItems = (sale.items || []).filter((item) => Number(item.status) === 1);
+  if (
+    saleItems.length === 0 &&
+    (sale.items || []).some((item) => Number(item.status) === 0)
+  ) {
+    return;
+  }
   products = await fetchProductsByIds(saleItems.map((item) => item.product_id));
 
   let benefit = 0;

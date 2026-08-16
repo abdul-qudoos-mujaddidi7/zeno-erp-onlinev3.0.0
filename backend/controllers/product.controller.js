@@ -32,6 +32,21 @@ async function getById(req, res) {
   });
 }
 
+async function reconcileStock(req, res) {
+  const product =
+    await productService.reconcileProductStock({
+      user: req.user,
+      productId: req.validated.params.id,
+    });
+
+  res.status(200).json({
+    success: true,
+    message:
+      'Product stock reconciled successfully.',
+    data: product,
+  });
+}
+
 async function create(req, res) {
   const product =
     await productService.createProduct({
@@ -87,6 +102,7 @@ async function remove(req, res) {
 module.exports = {
   list,
   getById,
+  reconcileStock,
   create,
   update,
   remove,

@@ -14,6 +14,8 @@ export const purchaseApi = {
     page,
     limit,
     skip_count = 0,
+    sort_by,
+    sort_dir,
   } = {}) {
     const params = new URLSearchParams();
 
@@ -43,12 +45,21 @@ export const purchaseApi = {
       params.set('skip_count', '1');
     }
 
+    if (sort_by) {
+      params.set('sort_by', String(sort_by));
+    }
+
+    if (sort_dir) {
+      params.set('sort_dir', String(sort_dir));
+    }
+
     if (page != null || limit != null) {
       appendPaginationParams(params, { page, limit });
     }
 
     return api.get(
       `${BASE_URL}?${params.toString()}`,
+      { cache: false },
     );
   },
 
@@ -61,6 +72,8 @@ export const purchaseApi = {
     page,
     limit,
     skip_count = 0,
+    sort_by,
+    sort_dir,
   } = {}) {
     return this.getAll({
       status,
@@ -72,6 +85,8 @@ export const purchaseApi = {
       page,
       limit,
       skip_count,
+      sort_by,
+      sort_dir,
     });
   },
 

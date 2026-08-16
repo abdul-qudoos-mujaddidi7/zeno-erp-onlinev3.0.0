@@ -207,6 +207,8 @@ import { saleApi } from '../api/saleApi.js';
             skip_count: 1,
             date_from: fromDate || undefined,
             date_to: toDate || undefined,
+            sort_by: sortColumn,
+            sort_dir: sortDirection,
           });
           if (requestId !== loadRequestId) return;
           sales = salesResponse?.data || [];
@@ -284,8 +286,12 @@ import { saleApi } from '../api/saleApi.js';
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
       sortColumn = column;
-      sortDirection = 'asc';
+      sortDirection = ['created_at', 'invoice_date', 'due_date', 'id', 'invoice_number'].includes(column)
+        ? 'desc'
+        : 'asc';
     }
+    if (currentPage !== 1) currentPage = 1;
+    else load();
   }
 
   function getLocalDate() {
@@ -354,25 +360,7 @@ import { saleApi } from '../api/saleApi.js';
       });
     }
 
-    // Search is handled server-side
-
-    result = result.sort((a, b) => {
-      if (sortColumn == 'total_amount' || sortColumn == 'remaining' || sortColumn == 'benefit') {
-        const valA = Number(a[sortColumn]) || 0;
-        const valB = Number(b[sortColumn]) || 0;
-        return sortDirection === 'asc' ? valA - valB : valB - valA;
-      }
-      let valA = a[sortColumn];
-      let valB = b[sortColumn];
-      if (valA === undefined || valA === null) return 1;
-      if (valB === undefined || valB === null) return -1;
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
-      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-
+    // Search and sort are handled server-side so page 1 is the newest bills.
     return result;
   })();
 

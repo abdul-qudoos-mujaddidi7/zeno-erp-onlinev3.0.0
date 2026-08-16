@@ -187,6 +187,8 @@ async function listSales({
       dateTo: filters.date_to,
       skipCount: Number(filters.skip_count) === 1,
       pagination,
+      sortBy: filters.sort_by,
+      sortDir: filters.sort_dir,
     },
   );
 
@@ -279,23 +281,54 @@ async function getSale({
     );
   }
 
-  const [
-    items,
-    payments,
-    returns,
-  ] = await Promise.all([
-    saleRepository.findItemsBySale(
+  let items =
+    await saleRepository.findItemsBySale(
       db,
       {
         orgId,
         saleId,
       },
-    ),
+    );
+
+  /*
+   * Soft-delete hides sale_items (status = 0). A later totals
+   * PATCH can revive the sale header while leaving those
+   * lines deleted, so reopen the original items whenever the
+   * bill is deleted or the header still has a total with no
+   * active lines.
+   */
+  const includeDeleted =
+    Number(sale.status) === 0 ||
+    (
+      items.length === 0 &&
+      (
+        Number(sale.items_count) > 0 ||
+        Number(sale.total_amount) > 0
+      )
+    );
+
+  if (includeDeleted && items.length === 0) {
+    items =
+      await saleRepository.findItemsBySale(
+        db,
+        {
+          orgId,
+          saleId,
+          includeDeleted: true,
+        },
+      );
+  }
+
+  const [
+    payments,
+    returns,
+  ] = await Promise.all([
     saleRepository.findPaymentsBySale(
       db,
       {
         orgId,
         saleId,
+        includeDeleted,
       },
     ),
     saleRepository.findReturnsBySale(
@@ -303,6 +336,7 @@ async function getSale({
       {
         orgId,
         saleId,
+        includeDeleted,
       },
     ),
   ]);
@@ -315,6 +349,7 @@ async function getSale({
           {
             orgId,
             returnId: saleReturn.id,
+            includeDeleted,
           },
         )
       ),
@@ -598,6 +633,14 @@ async function updateSale({
         'Sale not found.',
         404,
         'SALE_NOT_FOUND',
+      );
+    }
+
+    if (Number(oldSale.status) === 0) {
+      throw new AppError(
+        'Sale is deleted.',
+        409,
+        'SALE_DELETED',
       );
     }
 
@@ -1553,74 +1596,25 @@ async function createPayment({
     const receivableDebit = isReceive ? absAmount : 0;
     const receivableCredit = isReceive ? 0 : absAmount;
 
-    // SALES -> RECEIVABLE
-    await createJournalEntry(
-      connection,
-      {
-        orgId,
-        userId,
-        requestContext,
-        data: {
-          date: new Date().toISOString(),
-          reference_id: payment.id,
-          reference_type: 'sale_payment',
-          description: paymentDescription,
-          currency: payment.currency || null,
-          first_entry_account: salesAcct.id,
-          first_entry_debit: salesDebit,
-          first_entry_credit: salesCredit,
-          second_entry_account: receivableAcct.id,
-          second_entry_debit: receivableDebit,
-          second_entry_credit: receivableCredit,
-          status: 1,
-        },
-        description:
-          `Created sales/receivable journal for payment ${payment.id}`,
-      },
-    );
-
-    // customer -> treasury/cash (the account chosen on the form)
-    await createJournalEntry(
-      connection,
-      {
-        orgId,
-        userId,
-        requestContext,
-        data: {
-          date: new Date().toISOString(),
-          reference_id: payment.id,
-          reference_type: 'sale_payment',
-          description: paymentDescription,
-          currency: payment.currency || null,
-          first_entry_account: sale.account_id,
-          first_entry_debit: salesDebit,
-          first_entry_credit: salesCredit,
-          second_entry_account: data.account_id,
-          second_entry_debit: receivableDebit,
-          second_entry_credit: receivableCredit,
-          status: 1,
-        },
-        description:
-          `Created customer/treasury journal for payment ${payment.id}`,
-      },
-    );
-
     /*
-     * Cross-currency: when the payment is received in a different
-     * currency than the sale, also post the converted equivalents in
-     * the sale's currency. Without these, the customer's balance
-     * (which lives in the sale's currency) keeps the full sale debit
-     * even though the payment settled it.
+     * When the payment currency differs from the sale currency, the
+     * payment is converted to the sale's currency before posting, so
+     * the customer's balance only ever moves in the sale's currency
+     * and no balance is created in the paid currency.
      */
     const saleCurrency = sale.currency || payment.currency || null;
-
-    if (
+    const isCrossCurrency =
       payment.currency &&
       saleCurrency &&
       payment.currency !== saleCurrency &&
-      absAmount > 0
-    ) {
-      const convertedAmount =
+      absAmount > 0;
+
+    let journalCurrency = payment.currency || null;
+    let journalAmount = absAmount;
+
+    if (isCrossCurrency) {
+      journalCurrency = saleCurrency;
+      journalAmount =
         await convertCurrencyAmount(
           connection,
           {
@@ -1630,60 +1624,68 @@ async function createPayment({
             toCurrency: saleCurrency,
           },
         );
+    }
 
-      if (Number(convertedAmount) > 0) {
-        // SALES -> RECEIVABLE (converted to the sale's currency)
-        await createJournalEntry(
-          connection,
-          {
-            orgId,
-            userId,
-            requestContext,
-            data: {
-              date: new Date().toISOString(),
-              reference_id: payment.id,
-              reference_type: 'sale_payment',
-              description: paymentDescription,
-              currency: saleCurrency,
-              first_entry_account: salesAcct.id,
-              first_entry_debit: salesDebit ? convertedAmount : 0,
-              first_entry_credit: salesCredit ? convertedAmount : 0,
-              second_entry_account: receivableAcct.id,
-              second_entry_debit: receivableDebit ? convertedAmount : 0,
-              second_entry_credit: receivableCredit ? convertedAmount : 0,
-              status: 1,
-            },
-            description:
-              `Created converted sales/receivable journal for payment ${payment.id}`,
+    if (Number(journalAmount) > 0) {
+      // SALES -> RECEIVABLE
+      await createJournalEntry(
+        connection,
+        {
+          orgId,
+          userId,
+          requestContext,
+          data: {
+            date: new Date().toISOString(),
+            reference_id: payment.id,
+            reference_type: 'sale_payment',
+            description: paymentDescription,
+            currency: journalCurrency,
+            first_entry_account: salesAcct.id,
+            first_entry_debit: salesDebit ? journalAmount : 0,
+            first_entry_credit: salesCredit ? journalAmount : 0,
+            second_entry_account: receivableAcct.id,
+            second_entry_debit: receivableDebit ? journalAmount : 0,
+            second_entry_credit: receivableCredit ? journalAmount : 0,
+            status: 1,
           },
-        );
+          description:
+            `Created sales/receivable journal for payment ${payment.id}`,
+        },
+      );
 
-        // customer -> treasury/cash (converted to the sale's currency)
-        await createJournalEntry(
-          connection,
-          {
-            orgId,
-            userId,
-            requestContext,
-            data: {
-              date: new Date().toISOString(),
-              reference_id: payment.id,
-              reference_type: 'sale_payment',
-              description: paymentDescription,
-              currency: saleCurrency,
-              first_entry_account: sale.account_id,
-              first_entry_debit: salesDebit ? convertedAmount : 0,
-              first_entry_credit: salesCredit ? convertedAmount : 0,
-              second_entry_account: data.account_id,
-              second_entry_debit: receivableDebit ? convertedAmount : 0,
-              second_entry_credit: receivableCredit ? convertedAmount : 0,
-              status: 1,
-            },
-            description:
-              `Created converted customer/treasury journal for payment ${payment.id}`,
+      /*
+       * customer -> treasury/cash (the account chosen on the form).
+       *
+       * This entry credits the customer with the payment received, so
+       * a paid sale no longer leaves its amount in the customer's
+       * balance. For a cross-currency payment it is posted in the
+       * sale's currency (converted) and no balance is created in the
+       * paid currency.
+       */
+      await createJournalEntry(
+        connection,
+        {
+          orgId,
+          userId,
+          requestContext,
+          data: {
+            date: new Date().toISOString(),
+            reference_id: payment.id,
+            reference_type: 'sale_payment',
+            description: paymentDescription,
+            currency: journalCurrency,
+            first_entry_account: sale.account_id,
+            first_entry_debit: salesDebit ? journalAmount : 0,
+            first_entry_credit: salesCredit ? journalAmount : 0,
+            second_entry_account: data.account_id,
+            second_entry_debit: receivableDebit ? journalAmount : 0,
+            second_entry_credit: receivableCredit ? journalAmount : 0,
+            status: 1,
           },
-        );
-      }
+          description:
+            `Created customer/treasury journal for payment ${payment.id}`,
+        },
+      );
     }
 
     await activityRepository.create(

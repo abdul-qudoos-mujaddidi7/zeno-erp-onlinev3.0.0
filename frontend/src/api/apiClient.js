@@ -43,7 +43,10 @@ async function request(
     cache,
   } = {},
 ) {
-  const useCache = method === 'GET' && cache !== false;
+  const useCache =
+    method === 'GET' &&
+    cache !== false &&
+    !/[?&]page=/.test(path);
 
   if (useCache) {
     const hit = getCache.get(path);
