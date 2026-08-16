@@ -1,0 +1,317 @@
+.track-picker-layer {
+  position: fixed !important;
+  z-index: 100000 !important;
+  inset: 0 !important;
+  display: grid !important;
+  place-items: center;
+  padding: 1rem;
+  overflow: auto;
+  background: rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(1px);
+}
+
+.track-picker-dialog {
+  width: min(100%, 380px) !important;
+  max-width: 380px !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+.track-picker-modal {
+  display: flex;
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid #dce4ef !important;
+  border-radius: 15px !important;
+  background: var(--mdb-body-bg, #fff);
+  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.24) !important;
+}
+
+.track-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px !important;
+  border-bottom: 1px solid #e5eaf2 !important;
+  background: #fbfcfe;
+}
+
+.track-picker-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.track-picker-heading > span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: #eaf1ff;
+  color: #0f6efd;
+  font-size: 16px;
+}
+
+.track-picker-heading div {
+  display: flex;
+  flex-direction: column;
+}
+
+.track-picker-heading small {
+  color: #8491a5;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.track-picker-heading h5 {
+  margin: 0;
+  color: #18243a;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.track-picker-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #7b8798;
+}
+
+.track-picker-close:hover {
+  background: #eef2f7;
+  color: #df3f4c;
+}
+
+.track-picker-body {
+  min-height: 0;
+  padding: 9px 12px 5px !important;
+  overflow: hidden;
+}
+
+.track-picker-body > .mb-3 {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  margin-bottom: 0 !important;
+  flex-direction: column;
+}
+
+.track-search-group {
+  display: flex;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid #dbe4ef !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  box-shadow: 0 2px 8px rgba(31, 55, 90, 0.04);
+}
+
+.track-search-group input {
+  height: 34px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 12px;
+}
+
+.track-search-group button {
+  width: 38px;
+  border: 0 !important;
+  border-inline-start: 1px solid #edf1f6 !important;
+  background: transparent !important;
+  color: #0f6efd !important;
+  box-shadow: none !important;
+}
+
+.track-account-list {
+  min-height: 0;
+  max-height: min(190px, calc(100vh - 210px));
+  margin-top: 7px !important;
+  padding-inline-end: 3px;
+  overflow: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.track-account-group {
+  margin: 0 0 4px !important;
+}
+
+.track-account-row {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  min-height: 37px;
+  padding: 4px 6px !important;
+  border: 1px solid #e3e8f0 !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  color: #273449 !important;
+  text-align: start;
+}
+
+.track-account-row:hover {
+  z-index: 1;
+  border-color: #b9cdf4 !important;
+  background: #f7faff !important;
+  transform: translateY(-1px);
+}
+
+.track-account-row .badge {
+  margin-inline-start: auto !important;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #eef7fa !important;
+  color: #24718a !important;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.track-empty {
+  display: flex;
+  min-height: 110px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 7px;
+  color: #8a97aa;
+  font-size: 11px;
+}
+
+.track-picker-footer {
+  padding: 6px 12px 9px !important;
+  border-top: 0 !important;
+  background: #fff;
+}
+
+.track-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid #dce3ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #526177;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.track-cancel-btn:hover {
+  background: #f5f7fa;
+}
+
+html.dark .track-picker-layer {
+  background: rgba(2, 6, 23, 0.78);
+}
+
+html.dark .track-picker-modal,
+html.dark .track-picker-body,
+html.dark .track-picker-footer {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .track-picker-header {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface-soft) !important;
+}
+
+html.dark .track-picker-heading > span {
+  background: rgba(96, 165, 250, 0.14);
+  color: #93c5fd;
+}
+
+html.dark .track-picker-heading small,
+html.dark .track-empty {
+  color: var(--erp-muted);
+}
+
+html.dark .track-picker-heading h5 {
+  color: var(--erp-text);
+}
+
+html.dark .track-picker-close {
+  color: var(--erp-muted);
+}
+
+html.dark .track-picker-close:hover {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+}
+
+html.dark .track-search-group {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface-soft) !important;
+  box-shadow: none;
+}
+
+html.dark .track-search-group input {
+  color: var(--erp-text) !important;
+}
+
+html.dark .track-search-group input::placeholder {
+  color: var(--erp-muted);
+}
+
+html.dark .track-search-group button {
+  border-inline-start-color: var(--erp-border) !important;
+  color: #93c5fd !important;
+}
+
+html.dark .track-account-list {
+  scrollbar-color: #526176 transparent;
+}
+
+html.dark .track-account-row {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface-soft) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .track-account-row:hover {
+  border-color: rgba(96, 165, 250, 0.46) !important;
+  background: rgba(96, 165, 250, 0.14) !important;
+}
+
+html.dark .track-account-row .badge {
+  background: rgba(45, 212, 191, 0.14) !important;
+  color: #5eead4 !important;
+}
+
+html.dark .track-cancel-btn {
+  border-color: var(--erp-border);
+  background: var(--erp-surface-soft);
+  color: var(--erp-text-soft);
+}
+
+html.dark .track-cancel-btn:hover {
+  border-color: #4b6280;
+  background: #1e293b;
+  color: var(--erp-text);
+}
+
+@media (max-width: 767px) {
+  .track-picker-dialog {
+    margin: 0.65rem !important;
+  }
+
+  .track-picker-body {
+    padding: 12px !important;
+  }
+
+  .track-account-list {
+    max-height: 55vh;
+  }
+}

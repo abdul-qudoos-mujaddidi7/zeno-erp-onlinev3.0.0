@@ -1,0 +1,1539 @@
+/* =============================================================================
+   ZenoERP — Global design tokens & responsive density system
+   ============================================================================= */
+
+   *,
+   *::before,
+   *::after {
+     box-sizing: border-box;
+   }
+   
+   :root {
+     /* —— Brand / surface (legacy --erp-* kept for existing components) —— */
+     --erp-primary: #2f6fed;
+     --erp-primary-hover: #245fcf;
+     --erp-primary-soft: #eaf2ff;
+     --erp-navy: #2f6fed;
+     --erp-text: #172033;
+     --erp-text-soft: #64748b;
+     --erp-muted: #8a98ab;
+     --erp-border: #e2e8f0;
+     --erp-border-strong: #d5deea;
+     --erp-bg: #f4f7fb;
+     --erp-bg-base: #f4f7fb;
+     --erp-surface: #ffffff;
+     --erp-surface-soft: #f8fafc;
+     --erp-surface-glass: rgba(255, 255, 255, 0.92);
+     --erp-surface-glass-border: rgba(226, 232, 240, 0.92);
+     --erp-success: #11875d;
+     --erp-warning: #b77905;
+     --erp-danger: #c83248;
+     --erp-info: #14839a;
+     --erp-radius-sm: 8px;
+     --erp-radius: 12px;
+     --erp-radius-lg: 14px;
+     --erp-shadow-sm: 0 6px 18px rgba(21, 32, 51, 0.035);
+     --erp-shadow: 0 10px 28px rgba(21, 32, 51, 0.055);
+     --erp-date-row-height: calc(1.5em + 0.5rem + 2px);
+   
+     /* —— Responsive sizing tokens (compact ~15–20% vs previous ceilings) —— */
+     /* Body stays ~14px; caps tightened for 100% zoom density — never zoom the whole UI */
+     --app-font-size: clamp(0.875rem, 0.1vw + 0.84rem, 0.9375rem);
+     --app-font-sm: clamp(0.8125rem, 0.06vw + 0.78rem, 0.875rem);
+     --app-font-xs: clamp(0.75rem, 0.05vw + 0.72rem, 0.8125rem);
+     --app-heading-sm: clamp(0.95rem, 0.15vw + 0.9rem, 1.1rem);
+     --app-heading-md: clamp(1rem, 0.25vw + 0.9rem, 1.2rem);
+   
+     --page-padding: clamp(0.65rem, 1vw, 1rem);
+     --page-padding-x: clamp(0.65rem, 1.3vw, 1.25rem);
+     --section-gap: clamp(0.55rem, 0.75vw, 0.9rem);
+     --card-padding: clamp(0.65rem, 0.85vw, 1rem);
+     --card-radius: clamp(0.55rem, 0.7vw, 0.75rem);
+     --control-height: clamp(2rem, 1.8vw, 2.125rem);
+     --control-height-sm: clamp(1.875rem, 1.5vw, 2rem);
+     --control-font: clamp(0.8125rem, 0.08vw + 0.78rem, 0.875rem);
+     --control-radius: clamp(0.45rem, 0.45vw, 0.55rem);
+     --button-height: var(--control-height);
+     --button-height-sm: var(--control-height-sm);
+   
+     --sidebar-width-expanded: clamp(13rem, 14vw, 14.25rem);
+     --sidebar-width-collapsed: 4.25rem;
+     --sidebar-width: var(--sidebar-width-expanded);
+     --sidebar-nav-height: clamp(2.1rem, 2.2vw, 2.25rem);
+     --topbar-height: clamp(2.875rem, 3vw, 3.25rem);
+     --topbar-title-size: clamp(1rem, 0.3vw + 0.9rem, 1.1rem);
+   
+     --content-max-width: 96rem; /* ~1536px — restrain ultra-wide monitors */
+     --modal-overlay-padding: clamp(0.65rem, 1.5vw, 1.15rem);
+     --table-cell-padding-y: 0.8125rem; /* 13px — journals density */
+     --table-cell-padding-x: 0.875rem; /* 14px */
+     --table-font-size: 0.78rem; /* journals tbody */
+     --table-header-font-size: 0.72rem; /* journals thead */
+   
+     /* Bootstrap / MDB alignment */
+     --bs-body-font-size: var(--app-font-size);
+     --bs-body-line-height: 1.45;
+     --bs-border-radius: 8px;
+     --bs-border-radius-lg: 12px;
+   }
+   
+   html {
+     /* Keep the desktop UI slightly denser at 100% browser zoom without using
+        CSS zoom or transform scaling; only the rem baseline is reduced. */
+     font-size: 82%;
+     -webkit-text-size-adjust: 100%;
+     text-size-adjust: 100%;
+   }
+   
+   /* Keep normal sizing and accessible touch targets on tablet/mobile. */
+   @media (max-width: 991px) {
+     html {
+       font-size: 100%;
+     }
+   }
+   
+   body {
+     margin: 0;
+     overflow-x: hidden;
+     background-color: var(--erp-bg);
+     color: var(--erp-text);
+     font-family: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+     font-size: var(--app-font-size);
+     line-height: 1.45;
+     text-rendering: optimizeLegibility;
+     -webkit-font-smoothing: antialiased;
+   }
+
+   
+   
+   img,
+   svg,
+   video,
+   canvas,
+   iframe {
+     max-width: 100%;
+     height: auto;
+   }
+   
+   ::selection {
+     background: #cfe0ff;
+     color: #2f6fed;
+   }
+   
+   /* Keep SweetAlert2 above AppModal (10050) and toasts (10000) */
+   .swal2-container {
+     z-index: 10100 !important;
+   }
+   
+   /* Desktop density is already normalized by the 82% rem baseline above.
+      Do not apply a second short-screen shrink here. */
+   
+   @media (max-width: 1199px) {
+     :root {
+       --page-padding-x: clamp(0.6rem, 1.1vw, 1rem);
+       --sidebar-width-expanded: clamp(12.75rem, 14vw, 13.75rem);
+     }
+   }
+   
+   @media (max-width: 991px) {
+     :root {
+       --page-padding: 0.7rem;
+       --page-padding-x: 0.8rem;
+       --section-gap: 0.65rem;
+       --topbar-height: 3.125rem;
+     }
+   }
+   
+   @media (max-width: 767px) {
+     :root {
+       --page-padding: 0.65rem;
+       --page-padding-x: 0.75rem;
+       --card-padding: 0.75rem;
+       --section-gap: 0.65rem;
+       /* Keep accessible mobile touch targets */
+       --control-height: 2.625rem; /* 42px */
+       --control-height-sm: 2.5rem;
+       --button-height: 2.625rem;
+       --button-height-sm: 2.5rem;
+       --app-font-size: 0.875rem;
+     }
+   }
+   
+   @media (max-width: 575px) {
+     :root {
+       --page-padding: 0.6rem;
+       --page-padding-x: 0.65rem;
+       --control-height: 2.75rem; /* 44px */
+       --button-height: 2.75rem;
+     }
+   }
+   
+   /* =============================================================================
+      Reusable layout utilities (prefer these over page-local copies)
+      ============================================================================= */
+   
+   .page-container,
+   .page-shell {
+     width: 100%;
+     max-width: var(--content-max-width);
+     margin-inline: auto;
+     padding: 0;
+     min-width: 0;
+   }
+   
+   .page-header,
+   .responsive-toolbar,
+   .content-card,
+   .table-container,
+   .form-grid,
+   .dashboard-grid {
+     min-width: 0;
+   }
+   
+   .content-card {
+     padding: var(--card-padding);
+     border: 1px solid var(--erp-border);
+     border-radius: var(--card-radius);
+     background: var(--erp-surface);
+     box-shadow: var(--erp-shadow-sm);
+   }
+   
+   .responsive-toolbar {
+     display: flex;
+     flex-wrap: wrap;
+     align-items: flex-end;
+     gap: var(--section-gap);
+   }
+   
+   .form-grid {
+     display: grid;
+     grid-template-columns: repeat(12, minmax(0, 1fr));
+     gap: var(--section-gap);
+   }
+   
+   .form-grid > * {
+     min-width: 0;
+     grid-column: span 12;
+   }
+   
+   @media (min-width: 576px) {
+     .form-grid > .span-6,
+     .form-grid > .col-sm-6 {
+       grid-column: span 6;
+     }
+   }
+   
+   @media (min-width: 768px) {
+     .form-grid > .span-4,
+     .form-grid > .col-md-4 {
+       grid-column: span 4;
+     }
+   
+     .form-grid > .span-3,
+     .form-grid > .col-md-3 {
+       grid-column: span 3;
+     }
+   
+     .form-grid > .span-6,
+     .form-grid > .col-md-6 {
+       grid-column: span 6;
+     }
+   }
+   
+   @media (min-width: 992px) {
+     .form-grid > .span-3,
+     .form-grid > .col-lg-3 {
+       grid-column: span 3;
+     }
+   
+     .form-grid > .span-4,
+     .form-grid > .col-lg-4 {
+       grid-column: span 4;
+     }
+   }
+   
+   .dashboard-grid {
+     display: grid;
+     grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+     gap: var(--section-gap);
+   }
+   
+   .table-container {
+     width: 100%;
+     overflow-x: auto;
+     -webkit-overflow-scrolling: touch;
+     scrollbar-width: thin;
+     scrollbar-color: #cbd5e1 transparent;
+   }
+   
+   /* —— Fixed table cards: fill space beside sidebar; data scrolls inside —— */
+   .content-wrapper main .container-fluid:has([class*='-table-card']):not(:has(.sales-page--embedded)),
+   .content-wrapper main .container-fluid:has(.table-card):not(:has(.sales-page--embedded)),
+   .content-wrapper main .container-fluid:has(.page-shell:has([class*='-table-card'])):not(:has(.sales-page--embedded)),
+   .content-wrapper main .journals-page,
+   .content-wrapper main .exchanges-page {
+     display: flex;
+     flex: 1 1 auto;
+     flex-direction: column;
+     width: 100%;
+     min-width: 0;
+     min-height: 0;
+     height: 100%;
+     max-height: 100%;
+     margin-top: 0 !important;
+     overflow: hidden;
+   }
+   
+   .content-wrapper main .page-shell:has([class*='-table-card']),
+   .content-wrapper main .page-shell:has(.table-card) {
+     display: flex;
+     flex: 1 1 auto;
+     flex-direction: column;
+     width: 100%;
+     min-height: 0;
+     max-height: 100%;
+     min-width: 0;
+     overflow: hidden;
+   }
+   
+   .content-wrapper main .page-shell:has([class*='-table-card']) > :not([class*='-table-card']):not(.table-card),
+   .content-wrapper main .page-shell:has(.table-card) > :not([class*='-table-card']):not(.table-card) {
+     flex-shrink: 0;
+   }
+   
+   .content-wrapper main [class*='-table-card'],
+   .content-wrapper main .table-card {
+     display: flex;
+     flex: 1 1 auto;
+     flex-direction: column;
+     width: 100%;
+     min-height: 0;
+     min-width: 0;
+     overflow: hidden;
+   }
+   
+   .content-wrapper main [class*='-table-card'] .table-card-body,
+   .content-wrapper main .table-card .table-card-body {
+     display: flex;
+     flex: 1 1 auto;
+     flex-direction: column;
+     min-height: 0;
+     overflow: hidden;
+   }
+   
+   .content-wrapper main [class*='-table-card'] .data-table-wrap,
+   .content-wrapper main .table-card .data-table-wrap,
+   .content-wrapper main [class*='-table-card'] .table-container,
+   .content-wrapper main .table-card .table-container {
+     flex: 1 1 auto;
+     min-height: 0;
+     overflow: auto;
+     -webkit-overflow-scrolling: touch;
+   }
+   
+   .content-wrapper main [class*='-table-card'] .pagination-shell,
+   .content-wrapper main .table-card .pagination-shell,
+   .content-wrapper main [class*='-table-card'] > :global(.pagination-shell),
+   .content-wrapper main .table-card > :global(.pagination-shell) {
+     flex-shrink: 0;
+   }
+   
+   /* Bootstrap list cards (journals, exchanges, patients, users, …) */
+   .content-wrapper main .card:has(> .card-body.p-0),
+   .content-wrapper main .card:has(> .card-body .table-responsive),
+   .content-wrapper main .card:has(> .card-body > .table-responsive),
+   .content-wrapper main .journals-card,
+   .content-wrapper main .exchanges-card {
+     display: flex;
+     flex: 1 1 auto;
+     flex-direction: column;
+     width: 100%;
+     min-height: 0;
+     max-height: none;
+     overflow: hidden;
+   }
+   
+   .content-wrapper main .card:has(> .card-body.p-0) > .card-header,
+   .content-wrapper main .card:has(> .card-body.p-0) > .card-footer,
+   .content-wrapper main .card:has(> .card-body .table-responsive) > .card-header,
+   .content-wrapper main .card:has(> .card-body .table-responsive) > .card-footer,
+   .content-wrapper main .journals-card > .card-header,
+   .content-wrapper main .journals-card > .card-footer,
+   .content-wrapper main .exchanges-card > .card-header,
+   .content-wrapper main .exchanges-card > .card-footer {
+     flex-shrink: 0;
+   }
+   
+   .content-wrapper main .card:has(> .card-body.p-0) > .card-body,
+   .content-wrapper main .card:has(> .card-body .table-responsive) > .card-body,
+   .content-wrapper main .journals-card > .card-body,
+   .content-wrapper main .exchanges-card > .card-body {
+     display: flex;
+     flex: 1 1 auto;
+     flex-direction: column;
+     min-height: 0;
+     overflow: hidden;
+   }
+   
+   .content-wrapper main .card:has(> .card-body.p-0) .table-responsive,
+   .content-wrapper main .card:has(> .card-body .table-responsive) .table-responsive,
+   .content-wrapper main .journals-card .table-responsive,
+   .content-wrapper main .exchanges-card .table-responsive {
+     flex: 1 1 auto;
+     min-height: 0;
+     overflow: auto;
+     -webkit-overflow-scrolling: touch;
+   }
+   
+   .content-wrapper main .card:has(> .card-body.p-0) .table thead th,
+   .content-wrapper main .card:has(.table-responsive) .table thead th,
+   .content-wrapper main .journals-card .table thead th,
+   .content-wrapper main .exchanges-card .table thead th {
+     position: sticky;
+     top: 0;
+     z-index: 2;
+     padding: var(--table-cell-padding-y, 0.8125rem) var(--table-cell-padding-x, 0.875rem);
+     border-bottom: 1px solid #dfe5ed;
+     background: #fbfcfe;
+     color: #64748b;
+     font-size: var(--table-header-font-size, 0.72rem);
+     font-weight: 900;
+     white-space: nowrap;
+   }
+   
+   .text-truncate-safe {
+     overflow: hidden;
+     text-overflow: ellipsis;
+     white-space: nowrap;
+     min-width: 0;
+   }
+   
+   /* =============================================================================
+      Shell content wrapper
+      ============================================================================= */
+   
+   .content-wrapper {
+     display: flex;
+     flex-direction: column;
+     min-width: 0;
+     height: 100dvh;
+     max-height: 100dvh;
+     overflow: hidden;
+     transition: margin 0.3s ease;
+     background: var(--erp-bg);
+   }
+   
+   html[dir='ltr'] .content-wrapper {
+     margin-left: var(--sidebar-width);
+   }
+   
+   html[dir='rtl'] .content-wrapper {
+     margin-left: 0;
+     margin-right: var(--sidebar-width);
+   }
+   
+   @media (max-width: 991px) {
+     .content-wrapper,
+     html[dir='ltr'] .content-wrapper,
+     html[dir='rtl'] .content-wrapper {
+       margin: 0 !important;
+     }
+   }
+   
+   /* =============================================================================
+      SaaS application system — Bootstrap/MDB controls inside main content
+      ============================================================================= */
+   
+   .content-wrapper main {
+     color: var(--erp-text);
+     background: var(--erp-bg);
+   }
+   
+   .content-wrapper main .card {
+     border: 1px solid var(--erp-border) !important;
+     border-radius: var(--card-radius) !important;
+     background: var(--erp-surface);
+     box-shadow: var(--erp-shadow-sm) !important;
+   }
+   
+   .content-wrapper main .card-body {
+     padding: var(--card-padding);
+   }
+   
+   .content-wrapper main .card-header,
+   .content-wrapper main .card-footer {
+     padding: calc(var(--card-padding) * 0.85) var(--card-padding);
+     border-color: #edf1f6;
+     background: #fbfcfe;
+   }
+   
+   .content-wrapper main .card-header:first-child {
+     border-radius: calc(var(--card-radius) - 1px) calc(var(--card-radius) - 1px) 0 0;
+   }
+   
+   .content-wrapper main .card-title,
+   .content-wrapper main .modal-title {
+     color: var(--erp-text);
+     font-size: var(--app-heading-sm);
+     font-weight: 850;
+     letter-spacing: -0.015em;
+   }
+   
+   .content-wrapper main .btn {
+     min-height: var(--button-height, var(--control-height));
+     padding-block: 0.3rem;
+     padding-inline: 0.8rem;
+     border-radius: var(--control-radius);
+     font-size: var(--control-font);
+     font-weight: 750;
+     letter-spacing: 0;
+     box-shadow: none;
+     transition:
+       transform 0.16s ease,
+       color 0.16s ease,
+       background 0.16s ease,
+       border-color 0.16s ease,
+       box-shadow 0.16s ease;
+   }
+   
+   .content-wrapper main .btn-sm {
+     min-height: var(--button-height-sm, var(--control-height-sm));
+     padding-block: 0.25rem;
+     padding-inline: 0.65rem;
+     font-size: var(--app-font-sm);
+   }
+   
+   .content-wrapper main .btn:hover:not(:disabled) {
+     transform: translateY(-1px);
+   }
+   
+   .content-wrapper main .btn-primary {
+     border-color: var(--erp-primary) !important;
+     background: var(--erp-primary) !important;
+     color: #fff !important;
+     box-shadow: 0 7px 16px rgba(47, 111, 237, 0.16);
+   }
+   
+   .content-wrapper main .btn-primary:hover:not(:disabled),
+   .content-wrapper main .btn-primary:focus {
+     border-color: var(--erp-primary-hover) !important;
+     background: var(--erp-primary-hover) !important;
+   }
+   
+   .content-wrapper main .btn-secondary,
+   .content-wrapper main .btn-light {
+     border-color: var(--erp-border) !important;
+     background: #fff !important;
+     color: #475569 !important;
+   }
+   
+   .content-wrapper main .btn-secondary:hover:not(:disabled),
+   .content-wrapper main .btn-light:hover:not(:disabled) {
+     border-color: var(--erp-border-strong) !important;
+     background: #f8fafc !important;
+     color: var(--erp-text) !important;
+   }
+   
+   .content-wrapper main .btn-success {
+     border-color: var(--erp-success) !important;
+     background: var(--erp-success) !important;
+   }
+   
+   .content-wrapper main .btn-danger {
+     border-color: var(--erp-danger) !important;
+     background: var(--erp-danger) !important;
+   }
+   
+   .content-wrapper main .btn-warning {
+     border-color: #d79a20 !important;
+     background: #d79a20 !important;
+     color: #fff !important;
+   }
+   
+   .content-wrapper main .btn-info {
+     border-color: #d9eef3 !important;
+     background: #eef9fb !important;
+     color: var(--erp-info) !important;
+   }
+   
+   .content-wrapper main .btn-outline-primary {
+     border-color: #bcd2fa !important;
+     background: #fff;
+     color: var(--erp-primary) !important;
+   }
+   
+   .content-wrapper main .form-control,
+   .content-wrapper main .form-select {
+     min-height: var(--control-height);
+     height: var(--control-height);
+     padding-block: 0.3rem;
+     padding-inline: 0.65rem;
+     border: 1px solid var(--erp-border);
+     border-radius: var(--control-radius);
+     background-color: #fff;
+     color: #334155;
+     font-size: var(--control-font);
+     font-weight: 550;
+     box-shadow: none;
+     transition:
+       border-color 0.16s ease,
+       box-shadow 0.16s ease,
+       background 0.16s ease;
+   }
+   
+   .content-wrapper main textarea.form-control {
+     height: auto;
+     min-height: 5.25rem;
+   }
+   
+   .content-wrapper main .form-control::placeholder {
+     color: #9aa7b9;
+   }
+   
+   .content-wrapper main .form-control:focus,
+   .content-wrapper main .form-select:focus {
+     border-color: #8eb1f5;
+     background-color: #fff;
+     box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1);
+   }
+   
+   .content-wrapper main .form-label,
+   .content-wrapper main label:not(.form-check-label) {
+     color: #526176;
+     font-size: var(--app-font-xs);
+     font-weight: 750;
+   }
+   
+   .content-wrapper main .input-group-text {
+     border-color: var(--erp-border);
+     background: #f7f9fc;
+     color: #64748b;
+     font-size: var(--app-font-xs);
+     font-weight: 750;
+   }
+   
+   .content-wrapper main .table {
+     --mdb-table-color: #334155;
+     --mdb-table-striped-bg: #fbfcfe;
+     margin-bottom: 0;
+     color: #334155;
+     font-size: var(--table-font-size);
+   }
+   
+   .content-wrapper main .table > thead > tr > th {
+     padding: var(--table-cell-padding-y) var(--table-cell-padding-x);
+     border-bottom: 1px solid var(--erp-border);
+     background: #fbfcfe;
+     color: #64748b;
+     font-size: var(--table-header-font-size, 0.72rem);
+     font-weight: 900;
+     letter-spacing: 0;
+     vertical-align: middle;
+     white-space: nowrap;
+   }
+   
+   .content-wrapper main .table > tbody > tr > td {
+     padding: var(--table-cell-padding-y) var(--table-cell-padding-x);
+     border-color: #edf1f6;
+     background: transparent;
+     color: #46536a;
+     font-size: var(--table-font-size, 0.78rem);
+     vertical-align: middle;
+   }
+   
+   .content-wrapper main .table-hover > tbody > tr {
+     transition: background 0.15s ease;
+   }
+   
+   .content-wrapper main .table-hover > tbody > tr:hover > * {
+     --mdb-table-accent-bg: #f4f8fe;
+     color: var(--erp-text);
+   }
+   
+   .content-wrapper main .table-responsive {
+     scrollbar-width: thin;
+     scrollbar-color: #cbd5e1 transparent;
+   }
+   
+   .content-wrapper main .modal-dialog {
+     max-width: min(95vw, 48rem);
+     margin-inline: auto;
+   }
+   
+   .content-wrapper main .modal-content {
+     overflow: hidden;
+     max-height: min(90vh, 50rem);
+     display: flex;
+     flex-direction: column;
+     border: 1px solid var(--erp-border);
+     border-radius: var(--card-radius);
+     background: #fff;
+     box-shadow: 0 24px 64px rgba(21, 32, 51, 0.2);
+   }
+   
+   .content-wrapper main .modal-header {
+     padding: calc(var(--card-padding) * 0.9) var(--card-padding);
+     border-color: #edf1f6;
+     background: #fbfcfe;
+     flex-shrink: 0;
+   }
+   
+   .content-wrapper main .modal-body {
+     padding: var(--card-padding);
+     overflow: auto;
+     min-height: 0;
+   }
+   
+   .content-wrapper main .modal-footer {
+     padding: calc(var(--card-padding) * 0.75) var(--card-padding);
+     border-color: #edf1f6;
+     background: #fbfcfe;
+     flex-shrink: 0;
+   }
+   
+   .content-wrapper main .dropdown-menu {
+     padding: 0.4rem;
+     border: 1px solid var(--erp-border);
+     border-radius: 10px;
+     background: #fff;
+     box-shadow: 0 16px 36px rgba(21, 32, 51, 0.14);
+   }
+   
+   .content-wrapper main .dropdown-item {
+     border-radius: 7px;
+     color: #475569;
+     font-size: var(--control-font);
+     font-weight: 650;
+   }
+   
+   .content-wrapper main .dropdown-item:hover,
+   .content-wrapper main .dropdown-item:focus {
+     background: var(--erp-primary-soft);
+     color: var(--erp-primary);
+   }
+   
+   .content-wrapper main .nav-tabs {
+     gap: 0.25rem;
+     padding: 0.25rem;
+     border: 1px solid var(--erp-border);
+     border-radius: 10px;
+     background: #fff;
+   }
+   
+   .content-wrapper main .nav-tabs .nav-link {
+     border: 0;
+     border-radius: 7px;
+     color: #64748b;
+     font-size: var(--app-font-sm);
+     font-weight: 750;
+   }
+   
+   .content-wrapper main .nav-tabs .nav-link.active {
+     background: var(--erp-primary-soft);
+     color: var(--erp-primary);
+   }
+   
+   .content-wrapper main .alert {
+     border-width: 1px;
+     border-radius: 10px;
+     font-size: var(--control-font);
+   }
+   
+   .content-wrapper main .pagination .page-link {
+     min-width: var(--control-height-sm);
+     min-height: var(--control-height-sm);
+     display: grid;
+     place-items: center;
+     margin-inline: 0.12rem;
+     border: 1px solid var(--erp-border);
+     border-radius: 8px !important;
+     background: #fff;
+     color: #64748b;
+     font-size: var(--app-font-xs);
+     font-weight: 750;
+   }
+   
+   .content-wrapper main .pagination .page-item.active .page-link {
+     border-color: var(--erp-primary);
+     background: var(--erp-primary);
+     color: #fff;
+   }
+   
+   .content-wrapper main .badge {
+     border-radius: 6px;
+     font-weight: 800;
+     letter-spacing: 0;
+   }
+   
+   .content-wrapper main hr {
+     border-color: #e8edf4;
+     opacity: 1;
+   }
+   
+   /* Row/col safety in Bootstrap grids */
+   .content-wrapper main .row > [class*='col'] {
+     min-width: 0;
+   }
+   
+   @media (max-width: 767px) {
+     .content-wrapper main .card {
+       border-radius: 12px !important;
+     }
+   
+     .content-wrapper main .modal-dialog {
+       margin: 0.65rem;
+       max-width: calc(100% - 1.3rem);
+     }
+   }
+   
+   @media print {
+     .content-wrapper main .card {
+       border-color: #d1d5db !important;
+       box-shadow: none !important;
+     }
+   }
+   
+   /* Persian date picker — custom dual-calendar control (no native browser picker) */
+   .input-group.persianDatePicker,
+   .input-group-sm.persianDatePicker,
+   .date-picker-control {
+     display: flex !important;
+     flex-direction: row !important;
+     align-items: stretch !important;
+     flex-wrap: nowrap !important;
+     width: 100%;
+     min-height: var(--control-height-sm, 2.125rem);
+     border: 1px solid #dbe7f3;
+     border-radius: 8px;
+     overflow: hidden;
+     background: #ffffff;
+     cursor: pointer;
+     transition:
+       border-color 0.15s ease,
+       background 0.15s ease,
+       box-shadow 0.15s ease;
+   }
+   
+   .date-picker-control:hover {
+     border-color: #bfdbfe;
+     background: #f8fbff;
+   }
+   
+   .date-picker-control:focus-within {
+     border-color: #93c5fd;
+     box-shadow: 0 0 0 0.15rem rgba(37, 99, 235, 0.1);
+   }
+   
+   .persian-date-input-hidden {
+     position: absolute !important;
+     width: 1px !important;
+     height: 1px !important;
+     padding: 0 !important;
+     margin: -1px !important;
+     overflow: hidden !important;
+     clip: rect(0, 0, 0, 0) !important;
+     white-space: nowrap !important;
+     border: 0 !important;
+     opacity: 0 !important;
+     pointer-events: none !important;
+   }
+   
+   .gregorian-date-text,
+   .input-group-sm.persianDatePicker > .persian-date-text,
+   .input-group-sm.persianDatePicker > .input-group-text.persian-date-text {
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     flex: 1 1 50%;
+     min-width: 0;
+     min-height: var(--control-height-sm, 2.125rem);
+     padding: 0.35rem 0.55rem;
+     margin: 0;
+     border: 0;
+     border-radius: 0;
+     background: transparent;
+     color: #0f172a;
+     font-size: 0.8rem;
+     font-weight: 600;
+     line-height: 1.2;
+     white-space: nowrap;
+     text-align: center;
+     box-sizing: border-box;
+     user-select: none;
+   }
+   
+   .gregorian-date-text {
+     border-inline-end: 1px solid #dbe7f3;
+     cursor: pointer;
+   }
+   
+   .input-group-sm.persianDatePicker > .persian-date-text,
+   .input-group-sm.persianDatePicker > .input-group-text.persian-date-text {
+     cursor: pointer;
+   }
+   
+   .gregorian-date-text[data-empty='true'],
+   .input-group-sm.persianDatePicker > .persian-date-text[data-empty='true'] {
+     color: #94a3b8;
+     font-weight: 500;
+   }
+   
+   .date-picker-icon {
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     flex: 0 0 34px;
+     width: 34px;
+     min-width: 34px;
+     border-inline-start: 1px solid #dbe7f3;
+     color: #64748b;
+     font-size: 0.82rem;
+     background: transparent;
+     cursor: pointer;
+   }
+   
+   .date-picker-control:hover .date-picker-icon {
+     color: #0f6efd;
+     background: rgba(59, 130, 246, 0.06);
+   }
+   
+   .input-group-sm.persianDatePicker > .input-group-text:not(.persian-date-text) {
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     flex: 0 0 auto;
+     height: var(--erp-date-row-height);
+     min-height: var(--erp-date-row-height);
+     padding: 0.25rem 0.5rem;
+     font-size: 0.875rem;
+     line-height: 1.5;
+     box-sizing: border-box;
+     margin: 0;
+     white-space: nowrap;
+   }
+   
+   .input-group-sm.persianDatePicker > .form-control,
+   .input-group-sm.persianDatePicker > input[type='date']:not(.persian-date-input-hidden) {
+     flex: 1 1 50%;
+     min-width: 0;
+     width: auto;
+     height: var(--erp-date-row-height);
+     min-height: var(--erp-date-row-height);
+     max-height: var(--erp-date-row-height);
+     padding: 0.25rem 0.5rem;
+     font-size: 0.875rem;
+     line-height: 1.5;
+     box-sizing: border-box;
+     margin: 0;
+     background-color: #ffffff;
+   }
+   
+   .input-group-sm.persianDatePicker > input[type='date']::-webkit-calendar-picker-indicator {
+     display: none;
+   }
+   
+   /* MDS Persian calendar popup — match FilterSelect styling */
+   .mds-bs-persian-datetime-picker-popover {
+     border: 1px solid rgba(15, 23, 42, 0.08) !important;
+     border-radius: 0.75rem !important;
+     box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12) !important;
+     overflow: hidden;
+     z-index: 999999999 !important;
+   }
+   
+   .mds-bs-dtp-container {
+     font-family: 'Vazirmatn', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+     min-width: 280px;
+   }
+   
+   .mds-bs-dtp-container [mds-dtp-inline-header] {
+     border-bottom: 1px solid #eef2f7 !important;
+     background: #f8fbff;
+   }
+   
+   .mds-bs-dtp-container table table tbody.days tr:first-child > td {
+     color: #64748b;
+     font-size: 0.72rem;
+     font-weight: 700;
+   }
+   
+   .mds-bs-dtp-container table table tbody.days td[data-day] {
+     border-radius: 0.5rem;
+   }
+   
+   .mds-bs-dtp-container table table tbody.days td[data-day][data-today] {
+     background-color: rgba(59, 130, 246, 0.08) !important;
+     color: #0f6efd;
+   }
+   
+   .mds-bs-dtp-container table table tbody.days td[data-day][data-mds-dtp-selected-day],
+   .mds-bs-dtp-container table table tbody.days td.selected-range-days-start-end {
+     background-color: rgba(59, 130, 246, 0.14) !important;
+     color: #0f6efd !important;
+     font-weight: 700;
+   }
+   
+   .mds-bs-dtp-container table table tbody.days td[data-day]:not([data-special-date]):hover,
+   .mds-bs-dtp-container table table tbody.days td[data-nm]:hover,
+   .mds-bs-dtp-container table table tbody.days td[data-pm]:hover {
+     background: rgba(59, 130, 246, 0.06) !important;
+     color: #0f6efd !important;
+   }
+   
+   .mds-bs-dtp-container .btn {
+     border-radius: 0.5rem;
+     font-weight: 600;
+   }
+   
+   .mds-bs-dtp-container .select-year-box,
+   .mds-bs-dtp-container .select-year-inline-box {
+     border-radius: 0.75rem;
+   }
+.legacy-date-input {
+  display: none !important;
+}
+
+.legacy-app-date-picker-host {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.legacy-app-date-picker-host + .persian-date-text,
+.legacy-app-date-picker-host ~ .persian-date-text {
+  display: none !important;
+}
+
+/* =============================================================================
+   Dark theme
+   ============================================================================= */
+
+html.dark {
+  --erp-primary: #60a5fa;
+  --erp-primary-hover: #93c5fd;
+  --erp-primary-soft: rgba(96, 165, 250, 0.16);
+  --erp-navy: #93c5fd;
+  --erp-text: #e5edf7;
+  --erp-text-soft: #cbd5e1;
+  --erp-muted: #94a3b8;
+  --erp-border: #2b3a4f;
+  --erp-border-strong: #40516a;
+  --erp-bg: #0b1120;
+  --erp-bg-base: #0b1120;
+  --erp-surface: #111827;
+  --erp-surface-soft: #172033;
+  --erp-surface-glass: rgba(17, 24, 39, 0.94);
+  --erp-surface-glass-border: rgba(43, 58, 79, 0.92);
+  --erp-shadow-sm: 0 8px 22px rgba(0, 0, 0, 0.26);
+  --erp-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+}
+
+html.dark body,
+html.dark .content-wrapper,
+html.dark .content-wrapper main,
+html.dark .erp-page-main,
+html.dark .route-fill {
+  background: var(--erp-bg) !important;
+  color: var(--erp-text);
+}
+
+html.dark ::selection {
+  background: rgba(96, 165, 250, 0.35);
+  color: #f8fafc;
+}
+
+html.dark .content-card,
+html.dark .content-wrapper main .card,
+html.dark .card,
+html.dark .table-card,
+html.dark [class*='-table-card'],
+html.dark .summary-card,
+html.dark .metric-card,
+html.dark .quick-metric-card,
+html.dark .stat-card,
+html.dark .finance-card,
+html.dark .top-products-card,
+html.dark .chart-card,
+html.dark .index-card,
+html.dark .dashboard-card {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface) !important;
+  color: var(--erp-text) !important;
+  box-shadow: var(--erp-shadow-sm) !important;
+}
+
+html.dark .content-wrapper main .card-header,
+html.dark .content-wrapper main .card-footer,
+html.dark .card-header,
+html.dark .card-footer,
+html.dark .table-card-header,
+html.dark [class*='-table-card'] [class*='header'],
+html.dark .modal-header,
+html.dark .modal-footer {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface-soft) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .content-wrapper main .card-title,
+html.dark .content-wrapper main .modal-title,
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6,
+html.dark .text-dark {
+  color: var(--erp-text) !important;
+}
+
+html.dark .text-muted,
+html.dark small,
+html.dark .form-text {
+  color: var(--erp-muted) !important;
+}
+
+html.dark .erp-topbar,
+html.dark .mobile-page-nav,
+html.dark .topbar-actions .btn,
+html.dark .erp-icon-btn,
+html.dark .sync-indicator .sync-btn,
+html.dark .version-pill,
+html.dark .user-chip {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface) !important;
+  color: var(--erp-text) !important;
+  box-shadow: var(--erp-shadow-sm) !important;
+}
+
+html.dark .topbar-page-title,
+html.dark .topbar-page-title i,
+html.dark .user-meta strong {
+  color: var(--erp-text) !important;
+}
+
+html.dark .version-pill {
+  border-color: rgba(34, 197, 94, 0.3) !important;
+  background: rgba(34, 197, 94, 0.12) !important;
+  color: #86efac !important;
+}
+
+html.dark .content-wrapper main .btn-secondary,
+html.dark .content-wrapper main .btn-light,
+html.dark .content-wrapper main .btn-outline-primary,
+html.dark .btn-light,
+html.dark .btn-outline-secondary {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface-soft) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .content-wrapper main .btn-secondary:hover:not(:disabled),
+html.dark .content-wrapper main .btn-light:hover:not(:disabled),
+html.dark .content-wrapper main .btn-outline-primary:hover:not(:disabled),
+html.dark .btn-light:hover,
+html.dark .btn-outline-secondary:hover {
+  border-color: var(--erp-border-strong) !important;
+  background: #1e293b !important;
+  color: #bfdbfe !important;
+}
+
+html.dark .content-wrapper main .form-control,
+html.dark .content-wrapper main .form-select,
+html.dark .form-control,
+html.dark .form-select,
+html.dark .input-group-text,
+html.dark .date-picker-control,
+html.dark .input-group.persianDatePicker,
+html.dark .input-group-sm.persianDatePicker {
+  border-color: var(--erp-border) !important;
+  background-color: var(--erp-surface) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .content-wrapper main .form-control::placeholder,
+html.dark .form-control::placeholder {
+  color: #64748b !important;
+}
+
+html.dark .content-wrapper main .form-control:focus,
+html.dark .content-wrapper main .form-select:focus,
+html.dark .form-control:focus,
+html.dark .form-select:focus {
+  border-color: #60a5fa !important;
+  background-color: #0f172a !important;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18) !important;
+}
+
+html.dark .content-wrapper main .form-label,
+html.dark .content-wrapper main label:not(.form-check-label),
+html.dark label:not(.form-check-label) {
+  color: var(--erp-text-soft) !important;
+}
+
+html.dark .content-wrapper main .table,
+html.dark .table {
+  --mdb-table-color: var(--erp-text);
+  --mdb-table-striped-bg: rgba(148, 163, 184, 0.06);
+  --mdb-table-hover-bg: rgba(96, 165, 250, 0.1);
+  color: var(--erp-text) !important;
+}
+
+html.dark .content-wrapper main .table > thead > tr > th,
+html.dark .table > thead > tr > th,
+html.dark .content-wrapper main .card:has(> .card-body.p-0) .table thead th,
+html.dark .content-wrapper main .card:has(.table-responsive) .table thead th {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface-soft) !important;
+  color: var(--erp-text-soft) !important;
+}
+
+html.dark .content-wrapper main .table > tbody > tr > td,
+html.dark .table > tbody > tr > td {
+  border-color: var(--erp-border) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .content-wrapper main .table-hover > tbody > tr:hover > *,
+html.dark .table-hover > tbody > tr:hover > * {
+  --mdb-table-accent-bg: rgba(96, 165, 250, 0.1);
+  color: #f8fafc !important;
+}
+
+html.dark .content-wrapper main .modal-content,
+html.dark .modal-content,
+html.dark .dropdown-menu,
+html.dark .popover,
+html.dark .swal2-popup {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .dropdown-item {
+  color: var(--erp-text-soft) !important;
+}
+
+html.dark .dropdown-item:hover,
+html.dark .dropdown-item:focus {
+  background: var(--erp-primary-soft) !important;
+  color: #bfdbfe !important;
+}
+
+html.dark .content-wrapper main .nav-tabs,
+html.dark .nav-tabs,
+html.dark .pagination .page-link {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface) !important;
+}
+
+html.dark .content-wrapper main .nav-tabs .nav-link,
+html.dark .nav-tabs .nav-link,
+html.dark .pagination .page-link {
+  color: var(--erp-text-soft) !important;
+}
+
+html.dark .content-wrapper main .nav-tabs .nav-link.active,
+html.dark .nav-tabs .nav-link.active,
+html.dark .pagination .page-item.active .page-link {
+  border-color: var(--erp-primary) !important;
+  background: var(--erp-primary-soft) !important;
+  color: #bfdbfe !important;
+}
+
+html.dark .alert {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface-soft) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark hr {
+  border-color: var(--erp-border) !important;
+}
+
+html.dark .table-container,
+html.dark .table-responsive,
+html.dark .erp-page-main,
+html.dark .sidebar-menu {
+  scrollbar-color: #475569 transparent;
+}
+
+html.dark .gregorian-date-text,
+html.dark .input-group-sm.persianDatePicker > .persian-date-text,
+html.dark .input-group-sm.persianDatePicker > .input-group-text.persian-date-text {
+  color: var(--erp-text) !important;
+}
+
+html.dark .date-picker-icon {
+  border-color: var(--erp-border) !important;
+  color: var(--erp-muted) !important;
+}
+
+html.dark .mds-bs-persian-datetime-picker-popover,
+html.dark .mds-bs-dtp-container,
+html.dark .mds-bs-dtp-container [mds-dtp-inline-header] {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .index-page,
+html.dark .data-table-wrap,
+html.dark .filter-toolbar,
+html.dark .page-toolbar,
+html.dark .pagination-shell {
+  color: var(--erp-text) !important;
+}
+
+html.dark [class*='avatar'],
+html.dark [class*='initial'],
+html.dark .account-avatar,
+html.dark .user-avatar,
+html.dark .table-avatar {
+  border-color: var(--erp-border) !important;
+  background: rgba(96, 165, 250, 0.14) !important;
+  color: #bfdbfe !important;
+}
+
+html.dark [class*='name'],
+html.dark [class*='title'],
+html.dark [class*='label'] {
+  color: inherit;
+}
+
+html.dark .filter-search,
+html.dark .filter-panel,
+html.dark .filter-select__menu,
+html.dark .per-page-picker select,
+html.dark .data-table,
+html.dark .index-panel {
+  color-scheme: dark;
+}
+
+html.dark .positive,
+html.dark .amount-positive,
+html.dark .balance-positive,
+html.dark .text-success:not(.btn):not(.badge) {
+  color: #34d399 !important;
+}
+
+html.dark .negative,
+html.dark .amount-negative,
+html.dark .balance-negative,
+html.dark .text-danger:not(.btn):not(.badge) {
+  color: #f87171 !important;
+}
+
+html.dark .text-warning:not(.btn):not(.badge) {
+  color: #fbbf24 !important;
+}
+
+html.dark .bg-light,
+html.dark .bg-body,
+html.dark .bg-body-tertiary {
+  background-color: var(--erp-surface-soft) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .border,
+html.dark .border-top,
+html.dark .border-bottom,
+html.dark .border-start,
+html.dark .border-end {
+  border-color: var(--erp-border) !important;
+}
+
+/* Detail pages: sales, purchases, products, and nested payment ledgers */
+html.dark .purchase-detail-page,
+html[data-mdb-theme='dark'] .purchase-detail-page {
+  background: var(--erp-bg) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .pd-header-card,
+html.dark .pd-card,
+html.dark .pd-ledger-card,
+html.dark .pd-ledger-panel,
+html.dark .purchase-summary-card,
+html.dark .purchase-detail-card,
+html.dark .purchase-return-block,
+html.dark .product-tabs,
+html.dark .product-tab-card,
+html.dark .product-overview-card,
+html.dark .product-empty-state,
+html.dark .report-kpi,
+html.dark .report-panel,
+html[data-mdb-theme='dark'] .pd-header-card,
+html[data-mdb-theme='dark'] .pd-card,
+html[data-mdb-theme='dark'] .pd-ledger-card,
+html[data-mdb-theme='dark'] .pd-ledger-panel,
+html[data-mdb-theme='dark'] .purchase-summary-card,
+html[data-mdb-theme='dark'] .purchase-detail-card,
+html[data-mdb-theme='dark'] .purchase-return-block,
+html[data-mdb-theme='dark'] .product-tabs,
+html[data-mdb-theme='dark'] .product-tab-card,
+html[data-mdb-theme='dark'] .product-overview-card,
+html[data-mdb-theme='dark'] .product-empty-state,
+html[data-mdb-theme='dark'] .report-kpi,
+html[data-mdb-theme='dark'] .report-panel {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface) !important;
+  color: var(--erp-text) !important;
+  box-shadow: var(--erp-shadow-sm) !important;
+}
+
+html.dark .pd-card__head,
+html.dark .pd-header-meta,
+html.dark .pd-ledger-tabs,
+html.dark .pd-ledger-panel__toolbar,
+html.dark .product-table-toolbar,
+html.dark .product-table-footer,
+html.dark .report-panel__toolbar,
+html.dark .product-details-grid,
+html.dark .product-detail-section + .product-detail-section,
+html.dark .product-description-block,
+html.dark .product-meta-list__row,
+html[data-mdb-theme='dark'] .pd-card__head,
+html[data-mdb-theme='dark'] .pd-header-meta,
+html[data-mdb-theme='dark'] .pd-ledger-tabs,
+html[data-mdb-theme='dark'] .pd-ledger-panel__toolbar,
+html[data-mdb-theme='dark'] .product-table-toolbar,
+html[data-mdb-theme='dark'] .product-table-footer,
+html[data-mdb-theme='dark'] .report-panel__toolbar,
+html[data-mdb-theme='dark'] .product-details-grid,
+html[data-mdb-theme='dark'] .product-detail-section + .product-detail-section,
+html[data-mdb-theme='dark'] .product-description-block,
+html[data-mdb-theme='dark'] .product-meta-list__row {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface-soft) !important;
+}
+
+html.dark .pd-header-card__title,
+html.dark .pd-header-meta dd,
+html.dark .pd-card__title,
+html.dark .purchase-summary-card__value,
+html.dark .product-overview-card__name,
+html.dark .product-detail-section__title,
+html.dark .product-description-block__title,
+html.dark .product-meta-list__row dd,
+html.dark .product-price-card__value,
+html.dark .report-kpi__value,
+html[data-mdb-theme='dark'] .pd-header-card__title,
+html[data-mdb-theme='dark'] .pd-header-meta dd,
+html[data-mdb-theme='dark'] .pd-card__title,
+html[data-mdb-theme='dark'] .purchase-summary-card__value,
+html[data-mdb-theme='dark'] .product-overview-card__name,
+html[data-mdb-theme='dark'] .product-detail-section__title,
+html[data-mdb-theme='dark'] .product-description-block__title,
+html[data-mdb-theme='dark'] .product-meta-list__row dd,
+html[data-mdb-theme='dark'] .product-price-card__value,
+html[data-mdb-theme='dark'] .report-kpi__value {
+  color: var(--erp-text) !important;
+}
+
+html.dark .pd-header-meta dt,
+html.dark .pd-table__currency,
+html.dark .purchase-qty-unit,
+html.dark .purchase-summary-card__label,
+html.dark .purchase-summary-card__value small,
+html.dark .product-overview-card__eyebrow,
+html.dark .product-meta-list__row dt,
+html.dark .product-price-card__label,
+html.dark .product-price-card__value small,
+html.dark .report-kpi__label,
+html[data-mdb-theme='dark'] .pd-header-meta dt,
+html[data-mdb-theme='dark'] .pd-table__currency,
+html[data-mdb-theme='dark'] .purchase-qty-unit,
+html[data-mdb-theme='dark'] .purchase-summary-card__label,
+html[data-mdb-theme='dark'] .purchase-summary-card__value small,
+html[data-mdb-theme='dark'] .product-overview-card__eyebrow,
+html[data-mdb-theme='dark'] .product-meta-list__row dt,
+html[data-mdb-theme='dark'] .product-price-card__label,
+html[data-mdb-theme='dark'] .product-price-card__value small,
+html[data-mdb-theme='dark'] .report-kpi__label {
+  color: var(--erp-muted) !important;
+}
+
+html.dark .pd-table th,
+html.dark .product-table thead,
+html.dark .product-table th,
+html.dark .report-panel__table thead th,
+html[data-mdb-theme='dark'] .pd-table th,
+html[data-mdb-theme='dark'] .product-table thead,
+html[data-mdb-theme='dark'] .product-table th,
+html[data-mdb-theme='dark'] .report-panel__table thead th {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface-soft) !important;
+  color: var(--erp-text-soft) !important;
+}
+
+html.dark .pd-table td,
+html.dark .product-table td,
+html.dark .report-panel__table td,
+html[data-mdb-theme='dark'] .pd-table td,
+html[data-mdb-theme='dark'] .product-table td,
+html[data-mdb-theme='dark'] .report-panel__table td {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .pd-table tbody tr:hover td,
+html.dark .product-table tbody tr:hover,
+html.dark .report-panel__table tbody tr:hover,
+html[data-mdb-theme='dark'] .pd-table tbody tr:hover td,
+html[data-mdb-theme='dark'] .product-table tbody tr:hover,
+html[data-mdb-theme='dark'] .report-panel__table tbody tr:hover {
+  background: #1a2638 !important;
+}
+
+html.dark .product-overview-card__image,
+html[data-mdb-theme='dark'] .product-overview-card__image {
+  border-color: var(--erp-border) !important;
+  background:
+    linear-gradient(#233149 1px, transparent 1px),
+    linear-gradient(90deg, #233149 1px, transparent 1px),
+    #0f1726 !important;
+}
+
+html.dark .product-price-card,
+html.dark .product-description-block__text,
+html.dark .report-panel__date,
+html.dark .report-panel__chip,
+html.dark .report-panel__search-wrap,
+html.dark .report-panel__select,
+html.dark .report-panel__pdf,
+html[data-mdb-theme='dark'] .product-price-card,
+html[data-mdb-theme='dark'] .product-description-block__text,
+html[data-mdb-theme='dark'] .report-panel__date,
+html[data-mdb-theme='dark'] .report-panel__chip,
+html[data-mdb-theme='dark'] .report-panel__search-wrap,
+html[data-mdb-theme='dark'] .report-panel__select,
+html[data-mdb-theme='dark'] .report-panel__pdf {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface-soft) !important;
+  color: var(--erp-text) !important;
+}
+
+html.dark .pd-ledger-tab,
+html[data-mdb-theme='dark'] .pd-ledger-tab {
+  background: transparent !important;
+  color: var(--erp-text-soft) !important;
+}
+
+html.dark .pd-ledger-tab--active,
+html[data-mdb-theme='dark'] .pd-ledger-tab--active {
+  border-color: var(--erp-primary) !important;
+  background: var(--erp-primary-soft) !important;
+  color: #bfdbfe !important;
+}
+
+html.dark .purchase-qty-pill,
+html.dark .pd-ledger-tab__count,
+html.dark .product-tabs__btn--active,
+html[data-mdb-theme='dark'] .purchase-qty-pill,
+html[data-mdb-theme='dark'] .pd-ledger-tab__count,
+html[data-mdb-theme='dark'] .product-tabs__btn--active {
+  background: var(--erp-primary-soft) !important;
+  color: #bfdbfe !important;
+}

@@ -1,0 +1,485 @@
+.zeno-login {
+  --login-blue: #3b82f6;
+  --login-blue-dark: #0f6efd;
+  --login-blue-soft: rgba(59, 130, 246, 0.1);
+  --login-text: #0f172a;
+  --login-muted: #64748b;
+  --login-border: rgba(15, 23, 42, 0.1);
+
+  min-height: 100vh;
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: clamp(0.85rem, 3.5vw, 1.7rem);
+  overflow: hidden;
+  font-family: 'Vazirmatn', 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--login-text);
+  background:
+    radial-gradient(circle at 15% 12%, rgba(59, 130, 246, 0.15), transparent 30%),
+    radial-gradient(circle at 86% 80%, rgba(14, 165, 233, 0.12), transparent 28%),
+    linear-gradient(180deg, #f8fbff 0%, #ffffff 47%, #eef6ff 100%);
+}
+
+.zeno-login__bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.zeno-login__blob {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 999px;
+  filter: blur(80px);
+  opacity: 0.82;
+}
+
+.zeno-login__blob--1 {
+  top: -100px;
+  inset-inline-start: -85px;
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.zeno-login__blob--2 {
+  bottom: -115px;
+  inset-inline-end: -110px;
+  background: rgba(14, 165, 233, 0.14);
+}
+
+.zeno-login__dots {
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  background-image: radial-gradient(rgba(37, 99, 235, 0.24) 1px, transparent 1px);
+  background-size: 20px 20px;
+  mask-image: radial-gradient(ellipse 70% 65% at 50% 45%, black 15%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 65% at 50% 45%, black 15%, transparent 78%);
+}
+
+.zeno-login__mock {
+  position: absolute;
+  width: 160px;
+  padding: 0.85rem;
+  border: 1px solid rgba(59, 130, 246, 0.12);
+  border-radius: 1.05rem;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.zeno-login__mock::before,
+.zeno-login__mock span,
+.zeno-login__mock strong,
+.zeno-login__mock em {
+  content: '';
+  display: block;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.zeno-login__mock::before {
+  width: 36px;
+  height: 36px;
+  border-radius: 0.75rem;
+  margin-bottom: 0.7rem;
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.38), rgba(37, 99, 235, 0.18));
+}
+
+.zeno-login__mock span {
+  width: 70%;
+  height: 8px;
+  margin-bottom: 0.45rem;
+}
+
+.zeno-login__mock strong {
+  width: 92%;
+  height: 8px;
+  margin-bottom: 0.45rem;
+}
+
+.zeno-login__mock em {
+  width: 54%;
+  height: 8px;
+}
+
+.zeno-login__mock--sales {
+  top: 16%;
+  inset-inline-start: clamp(1rem, 9vw, 8rem);
+  transform: rotate(-5deg);
+}
+
+.zeno-login__mock--report {
+  right: clamp(1rem, 9vw, 8rem);
+  bottom: 15%;
+  transform: rotate(6deg);
+}
+
+.zeno-login__card {
+  width: min(100%, 380px);
+  position: relative;
+  z-index: 1;
+  border: 1px solid rgba(59, 130, 246, 0.16);
+  border-radius: 1.4rem;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(59, 130, 246, 0.09), transparent 28%),
+    rgba(255, 255, 255, 0.96);
+  box-shadow: 0 24px 68px rgba(15, 23, 42, 0.14);
+  padding: clamp(1.05rem, 3vw, 1.55rem);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.zeno-login__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+}
+
+.zeno-login__lang {
+  flex-shrink: 0;
+}
+
+.zeno-login__lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: transparent;
+  border: 1px solid var(--login-border);
+  border-radius: 7px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--login-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.zeno-login__lang-btn:hover {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: rgba(59, 130, 246, 0.28);
+  color: var(--login-text);
+}
+
+.zeno-login__lang-btn::after {
+  display: none;
+}
+
+.zeno-login__lang-chevron {
+  font-size: 0.55rem;
+  opacity: 0.6;
+}
+
+.zeno-login__lang .dropdown-menu {
+  min-width: 7.5rem;
+  padding: 0.3rem;
+  margin-top: 0.3rem !important;
+}
+
+.zeno-login__lang .dropdown-item {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--login-text);
+  padding: 0.38rem 0.55rem;
+}
+
+.zeno-login__lang .dropdown-item.active,
+.zeno-login__lang .dropdown-item:active {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--login-blue-dark);
+}
+
+.zeno-login__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid rgba(59, 130, 246, 0.12);
+  background: rgba(59, 130, 246, 0.07);
+  color: var(--login-blue-dark);
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+  margin-bottom: 0;
+  transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.zeno-login__back:hover {
+  background: rgba(59, 130, 246, 0.13);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.1);
+}
+
+.zeno-login[dir='rtl'] .zeno-login__back i {
+  transform: scaleX(-1);
+}
+
+.zeno-login__brand {
+  text-align: center;
+  margin-bottom: 1.05rem;
+}
+
+.zeno-login__logo-wrap {
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  border-radius: 0.95rem;
+  background: #ffffff;
+  box-shadow: 0 12px 26px rgba(59, 130, 246, 0.13);
+  margin-bottom: 0.6rem;
+}
+
+.zeno-login__logo {
+  max-width: 40px;
+  max-height: 40px;
+}
+
+.zeno-login__eyebrow {
+  display: block;
+  color: var(--login-blue-dark);
+  font-size: 0.65rem;
+  font-weight: 850;
+  margin-bottom: 0.25rem;
+}
+
+.zeno-login__brand h1 {
+  margin: 0 0 0.3rem;
+  color: var(--login-text);
+  font-size: clamp(1.22rem, 3.5vw, 1.55rem);
+  font-weight: 850;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+}
+
+.zeno-login__brand p {
+  max-width: 285px;
+  margin: 0 auto;
+  color: var(--login-muted);
+  font-size: 0.78rem;
+  line-height: 1.7;
+}
+
+.zeno-login__error {
+  margin-bottom: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.8rem;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.zeno-login__form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.zeno-login__field {
+  display: grid;
+  gap: 0.32rem;
+  margin: 0;
+  color: var(--login-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.zeno-login__control {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.zeno-login__control-icon {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: 0.75rem;
+  z-index: 1;
+  color: #94a3b8;
+  font-size: 0.88rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+  transition: color 0.18s ease;
+}
+
+.zeno-login__control input,
+.zeno-login__control select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--login-border);
+  border-radius: 0.8rem;
+  background: rgba(248, 251, 255, 0.92);
+  color: var(--login-text);
+  padding: 0.6rem 0.75rem;
+  padding-inline-start: 2.15rem;
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.zeno-login__control select {
+  cursor: pointer;
+}
+
+.zeno-login__control input:focus,
+.zeno-login__control select:focus {
+  border-color: rgba(59, 130, 246, 0.58);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.zeno-login__control:focus-within .zeno-login__control-icon {
+  color: var(--login-blue-dark);
+}
+
+.zeno-login__password input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.zeno-login__password button {
+  width: 40px;
+  flex: 0 0 40px;
+  border: 1px solid var(--login-border);
+  border-inline-start: 0;
+  border-start-end-radius: 0.8rem;
+  border-end-end-radius: 0.8rem;
+  background: #ffffff;
+  color: var(--login-muted);
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.zeno-login__password button:hover,
+.zeno-login__password button:focus-visible {
+  color: var(--login-blue-dark);
+  background: #f8fbff;
+  border-color: rgba(59, 130, 246, 0.28);
+  outline: none;
+}
+
+.zeno-login__submit {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--login-blue) 0%, var(--login-blue-dark) 100%);
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 850;
+  box-shadow: 0 14px 28px rgba(59, 130, 246, 0.28);
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.zeno-login__submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 36px rgba(59, 130, 246, 0.36);
+}
+
+.zeno-login__submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.zeno-login__submit i {
+  font-size: 1.05rem;
+}
+
+.zeno-login__register {
+  margin: 0.85rem 0 0;
+  color: var(--login-muted);
+  text-align: center;
+  font-size: 0.76rem;
+}
+
+.zeno-login__register button {
+  border: 0;
+  background: transparent;
+  color: var(--login-blue-dark);
+  font-weight: 850;
+  padding: 0.1rem 0.2rem;
+  cursor: pointer;
+  transition: color 0.18s ease;
+}
+
+.zeno-login__register button:hover {
+  color: #1d4ed8;
+}
+
+.zeno-login__danger {
+  width: 100%;
+  margin-top: 0.75rem;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  background: #fef2f2;
+  color: #b91c1c;
+  padding: 0.6rem 0.85rem;
+  font-weight: 800;
+  font-size: 0.84rem;
+}
+
+.zeno-login__version {
+  margin-top: 1.05rem;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.65rem;
+}
+
+@media (max-width: 991.98px) {
+  .zeno-login__mock {
+    opacity: 0.45;
+  }
+
+  .zeno-login__mock--sales {
+    inset-inline-start: -42px;
+  }
+
+  .zeno-login__mock--report {
+    inset-inline-end: -48px;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .zeno-login {
+    place-items: center;
+    padding: 0.65rem;
+  }
+
+  .zeno-login__card {
+    width: min(100%, 92vw);
+    border-radius: 1.15rem;
+    padding: 0.95rem;
+  }
+
+  .zeno-login__mock {
+    display: none;
+  }
+
+  .zeno-login__brand {
+    margin-bottom: 0.85rem;
+  }
+
+  .zeno-login__logo-wrap {
+    width: 48px;
+    height: 48px;
+  }
+
+  .zeno-login__logo {
+    max-width: 37px;
+    max-height: 37px;
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "newsvelte",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "prettier": "^3.8.1",
+    "prettier-plugin-svelte": "^3.5.1",
+    "svelte": "^5.45.2",
+    "vite": "^7.3.1",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@hamedf/svelte-persian-datepicker": "^1.4.0",
+    "@tailwindcss/vite": "^4.1.18",
+    "@tiptap/core": "^3.27.0",
+    "@tiptap/extension-table": "^3.27.0",
+    "@tiptap/extension-table-cell": "^3.27.0",
+    "@tiptap/extension-table-header": "^3.27.0",
+    "@tiptap/extension-table-row": "^3.27.0",
+    "@tiptap/pm": "^3.27.0",
+    "@tiptap/starter-kit": "^3.27.0",
+    "animate.css": "^4.1.1",
+    "arabic-persian-reshaper": "^1.0.1",
+    "chart.js": "^4.5.1",
+    "decimal.js": "^10.6.0",
+    "html2pdf.js": "^0.14.0",
+    "jalaali-js": "^1.2.8",
+    "jsbarcode": "^3.12.3",
+    "jspdf": "^4.2.0",
+    "jspdf-autotable": "^5.0.7",
+    "mdb-ui-kit": "^9.3.0",
+    "qrcode": "^1.5.4",
+    "rtl-detect": "^1.1.2",
+    "svelte-spa-router": "^4.0.1",
+    "sweetalert2": "^11.26.21"
+  }
+}

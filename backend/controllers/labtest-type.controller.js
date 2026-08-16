@@ -1,0 +1,92 @@
+const labtestTypeService =
+  require('../services/labtest-type.service');
+
+const {
+  getRequestContext,
+} = require('../utils/requestContext');
+
+async function list(req, res) {
+  const records =
+    await labtestTypeService.listLabtestTypes({
+      user: req.user,
+      filters: req.validated.query,
+    });
+
+  res.status(200).json({
+    success: true,
+    data: records,
+  });
+}
+
+async function getById(req, res) {
+  const record =
+    await labtestTypeService.getLabtestType({
+      user: req.user,
+      labtestTypeId: req.validated.params.id,
+    });
+
+  res.status(200).json({
+    success: true,
+    data: record,
+  });
+}
+
+async function create(req, res) {
+  const record =
+    await labtestTypeService.createLabtestType({
+      user: req.user,
+      data: req.validated.body,
+      requestContext:
+        getRequestContext(req),
+    });
+
+  res.status(201).json({
+    success: true,
+    message:
+      'Lab test type created successfully.',
+    data: record,
+  });
+}
+
+async function update(req, res) {
+  const record =
+    await labtestTypeService.updateLabtestType({
+      user: req.user,
+      labtestTypeId: req.validated.params.id,
+      data: req.validated.body,
+      requestContext:
+        getRequestContext(req),
+    });
+
+  res.status(200).json({
+    success: true,
+    message:
+      'Lab test type updated successfully.',
+    data: record,
+  });
+}
+
+async function remove(req, res) {
+  const record =
+    await labtestTypeService.deleteLabtestType({
+      user: req.user,
+      labtestTypeId: req.validated.params.id,
+      requestContext:
+        getRequestContext(req),
+    });
+
+  res.status(200).json({
+    success: true,
+    message:
+      'Lab test type deleted successfully.',
+    data: record,
+  });
+}
+
+module.exports = {
+  list,
+  getById,
+  create,
+  update,
+  remove,
+};
