@@ -17,9 +17,9 @@
   import DataTable from '../../components/common/DataTable.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import SummaryCard from '../../components/common/SummaryCard.svelte';
-  import ActionButton from '../../components/common/ActionButton.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import TableActions from '../../components/common/TableActions.svelte';
+  import ExportMenu from '../../components/common/ExportMenu.svelte';
   export let id;
 
   import JournalReceiptModal from '../journals/JournalReceiptModal.svelte';
@@ -27,7 +27,8 @@
   let selectedJournal = null;
 
   import { generatePDF } from '../generatePDF.js';
-  let generatingPDF = false;
+  import { generateExcel } from '../generateExcel.js';
+  let exportingReport = false;
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   let componentRoot = null;
@@ -473,14 +474,29 @@
     return pages;
   }
 
-  async function exportReport() {
-    generatingPDF = true;
-    await tick();
-    await generatePDF(
-      'account_financial_report', processed, startDate, endDate, processed.length,
-      getCurrencyInfoArray(computedBalance), account,
-    );
-    generatingPDF = false;
+  async function exportReport(format = 'pdf') {
+    if (exportingReport) return;
+
+    exportingReport = true;
+
+    try {
+      await tick();
+      const exporter = format === 'excel' ? generateExcel : generatePDF;
+
+      await exporter(
+        'account_financial_report',
+        processed,
+        startDate,
+        endDate,
+        processed.length,
+        getCurrencyInfoArray(computedBalance),
+        account,
+      );
+    } catch (error) {
+      console.error('Failed to generate the account financial report:', error);
+    } finally {
+      exportingReport = false;
+    }
   }
 
   import { auth } from '../../auth/authStore';
@@ -606,13 +622,12 @@
     dense={true}
     tablePadding={true}>
     <svelte:fragment slot="actions">
-      <ActionButton
-        variant="secondary"
-        icon="bi-file-pdf-fill"
-        label={t('PDF')}
-        loading={generatingPDF}
-        disabled={generatingPDF}
-        on:click={exportReport} />
+      <ExportMenu
+        extraClass="pdf-btn"
+        loading={exportingReport}
+        disabled={exportingReport || processed.length === 0}
+        on:export={(event) => exportReport(event.detail)}
+      />
       <button
         type="button"
         class="index-settings-button"
@@ -727,24 +742,10 @@
 
     <div class="col-md-2">
       <button
-        on:click={async () => {
-          generatingPDF = true;
-          await tick();
-          await generatePDF(
-            'account_financial_report',
-            processed,
-            startDate,
-            endDate,
-            processed.length,
-            getCurrencyInfoArray(computedBalance),
-            account,
-          );
-
-          generatingPDF = false;
-        }}
-        disabled={generatingPDF}
+        on:click={() => exportReport('pdf')}
+        disabled={exportingReport}
         class="btn btn-outline-danger btn-sm me-2 px-2 float-end">
-        {#if generatingPDF}
+        {#if exportingReport}
           <div class="spinner-border spinner-border-sm" role="status">
             <span class="visually-hidden">${t('Generating...')}</span>
           </div>
