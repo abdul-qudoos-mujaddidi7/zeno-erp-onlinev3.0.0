@@ -155,7 +155,10 @@
     "Currency locked to bill": "Currency locked to bill",
     "System": "System",
     "System accounts cannot be edited.": "System accounts cannot be edited.",
-    "System accounts cannot be deleted.": "System accounts cannot be deleted."
+    "System accounts cannot be deleted.": "System accounts cannot be deleted.",
+    "PDF": "PDF",
+    "Excel": "Excel",
+    "Download": "Download"
   },
   "fa": {
     "Welcome": "خوش آمدید",
@@ -964,6 +967,8 @@
     "File Size": "حجم فایل",
     "Thumbnail": "تصویر تمبنیل",
     "Download": "دانلود",
+    "Excel": "اکسل",
+    "PDF": "PDF",
     "File": "فایل",
     "Mfg": "تولید",
     "Expiry": "انقضأ",
@@ -1660,6 +1665,9 @@
     "Currency locked to bill": "ارز په بل باندې تړل شوی",
     "System": "سیسټمي",
     "System accounts cannot be edited.": "د سیسټم مخکیني حسابونه نشي سمولی.",
-    "System accounts cannot be deleted.": "د سیسټم مخکیني حسابونه نشي ړنګولی."
+    "System accounts cannot be deleted.": "د سیسټم مخکیني حسابونه نشي ړنګولی.",
+    "Download": "ډاونلوډ",
+    "Excel": "اکسل",
+    "PDF": "PDF"
   }
 }

@@ -144,6 +144,14 @@
     justify-content: flex-start;
     gap: 0.5rem;
     min-width: 0;
+    position: relative;
+    z-index: 2;
+  }
+
+  .index-toolbar-actions :global(.export-menu) {
+    position: relative;
+    z-index: 2;
+    flex: 0 0 auto;
   }
 
   .index-toolbar-main {

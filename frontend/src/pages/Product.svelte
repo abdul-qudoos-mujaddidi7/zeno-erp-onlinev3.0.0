@@ -31,6 +31,8 @@ import { purchaseApi } from '../api/purchaseApi.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   import { generatePDF } from './generatePDF.js';
+  import { generateExcel } from './generateExcel.js';
+  import ExportMenu from '../components/common/ExportMenu.svelte';
 
   import { showDate, setDatePickers } from '../calendar.js';
   let generatingPDF = false;
@@ -1060,23 +1062,27 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     return actions;
   }
 
-  async function exportProductReport() {
+  async function exportProductReport(format = 'pdf') {
     generatingPDF = true;
-    await generatePDF(
-      'product_transactions',
-      filteredTransactions,
-      fromDate,
-      toDate,
-      filteredTransactions.length,
-      balance,
-      {
-        product,
-        qtyBalance,
-        benefit: calculateBenefit(balance) || 0,
-        predictedBenefit: calculatePredictedBenefit(balance) || 0,
-      },
-    );
-    generatingPDF = false;
+    try {
+      const exporter = format === 'excel' ? generateExcel : generatePDF;
+      await exporter(
+        'product_transactions',
+        filteredTransactions,
+        fromDate,
+        toDate,
+        filteredTransactions.length,
+        balance,
+        {
+          product,
+          qtyBalance,
+          benefit: calculateBenefit(balance) || 0,
+          predictedBenefit: calculatePredictedBenefit(balance) || 0,
+        },
+      );
+    } finally {
+      generatingPDF = false;
+    }
   }
 
   function calculateBenefit(balance) {
@@ -1668,13 +1674,11 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
         dense={true}
         tablePadding={true}>
         <svelte:fragment slot="actions">
-          <ActionButton
-            variant="secondary"
-            icon="bi-file-pdf-fill"
-            label={t('PDF')}
+          <ExportMenu
             loading={generatingPDF}
-            disabled={generatingPDF}
-            on:click={exportProductReport} />
+            disabled={generatingPDF || filteredTransactions.length === 0}
+            on:export={(event) => exportProductReport(event.detail)}
+          />
 
           <button
             type="button"

@@ -4,7 +4,8 @@
   import { onMount, tick, onDestroy } from 'svelte';
   import { showDate, setDatePickers } from '../calendar.js';
   import { push } from 'svelte-spa-router';
-  import { generatePDF, generatingPDF } from './generatePDF.js';
+  import { generatePDF } from './generatePDF.js';
+  import { generateExcel } from './generateExcel.js';
   import { t, lang, translate_org_type, shortID, settings_all } from '../i18n/i18n';
   import { auth } from '../auth/authStore';
   import SummaryCard from '../components/common/SummaryCard.svelte';
@@ -12,6 +13,7 @@
   import FilterToolbar from '../components/common/FilterToolbar.svelte';
   import DataTable from '../components/common/DataTable.svelte';
   import ActionButton from '../components/common/ActionButton.svelte';
+  import ExportMenu from '../components/common/ExportMenu.svelte';
   import StatusBadge from '../components/common/StatusBadge.svelte';
   import PaginationBar from '../components/common/PaginationBar.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
@@ -30,6 +32,7 @@ import { accountApi } from '../api/accountApi.js';
 
   let purchases = [];
   let loading = true;
+  let exportingReport = false;
   let showSummaryCards = false;
   let accounts = [];
   let warehouses = [];
@@ -70,6 +73,30 @@ import { accountApi } from '../api/accountApi.js';
       push(`/dashboard/account-purchase-form/${account_id}`);
     } else {
       push(`/dashboard/purchase-form/0`);
+    }
+  }
+
+  async function exportPurchases(format) {
+    if (exportingReport) return;
+
+    exportingReport = true;
+
+    try {
+      const exporter = format === 'excel' ? generateExcel : generatePDF;
+
+      await exporter(
+        'purchases',
+        filteredPurchases,
+        fromDate,
+        toDate,
+        filteredPurchases.length,
+        totalPurchasesAmount,
+        {},
+      );
+    } catch (error) {
+      console.error('Failed to generate purchases report:', error);
+    } finally {
+      exportingReport = false;
     }
   }
 
@@ -509,16 +536,12 @@ import { accountApi } from '../api/accountApi.js';
       {#if permissions?.some((p) => p.code === 'Purchases' && p.create)}
         <ActionButton icon="bi-plus-lg" label={t('New Purchase')} on:click={openNewPurchase} />
       {/if}
-      <ActionButton
-        variant="secondary"
-        icon="bi-file-pdf-fill"
-        label={t('PDF')}
-        loading={generatingPDF}
-        disabled={generatingPDF}
+      <ExportMenu
         extraClass="pdf-btn"
-        on:click={() => {
-          generatePDF('purchases', filteredPurchases, fromDate, toDate, filteredPurchases.length, totalPurchasesAmount, {});
-        }} />
+        loading={exportingReport}
+        disabled={exportingReport || filteredPurchases.length === 0}
+        on:export={(event) => exportPurchases(event.detail)}
+      />
       <button
         type="button"
         class="index-settings-button"

@@ -6,9 +6,10 @@
   import { t, lang, translate_org_type } from '../../i18n/i18n';
   import { showDate, setDatePickers } from '../../calendar.js';
   import { generatePDF } from '../generatePDF.js';
+  import { generateExcel } from '../generateExcel.js';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
-  import ActionButton from '../../components/common/ActionButton.svelte';
+  import ExportMenu from '../../components/common/ExportMenu.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
@@ -400,7 +401,7 @@
     return rangeWithDots;
   }
 
-  async function downloadPdf() {
+  async function downloadReport(format) {
     if (generatingPDF) return;
 
     generatingPDF = true;
@@ -409,7 +410,9 @@
       const rows = await fetchAllReportJournals();
       await tick();
 
-      await generatePDF(
+      const exporter = format === 'excel' ? generateExcel : generatePDF;
+
+      await exporter(
         'journals_report',
         rows,
         startDate,
@@ -419,7 +422,7 @@
         {},
       );
     } catch (error) {
-      console.error('Failed to generate journals PDF:', error);
+      console.error('Failed to generate journals report:', error);
     } finally {
       generatingPDF = false;
     }
@@ -441,13 +444,10 @@
     tablePadding
   >
     <svelte:fragment slot="actions">
-      <ActionButton
-        variant="secondary"
-        icon="bi-file-pdf-fill"
-        label={t('PDF')}
+      <ExportMenu
         loading={generatingPDF}
         disabled={generatingPDF || loading || processed.length === 0}
-        on:click={downloadPdf}
+        on:export={(event) => downloadReport(event.detail)}
       />
 
       <button

@@ -4353,3 +4353,111 @@ export async function generatePDF(
     generatingPDF = false;
   }
 }
+
+function formatMoneyPlain(value, currency) {
+  const amount = formatNumber(value, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 3,
+  });
+  const label = currency ? t(currency) : '';
+
+  if (!label) return amount;
+
+  if (t('dir') === 'rtl') {
+    return `${label} ${amount}`;
+  }
+
+  return `${amount} ${label}`;
+}
+
+function flattenExportCell(cell) {
+  if (cell == null || cell === '') return '';
+
+  if (typeof cell === 'number' && Number.isFinite(cell)) {
+    return String(cell);
+  }
+
+  if (typeof cell === 'string') {
+    return stripDirectionalFormatting(cell)
+      .replace(/\n+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  if (isMoneyTableCell(cell)) {
+    return cell.moneyLines
+      .map((line) => formatMoneyPlain(line.amount, line.currency))
+      .join(' | ');
+  }
+
+  if (isSalesPurchaseDetailCell(cell)) {
+    const detail = cell.detailCell;
+
+    return [detail.partyName, detail.billNumber, detail.description]
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+      .join(' | ');
+  }
+
+  if (typeof cell === 'object' && cell.content != null && cell.content !== '') {
+    return flattenExportCell(cell.content);
+  }
+
+  return '';
+}
+
+export async function getReportExportData(
+  type = 'sales',
+  filteredItems = [],
+  fromDate = null,
+  toDate = null,
+  length = 0,
+  totalAmount = {},
+  extraInfo = {},
+) {
+  await loadThings();
+
+  let items = normalizeItems(filteredItems);
+
+  if (type === 'accounts') {
+    items = items.filter((item) => item.include);
+    length = items.length;
+  } else if (!length) {
+    length = items.length;
+  }
+
+  const table = buildTableData({
+    type,
+    items,
+    extraInfo,
+    rtl: false,
+  });
+
+  const metrics = buildReportMetrics({
+    type,
+    filteredItems: items,
+    fromDate,
+    toDate,
+    length,
+    totalAmount,
+    extraInfo,
+  });
+
+  return {
+    type,
+    title: resolveReportTitle(type),
+    companyName: company.name || 'ZenoERP',
+    dateRange: flattenExportCell(formatDateRange(fromDate, toDate)),
+    metrics: normalizeItems(metrics).map((metric) => ({
+      label: flattenExportCell(metric?.label),
+      value: flattenExportCell(metric?.value),
+    })),
+    headers: normalizeItems(table.head?.[0]).map((header) =>
+      flattenExportCell(header),
+    ),
+    rows: normalizeItems(table.body).map((row) =>
+      normalizeItems(row).map((cell) => flattenExportCell(cell)),
+    ),
+    rtl: t('dir') === 'rtl',
+  };
+}

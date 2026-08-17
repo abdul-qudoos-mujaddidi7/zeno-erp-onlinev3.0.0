@@ -1,7 +1,8 @@
 <script>
   import { onMount, tick, onDestroy } from 'svelte';
   import { push } from 'svelte-spa-router';
-  import { generatePDF, generatingPDF } from './generatePDF.js';
+  import { generatePDF } from './generatePDF.js';
+  import { generateExcel } from './generateExcel.js';
   import PaymentSection from './sales/PaymentSection.svelte';
   import { showDate, setDatePickers } from '../calendar.js';
   import { auth } from '../auth/authStore';
@@ -14,6 +15,7 @@
   import FilterToolbar from '../components/common/FilterToolbar.svelte';
   import DataTable from '../components/common/DataTable.svelte';
   import ActionButton from '../components/common/ActionButton.svelte';
+  import ExportMenu from '../components/common/ExportMenu.svelte';
   import StatusBadge from '../components/common/StatusBadge.svelte';
   import PaginationBar from '../components/common/PaginationBar.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
@@ -40,6 +42,7 @@ import { saleApi } from '../api/saleApi.js';
   let accounts = [];
   let warehouses = [];
   let loading = true;
+  let exportingReport = false;
   let showSummaryCards = false;
   let totalItems = 0;
   let totalPages = 0;
@@ -152,6 +155,30 @@ import { saleApi } from '../api/saleApi.js';
       push(`/dashboard/account-sale-form/${account_id}`);
     } else {
       push(`/dashboard/sale-form/0`);
+    }
+  }
+
+  async function exportSales(format) {
+    if (exportingReport) return;
+
+    exportingReport = true;
+
+    try {
+      const exporter = format === 'excel' ? generateExcel : generatePDF;
+
+      await exporter(
+        'sales',
+        filteredSales,
+        fromDate,
+        toDate,
+        filteredSales.length,
+        totalSalesAmount,
+        totalBenefitAmount,
+      );
+    } catch (error) {
+      console.error('Failed to generate sales report:', error);
+    } finally {
+      exportingReport = false;
     }
   }
 
@@ -466,16 +493,12 @@ import { saleApi } from '../api/saleApi.js';
           }
         }} />
 
-      <ActionButton
-        variant="secondary"
-        icon="bi-file-pdf-fill"
-        label={t('PDF')}
-        loading={generatingPDF}
-        disabled={generatingPDF}
+      <ExportMenu
         extraClass="pdf-btn"
-        on:click={() => {
-          generatePDF('sales', filteredSales, fromDate, toDate, filteredSales.length, totalSalesAmount, totalBenefitAmount);
-        }} />
+        loading={exportingReport}
+        disabled={exportingReport || filteredSales.length === 0}
+        on:export={(event) => exportSales(event.detail)}
+      />
       <button
         type="button"
         class="index-settings-button"
