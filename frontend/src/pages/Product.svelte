@@ -1778,7 +1778,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
             hover={false}
             stickyHeader={true}
             layout="fixed"
-            scrollbar="hidden"
+            scrollbar="thin"
             clipCells={true}>
             <svelte:fragment slot="head">
               <tr>
@@ -2604,12 +2604,20 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
   }
 
   .product-report-table {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
     min-width: 0;
+    min-height: 0;
     width: 100%;
+    overflow-y: auto;
   }
 
   .product-report-table :global(.data-table-wrap) {
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .product-report-table :global(th.report-col-id),
