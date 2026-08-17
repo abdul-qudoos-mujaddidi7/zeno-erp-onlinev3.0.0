@@ -332,6 +332,18 @@
     max-width: none !important;
   }
 
+  /*
+   * The bill picker always spans the full row below the
+   * customer/date line.
+   */
+  .quick-entry-modal--journal
+    .quick-entry-modal__content
+    :global(.journal-form-row > .journal-bill-field) {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+
   .quick-entry-modal--journal
     .quick-entry-modal__content
     :global(.journal-form-card .row > [class*='col-md-']) {

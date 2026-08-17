@@ -96,8 +96,9 @@ import { currencyApi } from '../../api/currencyApi.js';
   }
   onMount(async () => {
     const tasks = [];
-    if (!units?.length) tasks.push(loadUnits());
-    if (!currencies?.length) tasks.push(loadCurrencies());
+    const itemsAlreadyReady = (items || []).some((it) => it.product_name);
+    if (!units?.length && !itemsAlreadyReady) tasks.push(loadUnits());
+    if (!currencies?.length && !itemsAlreadyReady) tasks.push(loadCurrencies());
     if (!items?.length && sale?.id) {
       tasks.push(loadItems());
       if (!payments?.length) tasks.push(loadPayments());

@@ -705,6 +705,31 @@ async function createSale({
       },
     );
 
+    let createdPayment = null;
+
+    /*
+     * Confirm Sale can send the payment in the same payload so
+     * the bill is posted in one round-trip (sale + stock +
+     * journals + payment) instead of a follow-up /payments call.
+     */
+    if (
+      isConfirmed(data.invoice_status) &&
+      data.payment &&
+      Number(data.payment.amount || 0) !== 0
+    ) {
+      createdPayment = await createSalePaymentOnConnection(
+        connection,
+        {
+          orgId,
+          userId,
+          requestContext,
+          sale,
+          saleId: localId,
+          data: data.payment,
+        },
+      );
+    }
+
     await connection.commit();
 
     accountService.invalidateAccountAggregates(orgId);
@@ -712,6 +737,7 @@ async function createSale({
     return {
       ...sale,
       items: createdItems,
+      payments: createdPayment ? [createdPayment] : [],
     };
   } catch (error) {
     await connection.rollback();
@@ -1613,6 +1639,211 @@ async function deleteSale({
   }
 }
 
+async function createSalePaymentOnConnection(
+  connection,
+  {
+    orgId,
+    userId,
+    requestContext,
+    sale,
+    saleId,
+    data,
+  },
+) {
+  const paymentLocalId = generateLocalId();
+
+  const payment =
+    await saleRepository.createPayment(
+      connection,
+      {
+        orgId,
+        localId: paymentLocalId,
+        userId,
+        data: {
+          ...data,
+          sale_id: saleId,
+        },
+      },
+    );
+
+  /*
+   * Account process: a sale payment posts two entries
+   * (SALES -> RECEIVABLE and customer -> treasury/cash)
+   * inside the same transaction as the payment.
+   */
+  const receivableAcct =
+    await saleRepository.findAccountByCode(
+      connection,
+      {
+        orgId,
+        code: 'RECEIVABLE',
+      },
+    );
+
+  const salesAcct =
+    await saleRepository.findAccountByCode(
+      connection,
+      {
+        orgId,
+        code: 'SALES',
+      },
+    );
+
+  if (!receivableAcct) {
+    throw new AppError(
+      'RECEIVABLE account not found.',
+      500,
+      'RECEIVABLE_ACCOUNT_NOT_FOUND',
+    );
+  }
+
+  if (!salesAcct) {
+    throw new AppError(
+      'SALES account not found.',
+      500,
+      'SALES_ACCOUNT_NOT_FOUND',
+    );
+  }
+
+  const paymentDescription =
+    data.description || 'Payment for Sales Invoice';
+
+  /*
+   * The amount is positive for a Receive and negative for a
+   * Payment (the form sends a signed amount), mirroring the
+   * old Dexie journals exactly.
+   */
+  const signedAmount = Number(payment.amount || 0);
+  const isReceive = signedAmount >= 0;
+  const absAmount = Math.abs(signedAmount);
+
+  const salesDebit = isReceive ? 0 : absAmount;
+  const salesCredit = isReceive ? absAmount : 0;
+  const receivableDebit = isReceive ? absAmount : 0;
+  const receivableCredit = isReceive ? 0 : absAmount;
+
+  /*
+   * When the payment currency differs from the sale currency, the
+   * payment is converted to the sale's currency before posting, so
+   * the customer's balance only ever moves in the sale's currency
+   * and no balance is created in the paid currency.
+   */
+  const saleCurrency = sale.currency || payment.currency || null;
+  const isCrossCurrency =
+    payment.currency &&
+    saleCurrency &&
+    payment.currency !== saleCurrency &&
+    absAmount > 0;
+
+  let journalCurrency = payment.currency || null;
+  let journalAmount = absAmount;
+
+  if (isCrossCurrency) {
+    journalCurrency = saleCurrency;
+    journalAmount =
+      await convertCurrencyAmount(
+        connection,
+        {
+          orgId,
+          amount: absAmount,
+          fromCurrency: payment.currency,
+          toCurrency: saleCurrency,
+        },
+      );
+  }
+
+  if (Number(journalAmount) > 0) {
+    // SALES -> RECEIVABLE
+    await createJournalEntry(
+      connection,
+      {
+        orgId,
+        userId,
+        requestContext,
+        data: {
+          date: new Date().toISOString(),
+          reference_id: payment.id,
+          reference_type: 'sale_payment',
+          description: paymentDescription,
+          currency: journalCurrency,
+          first_entry_account: salesAcct.id,
+          first_entry_debit: salesDebit ? journalAmount : 0,
+          first_entry_credit: salesCredit ? journalAmount : 0,
+          second_entry_account: receivableAcct.id,
+          second_entry_debit: receivableDebit ? journalAmount : 0,
+          second_entry_credit: receivableCredit ? journalAmount : 0,
+          status: 1,
+        },
+        description:
+          `Created sales/receivable journal for payment ${payment.id}`,
+      },
+    );
+
+    /*
+     * customer -> treasury/cash (the account chosen on the form).
+     *
+     * This entry credits the customer with the payment received, so
+     * a paid sale no longer leaves its amount in the customer's
+     * balance. For a cross-currency payment it is posted in the
+     * sale's currency (converted) and no balance is created in the
+     * paid currency.
+     */
+    await createJournalEntry(
+      connection,
+      {
+        orgId,
+        userId,
+        requestContext,
+        data: {
+          date: new Date().toISOString(),
+          reference_id: payment.id,
+          reference_type: 'sale_payment',
+          description: paymentDescription,
+          currency: journalCurrency,
+          first_entry_account: sale.account_id,
+          first_entry_debit: salesDebit ? journalAmount : 0,
+          first_entry_credit: salesCredit ? journalAmount : 0,
+          second_entry_account: data.account_id,
+          second_entry_debit: receivableDebit ? journalAmount : 0,
+          second_entry_credit: receivableCredit ? journalAmount : 0,
+          status: 1,
+        },
+        description:
+          `Created customer/treasury journal for payment ${payment.id}`,
+      },
+    );
+  }
+
+  await activityRepository.create(
+    connection,
+    {
+      orgId,
+      userId,
+
+      action: 'create',
+      tableName: 'sale_payments',
+      entityId: payment.id,
+
+      oldValues: null,
+      newValues: payment,
+
+      description:
+        `Added payment of ${payment.amount} ${payment.currency} for sale #${saleId}`,
+
+      ipAddress:
+        requestContext.ipAddress,
+
+      sessionId:
+        requestContext.sessionId,
+
+      deviceInfo:
+        requestContext.deviceInfo,
+    },
+  );
+
+  return payment;
+}
+
 async function createPayment({
   user,
   saleId,
@@ -1648,194 +1879,15 @@ async function createPayment({
       );
     }
 
-    const paymentLocalId = generateLocalId();
-
-    const payment =
-      await saleRepository.createPayment(
-        connection,
-        {
-          orgId,
-          localId: paymentLocalId,
-          userId,
-          data: {
-            ...data,
-            sale_id: saleId,
-          },
-        },
-      );
-
-    /*
-     * Account process: a sale payment posts two entries
-     * (SALES -> RECEIVABLE and customer -> treasury/cash)
-     * inside the same transaction as the payment.
-     */
-    const receivableAcct =
-      await saleRepository.findAccountByCode(
-        connection,
-        {
-          orgId,
-          code: 'RECEIVABLE',
-        },
-      );
-
-    const salesAcct =
-      await saleRepository.findAccountByCode(
-        connection,
-        {
-          orgId,
-          code: 'SALES',
-        },
-      );
-
-    if (!receivableAcct) {
-      throw new AppError(
-        'RECEIVABLE account not found.',
-        500,
-        'RECEIVABLE_ACCOUNT_NOT_FOUND',
-      );
-    }
-
-    if (!salesAcct) {
-      throw new AppError(
-        'SALES account not found.',
-        500,
-        'SALES_ACCOUNT_NOT_FOUND',
-      );
-    }
-
-    const paymentDescription =
-      data.description || 'Payment for Sales Invoice';
-
-    /*
-     * The amount is positive for a Receive and negative for a
-     * Payment (the form sends a signed amount), mirroring the
-     * old Dexie journals exactly.
-     */
-    const signedAmount = Number(payment.amount || 0);
-    const isReceive = signedAmount >= 0;
-    const absAmount = Math.abs(signedAmount);
-
-    const salesDebit = isReceive ? 0 : absAmount;
-    const salesCredit = isReceive ? absAmount : 0;
-    const receivableDebit = isReceive ? absAmount : 0;
-    const receivableCredit = isReceive ? 0 : absAmount;
-
-    /*
-     * When the payment currency differs from the sale currency, the
-     * payment is converted to the sale's currency before posting, so
-     * the customer's balance only ever moves in the sale's currency
-     * and no balance is created in the paid currency.
-     */
-    const saleCurrency = sale.currency || payment.currency || null;
-    const isCrossCurrency =
-      payment.currency &&
-      saleCurrency &&
-      payment.currency !== saleCurrency &&
-      absAmount > 0;
-
-    let journalCurrency = payment.currency || null;
-    let journalAmount = absAmount;
-
-    if (isCrossCurrency) {
-      journalCurrency = saleCurrency;
-      journalAmount =
-        await convertCurrencyAmount(
-          connection,
-          {
-            orgId,
-            amount: absAmount,
-            fromCurrency: payment.currency,
-            toCurrency: saleCurrency,
-          },
-        );
-    }
-
-    if (Number(journalAmount) > 0) {
-      // SALES -> RECEIVABLE
-      await createJournalEntry(
-        connection,
-        {
-          orgId,
-          userId,
-          requestContext,
-          data: {
-            date: new Date().toISOString(),
-            reference_id: payment.id,
-            reference_type: 'sale_payment',
-            description: paymentDescription,
-            currency: journalCurrency,
-            first_entry_account: salesAcct.id,
-            first_entry_debit: salesDebit ? journalAmount : 0,
-            first_entry_credit: salesCredit ? journalAmount : 0,
-            second_entry_account: receivableAcct.id,
-            second_entry_debit: receivableDebit ? journalAmount : 0,
-            second_entry_credit: receivableCredit ? journalAmount : 0,
-            status: 1,
-          },
-          description:
-            `Created sales/receivable journal for payment ${payment.id}`,
-        },
-      );
-
-      /*
-       * customer -> treasury/cash (the account chosen on the form).
-       *
-       * This entry credits the customer with the payment received, so
-       * a paid sale no longer leaves its amount in the customer's
-       * balance. For a cross-currency payment it is posted in the
-       * sale's currency (converted) and no balance is created in the
-       * paid currency.
-       */
-      await createJournalEntry(
-        connection,
-        {
-          orgId,
-          userId,
-          requestContext,
-          data: {
-            date: new Date().toISOString(),
-            reference_id: payment.id,
-            reference_type: 'sale_payment',
-            description: paymentDescription,
-            currency: journalCurrency,
-            first_entry_account: sale.account_id,
-            first_entry_debit: salesDebit ? journalAmount : 0,
-            first_entry_credit: salesCredit ? journalAmount : 0,
-            second_entry_account: data.account_id,
-            second_entry_debit: receivableDebit ? journalAmount : 0,
-            second_entry_credit: receivableCredit ? journalAmount : 0,
-            status: 1,
-          },
-          description:
-            `Created customer/treasury journal for payment ${payment.id}`,
-        },
-      );
-    }
-
-    await activityRepository.create(
+    const payment = await createSalePaymentOnConnection(
       connection,
       {
         orgId,
         userId,
-
-        action: 'create',
-        tableName: 'sale_payments',
-        entityId: payment.id,
-
-        oldValues: null,
-        newValues: payment,
-
-        description:
-          `Added payment of ${payment.amount} ${payment.currency} for sale #${saleId}`,
-
-        ipAddress:
-          requestContext.ipAddress,
-
-        sessionId:
-          requestContext.sessionId,
-
-        deviceInfo:
-          requestContext.deviceInfo,
+        requestContext,
+        sale,
+        saleId,
+        data,
       },
     );
 

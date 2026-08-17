@@ -3,6 +3,8 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 import { settingsApi } from '../../api/settingsApi.js';
   import { onMount, tick } from 'svelte';
   import SaleItemsTable from './SaleItemsTable.svelte';
+  import SaleReceiptModal from './SaleReceiptModal.svelte';
+  import SaleA4ReceiptModal from './SaleA4ReceiptModal.svelte';
   import AccountModal from '../accounts/AccountModal.svelte';
   import FilterSelect from '../../components/common/FilterSelect.svelte';
   import AppDatePicker from '../../components/common/AppDatePicker.svelte';
@@ -235,6 +237,9 @@ import { settingsApi } from '../../api/settingsApi.js';
   let showReceipt = false;
   let showA4Receipt = false;
   let receiptSale = null;
+  let receiptItems = [];
+  let receiptPayments = [];
+  let receiptCustomer = {};
 
   let modalRef;
   let accounts = [];
@@ -1087,6 +1092,74 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     paymentAmount = Math.max(0, Number(getMaxPaymentAmount() || 0));
   }
 
+  function getPaidAmountInSaleCurrency(amount, fromCurrency) {
+    const paid = Number(amount || 0);
+    if (!paid) return 0;
+    const saleCurrency = form.currency;
+    const paymentCode =
+      fromCurrency || paymentCurrency || saleCurrency || defaultCurrency?.code || 'AFN';
+    if (!saleCurrency || paymentCode === saleCurrency) {
+      return paid;
+    }
+    return Number(exchangeRate(paid, paymentCode, saleCurrency) || 0);
+  }
+
+  function buildReceiptItemsSnapshot(sourceItems) {
+    const saleCurrency = form.currency;
+    const saleCurrencySymbol =
+      currencies.find((currency) => currency.code === saleCurrency)?.symbol || '';
+
+    return (sourceItems || []).map((item) => {
+      const product = products.find((row) => Number(row.id) === Number(item.product_id));
+      return {
+        ...item,
+        product_name: item.product_name || product?.name || 'Unknown',
+        unit_name:
+          item.unit_name ||
+          item.availableUnits?.find((unit) => Number(unit.id) === Number(item.product_unit_id))?.name ||
+          units.find((unit) => Number(unit.id) === Number(item.product_unit_id))?.name ||
+          '',
+        currency_symbol:
+          item.currency_symbol ||
+          currencies.find((currency) => currency.code === (item.currency || saleCurrency))?.symbol ||
+          saleCurrencySymbol,
+        status: 1,
+      };
+    });
+  }
+
+  function openConfirmedSaleReceipt({ saved, savedId, snapshotItems, snapshotPayments, snapshotCustomer }) {
+    receiptSale = {
+      ...(saved || {}),
+      id: savedId,
+      warehouse_id: saved?.warehouse_id || form.warehouse_id,
+      account_id: saved?.account_id || form.account_id,
+      invoice_number: saved?.invoice_number || form.invoice_number,
+      invoice_date: saved?.invoice_date || form.invoice_date,
+      description: saved?.description ?? form.description,
+      discount_amount: saved?.discount_amount ?? discount_amount,
+      discount_type: saved?.discount_type || discount_type,
+      expense_amount: saved?.expense_amount ?? expense_amount,
+      currency: saved?.currency || form.currency,
+      invoice_status: 'confirmed',
+      total_amount: saved?.total_amount ?? payableAmount,
+      remaining: saved?.remaining,
+      items: snapshotItems,
+      payments: snapshotPayments,
+    };
+    receiptItems = snapshotItems;
+    receiptPayments = snapshotPayments;
+    receiptCustomer = snapshotCustomer || {};
+
+    if (enable_a4_default_print_mode) {
+      showA4Receipt = true;
+      showReceipt = false;
+    } else {
+      showReceipt = true;
+      showA4Receipt = false;
+    }
+  }
+
   async function saveSale(confirm = false) {
     if (!form.warehouse_id || !form.account_id || items.length === 0) {
       toast.error(t('Validation Error'), t('Warehouse, Customer and at least one Item are required.'));
@@ -1125,6 +1198,27 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
         });
       }
 
+      const isEditing = Boolean(Number(saleId));
+      const nextPaymentAmount = confirm ? Number(paymentAmount || 0) : 0;
+      const paidInSaleCurrency = confirm
+        ? getPaidAmountInSaleCurrency(nextPaymentAmount, paymentCurrency)
+        : 0;
+      const remainingAmount = confirm
+        ? Number(payableAmount || 0) - paidInSaleCurrency
+        : payableAmount;
+
+      const paymentPayload =
+        confirm && nextPaymentAmount > 0
+          ? {
+              account_id: second_entry_account,
+              amount: nextPaymentAmount,
+              currency: paymentCurrency,
+              payment_date: new Date().toISOString(),
+              description: buildFinalPaymentDescription(),
+              status: 1,
+            }
+          : null;
+
       const payload = {
         warehouse_id: form.warehouse_id,
         account_id: form.account_id,
@@ -1140,14 +1234,31 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
         invoice_status: confirm ? 'confirmed' : 'draft',
         status: form.status,
         total_amount: payableAmount,
-        remaining: payableAmount,
+        remaining: remainingAmount,
         items_count: items.length,
         items: payloadItems,
       };
 
-      let saved;
+      /*
+       * New confirmed sales send the payment with the sale so the
+       * bill can open after a single request. Edits still replace
+       * payment rows separately.
+       */
+      if (paymentPayload && !isEditing) {
+        payload.payment = paymentPayload;
+      }
 
-      if (Number(saleId)) {
+      const snapshotItems = confirm ? buildReceiptItemsSnapshot(items) : [];
+      const snapshotCustomer = confirm
+        ? customers.find((customer) => Number(customer.id) === Number(form.account_id)) ||
+          accounts.find((account) => Number(account.id) === Number(form.account_id)) ||
+          { id: form.account_id }
+        : {};
+
+      let saved;
+      let createdPayment = null;
+
+      if (isEditing) {
         savedId = Number(saleId);
         const response = await saleApi.update(savedId, payload);
         saved = response?.data;
@@ -1155,6 +1266,8 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
         const response = await saleApi.create(payload);
         saved = response?.data;
         savedId = saved?.id;
+        createdPayment =
+          (saved?.payments || []).find((payment) => Number(payment.status) !== 0) || null;
       }
 
       /*
@@ -1166,53 +1279,60 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
        * On edit, replace existing payment rows instead of adding
        * another payment on top of the old one.
        */
-      if (confirm) {
-        const nextPaymentAmount = Number(paymentAmount || 0);
-
-        if (existingPaymentIds.length > 0) {
-          for (const paymentId of existingPaymentIds) {
-            await saleApi.removePayment(paymentId);
-          }
-          existingPaymentIds = [];
-        }
-
-        if (nextPaymentAmount > 0) {
-          const paymentResponse = await saleApi.addPayment(savedId, {
-            account_id: second_entry_account,
-            amount: nextPaymentAmount,
-            currency: paymentCurrency,
-            payment_date: new Date().toISOString(),
-            description: buildFinalPaymentDescription(),
-            status: 1,
-          });
-          if (paymentResponse?.data?.id) {
-            existingPaymentIds = [Number(paymentResponse.data.id)];
-          }
-        }
+      if (confirm && isEditing && existingPaymentIds.length > 0) {
+        await Promise.all(
+          existingPaymentIds.map((paymentId) => saleApi.removePayment(paymentId)),
+        );
+        existingPaymentIds = [];
       }
 
-      if (savedId) {
-        await calculateRemainingAndBenefit(savedId);
+      if (confirm && paymentPayload && !createdPayment) {
+        const paymentResponse = await saleApi.addPayment(savedId, paymentPayload);
+        createdPayment = paymentResponse?.data || null;
       }
+
+      if (createdPayment?.id) {
+        existingPaymentIds = [Number(createdPayment.id)];
+      }
+
+      const snapshotPayments =
+        confirm && nextPaymentAmount > 0
+          ? [
+              {
+                ...(createdPayment || {}),
+                amount: nextPaymentAmount,
+                currency: paymentCurrency,
+                account_id: second_entry_account,
+                status: 1,
+              },
+            ]
+          : [];
 
       form.invoice_status = confirm ? 'confirmed' : 'draft';
-      toast.success(t('Success'), confirm ? t('Sale Confirmed.') : t('Draft Saved.'));
       clearSaleFormDraft();
       saleDraftReady = false;
 
       if (confirm && savedId) {
-        const fullSaleResponse = await saleApi.getById(savedId);
-        receiptSale = fullSaleResponse?.data || { id: savedId };
+        openConfirmedSaleReceipt({
+          saved,
+          savedId,
+          snapshotItems,
+          snapshotPayments,
+          snapshotCustomer,
+        });
         resetForm();
-        if (enable_a4_default_print_mode) {
-          showA4Receipt = true;
-          showReceipt = false;
-        } else {
-          showReceipt = true;
-          showA4Receipt = false;
-        }
+        toast.success(t('Success'), t('Sale Confirmed.'));
+        calculateRemainingAndBenefit(savedId).catch((error) => {
+          console.warn('Failed to recalculate sale totals:', error);
+        });
       } else {
         resetForm();
+        toast.success(t('Success'), t('Draft Saved.'));
+        if (savedId) {
+          calculateRemainingAndBenefit(savedId).catch((error) => {
+            console.warn('Failed to recalculate sale totals:', error);
+          });
+        }
         push('/dashboard/sales');
       }
     } catch (err) {
@@ -2673,31 +2793,41 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 {/if}
 
 {#if showReceipt && receiptSale}
-  {#await import('./SaleReceiptModal.svelte') then mod}
-    <svelte:component
-      this={mod.default}
-      sale={receiptSale}
-      on:showA4={() => ((showA4Receipt = true), (showReceipt = false))}
-      on:close={() => {
-        showReceipt = false;
-        receiptSale = null;
-        push('/dashboard/sales');
-      }} />
-  {/await}
+  <SaleReceiptModal
+    sale={receiptSale}
+    items={receiptItems}
+    payments={receiptPayments}
+    customer={receiptCustomer}
+    {units}
+    {currencies}
+    on:showA4={() => ((showA4Receipt = true), (showReceipt = false))}
+    on:close={() => {
+      showReceipt = false;
+      receiptSale = null;
+      receiptItems = [];
+      receiptPayments = [];
+      receiptCustomer = {};
+      push('/dashboard/sales');
+    }} />
 {/if}
 
 {#if showA4Receipt && receiptSale}
-  {#await import('./SaleA4ReceiptModal.svelte') then mod}
-    <svelte:component
-      this={mod.default}
-      sale={receiptSale}
-      on:close={() => {
-        showA4Receipt = false;
-        receiptSale = null;
-        push('/dashboard/sales');
-      }}
-      on:show80mm={() => ((showReceipt = true), (showA4Receipt = false))} />
-  {/await}
+  <SaleA4ReceiptModal
+    sale={receiptSale}
+    items={receiptItems}
+    payments={receiptPayments}
+    customer={receiptCustomer}
+    {units}
+    {currencies}
+    on:close={() => {
+      showA4Receipt = false;
+      receiptSale = null;
+      receiptItems = [];
+      receiptPayments = [];
+      receiptCustomer = {};
+      push('/dashboard/sales');
+    }}
+    on:show80mm={() => ((showReceipt = true), (showA4Receipt = false))} />
 {/if}
 
 

@@ -147,7 +147,12 @@
     "Included Accounts": "Included Accounts",
     "This Year": "This Year",
     "Custom": "Custom",
-    "Treasury has no available balance. Payment is set to 0. Use Track to pay from another account, or save this bill unpaid.": "Treasury has no available balance. Payment is set to 0. Use Track to pay from another account, or save this bill unpaid."
+    "Treasury has no available balance. Payment is set to 0. Use Track to pay from another account, or save this bill unpaid.": "Treasury has no available balance. Payment is set to 0. Use Track to pay from another account, or save this bill unpaid.",
+    "Select Bill": "Select Bill",
+    "Search bills...": "Search bills...",
+    "No bills": "No bills",
+    "No bills found": "No bills found",
+    "Currency locked to bill": "Currency locked to bill"
   },
   "fa": {
     "Welcome": "خوش آمدید",
@@ -591,6 +596,11 @@
     "Print": "چاپ",
     "Supplier Copy": "کپی تامین‌کننده",
     "Bill": "بل",
+    "Select Bill": "انتخاب بل",
+    "Search bills...": "جستجوی بل...",
+    "No bills": "هیچ بلی موجود نیست",
+    "No bills found": "بلی پیدا نشد",
+    "Currency locked to bill": "ارز به بل قفل شده است",
     "Purchase Confirmed.": "خرید تایید شد.",
     "Draft Saved.": "پیش‌نویس ذخیره شد.",
     "Error saving purchase: ": "اشتباه در ذخیره خرید: ",
@@ -1636,6 +1646,11 @@
     "This Year": "سږ کال",
     "Custom": "دلخواه",
     "From Date": "له نېټې",
-    "To Date": "تر نېټې"
+    "To Date": "تر نېټې",
+    "Select Bill": "بل وټاکئ",
+    "Search bills...": "د بل لټون...",
+    "No bills": "هیڅ بل نشته",
+    "No bills found": "بل ونه موندل شو",
+    "Currency locked to bill": "ارز په بل باندې تړل شوی"
   }
 }

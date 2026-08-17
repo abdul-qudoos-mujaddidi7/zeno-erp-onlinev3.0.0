@@ -87,6 +87,27 @@ const saleBodySchema = z.object({
   items: z
     .array(saleItemSchema)
     .optional(),
+  /*
+   * Optional payment posted in the same create/update
+   * transaction so Confirm Sale is one round-trip.
+   */
+  payment: z
+    .object({
+      account_id: nullableNumber(),
+      amount: nullableNumber(),
+      currency: nullableString(50),
+      payment_date: nullableString(50),
+      description: nullableString(65535),
+      status: z
+        .coerce
+        .number()
+        .int()
+        .min(0)
+        .max(1)
+        .default(1),
+    })
+    .optional()
+    .nullable(),
 });
 
 const paymentBodySchema = z.object({

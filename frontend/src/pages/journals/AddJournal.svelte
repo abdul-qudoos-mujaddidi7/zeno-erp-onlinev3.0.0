@@ -243,6 +243,22 @@
     }
 
     await loadJournalIfEditing();
+
+    /*
+     * When editing a journal that already pays a bill, reload the bill
+     * list and preselect the referenced bill.
+     */
+    if (reference_type === 'sale' || reference_type === 'purchase') {
+      await loadBillsForAccount(first_entry_account);
+      const match = bills.find((b) => Number(b.id) === Number(reference_id));
+      if (match) {
+        selectedBill = match;
+        lockedCurrency = currency;
+        billSearch = billLabel(match);
+        billFilter = '';
+      }
+    }
+
     await tick();
     setDatePickers(
       handleDateChange,
@@ -394,6 +410,11 @@
     second_entry_debit = null;
     second_entry_credit = null;
     status = 1;
+
+    clearBillSelection();
+    bills = [];
+    showBillDropdown = false;
+    billSearch = '';
   }
 
   function format(value) {
@@ -533,6 +554,10 @@
   }
 
   function selectCurrency(code) {
+    if (lockedCurrency && code !== lockedCurrency) {
+      // Picking a different currency manually releases the bill lock.
+      clearBillSelection();
+    }
     currency = code;
     currencyMenuFor = null;
   }
@@ -580,6 +605,138 @@ import { settingsApi } from '../../api/settingsApi.js';
 import { journalApi } from '../../api/journalApi.js';
 import { accountApi } from '../../api/accountApi.js';
 import { accountTypeApi } from '../../api/accountTypeApi.js';
+import { saleApi } from '../../api/saleApi.js';
+import { purchaseApi } from '../../api/purchaseApi.js';
+
+  /* ---- Bill picker: customer -> sale bills, supplier -> purchase bills ---- */
+  let bills = [];
+  let showBillDropdown = false;
+  let selectedBill = null;
+  let lockedCurrency = null;
+  let billLoading = false;
+  /*
+   * billSearch is what the input shows (the selected bill's number when
+   * one is chosen); billFilter drives the dropdown list, so clicking the
+   * input always shows every bill while typing narrows the list.
+   */
+  let billSearch = '';
+  let billFilter = '';
+
+  function getAccountTypeId(accountId) {
+    const acc = accounts.find((a) => Number(a.id) === Number(accountId));
+    return acc ? Number(acc.account_type_id) : null;
+  }
+
+  function exchangeRate(amount, fromCurrencyCode, toCurrencyCode) {
+    if (!fromCurrencyCode || !toCurrencyCode) return amount;
+    const fromCurrency = currencies.find((c) => c.code === fromCurrencyCode);
+    const toCurrency = currencies.find((c) => c.code === toCurrencyCode);
+    if (!fromCurrency || !toCurrency) return amount;
+    const fromRate = Number(fromCurrency.exchangeRate || 1);
+    const toRate = Number(toCurrency.exchangeRate || 1);
+    return (amount / toRate) * fromRate;
+  }
+
+  function billRemaining(bill) {
+    const activePayments = (bill.payments || []).filter((p) => Number(p.status) === 1);
+    let totalPayments = activePayments.reduce((sum, p) => {
+      if (p.currency === bill.currency) return sum + Number(p.amount || 0);
+      return sum + Number(exchangeRate(Number(p.amount || 0), p.currency, bill.currency) || 0);
+    }, 0);
+    const totalReturns = (bill.returns || [])
+      .filter((r) => Number(r.status) === 1)
+      .reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
+    return Number(bill.total_amount || 0) - totalPayments - totalReturns;
+  }
+
+  function billLabel(bill) {
+    return bill.invoice_number || bill.bill_number || `#${bill.id}`;
+  }
+
+  async function loadBillsForAccount(accountId) {
+    bills = [];
+    selectedBill = null;
+    lockedCurrency = null;
+    showBillDropdown = false;
+    billSearch = '';
+    billFilter = '';
+
+    const typeId = getAccountTypeId(accountId);
+    if (typeId !== 4 && typeId !== 3) return;
+
+    billLoading = true;
+    try {
+      const response =
+        typeId === 4
+          ? await saleApi.getAll({ status: 1, account_id: accountId, relations: 1, limit: 100, skip_count: 1 })
+          : await purchaseApi.getAll({ status: 1, account_id: accountId, relations: 1, limit: 100, skip_count: 1 });
+
+      bills = (response?.data || [])
+        .filter(
+          (b) =>
+            Number(b.status) === 1 &&
+            (typeId === 4
+              ? b.invoice_status === 'confirmed'
+              : b.bill_status === 'confirmed'),
+        )
+        .map((b) => ({ ...b, _remaining: billRemaining(b) }))
+        /*
+         * Only unpaid bills are shown: once a bill is fully paid it
+         * disappears from the picker.
+         */
+        .filter((b) => Number(b._remaining) > 0)
+        .sort((a, b) => Number(a._remaining) - Number(b._remaining));
+    } finally {
+      billLoading = false;
+    }
+  }
+
+  function selectBill(bill) {
+    selectedBill = bill;
+    lockedCurrency = bill.currency;
+    currency = bill.currency;
+    reference_id = bill.id;
+    reference_type = getAccountTypeId(first_entry_account) === 4 ? 'sale' : 'purchase';
+
+    const remaining = Number(bill._remaining || 0);
+    if (remaining > 0) {
+      // Keep the money going to treasury by default (when one exists).
+      if (treasury_ID) {
+        second_entry_account = treasury_ID;
+      }
+      if (reference_type === 'sale') {
+        // Customer paid us: credit the customer, debit treasury.
+        onFirstCreditInput(String(remaining));
+      } else {
+        // We paid the supplier: debit the supplier, credit treasury.
+        onFirstDebitInput(String(remaining));
+      }
+    }
+
+    if (!description.trim()) {
+      description = t('Payment') + ' ' + billLabel(bill);
+    }
+    showBillDropdown = false;
+    billSearch = billLabel(bill);
+    billFilter = '';
+  }
+
+  function clearBillSelection() {
+    selectedBill = null;
+    lockedCurrency = null;
+    reference_id = null;
+    reference_type = null;
+    billSearch = '';
+    billFilter = '';
+  }
+
+  $: filteredBills = billFilter.trim()
+    ? bills.filter((bill) => {
+        const label = billLabel(bill).toLowerCase();
+        return label.includes(billFilter.trim().toLowerCase());
+      })
+    : bills;
+
   $: permissions = $auth.permissions;
 </script>
 
@@ -727,6 +884,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
                         : acc.name;
 
                 showAccountDropdown = false;
+                loadBillsForAccount(acc.id);
               }}>
               <span class="journal-account-option__avatar" aria-hidden="true">
                 <i class="bi bi-person"></i>
@@ -777,6 +935,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
       await loadAccounts();
       first_entry_account = e.detail.account.id;
       first_entry_account_search = '';
+      loadBillsForAccount(e.detail.account.id);
     }} />
 
 </div>
@@ -788,7 +947,94 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
               <span class="input-group-text persian-date-text"></span>
             </div>
           </div>
-          
+
+          {#if getAccountTypeId(first_entry_account) === 4 || getAccountTypeId(first_entry_account) === 3}
+          <div class="col-12 journal-bill-field">
+            <label class="journal-field-label">{t('Select Bill')}</label>
+            <div class="journal-customer-anchor">
+              <div class="journal-customer-control" class:is-open={showBillDropdown}>
+                <span class="journal-customer-control__icon" aria-hidden="true">
+                  <i class="bi bi-receipt"></i>
+                </span>
+
+                <input
+                  type="text"
+                  class="journal-account-search-input"
+                  id="journal_bill_search"
+                  bind:value={billSearch}
+                  placeholder={
+                    billLoading
+                      ? t('Loading...')
+                      : bills.length
+                        ? t('Search bills...')
+                        : t('No bills')
+                  }
+                  aria-label={t('Search bills...')}
+                  autocomplete="off"
+                  on:input={() => {
+                    billFilter = billSearch;
+                    showBillDropdown = true;
+                  }}
+                  on:focus={() => {
+                    showBillDropdown = true;
+                  }}
+                  on:blur={() =>
+                    setTimeout(() => (showBillDropdown = false), 150)} />
+
+                {#if selectedBill}
+                  <span class="journal-bill-input-meta">
+                    <span dir="ltr">{Number(selectedBill._remaining || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    {t(selectedBill.currency)}
+                    <i class="bi bi-lock-fill journal-bill-lock" title={t('Currency locked to bill')}></i>
+                  </span>
+                {/if}
+              </div>
+
+              {#if showBillDropdown && bills.length > 0}
+                <ul class="journal-account-dropdown journal-bill-dropdown">
+                  {#each filteredBills as bill (bill.id)}
+                    <li>
+                      <button
+                        type="button"
+                        class="journal-account-option"
+                        class:is-selected={selectedBill && Number(selectedBill.id) === Number(bill.id)}
+                        on:mousedown|preventDefault={() => selectBill(bill)}>
+                        <span class="journal-account-option__avatar" aria-hidden="true">
+                          <i class="bi bi-receipt"></i>
+                        </span>
+                        <span class="journal-account-option__copy">
+                          <strong>
+                            <span dir="ltr">{billLabel(bill)}</span>
+                            <span
+                              class="journal-bill-badge"
+                              class:journal-bill-badge--paid={Number(bill._remaining) <= 0}
+                              class:journal-bill-badge--unpaid={Number(bill._remaining) > 0}>
+                              {Number(bill._remaining) <= 0 ? t('Paid') : t('Unpaid')}
+                            </span>
+                          </strong>
+                          <small>
+                            {@html showDate(bill.invoice_date || bill.bill_date)} &nbsp;·&nbsp;
+                            <span dir="ltr">{Number(bill.total_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                            {t(bill.currency)}
+                            {#if Number(bill._remaining) > 0}
+                              &nbsp;·&nbsp; <span dir="ltr">{Number(bill._remaining).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                              {t(bill.currency)} {t('Remaining')}
+                            {/if}
+                          </small>
+                        </span>
+                        <i class="bi bi-chevron-right journal-account-option__arrow" aria-hidden="true"></i>
+                      </button>
+                    </li>
+                  {/each}
+                  {#if filteredBills.length === 0}
+                    <li class="journal-bill-dropdown__empty">{t('No bills found')}</li>
+                  {/if}
+                </ul>
+              {/if}
+            </div>
+          </div>
+          {/if}
+
           <div class="col-md-3 journal-debit-field">
             <label class="journal-field-label">{t('Debit')}</label>
             <div
@@ -2028,5 +2274,85 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     .journal-submit-field {
       padding-top: 0;
     }
+  }
+
+  .journal-bill-field {
+    min-width: 0;
+  }
+
+  .journal-bill-input-meta {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.25rem;
+    padding-inline: 0.55rem;
+    color: #64748b;
+    font-size: 0.7rem;
+    font-weight: 650;
+    white-space: nowrap;
+    border-inline-start: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  .journal-bill-lock {
+    margin-inline-start: 0.35rem;
+    color: #0f6efd;
+    font-size: 0.7rem;
+  }
+
+  .journal-selected-account--placeholder {
+    color: #94a3b8;
+  }
+
+  .journal-selected-account--placeholder:disabled {
+    cursor: not-allowed;
+    opacity: 0.75;
+  }
+
+  .journal-bill-badge {
+    display: inline-block;
+    margin-inline-start: 0.45rem;
+    padding: 0.08rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 750;
+    line-height: 1.4;
+    vertical-align: 1px;
+  }
+
+  .journal-bill-badge--paid {
+    background: #e7f8ef;
+    color: #067a46;
+  }
+
+  .journal-bill-badge--unpaid {
+    background: #fef1e7;
+    color: #b45309;
+  }
+
+  .journal-bill-dropdown {
+    width: 22rem;
+    max-width: calc(100vw - 2rem);
+    max-height: 20rem;
+    overflow-y: auto;
+  }
+
+  .journal-bill-dropdown__search {
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid #eef2f7;
+  }
+
+  .journal-bill-dropdown__search :global(.form-control) {
+    min-height: 1.9rem;
+    font-size: 0.78rem;
+    border-radius: 8px;
+    border-color: #e2e8f0;
+  }
+
+  .journal-bill-dropdown__empty {
+    padding: 0.6rem 0.85rem;
+    color: #94a3b8;
+    font-size: 0.78rem;
+    text-align: center;
   }
 </style>
