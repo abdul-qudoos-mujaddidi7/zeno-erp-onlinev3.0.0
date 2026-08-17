@@ -1,4 +1,5 @@
-import { t } from '../i18n/i18n';
+import { get } from 'svelte/store';
+import { isRTL, lang, t } from '../i18n/i18n';
 import { getReportExportData } from './generatePDF.js';
 
 export let generatingExcel = false;
@@ -170,13 +171,27 @@ function estimateColumnWidth(text) {
   return Math.min(42, Math.max(12, length + 4));
 }
 
-function inlineCell(ref, text, styleId) {
-  const value = escapeXml(text);
-  const space = /^\s|\s$/.test(String(text || ''))
-    ? ' xml:space="preserve"'
-    : '';
+function createSharedStringTable() {
+  const values = [];
+  const indexByValue = new Map();
 
-  return `<c r="${ref}" s="${styleId}" t="inlineStr"><is><t${space}>${value}</t></is></c>`;
+  function intern(text) {
+    const value = String(text ?? '');
+
+    if (indexByValue.has(value)) return indexByValue.get(value);
+
+    const index = values.length;
+    values.push(value);
+    indexByValue.set(value, index);
+
+    return index;
+  }
+
+  function cell(ref, text, styleId) {
+    return `<c r="${ref}" s="${styleId}" t="s"><v>${intern(text)}</v></c>`;
+  }
+
+  return { cell, values };
 }
 
 function contentTypesXml() {
@@ -187,6 +202,7 @@ function contentTypesXml() {
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
   <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
   <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
 </Types>`;
@@ -244,13 +260,26 @@ function containsRtlText(value) {
 }
 
 function resolveSheetRtl(report) {
-  if (t('dir') === 'rtl' || report?.rtl) return true;
+  if (report?.rtl) return true;
+  if (t('dir') === 'rtl') return true;
+  if (isRTL(get(lang))) return true;
+  if (
+    typeof document !== 'undefined' &&
+    document.documentElement?.getAttribute('dir') === 'rtl'
+  ) {
+    return true;
+  }
 
   const samples = [
+    report?.title,
     report?.companyName,
+    report?.dateRange,
     ...(Array.isArray(report?.headers) ? report.headers : []),
     ...(Array.isArray(report?.metrics)
       ? report.metrics.flatMap((metric) => [metric?.label, metric?.value])
+      : []),
+    ...(Array.isArray(report?.rows)
+      ? report.rows.slice(0, 12).flatMap((row) => (Array.isArray(row) ? row : []))
       : []),
   ];
 
@@ -261,14 +290,14 @@ function workbookXml(sheetName) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11231"/>
-  <workbookPr/>
+  <workbookPr defaultThemeVersion="166925"/>
   <bookViews>
-    <workbookView xWindow="240" yWindow="120" windowWidth="27795" windowHeight="12585" firstSheet="0" activeTab="0"/>
+    <workbookView xWindow="0" yWindow="0" windowWidth="27795" windowHeight="12585" tabRatio="600" firstSheet="0" activeTab="0"/>
   </bookViews>
   <sheets>
     <sheet name="${escapeXml(sheetName)}" sheetId="1" r:id="rId1"/>
   </sheets>
-  <calcPr calcId="0"/>
+  <calcPr calcId="191028"/>
 </workbook>`;
 }
 
@@ -277,11 +306,31 @@ function workbookRelsXml() {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
   <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
 </Relationships>`;
+}
+
+function sharedStringsXml(values) {
+  const items = Array.isArray(values) ? values : [];
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${items.length}" uniqueCount="${items.length}">
+${items
+  .map((value) => {
+    const text = escapeXml(value);
+    const space = /^\s|\s$/.test(String(value || ''))
+      ? ' xml:space="preserve"'
+      : '';
+
+    return `<si><t${space}>${text}</t></si>`;
+  })
+  .join('')}
+</sst>`;
 }
 
 function stylesXml(rtl = false) {
   const readingOrder = rtl ? ' readingOrder="2"' : ' readingOrder="1"';
+  const contentAlign = rtl ? 'right' : 'center';
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
@@ -311,13 +360,18 @@ function stylesXml(rtl = false) {
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
   </cellStyleXfs>
   <cellXfs count="6">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"${readingOrder}/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="${contentAlign}" vertical="center"${readingOrder}/></xf>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"${readingOrder}/></xf>
     <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"${readingOrder}/></xf>
-    <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"${readingOrder}/></xf>
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"${readingOrder}/></xf>
-    <xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"${readingOrder}/></xf>
+    <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="${contentAlign}" vertical="center" wrapText="1"${readingOrder}/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="${contentAlign}" vertical="center" wrapText="1"${readingOrder}/></xf>
+    <xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="${contentAlign}" vertical="center" wrapText="1"${readingOrder}/></xf>
   </cellXfs>
+  <cellStyles count="1">
+    <cellStyle name="Normal" xfId="0" builtinId="0"/>
+  </cellStyles>
+  <dxfs count="0"/>
+  <tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/>
 </styleSheet>`;
 }
 
@@ -333,22 +387,35 @@ function padRow(values, length) {
 
 function buildWorksheet(report) {
   const rtl = resolveSheetRtl(report);
+  const strings = createSharedStringTable();
   const metrics = Array.isArray(report.metrics) ? [...report.metrics] : [];
   const headers = Array.isArray(report.headers) ? [...report.headers] : [];
   const rows = Array.isArray(report.rows) ? report.rows : [];
   const columnCount = Math.max(1, metrics.length, headers.length, 1);
   const displayHeaders = padRow(headers, columnCount);
-  const displayMetrics = metrics;
+  const displayMetrics = padRow(metrics, columnCount);
   const displayRows = rows.map((row) => padRow(row, columnCount));
   const lastColumn = columnLetter(columnCount - 1);
+  /*
+   * RTL reports are written physically right-to-left: the first logical column
+   * (`#`, then date, description, ...) lands in the last grid column. This makes
+   * the report start from the right in every viewer — including ones that ignore
+   * Excel's `rightToLeft` sheet flag. The `rightToLeft` flag is deliberately NOT
+   * set so Excel (which honours it) doesn't flip the grid back to left-to-right.
+   */
+  const writeIndex = rtl ? (index) => columnCount - 1 - index : (index) => index;
   const sheetRows = [];
   let rowNumber = 1;
 
-  function pushRow(values, styleId, height) {
+  function pushRow(values, styleId, height, reverse = false) {
     const cells = values
       .slice(0, columnCount)
       .map((value, columnIndex) =>
-        inlineCell(cellRef(columnIndex, rowNumber), value, styleId),
+        strings.cell(
+          cellRef(reverse ? writeIndex(columnIndex) : columnIndex, rowNumber),
+          value,
+          styleId,
+        ),
       )
       .join('');
     const heightAttr = height ? ` ht="${height}" customHeight="1"` : '';
@@ -378,16 +445,24 @@ function buildWorksheet(report) {
 
   pushRow(Array.from({ length: columnCount }, () => ''), 0, 8);
 
-  if (displayMetrics.length) {
+  if (metrics.length) {
     pushRow(
-      Array.from({ length: columnCount }, (_, index) => displayMetrics[index]?.label || ''),
+      Array.from(
+        { length: columnCount },
+        (_, index) => displayMetrics[index]?.label || '',
+      ),
       3,
       18,
+      true,
     );
     pushRow(
-      Array.from({ length: columnCount }, (_, index) => displayMetrics[index]?.value || ''),
+      Array.from(
+        { length: columnCount },
+        (_, index) => displayMetrics[index]?.value || '',
+      ),
       4,
       20,
+      true,
     );
     pushRow(Array.from({ length: columnCount }, () => ''), 0, 8);
   }
@@ -397,6 +472,7 @@ function buildWorksheet(report) {
     Array.from({ length: columnCount }, (_, index) => displayHeaders[index] || ''),
     3,
     20,
+    true,
   );
 
   displayRows.forEach((row, index) => {
@@ -404,11 +480,12 @@ function buildWorksheet(report) {
       Array.from({ length: columnCount }, (_, columnIndex) => row[columnIndex] || ''),
       index % 2 === 0 ? 4 : 5,
       18,
+      true,
     );
   });
 
   const lastRow = Math.max(1, rowNumber - 1);
-  const widths = Array.from({ length: columnCount }, (_, columnIndex) => {
+  const logicalWidths = Array.from({ length: columnCount }, (_, columnIndex) => {
     const samples = [
       report.title,
       report.companyName,
@@ -424,6 +501,7 @@ function buildWorksheet(report) {
       12,
     );
   });
+  const widths = rtl ? logicalWidths.slice().reverse() : logicalWidths;
 
   const colsXml = widths
     .map(
@@ -442,26 +520,23 @@ function buildWorksheet(report) {
   }
 
   const freezeRow = headerRowNumber - 1;
-  const viewAttrs = rtl
-    ? 'rightToLeft="1" tabSelected="1" workbookViewId="0"'
-    : 'tabSelected="1" workbookViewId="0"';
-  const freezeXml = rtl
-    ? ''
-    : `<pane ySplit="${freezeRow}" topLeftCell="A${headerRowNumber}" activePane="bottomLeft" state="frozen"/>`;
+  const sheetView = `<sheetView tabSelected="1" zoomScale="100" zoomScaleNormal="100" workbookViewId="0"><pane ySplit="${freezeRow}" topLeftCell="A${headerRowNumber}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${headerRowNumber}" sqref="A${headerRowNumber}"/></sheetView>`;
 
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  return {
+    sharedStrings: strings.values,
+    xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheetPr/>
   <dimension ref="A1:${lastColumn}${lastRow}"/>
   <sheetViews>
-    <sheetView ${viewAttrs}>${freezeXml}</sheetView>
+    ${sheetView}
   </sheetViews>
   <sheetFormatPr defaultRowHeight="15"/>
   <cols>${colsXml}</cols>
   <sheetData>${sheetRows.join('')}</sheetData>
   <mergeCells count="${merges.length}">${merges.join('')}</mergeCells>
   <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>
-</worksheet>`;
+</worksheet>`,
+  };
 }
 
 function downloadBlob(bytes, fileName) {
@@ -504,6 +579,7 @@ export async function generateExcel(
     );
     const sheetName = sanitizeSheetName(report.title);
     const rtl = resolveSheetRtl(report);
+    const worksheet = buildWorksheet(report);
     const zipBytes = buildZip([
       { name: '[Content_Types].xml', data: contentTypesXml() },
       { name: '_rels/.rels', data: rootRelsXml() },
@@ -512,7 +588,8 @@ export async function generateExcel(
       { name: 'xl/workbook.xml', data: workbookXml(sheetName) },
       { name: 'xl/_rels/workbook.xml.rels', data: workbookRelsXml() },
       { name: 'xl/styles.xml', data: stylesXml(rtl) },
-      { name: 'xl/worksheets/sheet1.xml', data: buildWorksheet(report) },
+      { name: 'xl/sharedStrings.xml', data: sharedStringsXml(worksheet.sharedStrings) },
+      { name: 'xl/worksheets/sheet1.xml', data: worksheet.xml },
     ]);
 
     downloadBlob(zipBytes, resolveExcelFileName(type));
