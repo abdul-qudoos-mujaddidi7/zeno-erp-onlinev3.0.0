@@ -3,12 +3,14 @@
     import { accountApi } from "../../api/accountApi.js";
     import { showDate, setDatePickers } from "../../calendar.js";
     import {calculateCreditDebitOfAllAccounts} from './AccountsHelper.js';
-    import { generatePDF,generatingPDF } from "../generatePDF.js";
+    import { generatePDF } from "../generatePDF.js";
+    import { generateExcel } from "../generateExcel.js";
     import { push } from "svelte-spa-router";
     import { t, lang, translate_org_type,settings_all ,shortID} from "../../i18n/i18n.js";
     import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
     import FilterToolbar from '../../components/common/FilterToolbar.svelte';
     import ActionButton from '../../components/common/ActionButton.svelte';
+    import ExportMenu from '../../components/common/ExportMenu.svelte';
     import DataTable from '../../components/common/DataTable.svelte';
     import EmptyState from '../../components/common/EmptyState.svelte';
     import PaginationBar from '../../components/common/PaginationBar.svelte';
@@ -27,6 +29,7 @@
     let accountTypes = [];
     let accountGroups = [];
     let loading = true;
+    let exportingReport = false;
     let filterBalState = 0;
     let balStateDropdownOpen = false;
     let filtersOpen = false;
@@ -388,6 +391,30 @@
         if (t("Lang") === "fa") return tObj.name_fa || tObj.name || "";
         if (t("Lang") === "ps") return tObj.name_ps || tObj.name || "";
         return tObj.name || "";
+    }
+
+    async function exportAccounts(format) {
+        if (exportingReport) return;
+
+        exportingReport = true;
+
+        try {
+            const exporter = format === 'excel' ? generateExcel : generatePDF;
+
+            await exporter(
+                'accounts',
+                filteredAccounts,
+                fromDate,
+                toDate,
+                filteredAccounts.length,
+                overallBalanceArray,
+                {},
+            );
+        } catch (error) {
+            console.error('Failed to generate accounts report:', error);
+        } finally {
+            exportingReport = false;
+        }
     }
 
     let overallBalances = {};
@@ -865,13 +892,12 @@
     dense={true}
     tablePadding={true}>
     <svelte:fragment slot="actions">
-        <ActionButton
-            variant="secondary"
-            icon="bi-file-pdf-fill"
-            label={t('PDF')}
-            loading={generatingPDF}
-            disabled={generatingPDF}
-            on:click={() => generatePDF('accounts', filteredAccounts, fromDate, toDate, filteredAccounts.length, overallBalanceArray, {})} />
+        <ExportMenu
+            extraClass="pdf-btn"
+            loading={exportingReport}
+            disabled={exportingReport || loading || filteredAccounts.length === 0}
+            on:export={(event) => exportAccounts(event.detail)}
+        />
         <ActionButton
             variant="secondary"
             icon="bi-printer-fill"
@@ -954,18 +980,16 @@
                 </select>
 
                 <button
-                    on:click={() => {
-                        generatePDF('accounts', filteredAccounts, fromDate, toDate, filteredAccounts.length, overallBalanceArray, {});
-                    }}
-                    disabled={generatingPDF}
+                    on:click={() => exportAccounts('pdf')}
+                    disabled={exportingReport || loading || filteredAccounts.length === 0}
                     class="report-pdf-btn">
-                    {#if generatingPDF}
+                    {#if exportingReport}
                         <div class="spinner-border spinner-border-sm" role="status">
                             <span class="visually-hidden">{t('Generating...')}</span>
                         </div>
                     {:else}
-                        <i class="bi bi-file-pdf-fill"></i>
-                        {t('PDF')}
+                        <i class="bi bi-download"></i>
+                        {t('Download')}
                     {/if}
                 </button>
                 <button
