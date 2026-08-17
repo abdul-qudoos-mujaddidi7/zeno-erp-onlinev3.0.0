@@ -22,6 +22,9 @@ const journalRepository =
 const activityRepository =
   require('../repositories/activity.repository');
 
+const settingsRepository =
+  require('../repositories/settings.repository');
+
 const {
   generateLocalId,
 } = require('../utils/generateLocalId');
@@ -106,6 +109,99 @@ async function persistSaleBatchCosts(
       },
     );
   }
+}
+
+/*
+ * Allocates the next invoice number for the org atomically inside
+ * the caller's transaction. The settings `invoice_index` row is
+ * locked with SELECT ... FOR UPDATE, so concurrent POS sessions
+ * (multiple tabs/devices) can never be handed the same number.
+ * Returns a number guaranteed to be unused by any active sale.
+ */
+async function allocateInvoiceNumber(
+  connection,
+  {
+    orgId,
+    userId,
+    saleType,
+  },
+) {
+  const isPos = String(saleType || '') === 'pos';
+
+  const prefixSetting = await settingsRepository.findByKey(
+    connection,
+    {
+      orgId,
+      key: isPos ? 'pos_index_prefix' : 'invoice_index_prefix',
+      forUpdate: true,
+    },
+  );
+
+  const indexSetting = await settingsRepository.findByKey(
+    connection,
+    {
+      orgId,
+      key: 'invoice_index',
+      forUpdate: true,
+    },
+  );
+
+  const prefix = prefixSetting?.value || (isPos ? 'POS-' : 'INV-');
+  let index = Number(indexSetting?.value || 0);
+
+  /*
+   * If the counter was clobbered (e.g. by the desktop app's
+   * timestamp-style value), fall back to the highest sequential
+   * number actually in use for this prefix instead of issuing
+   * absurd numbers.
+   */
+  if (!Number.isSafeInteger(index) || index > 99999999) {
+    const [rows] = await connection.execute(
+      `SELECT
+         MAX(CAST(SUBSTRING_INDEX(invoice_number, '-', -1) AS UNSIGNED)) m
+       FROM sales
+       WHERE org_id = ?
+         AND invoice_number LIKE ?
+         AND CAST(SUBSTRING_INDEX(invoice_number, '-', -1) AS UNSIGNED) < 100000000`,
+      [orgId, `${prefix}%`],
+    );
+    index = Math.max(Number(rows[0]?.m || 0), 0);
+  }
+
+  /*
+   * Skip past any number a live sale already holds (protects
+   * against legacy duplicates and counters that drifted ahead).
+   */
+  let invoiceNumber = `${prefix}${index + 1}`;
+  while (
+    await saleRepository.findByInvoiceNumber(
+      connection,
+      {
+        orgId,
+        invoiceNumber,
+      },
+    )
+  ) {
+    index += 1;
+    invoiceNumber = `${prefix}${index + 1}`;
+  }
+  index += 1;
+
+  if (indexSetting) {
+    await settingsRepository.update(
+      connection,
+      {
+        orgId,
+        localId: indexSetting.local_id,
+        userId,
+        data: {
+          value: String(index),
+        },
+      },
+    );
+  }
+
+  return invoiceNumber;
 }
 
 /*
@@ -389,6 +485,25 @@ async function createSale({
 
     const localId = generateLocalId();
 
+    /*
+     * Confirmed sales get their invoice number from the org's
+     * counter, allocated atomically inside this transaction so two
+     * POS sessions can never stamp the same bill number.
+     */
+    const resolvedData = isConfirmed(data.invoice_status)
+      ? {
+          ...data,
+          invoice_number: await allocateInvoiceNumber(
+            connection,
+            {
+              orgId,
+              userId,
+              saleType: data.sale_type,
+            },
+          ),
+        }
+      : data;
+
     const sale =
       await saleRepository.create(
         connection,
@@ -396,7 +511,7 @@ async function createSale({
           orgId,
           localId,
           userId,
-          data,
+          data: resolvedData,
         },
       );
 
@@ -472,7 +587,7 @@ async function createSale({
               peer_price: Number(item.unit_price ?? 0),
               peer_currency: item.currency || data.currency || null,
               date: data.invoice_date || new Date(),
-              description: `Sale Invoice #${data.invoice_number || ''}`,
+              description: `Sale Invoice #${sale.invoice_number || ''}`,
               status: 1,
             },
           },
@@ -544,7 +659,7 @@ async function createSale({
             reference_id: localId,
             reference_type: 'sale',
             description:
-              data.description || `Sale Invoice #${data.invoice_number || ''}`,
+              data.description || `Sale Invoice #${sale.invoice_number || ''}`,
             currency: data.currency || null,
             first_entry_account: data.account_id,
             first_entry_debit: data.total_amount || 0,
@@ -591,6 +706,8 @@ async function createSale({
     );
 
     await connection.commit();
+
+    accountService.invalidateAccountAggregates(orgId);
 
     return {
       ...sale,
@@ -1206,6 +1323,8 @@ async function updateSale({
 
     await connection.commit();
 
+    accountService.invalidateAccountAggregates(orgId);
+
     return updatedSale;
   } catch (error) {
     await connection.rollback();
@@ -1483,6 +1602,8 @@ async function deleteSale({
 
     await connection.commit();
 
+    accountService.invalidateAccountAggregates(orgId);
+
     return deletedSale;
   } catch (error) {
     await connection.rollback();
@@ -1720,6 +1841,8 @@ async function createPayment({
 
     await connection.commit();
 
+    accountService.invalidateAccountAggregates(orgId);
+
     return payment;
   } catch (error) {
     await connection.rollback();
@@ -1823,6 +1946,8 @@ async function deletePayment({
     );
 
     await connection.commit();
+
+    accountService.invalidateAccountAggregates(orgId);
 
     return deletedPayment;
   } catch (error) {
@@ -2048,6 +2173,8 @@ async function createReturn({
 
     await connection.commit();
 
+    accountService.invalidateAccountAggregates(orgId);
+
     return {
       ...saleReturn,
       items: createdItems,
@@ -2240,6 +2367,8 @@ async function deleteReturn({
     );
 
     await connection.commit();
+
+    accountService.invalidateAccountAggregates(orgId);
 
     return deletedReturn;
   } catch (error) {

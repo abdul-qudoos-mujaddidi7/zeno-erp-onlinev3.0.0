@@ -68,7 +68,7 @@ export const accountApi = {
     const params = new URLSearchParams();
     params.set('status', String(status));
     if (account_ids) params.set('account_ids', String(account_ids));
-    return api.get(`${BASE_URL}/credit-debit?${params}`);
+    return api.get(`${BASE_URL}/credit-debit?${params}`, { cache: false });
   },
 
   getReportBootstrap({ status = 1 } = {}) {

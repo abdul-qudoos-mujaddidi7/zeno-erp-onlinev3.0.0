@@ -646,16 +646,12 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
   }
 
   async function finalizePosSale(saleId) {
-    try {
-      const indexSetting = (await settingsApi.getAll({ status: 1, key: 'invoice_index' }))?.data?.[0];
-      if (indexSetting) {
-        await settingsApi.update(indexSetting.id, {
-          value: String(Number(indexSetting.value || 0) + 1),
-        });
-      }
-    } catch (error) {
-      console.warn('Failed to bump POS invoice index:', error);
-    }
+    /*
+     * The backend allocates the next invoice number atomically
+     * inside the sale transaction, so the counter is not bumped
+     * here anymore (that was racy: concurrent POS sessions could
+     * read the same index and stamp the same bill number).
+     */
 
     try {
       await calculateRemainingAndBenefit(saleId);

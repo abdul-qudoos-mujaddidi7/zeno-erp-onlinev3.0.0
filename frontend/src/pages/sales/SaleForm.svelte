@@ -1155,11 +1155,6 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
         const response = await saleApi.create(payload);
         saved = response?.data;
         savedId = saved?.id;
-
-        const _indexSetting = (await settingsApi.getAll({ status: 1, key: 'invoice_index' }))?.data?.[0];
-        if (_indexSetting) {
-          await settingsApi.update(_indexSetting.id, { value: String(Number(_indexSetting.value || 0) + 1) });
-        }
       }
 
       /*

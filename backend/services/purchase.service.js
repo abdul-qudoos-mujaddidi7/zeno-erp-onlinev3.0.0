@@ -518,6 +518,8 @@ async function createPurchase({
 
     await connection.commit();
 
+    accountService.invalidateAccountAggregates(orgId);
+
     return {
       ...purchase,
       items: createdItems,
@@ -968,6 +970,8 @@ async function updatePurchase({
 
     await connection.commit();
 
+    accountService.invalidateAccountAggregates(orgId);
+
     return updatedPurchase;
   } catch (error) {
     await connection.rollback();
@@ -1245,6 +1249,8 @@ async function deletePurchase({
 
     await connection.commit();
 
+    accountService.invalidateAccountAggregates(orgId);
+
     return deletedPurchase;
   } catch (error) {
     await connection.rollback();
@@ -1474,6 +1480,8 @@ async function createPayment({
 
     await connection.commit();
 
+    accountService.invalidateAccountAggregates(orgId);
+
     return payment;
   } catch (error) {
     await connection.rollback();
@@ -1577,6 +1585,8 @@ async function deletePayment({
     );
 
     await connection.commit();
+
+    accountService.invalidateAccountAggregates(orgId);
 
     return deletedPayment;
   } catch (error) {
@@ -1800,6 +1810,8 @@ async function createReturn({
 
     await connection.commit();
 
+    accountService.invalidateAccountAggregates(orgId);
+
     return {
       ...purchaseReturn,
       items: createdItems,
@@ -1992,6 +2004,8 @@ async function deleteReturn({
     );
 
     await connection.commit();
+
+    accountService.invalidateAccountAggregates(orgId);
 
     return deletedReturn;
   } catch (error) {

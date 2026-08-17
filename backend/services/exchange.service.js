@@ -29,6 +29,9 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
+const accountService =
+  require('./account.service');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -488,6 +491,8 @@ async function createExchange({
 
     await connection.commit();
 
+    accountService.invalidateAccountAggregates(orgId);
+
     return exchange;
   } catch (error) {
     await connection.rollback();
@@ -571,6 +576,8 @@ async function updateExchange({
     );
 
     await connection.commit();
+
+    accountService.invalidateAccountAggregates(orgId);
 
     return updatedExchange;
   } catch (error) {
@@ -671,6 +678,8 @@ async function deleteExchange({
     );
 
     await connection.commit();
+
+    accountService.invalidateAccountAggregates(orgId);
 
     return deletedExchange;
   } catch (error) {

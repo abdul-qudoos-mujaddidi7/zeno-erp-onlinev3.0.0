@@ -76,6 +76,33 @@ async function findAll(
   return rows;
 }
 
+async function findByKey(
+  executor,
+  {
+    orgId,
+    key,
+    forUpdate = false,
+  },
+) {
+  const [rows] = await executor.execute(
+    `
+      SELECT
+        ${SETTINGS_COLUMNS}
+      FROM settings
+      WHERE org_id = ?
+        AND \`key\` = ?
+      LIMIT 1
+      ${forUpdate ? 'FOR UPDATE' : ''}
+    `,
+    [
+      orgId,
+      key,
+    ],
+  );
+
+  return rows[0] || null;
+}
+
 async function findByLocalId(
   executor,
   {
@@ -247,6 +274,7 @@ async function softDelete(
 
 module.exports = {
   findAll,
+  findByKey,
   findByLocalId,
   create,
   update,

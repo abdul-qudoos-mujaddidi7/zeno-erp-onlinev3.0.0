@@ -524,6 +524,8 @@ async function createAccount({
 
     await connection.commit();
 
+    invalidateAccountAggregates(orgId);
+
     return account;
   } catch (error) {
     await connection.rollback();

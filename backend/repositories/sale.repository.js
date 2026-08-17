@@ -233,6 +233,32 @@ async function findByLocalId(
   return rows[0] || null;
 }
 
+async function findByInvoiceNumber(
+  executor,
+  {
+    orgId,
+    invoiceNumber,
+  },
+) {
+  const [rows] = await executor.execute(
+    `
+      SELECT
+        ${SALE_COLUMNS}
+      FROM sales
+      WHERE org_id = ?
+        AND invoice_number = ?
+        AND status = 1
+      LIMIT 1
+    `,
+    [
+      orgId,
+      invoiceNumber,
+    ],
+  );
+
+  return rows[0] || null;
+}
+
 async function create(
   connection,
   {
@@ -1171,6 +1197,7 @@ async function updateItemCosts(
 module.exports = {
   findAll,
   findByLocalId,
+  findByInvoiceNumber,
   create,
   update,
   softDelete,
