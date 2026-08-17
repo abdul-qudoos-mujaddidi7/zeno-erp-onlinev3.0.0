@@ -253,7 +253,7 @@
       const match = bills.find((b) => Number(b.id) === Number(reference_id));
       if (match) {
         selectedBill = match;
-        lockedCurrency = currency;
+        currency = match.currency;
         billSearch = billLabel(match);
         billFilter = '';
       }
@@ -327,7 +327,13 @@
     description,
     reference_id,
     reference_type,
-    currency,
+    /*
+     * Bill payments are always posted in the bill's currency so the
+     * customer/supplier balance and the bill's remaining move in the
+     * bill's currency, even when the payment was made in another
+     * currency (the amounts were converted on input).
+     */
+    currency: selectedBill ? selectedBill.currency : currency,
 
     first_entry_account,
     first_entry_debit: hasDebit ? debitAmount : 0,
@@ -440,32 +446,70 @@
     }
     return decimal !== undefined ? integer + '.' + decimal : integer;
   }
+  /*
+   * Cross-currency bill payments (SaleForm-style): when a bill is
+   * selected the user may pay in any currency, but the journal is always
+   * posted in the bill's currency so the customer/supplier balance and
+   * the bill's remaining move correctly. The amount typed in the paid
+   * currency is converted to the bill currency before saving.
+   */
+  function billCurrencyCode() {
+    return selectedBill ? selectedBill.currency : null;
+  }
+
+  function toJournalAmount(value) {
+    const billCur = billCurrencyCode();
+    if (billCur && currency && currency !== billCur) {
+      return exchangeRate(Number(value || 0), currency, billCur);
+    }
+    return value;
+  }
+
+  function toDisplayAmount(value) {
+    const billCur = billCurrencyCode();
+    if (
+      value === null ||
+      value === undefined ||
+      value === ''
+    ) {
+      return value;
+    }
+    if (billCur && currency && currency !== billCur) {
+      return exchangeRate(Number(value || 0), billCur, currency);
+    }
+    return value;
+  }
+
   function onFirstDebitInput(value) {
     const amount = normalize(value);
-    first_entry_debit = amount;
+    const journalAmount = normalize(String(toJournalAmount(amount)));
+    first_entry_debit = journalAmount;
     first_entry_credit = null;
-    second_entry_credit = amount;
+    second_entry_credit = journalAmount;
     second_entry_debit = null;
   }
   function onFirstCreditInput(value) {
     const amount = normalize(value);
-    first_entry_credit = amount;
+    const journalAmount = normalize(String(toJournalAmount(amount)));
+    first_entry_credit = journalAmount;
     first_entry_debit = null;
-    second_entry_debit = amount;
+    second_entry_debit = journalAmount;
     second_entry_credit = null;
   }
   function onSecondDebitInput(value) {
     const amount = normalize(value);
-    second_entry_debit = amount;
+    const journalAmount = normalize(String(toJournalAmount(amount)));
+    second_entry_debit = journalAmount;
     second_entry_credit = null;
-    first_entry_credit = amount;
+    first_entry_credit = journalAmount;
     first_entry_debit = null;
   }
   function onSecondCreditInput(value) {
     const amount = normalize(value);
-    second_entry_credit = amount;
+    const journalAmount = normalize(String(toJournalAmount(amount)));
+    second_entry_credit = journalAmount;
     second_entry_debit = null;
-    first_entry_debit = amount;
+    first_entry_debit = journalAmount;
     first_entry_credit = null;
   }
   function onlyNumbers(e) {
@@ -554,15 +598,12 @@
   }
 
   function selectCurrency(code) {
-    if (lockedCurrency && code !== lockedCurrency) {
-      // Picking a different currency manually releases the bill lock.
-      clearBillSelection();
-    }
     currency = code;
     currencyMenuFor = null;
   }
 
   function toggleCurrencyMenu(which) {
+    if (isBillCurrencyLocked) return;
     currencyMenuFor = currencyMenuFor === which ? null : which;
   }
 
@@ -612,7 +653,6 @@ import { purchaseApi } from '../../api/purchaseApi.js';
   let bills = [];
   let showBillDropdown = false;
   let selectedBill = null;
-  let lockedCurrency = null;
   let billLoading = false;
   /*
    * billSearch is what the input shows (the selected bill's number when
@@ -621,6 +661,43 @@ import { purchaseApi } from '../../api/purchaseApi.js';
    */
   let billSearch = '';
   let billFilter = '';
+
+  /*
+   * When a bill is selected the payment direction is fixed: a customer's
+   * bill is paid by crediting the customer (debit disabled), a supplier's
+   * bill by debiting the supplier (credit disabled).
+   */
+  $: isCustomerBill = Boolean(
+    selectedBill && getAccountTypeId(first_entry_account) === 4,
+  );
+  $: isSupplierBill = Boolean(
+    selectedBill && getAccountTypeId(first_entry_account) === 3,
+  );
+  $: isBillCurrencyLocked = Boolean(selectedBill);
+
+  /*
+   * Live SaleForm-style conversion line, e.g. "7.81 USD = 500 AFN".
+   */
+  $: conversionHint = (() => {
+    if (!selectedBill || !currency || currency === selectedBill.currency) {
+      return null;
+    }
+    const journalAmount = Number(
+      first_entry_credit || first_entry_debit || 0,
+    );
+    if (!journalAmount) return null;
+    const paidAmount = exchangeRate(
+      journalAmount,
+      selectedBill.currency,
+      currency,
+    );
+    return {
+      paid: paidAmount,
+      paidCurrency: currency,
+      journal: journalAmount,
+      journalCurrency: selectedBill.currency,
+    };
+  })();
 
   function getAccountTypeId(accountId) {
     const acc = accounts.find((a) => Number(a.id) === Number(accountId));
@@ -656,7 +733,6 @@ import { purchaseApi } from '../../api/purchaseApi.js';
   async function loadBillsForAccount(accountId) {
     bills = [];
     selectedBill = null;
-    lockedCurrency = null;
     showBillDropdown = false;
     billSearch = '';
     billFilter = '';
@@ -693,8 +769,8 @@ import { purchaseApi } from '../../api/purchaseApi.js';
 
   function selectBill(bill) {
     selectedBill = bill;
-    lockedCurrency = bill.currency;
     currency = bill.currency;
+    currencyMenuFor = null;
     reference_id = bill.id;
     reference_type = getAccountTypeId(first_entry_account) === 4 ? 'sale' : 'purchase';
 
@@ -723,7 +799,6 @@ import { purchaseApi } from '../../api/purchaseApi.js';
 
   function clearBillSelection() {
     selectedBill = null;
-    lockedCurrency = null;
     reference_id = null;
     reference_type = null;
     billSearch = '';
@@ -984,8 +1059,7 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                 {#if selectedBill}
                   <span class="journal-bill-input-meta">
                     <span dir="ltr">{Number(selectedBill._remaining || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                    {t(selectedBill.currency)}
-                    <i class="bi bi-lock-fill journal-bill-lock" title={t('Currency locked to bill')}></i>
+                    {t(selectedBill.currency)} {t('Remaining')}
                   </span>
                 {/if}
               </div>
@@ -1054,7 +1128,9 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                     : ''}"
                   style="background: #feecec !important; background-color: #feecec !important; color: #b91c1c; border-color: transparent !important; box-shadow: none !important; outline: none !important;"
                   placeholder={t('Debit')}
-                  value={format(first_entry_debit)}
+                  value={format(toDisplayAmount(first_entry_debit))}
+                  disabled={isCustomerBill}
+                  title={isCustomerBill ? t('Disabled for customer bill payment') : ''}
                   on:keydown={onlyNumbers}
                   on:input={(e) => onFirstDebitInput(normalize(e.target.value))} />
               </div>
@@ -1063,12 +1139,18 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                   id="journalCurrencyDropdown"
                   class="journal-currency-picker__btn"
                   type="button"
+                  disabled={isBillCurrencyLocked}
                   aria-expanded={currencyMenuFor === 'debit'}
                   aria-haspopup="listbox"
                   aria-label={t('Currency')}
+                  title={isBillCurrencyLocked ? t('Locked to bill currency') : ''}
                   on:click|stopPropagation={() => toggleCurrencyMenu('debit')}>
                   {t(currency)}
-                  <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                  {#if isBillCurrencyLocked}
+                    <i class="bi bi-lock-fill journal-bill-lock" aria-hidden="true"></i>
+                  {:else}
+                    <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                  {/if}
                 </button>
                 {#if currencyMenuFor === 'debit'}
                   <ul class="journal-currency-menu" role="listbox">
@@ -1113,7 +1195,9 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                     : ''}"
                   style="background: #e9f9ef !important; background-color: #e9f9ef !important; color: #047857; border-color: transparent !important; box-shadow: none !important; outline: none !important;"
                   placeholder={t('Credit')}
-                  value={format(first_entry_credit)}
+                  value={format(toDisplayAmount(first_entry_credit))}
+                  disabled={isSupplierBill}
+                  title={isSupplierBill ? t('Disabled for supplier bill payment') : ''}
                   on:keydown={onlyNumbers}
                   on:input={(e) => onFirstCreditInput(normalize(e.target.value))} />
               </div>
@@ -1121,12 +1205,18 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                 <button
                   class="journal-currency-picker__btn"
                   type="button"
+                  disabled={isBillCurrencyLocked}
                   aria-expanded={currencyMenuFor === 'credit'}
                   aria-haspopup="listbox"
                   aria-label={t('Currency')}
+                  title={isBillCurrencyLocked ? t('Locked to bill currency') : ''}
                   on:click|stopPropagation={() => toggleCurrencyMenu('credit')}>
                   {t(currency)}
-                  <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                  {#if isBillCurrencyLocked}
+                    <i class="bi bi-lock-fill journal-bill-lock" aria-hidden="true"></i>
+                  {:else}
+                    <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                  {/if}
                 </button>
                 {#if currencyMenuFor === 'credit'}
                   <ul class="journal-currency-menu" role="listbox">
@@ -1152,6 +1242,18 @@ import { purchaseApi } from '../../api/purchaseApi.js';
               </div>
             {/if}
           </div>
+          {#if conversionHint}
+            <div class="col-12 journal-conversion-hint">
+              <i class="bi bi-arrow-repeat"></i>
+              {t('Payment')}:
+              <span dir="ltr">{Number(conversionHint.paid).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              {t(conversionHint.paidCurrency)}
+              =&nbsp;
+              <span dir="ltr">{Number(conversionHint.journal).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              {t(conversionHint.journalCurrency)}
+            </div>
+          {/if}
+
           <div class="col-md-4 journal-description-field">
             <label class="journal-field-label">{t('Description')}</label>
             <div class="journal-unified-input-group">
@@ -1578,6 +1680,11 @@ import { purchaseApi } from '../../api/purchaseApi.js';
 
   .journal-currency-picker__btn:hover {
     background: #f8fafc;
+  }
+
+  .journal-currency-picker__btn:disabled {
+    cursor: not-allowed;
+    opacity: 1;
   }
 
   .journal-currency-menu {
@@ -2278,6 +2385,25 @@ import { purchaseApi } from '../../api/purchaseApi.js';
 
   .journal-bill-field {
     min-width: 0;
+  }
+
+  .journal-conversion-hint {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.4rem 0.7rem;
+    background: #f0f7ff;
+    border: 1px solid #d7e7fb;
+    border-radius: 8px;
+    color: #1d4ed8;
+    font-size: 0.78rem;
+    font-weight: 650;
+  }
+
+  .journal-amount-row :global(.form-control:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .journal-bill-input-meta {

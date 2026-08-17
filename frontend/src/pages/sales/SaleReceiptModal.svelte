@@ -5,6 +5,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { productGenericApi } from '../../api/productGenericApi.js';
   import { saleApi } from '../../api/saleApi.js';
   import { accountApi } from '../../api/accountApi.js';
+  import { journalApi } from '../../api/journalApi.js';
   import AppModal from '../../components/common/AppModal.svelte';
 
   import { t, lang, translate_org_type, shortID, settings_all } from '../../i18n/i18n';
@@ -41,6 +42,33 @@ import { currencyApi } from '../../api/currencyApi.js';
   }
 
   let allJournals = [];
+
+  /*
+   * Loads every journal that touches the customer account (first or
+   * second entry) so the receipt can show the previous/current balance.
+   */
+  async function loadJournals() {
+    if (!sale?.account_id) return;
+    const all = [];
+    let page = 1;
+    const limit = 200;
+    for (;;) {
+      const response = await journalApi.getAll({
+        status: 1,
+        account_id: sale.account_id,
+        limit,
+        page,
+        skip_count: 1,
+      });
+      const rows = response?.data || [];
+      all.push(...rows);
+      const meta = response?.meta || {};
+      if (!meta.hasMore || rows.length < limit) break;
+      page += 1;
+    }
+    allJournals = all;
+  }
+
   async function loadItems() {
     const saleResponse = await saleApi.getById(Number(sale.id));
     const saleItems = ((saleResponse?.data?.items) || [])
@@ -104,6 +132,7 @@ import { currencyApi } from '../../api/currencyApi.js';
       if (!payments?.length) tasks.push(loadPayments());
     }
     if (!customer?.id && sale?.account_id) tasks.push(loadCustomer());
+    if (!allJournals.length && sale?.account_id) tasks.push(loadJournals());
     if (tasks.length) await Promise.all(tasks);
 
     items = (items || []).map((it) => ({
@@ -559,7 +588,7 @@ td {
                 <div class="fw-bold">{t('Old Balance')}</div>
                 <div class="right fw-bold">
                   <span dir="ltr"
-                    >{balance[sale?.currency]
+                    >{balance[sale?.currency] !== undefined && balance[sale?.currency] !== null
                       ? Number(balance[sale?.currency] + due || 0).toLocaleString(undefined, {
                           maximumFractionDigits: 3,
                         })

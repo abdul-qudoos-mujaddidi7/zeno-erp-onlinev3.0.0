@@ -152,7 +152,10 @@
     "Search bills...": "Search bills...",
     "No bills": "No bills",
     "No bills found": "No bills found",
-    "Currency locked to bill": "Currency locked to bill"
+    "Currency locked to bill": "Currency locked to bill",
+    "System": "System",
+    "System accounts cannot be edited.": "System accounts cannot be edited.",
+    "System accounts cannot be deleted.": "System accounts cannot be deleted."
   },
   "fa": {
     "Welcome": "خوش آمدید",
@@ -1593,7 +1596,10 @@
     "Included Accounts": "حساب‌های شامل‌شده",
     "This Year": "امسال",
     "Custom": "دلخواه",
-    "Please enter a debit or credit amount greater than zero.": "لطفاً یک مبلغ باقیدار یا طلبکار بزرگتر از صفر وارد کنید."
+    "Please enter a debit or credit amount greater than zero.": "لطفاً یک مبلغ باقیدار یا طلبکار بزرگتر از صفر وارد کنید.",
+    "System": "سیستمی",
+    "System accounts cannot be edited.": "حساب‌های پیش‌فرض سیستم قابل ویرایش نیستند.",
+    "System accounts cannot be deleted.": "حساب‌های پیش‌فرض سیستم قابل حذف نیستند."
   },
   "ps": {
     "Welcome": "ښه راغلاست",
@@ -1651,6 +1657,9 @@
     "Search bills...": "د بل لټون...",
     "No bills": "هیڅ بل نشته",
     "No bills found": "بل ونه موندل شو",
-    "Currency locked to bill": "ارز په بل باندې تړل شوی"
+    "Currency locked to bill": "ارز په بل باندې تړل شوی",
+    "System": "سیسټمي",
+    "System accounts cannot be edited.": "د سیسټم مخکیني حسابونه نشي سمولی.",
+    "System accounts cannot be deleted.": "د سیسټم مخکیني حسابونه نشي ړنګولی."
   }
 }

@@ -29,6 +29,7 @@
   $: permissions = $auth.permissions;
 
   import { resolveMediaUrl } from '../../lib/mediaUrl.js';
+  import { isSystemAccount } from '../../lib/systemAccounts.js';
 
   let accounts = [];
   let accountTypes = [];
@@ -229,6 +230,10 @@
     let result = accounts.slice();
 
     result = result.sort((a, b) => {
+      const aSystem = isSystemAccount(a) ? 0 : 1;
+      const bSystem = isSystemAccount(b) ? 0 : 1;
+      if (aSystem !== bSystem) return aSystem - bSystem;
+
       let valA = a[sortColumn];
       let valB = b[sortColumn];
 
@@ -334,6 +339,12 @@
   }
 
   async function deleteAccount(id) {
+    const acc = accounts.find((a) => Number(a.id) === Number(id));
+    if (isSystemAccount(acc)) {
+      toast.error(t('Error'), t('System accounts cannot be deleted.'));
+      return;
+    }
+
     if (confirm('Delete this account?')) {
       await accountApi.remove(id);
       await loadAccounts();
@@ -351,6 +362,12 @@
   }
 
   function changeAccountStatus(id, newStatus) {
+    const acc = accounts.find((a) => a.id === id);
+    if (isSystemAccount(acc)) {
+      toast.error(t('Error'), t('System accounts cannot be edited.'));
+      return;
+    }
+
     if (newStatus === 'archived') {
       const acc = accounts.find((a) => a.id === id);
       let keys = Object.keys(acc?.computedBalances || {});
@@ -479,6 +496,12 @@
                     </div>
                   {/if}
                     <span class="account-name">{getAccountDisplayName(acc)}</span>
+                    {#if isSystemAccount(acc)}
+                      <span class="system-account-badge" title={t('System accounts cannot be edited.')}>
+                        <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                        {t('System')}
+                      </span>
+                    {/if}
                   </div>
                 </td>
                 {#if showTotalPercentage}
@@ -529,8 +552,12 @@
                     <button
                         type="button"
                         class="archive-btn"
-                        title={acc.account_status === 'active' ? t('Archived') : t('Active')}
+                        disabled={isSystemAccount(acc)}
+                        title={isSystemAccount(acc)
+                          ? t('System accounts cannot be edited.')
+                          : acc.account_status === 'active' ? t('Archived') : t('Active')}
                       on:click={() =>
+                        !isSystemAccount(acc) &&
                         changeAccountStatus(acc.id, acc.account_status === 'active' ? 'archived' : 'active')}>
                       <i class="bi bi-{acc.account_status === 'active' ? 'archive' : 'box-arrow-in-up'}"></i>
                     </button>
@@ -864,6 +891,26 @@
     font-weight: 800;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .system-account-badge {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.08rem 0.4rem;
+    border: 1px solid #dbe4f0;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.65rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .archive-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
   }
 
   .percentage-value {

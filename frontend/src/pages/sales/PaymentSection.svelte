@@ -67,23 +67,44 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     return colors[type];
   }
 
-  function getAccountName(id) {
-    const acc = accounts.find((a) => Number(a.id) === Number(id)) || {};
+  function getAccountName(id, payment = null) {
+    const acc =
+      accounts.find(
+        (a) =>
+          Number(a.id ?? a.local_id) === Number(id),
+      ) || {};
     let out = '';
-    if (t('Lang') === 'en') out = acc.name || '';
-    if (t('Lang') === 'fa') out = acc.name_fa || acc.name || '';
-    if (t('Lang') === 'ps') out = acc.name_ps || acc.name || '';
-    out = out || 'Unknown';
-    return out;
+    const name = acc.name || payment?.account_name || '';
+    const nameFa = acc.name_fa || payment?.account_name_fa || '';
+    const namePs = acc.name_ps || payment?.account_name_ps || '';
+    if (t('Lang') === 'en') out = name;
+    if (t('Lang') === 'fa') out = nameFa || name;
+    if (t('Lang') === 'ps') out = namePs || name;
+    const code = acc.code || payment?.account_code || '';
+    if (
+      !out &&
+      (code === 'TREASURY' || Number(id) === Number(treasury_ID))
+    ) {
+      out = t('Treasury');
+    }
+    return out || t('Unknown');
+  }
+
+  function asAccountList(value) {
+    return Array.isArray(value) ? value : [];
   }
 
   function mergeAccounts(rows = []) {
     const byId = new Map(
-      accounts.map((account) => [Number(account.id), account]),
+      accounts.map((account) => [
+        Number(account.id ?? account.local_id),
+        account,
+      ]),
     );
     for (const row of rows) {
-      if (!row?.id) continue;
-      byId.set(Number(row.id), row);
+      const rowId = row?.id ?? row?.local_id;
+      if (rowId == null || rowId === '') continue;
+      byId.set(Number(rowId), row);
     }
     accounts = [...byId.values()].filter(
       (a) => !['NOTRACK', 'RECEIVABLE', 'PAYABLE', 'SALES', 'PURCHASE'].includes(a.code),
@@ -132,11 +153,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     units = unitResponse?.data || [];
 
     const seedAccounts = [
-      ...(treasuryResponse?.data || []),
-      ...(notrackResponse?.data || []),
+      ...asAccountList(treasuryResponse?.data),
+      ...asAccountList(notrackResponse?.data),
     ];
-    treasury_ID = seedAccounts.find((a) => a.code === 'TREASURY')?.id || 0;
-    notrack_ID = seedAccounts.find((a) => a.code === 'NOTRACK')?.id || 0;
+    const treasuryAccount = seedAccounts.find((a) => a.code === 'TREASURY');
+    treasury_ID = treasuryAccount?.id ?? treasuryAccount?.local_id ?? 0;
+    notrack_ID = seedAccounts.find((a) => a.code === 'NOTRACK')?.id
+      ?? seedAccounts.find((a) => a.code === 'NOTRACK')?.local_id
+      ?? 0;
     if (treasury_ID) second_entry_account = treasury_ID;
 
     const paymentAccountIds = [
@@ -147,7 +171,10 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       ),
     ];
     const missingPaymentAccounts = paymentAccountIds.filter(
-      (id) => !seedAccounts.some((account) => Number(account.id) === id),
+      (id) =>
+        !seedAccounts.some(
+          (account) => Number(account.id ?? account.local_id) === id,
+        ),
     );
     const paymentAccounts = await Promise.all(
       missingPaymentAccounts.map((id) =>
@@ -542,7 +569,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                         <span class="pd-table__currency">{t(p.currency)}</span>
                       </span>
                     </td>
-                    <td class="pd-table__col-account">{getAccountName(p.account_id)}</td>
+                    <td class="pd-table__col-account">{getAccountName(p.account_id, p)}</td>
                     <td class="pd-table__col-actions">
                       {#if !isDeletedSale}
                       <button type="button" class="pd-btn pd-btn--danger-outline pd-btn--sm" on:click={() => deletePayment(p.id)}>

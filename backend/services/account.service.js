@@ -32,6 +32,10 @@ const accountGroupRepository =
 const accountProductItemRepository =
   require('../repositories/account-product-item.repository');
 
+const {
+  isSystemAccountCode,
+} = require('../constants/systemAccounts');
+
 const BALANCE_CACHE_TTL_MS = 45000;
 
 function getAuthenticatedIdentity(user) {
@@ -432,6 +436,14 @@ async function createAccount({
   try {
     await connection.beginTransaction();
 
+    if (isSystemAccountCode(data.code)) {
+      throw new AppError(
+        'System accounts cannot be created.',
+        403,
+        'SYSTEM_ACCOUNT_LOCKED',
+      );
+    }
+
     if (data.code) {
       const existingCode =
         await accountRepository.findByCode(
@@ -570,6 +582,22 @@ async function updateAccount({
       );
     }
 
+    if (isSystemAccountCode(oldAccount.code)) {
+      throw new AppError(
+        'System accounts cannot be edited.',
+        403,
+        'SYSTEM_ACCOUNT_LOCKED',
+      );
+    }
+
+    if (isSystemAccountCode(data.code)) {
+      throw new AppError(
+        'System accounts cannot be edited.',
+        403,
+        'SYSTEM_ACCOUNT_LOCKED',
+      );
+    }
+
     if (data.code) {
       const existingCode =
         await accountRepository.findByCode(
@@ -673,6 +701,14 @@ async function deleteAccount({
         'Account not found.',
         404,
         'ACCOUNT_NOT_FOUND',
+      );
+    }
+
+    if (isSystemAccountCode(oldAccount.code)) {
+      throw new AppError(
+        'System accounts cannot be deleted.',
+        403,
+        'SYSTEM_ACCOUNT_LOCKED',
       );
     }
 

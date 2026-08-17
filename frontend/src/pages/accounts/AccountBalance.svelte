@@ -6,6 +6,7 @@
   import { patientTypeApi } from '../../api/patientTypeApi.js';
   export let id;
   import { resolveMediaUrl } from '../../lib/mediaUrl.js';
+  import { isSystemAccount } from '../../lib/systemAccounts.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   let accounts = [];
@@ -245,7 +246,7 @@ import { accountImageApi } from '../../api/accountImageApi.js';
         <i class="bi bi-arrow-left"></i>
       </button>
 
-      {#if permissions?.some((p) => p.code === 'Accounts' && p.edit)}
+      {#if permissions?.some((p) => p.code === 'Accounts' && p.edit) && !isSystemAccount(account)}
         <button
           on:click={() => modalRef.openModal(account)}
           class="edit-button"

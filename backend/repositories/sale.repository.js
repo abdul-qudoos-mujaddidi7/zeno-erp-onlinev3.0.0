@@ -56,22 +56,33 @@ const SALE_ITEM_COLUMNS = `
 `;
 
 const PAYMENT_COLUMNS = `
-  local_id AS id,
-  local_id,
-  sale_id,
-  account_id,
-  amount,
-  currency,
-  payment_date,
-  description,
-  status,
-  COALESCE(version, 1) AS version,
-  created_by,
-  updated_by,
-  approved_by,
-  approved_at,
-  created_at,
-  updated_at
+  sp.local_id AS id,
+  sp.local_id,
+  sp.sale_id,
+  sp.account_id,
+  sp.amount,
+  sp.currency,
+  sp.payment_date,
+  sp.description,
+  sp.status,
+  COALESCE(sp.version, 1) AS version,
+  sp.created_by,
+  sp.updated_by,
+  sp.approved_by,
+  sp.approved_at,
+  sp.created_at,
+  sp.updated_at,
+  a.name AS account_name,
+  a.name_fa AS account_name_fa,
+  a.name_ps AS account_name_ps,
+  a.code AS account_code
+`;
+
+const PAYMENT_FROM = `
+  sale_payments sp
+  LEFT JOIN accounts a
+    ON a.org_id = sp.org_id
+   AND a.local_id = sp.account_id
 `;
 
 const RETURN_COLUMNS = `
@@ -603,11 +614,11 @@ async function findPaymentsBySaleIds(
     `
       SELECT
         ${PAYMENT_COLUMNS}
-      FROM sale_payments
-      WHERE org_id = ?
-        AND sale_id IN (${placeholders})
-        ${includeDeleted ? '' : 'AND status = 1'}
-      ORDER BY created_at ASC, local_id ASC
+      FROM ${PAYMENT_FROM}
+      WHERE sp.org_id = ?
+        AND sp.sale_id IN (${placeholders})
+        ${includeDeleted ? '' : 'AND sp.status = 1'}
+      ORDER BY sp.created_at ASC, sp.local_id ASC
     `,
     [
       orgId,
@@ -687,9 +698,9 @@ async function createPayment(
     `
       SELECT
         ${PAYMENT_COLUMNS}
-      FROM sale_payments
-      WHERE org_id = ?
-        AND local_id = ?
+      FROM ${PAYMENT_FROM}
+      WHERE sp.org_id = ?
+        AND sp.local_id = ?
       LIMIT 1
     `,
     [
@@ -713,9 +724,9 @@ async function findPaymentByLocalId(
     `
       SELECT
         ${PAYMENT_COLUMNS}
-      FROM sale_payments
-      WHERE org_id = ?
-        AND local_id = ?
+      FROM ${PAYMENT_FROM}
+      WHERE sp.org_id = ?
+        AND sp.local_id = ?
       LIMIT 1
       ${forUpdate ? 'FOR UPDATE' : ''}
     `,

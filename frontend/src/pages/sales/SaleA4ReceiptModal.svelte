@@ -111,7 +111,32 @@ import { productBrandApi } from '../../api/productBrandApi.js';
       };
     });
 
-    allJournals = (await journalApi.getAll({ status: 1 }))?.data || [];
+  }
+
+  /*
+   * Loads every journal that touches the customer account (first or
+   * second entry) so the receipt can show the previous/current balance.
+   */
+  async function loadJournals() {
+    if (!sale?.account_id) return;
+    const all = [];
+    let page = 1;
+    const limit = 200;
+    for (;;) {
+      const response = await journalApi.getAll({
+        status: 1,
+        account_id: sale.account_id,
+        limit,
+        page,
+        skip_count: 1,
+      });
+      const rows = response?.data || [];
+      all.push(...rows);
+      const meta = response?.meta || {};
+      if (!meta.hasMore || rows.length < limit) break;
+      page += 1;
+    }
+    allJournals = all;
   }
 
   async function loadPayments() {
@@ -155,6 +180,7 @@ import { productBrandApi } from '../../api/productBrandApi.js';
       if (!payments?.length) tasks.push(loadPayments());
     }
     if (!customer?.id && sale?.account_id) tasks.push(loadCustomer());
+    if (!allJournals.length && sale?.account_id) tasks.push(loadJournals());
     if (tasks.length) await Promise.all(tasks);
 
     if (sale?.account_id && allJournals.length) {
@@ -600,7 +626,7 @@ import { productBrandApi } from '../../api/productBrandApi.js';
                       <tr>
                         <td class="p-2 py-1">{t('Old Balance')} </td><td class="p-2 py-1 fw-bold">
                           <span dir="ltr"
-                            >{@html balance[sale?.currency]
+                            >{@html balance[sale?.currency] !== undefined && balance[sale?.currency] !== null
                               ? Number(balance[sale?.currency] + due || 0).toLocaleString(undefined, {
                                   maximumFractionDigits: 3,
                                 })
@@ -642,7 +668,7 @@ import { productBrandApi } from '../../api/productBrandApi.js';
                       {#if customer?.code != 'WALKIN'}
                         <td class="p-2 py-1">{t('Old Balance')}: <strong>
                           <span dir="ltr"
-                            >{@html balance[sale?.currency]
+                            >{@html balance[sale?.currency] !== undefined && balance[sale?.currency] !== null
                               ? Number(balance[sale?.currency] + due || 0).toLocaleString(undefined, {
                                   maximumFractionDigits: 3,
                                 })

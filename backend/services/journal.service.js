@@ -29,6 +29,10 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
+const {
+  convertCurrencyAmount,
+} = require('../utils/currency');
+
 const accountService =
   require('./account.service');
 
@@ -288,6 +292,32 @@ async function createBillPayment(
     return null;
   }
 
+  /*
+   * The bill is always paid in the bill's own currency. If the journal
+   * was posted in a different currency, convert the payment amount so
+   * the bill's remaining reduces correctly.
+   */
+  let paymentAmount = amount;
+  let paymentCurrency = journal.currency || bill.currency || null;
+
+  if (
+    paymentCurrency &&
+    bill.currency &&
+    paymentCurrency !== bill.currency
+  ) {
+    paymentAmount =
+      await convertCurrencyAmount(
+        connection,
+        {
+          orgId,
+          amount,
+          fromCurrency: paymentCurrency,
+          toCurrency: bill.currency,
+        },
+      );
+    paymentCurrency = bill.currency;
+  }
+
   const paymentLocalId = generateLocalId();
 
   const payment = await repo.createPayment(
@@ -302,8 +332,8 @@ async function createBillPayment(
           : { purchase_id: bill.id }),
         account_id:
           journal.second_entry_account || journal.first_entry_account,
-        amount,
-        currency: journal.currency || bill.currency || null,
+        amount: paymentAmount,
+        currency: paymentCurrency,
         payment_date: journal.date || new Date().toISOString(),
         description:
           `Payment via ${journalPaymentTag(journal.id)} for ${isSale ? 'Sale' : 'Purchase'} #${billDisplayNumber(bill, isSale)}`,

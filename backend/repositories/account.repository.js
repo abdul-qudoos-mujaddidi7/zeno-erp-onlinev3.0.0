@@ -1,3 +1,8 @@
+const {
+  systemAccountOrderSql,
+  systemAccountFlagSql,
+} = require('../constants/systemAccounts');
+
 const ACCOUNT_COLUMNS = `
   local_id AS id,
   local_id,
@@ -11,6 +16,7 @@ const ACCOUNT_COLUMNS = `
   name_fa,
   name_ps,
   main_acc,
+  ${systemAccountFlagSql('code')} AS is_system,
   balance,
   currency,
   percentage,
@@ -119,7 +125,7 @@ async function findAll(
     tableSql: 'accounts',
     whereSql: conditions.join(' AND '),
     values,
-    orderBySql: 'ORDER BY name ASC, local_id ASC',
+    orderBySql: `ORDER BY ${systemAccountOrderSql('code')}, name ASC, local_id ASC`,
     columnsSql,
     pagination,
   });

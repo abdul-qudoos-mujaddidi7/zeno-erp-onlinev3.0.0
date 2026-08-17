@@ -5,6 +5,7 @@
   import { accountImageApi } from '../../api/accountImageApi.js';
 
   import { t, lang, translate_org_type, settings_all } from '../../i18n/i18n';
+  import { isSystemAccount } from '../../lib/systemAccounts.js';
   import AccountGroupModal from './AccountGroupModal.svelte';
   import FilterSelect from '../../components/common/FilterSelect.svelte';
 
@@ -377,6 +378,11 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
   }
 
   async function saveAccount() {
+    if (isSystemAccount(account)) {
+      toast.error(t('Error'), t('System accounts cannot be edited.'));
+      return;
+    }
+
     const codeTrimmed = (code || '').trim();
     const nameTrimmed = (name || '').trim();
 
@@ -510,6 +516,11 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
   }
   // Expose openModal to parent via component instance
   export async function openModal(account = null) {
+    if (isSystemAccount(account)) {
+      toast.error(t('Error'), t('System accounts cannot be edited.'));
+      return;
+    }
+
     await loadAccount(account);
     if (!account && accountTypes.length && !account_type_id) {
       account_type_id = getDefaultAccountTypeId();
