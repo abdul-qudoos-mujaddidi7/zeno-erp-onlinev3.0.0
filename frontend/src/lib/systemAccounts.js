@@ -30,3 +30,7 @@ export function isSystemAccount(account) {
     String(account.code || '').trim().toUpperCase(),
   );
 }
+
+export function isDefaultSystemDescription(description) {
+  return /^\s*Default\s+/i.test(String(description || ''));
+}

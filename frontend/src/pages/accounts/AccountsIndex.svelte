@@ -496,12 +496,6 @@
                     </div>
                   {/if}
                     <span class="account-name">{getAccountDisplayName(acc)}</span>
-                    {#if isSystemAccount(acc)}
-                      <span class="system-account-badge" title={t('System accounts cannot be edited.')}>
-                        <i class="bi bi-lock-fill" aria-hidden="true"></i>
-                        {t('System')}
-                      </span>
-                    {/if}
                   </div>
                 </td>
                 {#if showTotalPercentage}
@@ -893,26 +887,6 @@
     white-space: nowrap;
   }
 
-  .system-account-badge {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    gap: 0.2rem;
-    padding: 0.08rem 0.4rem;
-    border: 1px solid #dbe4f0;
-    border-radius: 999px;
-    background: #f8fafc;
-    color: #64748b;
-    font-size: 0.65rem;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .archive-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.4;
-  }
-
   .percentage-value {
     font-weight: 800;
   }
@@ -951,6 +925,11 @@
     color: #0f6efd;
     background: #eff6ff;
     border-color: #bfdbfe;
+  }
+
+  .archive-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
   }
 
   .total-percentage-row td {

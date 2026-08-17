@@ -6,7 +6,7 @@
   import { patientTypeApi } from '../../api/patientTypeApi.js';
   export let id;
   import { resolveMediaUrl } from '../../lib/mediaUrl.js';
-  import { isSystemAccount } from '../../lib/systemAccounts.js';
+  import { isSystemAccount, isDefaultSystemDescription } from '../../lib/systemAccounts.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   let accounts = [];
@@ -316,7 +316,7 @@ import { accountImageApi } from '../../api/accountImageApi.js';
             <span class="type-pill">{displayType}</span>
           </div>
 
-          {#if account?.description}
+          {#if account?.description && !isDefaultSystemDescription(account.description)}
             <p class="profile-description">
               {account.description}
             </p>
