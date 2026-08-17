@@ -663,7 +663,6 @@ import { settingsApi } from '../../api/settingsApi.js';
         Product: 'bi-box',
         Journal: 'bi-book',
         Accounts: 'bi-file-earmark-text',
-        Reports: 'bi-filetype-xlsx',
         Messaging: 'bi-send',
         'Inventory Record': 'bi-safe',
         Manufacturing: 'bi-diagram-3',
@@ -682,72 +681,6 @@ import { settingsApi } from '../../api/settingsApi.js';
 
     // Track editing
     let editingId = null;
-
-    // ---- Report export direction (per report type) ----
-    const REPORT_DIRECTION_OPTIONS = [
-      { value: 'auto', label: 'Auto' },
-      { value: 'rtl', label: 'Right to Left' },
-      { value: 'ltr', label: 'Left to Right' },
-    ];
-
-    const REPORT_DIRECTION_TYPES = [
-      { key: 'sales', labelKey: 'Sales Report' },
-      { key: 'purchases', labelKey: 'Purchase Report' },
-      { key: 'accounts', labelKey: 'Accounts Report' },
-      { key: 'account_financial_report', labelKey: 'Account Financial Report' },
-      { key: 'journals_report', labelKey: 'Journals Report' },
-      { key: 'product_transactions', labelKey: 'Product Transactions Report' },
-      { key: 'account_products_report', labelKey: 'Account Products Report' },
-    ];
-
-    let reportDirections = {};
-
-    function parseReportDirectionsValue(raw) {
-      let parsed = {};
-
-      try {
-        parsed = JSON.parse(raw || '{}') || {};
-      } catch {
-        parsed = {};
-      }
-
-      const normalized = {};
-
-      REPORT_DIRECTION_TYPES.forEach((rep) => {
-        normalized[rep.key] = ['auto', 'rtl', 'ltr'].includes(parsed[rep.key])
-          ? parsed[rep.key]
-          : 'auto';
-      });
-
-      return normalized;
-    }
-
-    async function saveReportDirections() {
-      try {
-        const value = JSON.stringify(reportDirections);
-        const row = settings.find((s) => s.key === 'report_directions');
-
-        if (row) {
-          await settingsApi.update(row.id, { value });
-        } else {
-          await settingsApi.create({
-            category: 'Reports',
-            type: 'text',
-            key: 'report_directions',
-            value,
-            description: 'Export direction per report type: auto | rtl | ltr',
-            status: 1,
-          });
-        }
-
-        await loadSettings();
-        await refreshSettings();
-        toast.success(t('Success'), t('Settings saved successfully.'));
-      } catch (err) {
-        console.error('Failed to save report directions:', err);
-        toast.error(t('Error'), t('Failed to save settings.'));
-      }
-    }
 
     async function manageDefaultSettings() {
       try {
@@ -830,6 +763,9 @@ import { settingsApi } from '../../api/settingsApi.js';
       // loading = true;
       try {
         settings = (await settingsApi.getAll({ status: 1 }))?.data || [];
+        settings = settings.filter(
+          (s) => s.key !== 'report_directions' && s.category !== 'Reports',
+        );
         const orgType = localStorage.getItem('org_type');
 
         if (orgType !== 'exchange') {
@@ -878,25 +814,15 @@ import { settingsApi } from '../../api/settingsApi.js';
           return 0;
         });
 
-        // The Reports tab is a built-in section (not derived from a setting).
-        if (!categoryOptions.includes('Reports')) {
-          categoryOptions.push('Reports');
-        }
-
         const categoryOrder = [
           'Company Profile', 'Sale', 'Stock Transfer', 'Purchase', 'Product',
-          'Journal', 'Accounts', 'Reports', 'Inventory Record', 'Messaging', 'Miscellaneous'
+          'Journal', 'Accounts', 'Inventory Record', 'Messaging', 'Miscellaneous'
         ];
         categoryOptions.sort((a, b) => {
           const aIndex = categoryOrder.indexOf(a);
           const bIndex = categoryOrder.indexOf(b);
           return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
         });
-
-        const reportDirectionsRow = settings.find(
-          (s) => s.key === 'report_directions',
-        );
-        reportDirections = parseReportDirectionsValue(reportDirectionsRow?.value);
       } catch (err) {
         console.error('Failed to load:', err);
       } finally {
@@ -1214,31 +1140,6 @@ import { settingsApi } from '../../api/settingsApi.js';
               </div>
               <div class="company-actions">
                 <button type="button" class="save-profile-button" on:click={saveCompanyProfile}><i class="bi bi-floppy"></i>{t('Save')}</button>
-                <button type="button" class="cancel-profile-button" on:click={loadSettings}>{t('Cancel')}</button>
-              </div>
-            </div>
-          {:else if selectedCategory === 'Reports' && !(shiftPressed && ctrlPressed)}
-            <div class="reports-direction-form" dir={_lang === 'en' ? 'ltr' : 'rtl'}>
-              <div class="reports-direction-head">
-                <h2>{t('Report Direction')}</h2>
-                <p>{t('Choose the export direction for each report. Auto follows the app language.')}</p>
-              </div>
-              <div class="reports-direction-body">
-                {#each REPORT_DIRECTION_TYPES as rep}
-                  <div class="reports-direction-row">
-                    <label for={'report-dir-' + rep.key}>{t(rep.labelKey)}</label>
-                    <div class="reports-direction-control">
-                      <select id={'report-dir-' + rep.key} bind:value={reportDirections[rep.key]}>
-                        {#each REPORT_DIRECTION_OPTIONS as opt}
-                          <option value={opt.value}>{t(opt.label)}</option>
-                        {/each}
-                      </select>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-              <div class="company-actions">
-                <button type="button" class="save-profile-button" on:click={saveReportDirections}><i class="bi bi-floppy"></i>{t('Save')}</button>
                 <button type="button" class="cancel-profile-button" on:click={loadSettings}>{t('Cancel')}</button>
               </div>
             </div>
@@ -1912,60 +1813,6 @@ import { settingsApi } from '../../api/settingsApi.js';
       min-height: 470px;
       flex-direction: column;
       background-color: var(--erp-bg);
-    }
-
-    .reports-direction-form {
-      display: flex;
-      min-height: 470px;
-      flex-direction: column;
-      background-color: var(--erp-bg);
-    }
-
-    .reports-direction-head {
-      padding: 16px 20px 8px;
-    }
-
-    .reports-direction-head h2 {
-      margin: 0 0 4px;
-      font-size: 1.02rem;
-      font-weight: 800;
-      color: #1f2a44;
-    }
-
-    .reports-direction-head p {
-      margin: 0;
-      font-size: .78rem;
-      color: #667085;
-    }
-
-    .reports-direction-body {
-      flex: 1;
-      padding: 8px 20px 12px;
-    }
-
-    .reports-direction-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 240px;
-      align-items: center;
-      gap: 12px;
-      padding-block: 6px;
-      border-bottom: 1px solid #e8edf3;
-    }
-    :global([dir='rtl']) .reports-direction-row { grid-template-columns: 240px minmax(0, 1fr); }
-    :global([dir='rtl']) .reports-direction-row > label { grid-column: 1; grid-row: 1; }
-    :global([dir='rtl']) .reports-direction-row > .reports-direction-control { grid-column: 2; grid-row: 1; }
-    .reports-direction-row > label { color: #344155; font-size: .82rem; font-weight: 800; }
-    .reports-direction-control { min-width: 0; }
-    .reports-direction-control > select {
-      width: 100%;
-      height: 34px;
-      border: 1px solid #d8dee8;
-      border-radius: 6px;
-      background: #fff;
-      color: #1f2a44;
-      font-family: inherit;
-      font-size: .82rem;
-      padding: 0 10px;
     }
 
     .category-profile-body { padding: 14px 20px 12px; }
