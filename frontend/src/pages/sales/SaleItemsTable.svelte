@@ -408,9 +408,14 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     item.expiry_date = batch.expiry_date || null;
     item.buy_price = batch.buy_price ?? item.buy_price;
     item.buy_price_currency = batch.buy_price_currency || item.buy_price_currency;
-    item.unit_price = Number(batch.unit_price ?? item.unit_price ?? 0);
-    item.calculated_price = Number(batch.unit_price ?? item.calculated_price ?? 0);
-    item.currency = batch.sell_currency || item.currency;
+    const hasBatchPrice = batch.unit_price != null && batch.unit_price !== '';
+    const priced = priceInFormCurrency(
+      hasBatchPrice ? batch.unit_price : (item.unit_price ?? item.calculated_price ?? 0),
+      hasBatchPrice ? (batch.sell_currency || item.currency) : item.currency,
+    );
+    item.unit_price = priced.price;
+    item.calculated_price = priced.price;
+    item.currency = priced.currency;
 
     if (index >= 0) recalc(index);
   }
@@ -600,6 +605,36 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     });
   }
 
+  function getFormCurrencyCode() {
+    if (currency && typeof currency === 'object') {
+      return currency.code || 'AFN';
+    }
+
+    return currency || 'AFN';
+  }
+
+  /*
+   * Product sell prices are stored in the product's own currency.
+   * Convert them into the Sale Details currency as soon as the product
+   * is added, so the price label matches the header on the first pick
+   * (not only after the user toggles currency again).
+   */
+  function priceInFormCurrency(amount, fromCurrencyCode) {
+    const formCode = getFormCurrencyCode();
+    const fromCode = fromCurrencyCode || formCode;
+    const numericAmount = Number(amount) || 0;
+
+    if (!fromCode || fromCode === formCode) {
+      return { price: numericAmount, currency: formCode };
+    }
+
+    const converted = exchangeRate(numericAmount, fromCode, currency);
+    return {
+      price: Math.round(converted * 100) / 100,
+      currency: formCode,
+    };
+  }
+
   function selectProduct(product) {
     if (!product) return false;
 
@@ -648,9 +683,12 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     };
 
     search = product.name;
-    unit_price = Number(product.sell_price) || 0;
-    unit_currency =
-      product.sell_currency || currency?.code || currency || 'AFN';
+    const priced = priceInFormCurrency(
+      product.sell_price,
+      product.sell_currency,
+    );
+    unit_price = priced.price;
+    unit_currency = priced.currency;
     unit = product.product_unit_id;
     latestPrice = null;
 
@@ -813,6 +851,11 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     } else {
       affectedRowIndex = items.length;
 
+      const priced = priceInFormCurrency(
+        unit_price,
+        unit_currency || selectedProduct.sell_currency,
+      );
+
       items.push({
         type: selectedProduct.type || 'good',
         product_id: selectedProduct.id,
@@ -824,13 +867,14 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
         manufacturing_date: selectedProduct.manufacturing_date || null,
         expiry_date: selectedProduct.expiry_date || null,
         quantity: Number(quantity),
-        unit_price: Number(unit_price),
+        unit_price: priced.price,
         latestPrice: latestPrice,
         buy_price: selectedProduct.buy_price,
-        buy_price_currency: selectedProduct.buy_currency || currency.code,
-        calculated_price: Number(unit_price),
-        currency: selectedProduct.sell_currency || currency.code,
-        subtotal: Number(quantity) * Number(unit_price),
+        buy_price_currency:
+          selectedProduct.buy_currency || getFormCurrencyCode(),
+        calculated_price: priced.price,
+        currency: priced.currency,
+        subtotal: Number(quantity) * priced.price,
         availableUnits: selectedProduct.availableUnits,
         warehouse_stock: selectedProduct.warehouse_stock,
       });
@@ -846,6 +890,7 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     selectedProduct = null;
     quantity = 1;
     unit_price = 0;
+    unit_currency = '';
     setTimeout(() => {
       if (window.mdb) {
         document
@@ -1206,8 +1251,13 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
                         type="button"
                         class="btn btn-link p-0 purchase-item-stock-link"
                         on:click={() => {
-                          item.calculated_price = Number(item.latestPrice.price || 0);
-                          item.currency = item.latestPrice.currency;
+                          const priced = priceInFormCurrency(
+                            item.latestPrice.price,
+                            item.latestPrice.currency,
+                          );
+                          item.calculated_price = priced.price;
+                          item.unit_price = priced.price;
+                          item.currency = priced.currency;
                           recalc(index);
                         }}>
                         {Number(item.latestPrice.price || 0).toLocaleString(undefined, {
@@ -1504,6 +1554,11 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
       newProduct.product_unit_id,
     );
 
+    const priced = priceInFormCurrency(
+      newProduct.sell_price,
+      newProduct.sell_currency,
+    );
+
     items.push({
       type: newProduct.type || 'good',
       product_id: newProduct.id,
@@ -1512,22 +1567,15 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
       batch: newProduct.batch || null,
       manufacturing_date: newProduct.manufacturing_date || null,
       expiry_date: newProduct.expiry_date || null,
-      currency:
-        newProduct.sell_currency ||
-        currency?.code ||
-        currency ||
-        'AFN',
+      currency: priced.currency,
       quantity: 1,
       latestPrice: null,
       buy_price: newProduct.buy_price,
       buy_price_currency:
-        newProduct.buy_currency ||
-        currency?.code ||
-        currency ||
-        'AFN',
-      unit_price: Number(newProduct.sell_price) || 0,
-      calculated_price: Number(newProduct.sell_price) || 0,
-      subtotal: Number(newProduct.sell_price) || 0,
+        newProduct.buy_currency || getFormCurrencyCode(),
+      unit_price: priced.price,
+      calculated_price: priced.price,
+      subtotal: priced.price,
       availableUnits,
       warehouse_stock: availableStock,
     });
