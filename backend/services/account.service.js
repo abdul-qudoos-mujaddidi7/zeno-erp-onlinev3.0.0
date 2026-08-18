@@ -104,6 +104,10 @@ async function listAccounts({
       accountStatus: filters.account_status,
       excludeCodes,
       pagination,
+      ids: String(filters.ids || '')
+        .split(',')
+        .map((part) => Number(String(part).trim()))
+        .filter((id) => Number.isSafeInteger(id) && id > 0),
     },
   );
 }

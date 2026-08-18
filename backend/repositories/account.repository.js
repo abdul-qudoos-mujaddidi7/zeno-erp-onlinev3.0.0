@@ -53,6 +53,7 @@ async function findAll(
     excludeCodes = [],
     pagination = null,
     columnsSql = ACCOUNT_COLUMNS,
+    ids = [],
   },
 ) {
   const conditions = [
@@ -112,6 +113,13 @@ async function findAll(
   if (accountStatus) {
     conditions.push('account_status = ?');
     values.push(accountStatus);
+  }
+
+  if (Array.isArray(ids) && ids.length > 0) {
+    conditions.push(
+      `local_id IN (${ids.map(() => '?').join(', ')})`,
+    );
+    values.push(...ids);
   }
 
   if (Array.isArray(excludeCodes) && excludeCodes.length > 0) {

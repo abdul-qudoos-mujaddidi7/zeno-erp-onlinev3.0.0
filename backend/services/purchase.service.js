@@ -143,6 +143,10 @@ async function listPurchases({
   } = getAuthenticatedIdentity(user);
 
   const pagination = resolvePagination(filters);
+  const ids = String(filters.ids || '')
+    .split(',')
+    .map((part) => Number(String(part).trim()))
+    .filter((id) => Number.isSafeInteger(id) && id > 0);
 
   const result = await purchaseRepository.findAll(
     db,
@@ -159,6 +163,7 @@ async function listPurchases({
       pagination,
       sortBy: filters.sort_by,
       sortDir: filters.sort_dir,
+      ids,
     },
   );
 

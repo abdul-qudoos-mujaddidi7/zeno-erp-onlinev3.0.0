@@ -244,6 +244,13 @@ const saleListQuerySchema = z.object({
     .enum(['paid', 'unpaid'])
     .optional(),
 
+  ids: z
+    .string()
+    .trim()
+    .max(5000)
+    .optional()
+    .default(''),
+
   skip_count: z
     .coerce
     .number()

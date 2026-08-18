@@ -18,6 +18,7 @@ export const purchaseApi = {
     sort_dir,
     bill_status,
     payment_status,
+    ids = '',
   } = {}) {
     const params = new URLSearchParams();
 
@@ -29,6 +30,10 @@ export const purchaseApi = {
 
     if (search.trim()) {
       params.set('search', search.trim());
+    }
+
+    if (ids) {
+      params.set('ids', String(ids));
     }
 
     if (account_id !== undefined && account_id !== null && account_id !== '') {

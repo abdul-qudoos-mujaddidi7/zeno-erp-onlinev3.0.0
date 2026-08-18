@@ -161,6 +161,7 @@ async function findAll(
     pagination = null,
     sortBy = 'created_at',
     sortDir = 'desc',
+    ids = [],
   }) {
   const conditions = [
     'org_id = ?',
@@ -171,6 +172,13 @@ async function findAll(
     orgId,
     status,
   ];
+
+  if (Array.isArray(ids) && ids.length > 0) {
+    conditions.push(
+      `local_id IN (${ids.map(() => '?').join(', ')})`,
+    );
+    values.push(...ids);
+  }
 
   if (accountId !== undefined && accountId !== null && accountId !== '') {
     conditions.push('account_id = ?');

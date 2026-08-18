@@ -185,6 +185,13 @@ const accountListQuerySchema = z.object({
     .max(1)
     .optional()
     .default(0),
+
+  ids: z
+    .string()
+    .trim()
+    .max(5000)
+    .optional()
+    .default(''),
 }).merge(paginationQuerySchema);
 
 const accountBalancesQuerySchema = z.object({

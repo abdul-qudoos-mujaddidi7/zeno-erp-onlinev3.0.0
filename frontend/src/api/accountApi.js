@@ -15,6 +15,7 @@ export const accountApi = {
     exclude_system,
     page,
     limit,
+    ids = '',
   } = {}) {
     const params = new URLSearchParams();
 
@@ -22,6 +23,10 @@ export const accountApi = {
 
     if (search.trim()) {
       params.set('search', search.trim());
+    }
+
+    if (ids) {
+      params.set('ids', String(ids));
     }
 
     if (code.trim()) {

@@ -10,7 +10,8 @@ import { stockBatchApi } from '../api/stockBatchApi.js';
 import { saleApi } from '../api/saleApi.js';
 import { purchaseApi } from '../api/purchaseApi.js';
   import {
-    convertUnit,
+    convertUnitSync,
+    ensureProductUnitsLoaded,
     calculateProductStock,
     resolveInventoryMethod,
   } from './stocktransactions/calculateStock.js';
@@ -63,9 +64,39 @@ import { purchaseApi } from '../api/purchaseApi.js';
 
   async function getProductByRouteId(routeId) {
     if (routeId == null || routeId === '') return null;
-    const routeKey = String(routeId).trim();
-    const products = (await productApi.getAll({ status: 1 }))?.data || [];
-    return products.find((p) => String(p.id).trim() === routeKey && p.status === 1) || null;
+
+    const productRes = await productApi.getById(routeId).catch(() => null);
+    const row = productRes?.data || null;
+
+    return row && Number(row.status) === 1 ? row : null;
+  }
+
+  async function fetchRowsByIds(getAll, ids) {
+    const unique = [
+      ...new Set(
+        (ids || [])
+          .map((value) => String(value ?? '').trim())
+          .filter(Boolean),
+      ),
+    ];
+
+    if (!unique.length) return [];
+
+    const chunkSize = 80;
+    const chunks = [];
+    for (let i = 0; i < unique.length; i += chunkSize) {
+      chunks.push(unique.slice(i, i + chunkSize));
+    }
+
+    const pages = await Promise.all(
+      chunks.map((chunk) =>
+        getAll({ status: 1, ids: chunk.join(',') })
+          .then((response) => response?.data || [])
+          .catch(() => []),
+      ),
+    );
+
+    return pages.flat();
   }
 
   function toNumber(value) {
@@ -156,6 +187,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
   let productBatchDetails = [];
   let product = null;
   let loading = true;
+  let reportLoading = true;
   let category = null;
   let unit = null;
   let brand = null;
@@ -507,25 +539,14 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
   }
 
   async function loadStockTransactions() {
-    product =
-      product ||
-      (await getProductByRouteId(id));
+    reportLoading = true;
+
+    try {
+    product = product || (await getProductByRouteId(id));
 
     if (!product) {
-      product =
-        (await productApi.getAll({ status: 1 }))?.data?.find(
-          (p) => Number(p.id) === Number(id),
-        ) || null;
+      return;
     }
-
-    if (!product) return;
-
-    const [sales, purchases, accounts] =
-      await Promise.all([
-        saleApi.getAll({ status: 1 }).then((r) => r?.data || []),
-        purchaseApi.getAll({ status: 1 }).then((r) => r?.data || []),
-        (await accountApi.getAll({ status: 1 }))?.data || [],
-      ]);
 
     const sameId = (first, second) =>
       String(first ?? '').trim() ===
@@ -538,6 +559,21 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
 
     stockTransactions =
       (await stockTransactionApi.getAll({ status: 1, product_ids: transactionProductIds }))?.data || [];
+
+    const saleRefIds = [...new Set(stockTransactions.filter(t => t.reference_type === 'sale').map(t => t.reference_id))].filter(Boolean);
+    const purchaseRefIds = [...new Set(stockTransactions.filter(t => t.reference_type === 'purchase').map(t => t.reference_id))].filter(Boolean);
+
+    const [sales, purchases] = await Promise.all([
+      fetchRowsByIds((opts) => saleApi.getAll(opts), saleRefIds),
+      fetchRowsByIds((opts) => purchaseApi.getAll(opts), purchaseRefIds),
+    ]);
+
+    const accountIds = [...new Set([...sales.map(s => s.account_id), ...purchases.map(p => p.account_id)])].filter(Boolean);
+    const accounts = await fetchRowsByIds((opts) => accountApi.getAll(opts), accountIds);
+
+    const saleById = new Map(sales.map((item) => [String(item.id).trim(), item]));
+    const purchaseById = new Map(purchases.map((item) => [String(item.id).trim(), item]));
+    const accountById = new Map(accounts.map((item) => [String(item.id).trim(), item]));
 
     const hasOpening = stockTransactions.some((transaction) => isOpeningInputAdjustment(transaction));
     const openingQuantity = Number(product.initial_quantity || 0);
@@ -566,35 +602,18 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
       stockTransactions.map(
         (transaction) => {
           const sale =
-            transaction.reference_type ===
-            'sale'
-              ? sales.find((item) =>
-                  sameId(
-                    item.id,
-                    transaction.reference_id,
-                  ),
-                )
+            transaction.reference_type === 'sale'
+              ? saleById.get(String(transaction.reference_id ?? '').trim()) || null
               : null;
 
           const purchase =
-            transaction.reference_type ===
-            'purchase'
-              ? purchases.find((item) =>
-                  sameId(
-                    item.id,
-                    transaction.reference_id,
-                  ),
-                )
+            transaction.reference_type === 'purchase'
+              ? purchaseById.get(String(transaction.reference_id ?? '').trim()) || null
               : null;
 
           if (sale) {
-            const account = accounts.find(
-              (item) =>
-                sameId(
-                  item.id,
-                  sale.account_id,
-                ),
-            );
+            const account =
+              accountById.get(String(sale.account_id ?? '').trim()) || null;
 
             return {
               ...transaction,
@@ -618,13 +637,8 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
           }
 
           if (purchase) {
-            const account = accounts.find(
-              (item) =>
-                sameId(
-                  item.id,
-                  purchase.account_id,
-                ),
-            );
+            const account =
+              accountById.get(String(purchase.account_id ?? '').trim()) || null;
 
             return {
               ...transaction,
@@ -702,6 +716,8 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
       compareTransactionsChronologically,
     );
 
+    await ensureProductUnitsLoaded();
+
     let runningQuantity = 0;
     let runningIncoming = 0;
     let runningOutgoing = 0;
@@ -710,19 +726,11 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     let usedOpeningSeed = false;
 
     for (const transaction of stockTransactions) {
-      const convertedQuantity =
-        await convertUnit(
-          Number(
-            transaction.quantity || 0,
-          ),
-          Number(
-            transaction.product_unit_id ||
-              product.product_unit_id,
-          ),
-          Number(
-            product.product_unit_id,
-          ),
-        );
+      const convertedQuantity = convertUnitSync(
+        Number(transaction.quantity || 0),
+        Number(transaction.product_unit_id || product.product_unit_id),
+        Number(product.product_unit_id),
+      );
 
       let quantity = Number(
         convertedQuantity || 0,
@@ -871,6 +879,9 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
         Number(first._historicalIndex)
       );
     });
+    } finally {
+      reportLoading = false;
+    }
   }
 
   function exchangeRate(amount, fromCurrencyCode, toCurrencyCode) {
@@ -884,14 +895,17 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
   }
   function formatBalance(balance) {
     return Object.entries(balance)
-      .map(
-        ([currency, amount]) =>
-          `<span class="amount-inline"><span dir="ltr">${amount.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 3,
-          })}</span><span>${t(currency)}</span></span>`,
-      )
-      .join('<br >');
+      .map(([currency, amount]) => {
+        const numeric = Number(amount) || 0;
+        const tone =
+          numeric < 0 ? 'amount-negative' : numeric > 0 ? 'amount-positive' : '';
+
+        return `<span class="amount-inline ${tone}"><span dir="ltr">${numeric.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 3,
+        })}</span><span>${t(currency)}</span></span>`;
+      })
+      .join('<br>');
   }
 
   function unitLabel(unitId) {
@@ -995,7 +1009,14 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     if (!baseProduct) return;
 
     const groupKey = getProductGroupKey(baseProduct);
-    productGroupProducts = ((await productApi.getAll({ status: 1 }))?.data || [])
+    const catalog = (await productApi.getAll({
+      status: 1,
+      search: String(baseProduct.name || '').trim(),
+      category_id: baseProduct.category_id || '',
+      exclude_type: 'service',
+    }))?.data || [];
+
+    productGroupProducts = catalog
       .filter((row) => row.type !== 'service' && getProductGroupKey(row) === groupKey)
       .map((row) =>
         String(row.id) === String(baseProduct.id)
@@ -1015,11 +1036,15 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     product = aggregateProductGroup(productGroupProducts, baseProduct);
     productGroupIds = productGroupProducts.map((item) => Number(item.id));
 
-    const warehouseRows = (await warehouseProductApi.getAll({ status: 1 }))?.data || [];
-    const filteredWarehouseRows = warehouseRows.filter((row) =>
-      productGroupIds.includes(Number(row.product_id)),
+    const warehouseResponses = await Promise.all(
+      productGroupIds.map((productId) =>
+        warehouseProductApi
+          .getAll({ status: 1, product_id: productId })
+          .then((response) => response?.data || [])
+          .catch(() => []),
+      ),
     );
-    warehouse_products = aggregateWarehouseRows(filteredWarehouseRows, productGroupProducts);
+    warehouse_products = aggregateWarehouseRows(warehouseResponses.flat(), productGroupProducts);
 
     productBatchDetails = await buildProductBatchDetails(productGroupProducts);
     qtyBalance = toNumber(product.quantity);
@@ -1115,41 +1140,65 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
   }
 
   async function loadProduct() {
-    currencies = (await currencyApi.getAll({ status: 1 }))?.data || [];
-    warehouses = (await warehouseApi.getAll({ status: 1 }))?.data || [];
-    units = (await productUnitApi.getAll({ status: 1 }))?.data || [];
-    const brandResponse = await productBrandApi.getAll({ status: 1 });
-    brands = brandResponse?.data || [];
-    const genericResponse = await productGenericApi.getAll({ status: 1 });
-    generics = genericResponse?.data || [];
-    product = await getProductByRouteId(id);
-    if (!product) {
-      product =
-        (await productApi.getAll({ status: 1 }))?.data?.find(
-          (p) => Number(p.id) === Number(id),
-        ) || null;
-    }
-    await hydrateProductGroup(product);
-    category = product
-      ? (await productCategoryApi.getAll({ status: 1 }))?.data?.find(
-          (c) => Number(c.id) === Number(product.category_id),
-        ) || null
-      : null;
+    try {
+    const [
+      currencyRes,
+      warehouseRes,
+      unitListRes,
+      brandRes,
+      genericRes,
+      loadedProduct,
+    ] = await Promise.all([
+      currencyApi.getAll({ status: 1 }),
+      warehouseApi.getAll({ status: 1 }),
+      productUnitApi.getAll({ status: 1 }),
+      productBrandApi.getAll({ status: 1 }),
+      productGenericApi.getAll({ status: 1 }),
+      getProductByRouteId(id),
+    ]);
 
-    const unitRes = product?.product_unit_id
-      ? (await productUnitApi.getById(product.product_unit_id))?.data || null
-      : null;
-    unit = unitRes?.status === 1 ? unitRes : null;
-    brand = product ? brands.find((b) => b.id === product.brand_id) || null : null;
-    generic = product ? generics.find((g) => g.id === product.generic_id) || null : null;
-    const img = product ? (await productImageApi.getAll({ product_id: product.id, status: 1 }))?.data?.[0] || null : null;
+    currencies = currencyRes?.data || [];
+    warehouses = warehouseRes?.data || [];
+    units = unitListRes?.data || [];
+    brands = brandRes?.data || [];
+    generics = genericRes?.data || [];
+    product = loadedProduct;
+
+    if (!product) {
+      reportLoading = false;
+      return;
+    }
+
+    await hydrateProductGroup(product);
+
+    const [categoryRes, unitRes, imgRes] = await Promise.all([
+      product.category_id
+        ? productCategoryApi.getById(product.category_id).catch(() => null)
+        : Promise.resolve(null),
+      product.product_unit_id
+        ? productUnitApi.getById(product.product_unit_id).catch(() => null)
+        : Promise.resolve(null),
+      productImageApi.getAll({ product_id: product.id, status: 1 }),
+      loadStockTransactions(),
+    ]);
+
+    category = categoryRes?.data || null;
+    const unitRow = unitRes?.data || null;
+    unit = unitRow?.status === 1
+      ? unitRow
+      : units.find((item) => Number(item.id) === Number(product.product_unit_id)) || null;
+    brand = brands.find((b) => b.id === product.brand_id) || null;
+    generic = generics.find((g) => g.id === product.generic_id) || null;
+    const img = imgRes?.data?.[0] || null;
 
     product.thumbnailUrl = resolveMediaUrl(img?.thumbnail, '/img/no-image.png');
     product.imageUrl = resolveMediaUrl(img?.image, '/img/no-image.png');
 
     myThumbnailUrl = product?.thumbnailUrl || '/img/no-image.png';
     myImageUrl = product?.imageUrl || '/img/no-image.png';
-    loading = false;
+    } finally {
+      loading = false;
+    }
   }
   async function refreshCanonicalStock() {
     if (!product?.id) return;
@@ -1212,8 +1261,6 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
 
   onMount(async () => {
     await loadProduct();
-    await refreshCanonicalStock();
-    await loadStockTransactions();
     if (window.mdb) {
       console.log(document.querySelectorAll('[data-mdb-input-init]'));
       document.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
@@ -1670,7 +1717,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
         ariaLabel={t('Report')}
         toolbarWidth="25rem"
         showStats={showReportStats}
-        showFooter={!loading && filteredTransactions.length > 0}
+        showFooter={!reportLoading && filteredTransactions.length > 0}
         dense={true}
         tablePadding={true}>
         <svelte:fragment slot="actions">
@@ -1760,7 +1807,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
           </div>
         </svelte:fragment>
 
-        {#if loading}
+        {#if reportLoading}
           <div class="index-table-state">
             <EmptyState loading message={t('Loading...')} />
           </div>
@@ -2616,7 +2663,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
   .product-report-table :global(.data-table-wrap) {
     flex: 1 1 auto;
     min-height: 0;
-    overflow-x: hidden;
+    overflow-x: auto;
     overflow-y: auto;
   }
 
@@ -3223,6 +3270,37 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
 
   .report-balance-cell {
     direction: ltr;
+  }
+
+  .report-balance-cell :global(.amount-negative),
+  .report-summary-balance :global(.amount-negative) {
+    color: #be123c;
+  }
+
+  .report-balance-cell :global(.amount-positive),
+  .report-summary-balance :global(.amount-positive) {
+    color: #047857;
+  }
+
+  :global(html.dark) .report-summary-balance,
+  :global(html.dark) .report-balance-cell,
+  :global([data-mdb-theme='dark']) .report-summary-balance,
+  :global([data-mdb-theme='dark']) .report-balance-cell {
+    color: #e8eef8;
+  }
+
+  :global(html.dark) .report-balance-cell :global(.amount-negative),
+  :global(html.dark) .report-summary-balance :global(.amount-negative),
+  :global([data-mdb-theme='dark']) .report-balance-cell :global(.amount-negative),
+  :global([data-mdb-theme='dark']) .report-summary-balance :global(.amount-negative) {
+    color: #fca5a5;
+  }
+
+  :global(html.dark) .report-balance-cell :global(.amount-positive),
+  :global(html.dark) .report-summary-balance :global(.amount-positive),
+  :global([data-mdb-theme='dark']) .report-balance-cell :global(.amount-positive),
+  :global([data-mdb-theme='dark']) .report-summary-balance :global(.amount-positive) {
+    color: #6ee7b7;
   }
 
   .report-muted-dash {

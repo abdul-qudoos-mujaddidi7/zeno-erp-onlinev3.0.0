@@ -274,6 +274,10 @@ async function listSales({
   } = getAuthenticatedIdentity(user);
 
   const pagination = resolvePagination(filters);
+  const ids = String(filters.ids || '')
+    .split(',')
+    .map((part) => Number(String(part).trim()))
+    .filter((id) => Number.isSafeInteger(id) && id > 0);
 
   const result = await saleRepository.findAll(
     db,
@@ -290,6 +294,7 @@ async function listSales({
       pagination,
       sortBy: filters.sort_by,
       sortDir: filters.sort_dir,
+      ids,
     },
   );
 
