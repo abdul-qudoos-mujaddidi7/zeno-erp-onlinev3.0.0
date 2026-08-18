@@ -16,6 +16,8 @@ export const purchaseApi = {
     skip_count = 0,
     sort_by,
     sort_dir,
+    bill_status,
+    payment_status,
   } = {}) {
     const params = new URLSearchParams();
 
@@ -39,6 +41,14 @@ export const purchaseApi = {
 
     if (date_to) {
       params.set('date_to', String(date_to));
+    }
+
+    if (bill_status && bill_status !== 'all') {
+      params.set('bill_status', String(bill_status));
+    }
+
+    if (payment_status && payment_status !== 'all') {
+      params.set('payment_status', String(payment_status));
     }
 
     if (skip_count) {
@@ -74,6 +84,8 @@ export const purchaseApi = {
     skip_count = 0,
     sort_by,
     sort_dir,
+    bill_status,
+    payment_status,
   } = {}) {
     return this.getAll({
       status,
@@ -87,6 +99,8 @@ export const purchaseApi = {
       skip_count,
       sort_by,
       sort_dir,
+      bill_status,
+      payment_status,
     });
   },
 

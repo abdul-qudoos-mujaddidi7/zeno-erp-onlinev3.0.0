@@ -153,6 +153,8 @@ async function listPurchases({
       accountId: filters.account_id,
       dateFrom: filters.date_from,
       dateTo: filters.date_to,
+      billStatus: filters.bill_status,
+      paymentStatus: filters.payment_status,
       skipCount: Number(filters.skip_count) === 1,
       pagination,
       sortBy: filters.sort_by,

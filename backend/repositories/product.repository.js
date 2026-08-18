@@ -52,6 +52,10 @@ async function findAll(
     type = null,
     exclude_type = null,
     categoryId = null,
+    productStatus = null,
+    brandId = null,
+    genericId = null,
+    currency = null,
     pagination = null,
   },
 ) {
@@ -96,6 +100,31 @@ async function findAll(
   if (categoryId) {
     conditions.push('category_id = ?');
     values.push(categoryId);
+  }
+
+  if (productStatus && productStatus !== 'all') {
+    if (productStatus === 'active') {
+      conditions.push("(product_status IS NULL OR product_status = '' OR product_status = ?)");
+      values.push('active');
+    } else {
+      conditions.push('product_status = ?');
+      values.push(productStatus);
+    }
+  }
+
+  if (brandId) {
+    conditions.push('brand_id = ?');
+    values.push(brandId);
+  }
+
+  if (genericId) {
+    conditions.push('generic_id = ?');
+    values.push(genericId);
+  }
+
+  if (currency && currency !== 'all') {
+    conditions.push('currency = ?');
+    values.push(currency);
   }
 
   return paginateSelect(executor, {
@@ -405,6 +434,75 @@ async function adjustQuantity(
   );
 }
 
+function rowsToCurrencyMap(rows = []) {
+  const totals = {};
+
+  rows.forEach((row) => {
+    const currency = String(row.currency || 'AFN').trim() || 'AFN';
+    const total = Number(row.total) || 0;
+
+    if (!total) return;
+
+    totals[currency] = (totals[currency] || 0) + total;
+  });
+
+  return totals;
+}
+
+async function summarizeIndexTotals(
+  executor,
+  {
+    orgId,
+    status = 1,
+    excludeType = 'service',
+  },
+) {
+  const conditions = [
+    'org_id = ?',
+    'status = ?',
+  ];
+  const values = [
+    orgId,
+    status,
+  ];
+
+  if (excludeType) {
+    conditions.push('(type IS NULL OR type <> ?)');
+    values.push(excludeType);
+  }
+
+  const whereSql = conditions.join(' AND ');
+
+  const [purchaseRows] = await executor.execute(
+    `
+      SELECT
+        COALESCE(NULLIF(TRIM(buy_currency), ''), 'AFN') AS currency,
+        SUM(COALESCE(buy_price, 0) * COALESCE(quantity, 0)) AS total
+      FROM products
+      WHERE ${whereSql}
+      GROUP BY COALESCE(NULLIF(TRIM(buy_currency), ''), 'AFN')
+    `,
+    values,
+  );
+
+  const [saleRows] = await executor.execute(
+    `
+      SELECT
+        COALESCE(NULLIF(TRIM(sell_currency), ''), 'AFN') AS currency,
+        SUM(COALESCE(sell_price, 0) * COALESCE(quantity, 0)) AS total
+      FROM products
+      WHERE ${whereSql}
+      GROUP BY COALESCE(NULLIF(TRIM(sell_currency), ''), 'AFN')
+    `,
+    values,
+  );
+
+  return {
+    purchase: rowsToCurrencyMap(purchaseRows),
+    sale: rowsToCurrencyMap(saleRows),
+  };
+}
+
 module.exports = {
   findAll,
   findByLocalId,
@@ -412,4 +510,5 @@ module.exports = {
   update,
   softDelete,
   adjustQuantity,
+  summarizeIndexTotals,
 };

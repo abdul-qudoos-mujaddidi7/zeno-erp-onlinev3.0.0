@@ -19,6 +19,18 @@ async function list(req, res) {
   return sendListResponse(res, result);
 }
 
+async function summary(req, res) {
+  const data =
+    await productService.getIndexSummary({
+      user: req.user,
+    });
+
+  res.status(200).json({
+    success: true,
+    data,
+  });
+}
+
 async function getById(req, res) {
   const product =
     await productService.getProduct({
@@ -101,6 +113,7 @@ async function remove(req, res) {
 
 module.exports = {
   list,
+  summary,
   getById,
   reconcileStock,
   create,

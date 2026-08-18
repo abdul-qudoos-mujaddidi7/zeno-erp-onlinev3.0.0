@@ -18,7 +18,7 @@
 
   $: isOutline = variant === 'outline';
   $: selectedValues = Array.isArray(value) ? value : [];
-  $: selectedOption = options.find((option) => option.value === value);
+  $: selectedOption = options.find((option) => String(option.value) === String(value));
   $: selectedOptions = multiple ? options.filter((option) => selectedValues.includes(option.value)) : [];
   $: selectedLabel = multiple
     ? selectedOptions.length
@@ -128,11 +128,11 @@
         style={menuStyle}
         on:click|stopPropagation>
         {#each options as option (option.value)}
-          <li role="option" aria-selected={multiple ? selectedValues.includes(option.value) : option.value === value}>
+          <li role="option" aria-selected={multiple ? selectedValues.includes(option.value) : String(option.value) === String(value)}>
             <button
               type="button"
               class="filter-select__option"
-              class:active={multiple ? selectedValues.includes(option.value) : option.value === value}
+              class:active={multiple ? selectedValues.includes(option.value) : String(option.value) === String(value)}
               on:click={() => selectOption(option.value)}>
               {#if multiple && option.value !== 'all'}
                 <i class="bi {selectedValues.includes(option.value) ? 'bi-check-square-fill' : 'bi-square'} filter-select__check" aria-hidden="true"></i>

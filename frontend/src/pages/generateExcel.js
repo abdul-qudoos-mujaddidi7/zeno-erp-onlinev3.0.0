@@ -396,14 +396,6 @@ function buildWorksheet(report) {
   const displayMetrics = padRow(metrics, columnCount);
   const displayRows = rows.map((row) => padRow(row, columnCount));
   const lastColumn = columnLetter(columnCount - 1);
-  /*
-   * RTL reports are written physically right-to-left: the first logical column
-   * (`#`, then date, description, ...) lands in the last grid column. This makes
-   * the report start from the right in every viewer — including ones that ignore
-   * Excel's `rightToLeft` sheet flag. The `rightToLeft` flag is deliberately NOT
-   * set so Excel (which honours it) doesn't flip the grid back to left-to-right.
-   */
-  const writeIndex = rtl ? (index) => columnCount - 1 - index : (index) => index;
   const sheetRows = [];
   let rowNumber = 1;
 
@@ -412,7 +404,7 @@ function buildWorksheet(report) {
       .slice(0, columnCount)
       .map((value, columnIndex) =>
         strings.cell(
-          cellRef(reverse ? writeIndex(columnIndex) : columnIndex, rowNumber),
+          cellRef(columnIndex, rowNumber),
           value,
           styleId,
         ),
@@ -501,7 +493,7 @@ function buildWorksheet(report) {
       12,
     );
   });
-  const widths = rtl ? logicalWidths.slice().reverse() : logicalWidths;
+  const widths = logicalWidths;
 
   const colsXml = widths
     .map(
@@ -520,7 +512,8 @@ function buildWorksheet(report) {
   }
 
   const freezeRow = headerRowNumber - 1;
-  const sheetView = `<sheetView tabSelected="1" zoomScale="100" zoomScaleNormal="100" workbookViewId="0"><pane ySplit="${freezeRow}" topLeftCell="A${headerRowNumber}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${headerRowNumber}" sqref="A${headerRowNumber}"/></sheetView>`;
+  const rtlAttr = rtl ? ' rightToLeft="1"' : '';
+  const sheetView = `<sheetView${rtlAttr} tabSelected="1" zoomScale="100" zoomScaleNormal="100" workbookViewId="0"><pane ySplit="${freezeRow}" topLeftCell="A${headerRowNumber}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${headerRowNumber}" sqref="A${headerRowNumber}"/></sheetView>`;
 
   return {
     sharedStrings: strings.values,

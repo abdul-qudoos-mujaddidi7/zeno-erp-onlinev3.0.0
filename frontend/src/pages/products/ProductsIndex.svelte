@@ -86,6 +86,10 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   let bootstrapped = false;
   let lastPageKey = '';
 
+  function getProductQueryKey() {
+    return `${currentPage}|${itemsPerPage}|${filterCategory}|${filterStatus}|${filterBrand}|${filterCurrency}|${filterGeneric}`;
+  }
+
   let goodModal;
   let serviceModal;
 
@@ -228,26 +232,8 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   let totalPurchaseCostMap = {};
   let totalSaleValueMap = {};
   let totalQuantityCount = 0;
-
-  async function calculatePriceMap() {
-    totalPurchaseCostMap = {};
-    totalSaleValueMap = {};
-    totalQuantityCount = 0;
-    products.forEach((p) => {
-      const buyPrice = parseFloat(p.buy_price) || 0;
-      const sellPrice = parseFloat(p.sell_price) || 0;
-      const qty = parseFloat(p.quantity) || 0;
-      const buyCurrency = p.buy_currency;
-      const sellCurrency = p.sell_currency;
-      totalPurchaseCostMap[buyCurrency] = (totalPurchaseCostMap[buyCurrency] || 0) + buyPrice * qty;
-      totalSaleValueMap[sellCurrency] = (totalSaleValueMap[sellCurrency] || 0) + sellPrice * qty;
-      totalQuantityCount += qty;
-      // check if qty is not integer and it is float, then round to 2 decimal places
-      if (qty % 1 !== 0) {
-        console.log(p.name, p.id, qty);
-      }
-    });
-  }
+  let totalBenefit = {};
+  let totalPredictedBenefit = {};
 
   function subtractValueMaps(saleMap = {}, purchaseMap = {}) {
     const result = {};
@@ -257,6 +243,22 @@ import { saleItemApi } from '../../api/saleItemApi.js';
       if (value !== 0) result[currency] = value;
     });
     return result;
+  }
+
+  async function loadIndexSummary() {
+    try {
+      const response = await productApi.getSummary();
+      const data = response?.data || {};
+      totalPurchaseCostMap = data.purchase || {};
+      totalSaleValueMap = data.sale || {};
+      totalPredictedBenefit = subtractValueMaps(
+        totalSaleValueMap,
+        totalPurchaseCostMap,
+      );
+      totalQuantityCount = Number(data.quantity) || 0;
+    } catch (error) {
+      console.error('Error loading product summary:', error);
+    }
   }
 
   async function loadLookups() {
@@ -286,9 +288,9 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     lookupsLoaded = true;
   }
 
-  async function loadAll() {
+  async function loadAll({ refreshSummary = false } = {}) {
     const requestId = ++loadRequestId;
-    lastPageKey = `${currentPage}|${itemsPerPage}`;
+    lastPageKey = getProductQueryKey();
     loading = true;
     try {
       await loadLookups();
@@ -300,6 +302,11 @@ import { saleItemApi } from '../../api/saleItemApi.js';
         status: 1,
         search: searchTerm.trim(),
         exclude_type: 'service',
+        category_id: filterCategory !== 'all' ? filterCategory : '',
+        product_status: filterStatus !== 'all' ? filterStatus : '',
+        brand_id: filterBrand !== 'all' ? filterBrand : '',
+        generic_id: filterGeneric !== 'all' ? filterGeneric : '',
+        currency: filterCurrency !== 'all' ? filterCurrency : '',
         page: currentPage,
         limit: itemsPerPage,
       });
@@ -316,10 +323,11 @@ import { saleItemApi } from '../../api/saleItemApi.js';
 
       // Skip expensive sale_items profit aggregation on index load
       totalProfitMap = {};
+      totalBenefit = {};
 
-      await calculatePriceMap();
-      await calculateTotalBenefit();
-      await calculateTotalPredictedBenefit();
+      if (refreshSummary) {
+        await loadIndexSummary();
+      }
 
       const pageIds = products
         .flatMap((p) => getProductGroupIds(p))
@@ -375,16 +383,21 @@ import { saleItemApi } from '../../api/saleItemApi.js';
       );
     }
 
-    lastPageKey = `${currentPage}|${itemsPerPage}`;
+    lastPageKey = getProductQueryKey();
     bootstrapped = true;
-    await loadAll();
+    await loadAll({ refreshSummary: true });
   });
 
-  // Reload on page / page-size changes
+  // Reload on page / page-size / filter changes
   $: if (bootstrapped) {
     void currentPage;
     void itemsPerPage;
-    const key = `${currentPage}|${itemsPerPage}`;
+    void filterCategory;
+    void filterStatus;
+    void filterBrand;
+    void filterCurrency;
+    void filterGeneric;
+    const key = getProductQueryKey();
     if (key !== lastPageKey) {
       lastPageKey = key;
       loadAll();
@@ -399,7 +412,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
       await Promise.all(
         ids.map((productId) => productApi.remove(productId)),
       );
-      loadAll();
+      loadAll({ refreshSummary: true });
     }
   }
 
@@ -420,7 +433,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   }
 
   function onProductSaved(e) {
-    loadAll();
+    loadAll({ refreshSummary: true });
     console.log('Product saved event received:', e.detail);
     if (e.detail.save_type === 'again') {
       setTimeout(() => {
@@ -432,34 +445,9 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   // --- Computed Data (Filter, Sort, Pagination) ---
   // Use a reactive statement to filter and sort the products list
 
-  // Client filters apply to the current server page only (category/brand/etc.).
+  // Server already applied category/status/brand/currency/generic filters.
   $: filteredProducts = (() => {
     let result = products;
-
-    // 1. Filter Status
-    if (filterStatus === 'active') {
-      result = result.filter((p) => (p.product_status ? p.product_status === 'active' : true));
-    } else if (filterStatus === 'archived') {
-      result = result.filter((p) => p.product_status === 'archived');
-    }
-
-    // 2. Filter Category
-    if (filterCategory !== 'all') {
-      result = result.filter((p) => p.category_id === parseInt(filterCategory));
-    }
-
-    if (filterBrand !== 'all') {
-      result = result.filter((p) => p.brand_id === parseInt(filterBrand));
-    }
-
-    if (filterCurrency !== 'all') {
-      result = result.filter((p) => p.currency === filterCurrency);
-    }
-    if (filterGeneric !== 'all') {
-      result = result.filter((p) => p.generic_id === parseInt(filterGeneric));
-    }
-
-    // Search is server-side; keep light local match only if needed for grouped rows
 
     // 4. Sort
     result = result.slice().sort((a, b) => {
@@ -569,11 +557,6 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     },
   ];
 
-  // Reset pagination when filters change
-  $: if (filterCategory || filterStatus || filterBrand || filterCurrency || filterGeneric) {
-    // local filters only — do not reset server page aggressively
-  }
-
   function handleToolbarFilterChange(e) {
     const { key, value } = e.detail;
     if (key === 'category') filterCategory = value;
@@ -581,6 +564,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     if (key === 'generic') filterGeneric = value;
     if (key === 'brand') filterBrand = value;
     if (key === 'status') filterStatus = value;
+    if (currentPage !== 1) currentPage = 1;
   }
 
   function resetFilters() {
@@ -741,21 +725,6 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     product.calculated_benefit = benefit;
     return benefit;
   }
-  let totalBenefit = {};
-  async function calculateTotalBenefit() {
-    totalBenefit = {};
-    products.forEach((p) => {
-      if (p.product_status !== 'active') return;
-      const benefit = toNumber(totalProfitMap[p.id]);
-      if (!benefit) return;
-      if (totalBenefit[p.buy_currency]) {
-        totalBenefit[p.buy_currency] += benefit;
-      } else {
-        totalBenefit[p.buy_currency] = benefit;
-      }
-    });
-    return totalBenefit;
-  }
   async function calculatePredictedBenefit(product) {
     let benefitData = null;
     try {
@@ -795,11 +764,6 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     product.calculated_predicted_benefit = benefit;
     return benefit;
   }
-  let totalPredictedBenefit = {};
-  async function calculateTotalPredictedBenefit() {
-    totalPredictedBenefit = subtractValueMaps(totalSaleValueMap, totalPurchaseCostMap);
-    return totalPredictedBenefit;
-  }
 
   function changeProductStatus(id, newStatus) {
     if (newStatus === 'archived') {
@@ -826,7 +790,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
               }),
             ),
           );
-          loadAll();
+          loadAll({ refreshSummary: true });
         }
       });
   }
@@ -934,7 +898,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
                 inventoryMethod,
               );
 
-              await loadAll();
+              await loadAll({ refreshSummary: true });
 
               toast.success(
                 t('Success'),

@@ -52,6 +52,10 @@ import { saleApi } from '../api/saleApi.js';
   let loadRequestId = 0;
   let lookupsLoaded = false;
 
+  function getSalesQueryKey() {
+    return `${currentPage}|${itemsPerPage}|${account_id || ''}|${filterStatus}|${filterPaymentStatus}|${fromDate}|${toDate}`;
+  }
+
   let shiftPressed = false;
   let ctrlPressed = false;
 
@@ -76,6 +80,7 @@ import { saleApi } from '../api/saleApi.js';
   let selectedA4Sale = null;
 
   export let account_id = null;
+  const scopedAccountId = account_id;
   
   let searchTerm = '';
   let filterStatus = 'all';
@@ -144,6 +149,7 @@ import { saleApi } from '../api/saleApi.js';
   }
 
   function clearCustomerFilter() {
+    if (scopedAccountId) return;
     account_id = null;
     searchTerm = '';
     showCustomerDropdown = false;
@@ -219,7 +225,7 @@ import { saleApi } from '../api/saleApi.js';
 
   async function load() {
     const requestId = ++loadRequestId;
-    lastPageKey = `${currentPage}|${itemsPerPage}`;
+    lastPageKey = getSalesQueryKey();
     loading = true;
     try {
       await Promise.all([
@@ -229,9 +235,19 @@ import { saleApi } from '../api/saleApi.js';
             status: 1,
             search: searchTerm.trim(),
             account_id: account_id || undefined,
+            invoice_status: filterStatus !== 'all' ? filterStatus : undefined,
+            payment_status: filterPaymentStatus !== 'all' ? filterPaymentStatus : undefined,
             page: currentPage,
             limit: itemsPerPage,
-            skip_count: 1,
+            skip_count:
+              searchTerm.trim() ||
+              account_id ||
+              filterStatus !== 'all' ||
+              filterPaymentStatus !== 'all' ||
+              fromDate ||
+              toDate
+                ? 0
+                : 1,
             date_from: fromDate || undefined,
             date_to: toDate || undefined,
             sort_by: sortColumn,
@@ -265,7 +281,7 @@ import { saleApi } from '../api/saleApi.js';
   onMount(async () => {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    lastPageKey = `${currentPage}|${itemsPerPage}`;
+    lastPageKey = getSalesQueryKey();
     bootstrapped = true;
     await load();
     tick().then(() => setDatePickers(handleDateChange));
@@ -277,7 +293,12 @@ import { saleApi } from '../api/saleApi.js';
   $: if (bootstrapped) {
     void currentPage;
     void itemsPerPage;
-    const key = `${currentPage}|${itemsPerPage}`;
+    void account_id;
+    void filterStatus;
+    void filterPaymentStatus;
+    void fromDate;
+    void toDate;
+    const key = getSalesQueryKey();
     if (key !== lastPageKey) {
       lastPageKey = key;
       load();
@@ -333,9 +354,16 @@ import { saleApi } from '../api/saleApi.js';
   function showAllFilters() {
     fromDate = '';
     toDate = '';
-    clearCustomerFilter();
+    if (!scopedAccountId) {
+      clearCustomerFilter();
+    } else {
+      account_id = scopedAccountId;
+    }
     filterStatus = 'all';
     filterPaymentStatus = 'all';
+    searchTerm = '';
+    if (currentPage !== 1) currentPage = 1;
+    else load();
   }
 
   function toggleFilters() {
@@ -360,36 +388,7 @@ import { saleApi } from '../api/saleApi.js';
     selectedSale = null;
   }
   
-  $: filteredSales = (() => {
-    let result = sales.filter((s) => {
-      const invoiceDate = new Date(s.invoice_date || s.created_at);
-      const from = fromDate ? new Date(fromDate) : null;
-      const to = toDate ? new Date(toDate) : null;
-      if (from && to && from.getTime() === to.getTime()) {
-        return invoiceDate.toDateString() === from.toDateString();
-      }
-      if (from && invoiceDate < from) return false;
-      if (to && invoiceDate > to) return false;
-      return true;
-    });
-
-    if (filterStatus !== 'all') {
-      result = result.filter((s) => s.invoice_status === filterStatus);
-    }
-
-    if (filterPaymentStatus !== 'all') {
-      result = result.filter((s) => {
-        const remaining = s.remaining;
-        if (remaining === undefined) return false;
-        if (filterPaymentStatus === 'paid') return remaining <= 0;
-        if (filterPaymentStatus === 'unpaid') return remaining > 0;
-        return true;
-      });
-    }
-
-    // Search and sort are handled server-side so page 1 is the newest bills.
-    return result;
-  })();
+  $: filteredSales = sales;
 
   // Server already paginated
   $: paginatedSales = filteredSales;
@@ -407,10 +406,6 @@ import { saleApi } from '../api/saleApi.js';
     totals[s.currency] += Number(s.total_amount);
     return totals;
   }, {});
-
-  $: if (filterStatus !== 'all' || filterPaymentStatus !== 'all' || account_id) {
-    // local filters on current page — no forced page reset storm
-  }
 
   $: salesCountLabel = `${totalItems} ${totalItems < 2 ? t('Sale') : t('Sales')}`;
   $: activeFilterCount =
@@ -440,7 +435,11 @@ import { saleApi } from '../api/saleApi.js';
 
   $: salesToolbarFilters = [
     {
-      key: 'account', label: t('Customer'), value: account_id || 'all', icon: 'bi-person',
+      key: 'account',
+      label: t('Customer'),
+      value: account_id || 'all',
+      icon: 'bi-person',
+      visible: !scopedAccountId,
       options: [{ value: 'all', label: t('All') }, ...accounts.map((account) => ({ value: account.id, label: getAccountName(account) }))],
     },
     { key: 'status', label: t('Status'), value: filterStatus, icon: 'bi-activity', options: statusFilterOptions },
@@ -451,12 +450,15 @@ import { saleApi } from '../api/saleApi.js';
 
   function handleSalesToolbarFilter(event) {
     const { key, value } = event.detail;
-    if (key === 'account') account_id = value === 'all' ? null : Number(value);
+    if (key === 'account') {
+      if (scopedAccountId) return;
+      account_id = value === 'all' ? null : Number(value);
+    }
     if (key === 'status') filterStatus = value;
     if (key === 'payment') filterPaymentStatus = value;
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
-    currentPage = 1;
+    if (currentPage !== 1) currentPage = 1;
   }
 </script>
 

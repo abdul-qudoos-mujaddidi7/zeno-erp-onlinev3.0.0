@@ -79,7 +79,7 @@
   {:else if page == 'bills'}
     {#if account?.account_type_id == 4 || account?.account_type_id == 3}
       {#if account?.account_type_id == 4}
-        <Sales account_id={id} />
+        <Sales account_id={id} embedded />
       {:else if account?.account_type_id == 3}
         <Purchases account_id={id} />
       {/if}

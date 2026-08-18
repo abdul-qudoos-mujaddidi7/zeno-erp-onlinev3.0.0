@@ -78,7 +78,28 @@ async function listProducts({
       type: filters.type || null,
       exclude_type: filters.exclude_type || null,
       categoryId: filters.category_id || null,
+      productStatus: filters.product_status || null,
+      brandId: filters.brand_id || null,
+      genericId: filters.generic_id || null,
+      currency: filters.currency || null,
       pagination,
+    },
+  );
+}
+
+async function getIndexSummary({
+  user,
+}) {
+  const {
+    orgId,
+  } = getAuthenticatedIdentity(user);
+
+  return productRepository.summarizeIndexTotals(
+    db,
+    {
+      orgId,
+      status: 1,
+      excludeType: 'service',
     },
   );
 }
@@ -565,6 +586,7 @@ async function deleteProduct({
 
 module.exports = {
   listProducts,
+  getIndexSummary,
   getProduct,
   reconcileProductStock,
   createProduct,

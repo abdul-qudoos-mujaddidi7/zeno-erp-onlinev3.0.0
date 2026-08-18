@@ -29,6 +29,7 @@ import { accountApi } from '../api/accountApi.js';
   $: permissions = $auth.permissions;
 
   export let account_id = null;
+  const scopedAccountId = account_id;
 
   let purchases = [];
   let loading = true;
@@ -45,6 +46,10 @@ import { accountApi } from '../api/accountApi.js';
   let searchDebounceTimer = null;
   let loadRequestId = 0;
   let lookupsLoaded = false;
+
+  function getPurchasesQueryKey() {
+    return `${currentPage}|${itemsPerPage}|${account_id || ''}|${filterStatus}|${paymentStatus}|${fromDate}|${toDate}`;
+  }
 
   let searchTerm = '';
   let filterStatus = 'all';
@@ -140,6 +145,7 @@ import { accountApi } from '../api/accountApi.js';
   }
 
   function clearSupplierFilter() {
+    if (scopedAccountId) return;
     account_id = null;
     searchTerm = '';
     showSupplierDropdown = false;
@@ -187,7 +193,7 @@ import { accountApi } from '../api/accountApi.js';
 
   async function load() {
     const requestId = ++loadRequestId;
-    lastPageKey = `${currentPage}|${itemsPerPage}`;
+    lastPageKey = getPurchasesQueryKey();
     loading = true;
     try {
       await Promise.all([
@@ -197,9 +203,19 @@ import { accountApi } from '../api/accountApi.js';
             status: 1,
             search: searchTerm.trim(),
             account_id: account_id || undefined,
+            bill_status: filterStatus !== 'all' ? filterStatus : undefined,
+            payment_status: paymentStatus !== 'all' ? paymentStatus : undefined,
             page: currentPage,
             limit: itemsPerPage,
-            skip_count: 1,
+            skip_count:
+              searchTerm.trim() ||
+              account_id ||
+              filterStatus !== 'all' ||
+              paymentStatus !== 'all' ||
+              fromDate ||
+              toDate
+                ? 0
+                : 1,
             date_from: fromDate || undefined,
             date_to: toDate || undefined,
             sort_by: sortColumn,
@@ -233,7 +249,7 @@ import { accountApi } from '../api/accountApi.js';
   }
 
   onMount(async () => {
-    lastPageKey = `${currentPage}|${itemsPerPage}`;
+    lastPageKey = getPurchasesQueryKey();
     bootstrapped = true;
     await load();
     tick().then(() => setDatePickers(handleDateChange));
@@ -246,7 +262,12 @@ import { accountApi } from '../api/accountApi.js';
   $: if (bootstrapped) {
     void currentPage;
     void itemsPerPage;
-    const key = `${currentPage}|${itemsPerPage}`;
+    void account_id;
+    void filterStatus;
+    void paymentStatus;
+    void fromDate;
+    void toDate;
+    const key = getPurchasesQueryKey();
     if (key !== lastPageKey) {
       lastPageKey = key;
       load();
@@ -306,9 +327,16 @@ import { accountApi } from '../api/accountApi.js';
   function showAllFilters() {
     fromDate = '';
     toDate = '';
-    clearSupplierFilter();
+    if (!scopedAccountId) {
+      clearSupplierFilter();
+    } else {
+      account_id = scopedAccountId;
+    }
     filterStatus = 'all';
     paymentStatus = 'all';
+    searchTerm = '';
+    if (currentPage !== 1) currentPage = 1;
+    else load();
   }
 
   function toggleFilters() {
@@ -405,66 +433,7 @@ import { accountApi } from '../api/accountApi.js';
     return rem;
   })();
 
-  $: filteredPurchases = (() => {
-    let result = purchases.filter((p) => {
-      const invoiceDate = new Date(p.bill_date || p.created_at);
-      const from = fromDate ? new Date(fromDate) : null;
-      const to = toDate ? new Date(toDate) : null;
-      if (from && to && from.getTime() === to.getTime()) {
-        return invoiceDate.toDateString() === from.toDateString();
-      }
-      if (from && invoiceDate < from) return false;
-      if (to && invoiceDate > to) return false;
-      return true;
-    });
-    /*
-     * Purchase status filter:
-     *
-     * confirmed / draft:
-     *   Filter using purchases.bill_status.
-     *
-     * return:
-     *   A return is stored in purchase_returns, not in bill_status.
-     *   Show purchases that have at least one active return amount.
-     */
-    if (filterStatus === 'return') {
-      result = result.filter(
-        (p) => Number(returnsByPurchase?.[p.id] || 0) > 0,
-      );
-    } else if (filterStatus !== 'all') {
-      result = result.filter(
-        (p) => p.bill_status === filterStatus,
-      );
-    }
-
-    /*
-     * Payment status is calculated from the remaining amount:
-     * paid   => remaining balance is zero or below
-     * unpaid => remaining balance is greater than zero
-     */
-    if (paymentStatus !== 'all') {
-      result = result.filter((p) => {
-        const remaining = Number(
-          purchaseRemainingMap?.[p.id] ??
-            p.total_amount ??
-            0,
-        );
-
-        if (paymentStatus === 'paid') {
-          return remaining <= 0.000001;
-        }
-
-        if (paymentStatus === 'unpaid') {
-          return remaining > 0.000001;
-        }
-
-        return true;
-      });
-    }
-
-    // Search and sort are handled server-side so page 1 is the newest bills.
-    return result;
-  })();
+  $: filteredPurchases = purchases;
 
   $: paginatedPurchases = filteredPurchases;
   $: purchasesCountLabel = `${totalItems} ${totalItems < 2 ? t('Purchase') : t('Purchases')}`;
@@ -494,7 +463,11 @@ import { accountApi } from '../api/accountApi.js';
 
   $: purchaseToolbarFilters = [
     {
-      key: 'account', label: t('Supplier'), value: account_id || 'all', icon: 'bi-person',
+      key: 'account',
+      label: t('Supplier'),
+      value: account_id || 'all',
+      icon: 'bi-person',
+      visible: !scopedAccountId,
       options: [{ value: 'all', label: t('All') }, ...accounts.map((account) => ({ value: account.id, label: getAccountName(account) }))],
     },
     { key: 'status', label: t('Status'), value: filterStatus, icon: 'bi-activity', options: statusFilterOptions },
@@ -511,12 +484,15 @@ import { accountApi } from '../api/accountApi.js';
 
   function handlePurchaseToolbarFilter(event) {
     const { key, value } = event.detail;
-    if (key === 'account') account_id = value === 'all' ? null : Number(value);
+    if (key === 'account') {
+      if (scopedAccountId) return;
+      account_id = value === 'all' ? null : Number(value);
+    }
     if (key === 'status') filterStatus = value;
     if (key === 'paymentStatus') paymentStatus = value;
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
-    currentPage = 1;
+    if (currentPage !== 1) currentPage = 1;
   }
 </script>
 

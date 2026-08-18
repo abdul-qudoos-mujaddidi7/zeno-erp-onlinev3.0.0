@@ -208,6 +208,16 @@ const purchaseListQuerySchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'date_to must be YYYY-MM-DD')
     .optional(),
 
+  bill_status: z
+    .string()
+    .trim()
+    .max(50)
+    .optional(),
+
+  payment_status: z
+    .enum(['paid', 'unpaid'])
+    .optional(),
+
   skip_count: z
     .coerce
     .number()

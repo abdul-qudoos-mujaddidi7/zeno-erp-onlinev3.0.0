@@ -145,6 +145,50 @@ const productListQuerySchema = z.object({
       .positive()
       .optional(),
   ),
+
+  product_status: z
+    .string()
+    .trim()
+    .max(50)
+    .optional(),
+
+  brand_id: z.preprocess(
+    (value) => {
+      if (value === '' || value === undefined || value === null) {
+        return undefined;
+      }
+
+      const number = Number(value);
+      return Number.isFinite(number) ? number : undefined;
+    },
+    z
+      .number()
+      .int()
+      .positive()
+      .optional(),
+  ),
+
+  generic_id: z.preprocess(
+    (value) => {
+      if (value === '' || value === undefined || value === null) {
+        return undefined;
+      }
+
+      const number = Number(value);
+      return Number.isFinite(number) ? number : undefined;
+    },
+    z
+      .number()
+      .int()
+      .positive()
+      .optional(),
+  ),
+
+  currency: z
+    .string()
+    .trim()
+    .max(50)
+    .optional(),
 }).merge(paginationQuerySchema);
 
 const updateProductSchema = productBodySchema.partial();

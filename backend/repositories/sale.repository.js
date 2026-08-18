@@ -160,6 +160,8 @@ async function findAll(
     accountId,
     dateFrom,
     dateTo,
+    invoiceStatus,
+    paymentStatus,
     skipCount = false,
     pagination = null,
     sortBy = 'created_at',
@@ -204,6 +206,17 @@ async function findAll(
   if (dateTo) {
     conditions.push('COALESCE(invoice_date, created_at) < DATE_ADD(?, INTERVAL 1 DAY)');
     values.push(dateTo);
+  }
+
+  if (invoiceStatus && invoiceStatus !== 'all') {
+    conditions.push('invoice_status = ?');
+    values.push(invoiceStatus);
+  }
+
+  if (paymentStatus === 'paid') {
+    conditions.push('COALESCE(remaining, 0) <= 0');
+  } else if (paymentStatus === 'unpaid') {
+    conditions.push('COALESCE(remaining, 0) > 0');
   }
 
   return paginateSelect(executor, {

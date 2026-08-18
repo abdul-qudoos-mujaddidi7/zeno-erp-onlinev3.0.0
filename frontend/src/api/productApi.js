@@ -10,6 +10,10 @@ export const productApi = {
     type = '',
     exclude_type = '',
     category_id = '',
+    product_status = '',
+    brand_id = '',
+    generic_id = '',
+    currency = '',
     page,
     limit,
   } = {}) {
@@ -29,8 +33,24 @@ export const productApi = {
       params.set('exclude_type', String(exclude_type));
     }
 
-    if (category_id) {
+    if (category_id && category_id !== 'all') {
       params.set('category_id', String(category_id));
+    }
+
+    if (product_status && product_status !== 'all') {
+      params.set('product_status', String(product_status));
+    }
+
+    if (brand_id && brand_id !== 'all') {
+      params.set('brand_id', String(brand_id));
+    }
+
+    if (generic_id && generic_id !== 'all') {
+      params.set('generic_id', String(generic_id));
+    }
+
+    if (currency && currency !== 'all') {
+      params.set('currency', String(currency));
     }
 
     if (page != null || limit != null) {
@@ -40,6 +60,10 @@ export const productApi = {
     return api.get(
       `${BASE_URL}?${params.toString()}`,
     );
+  },
+
+  getSummary() {
+    return api.get(`${BASE_URL}/summary`, { cache: false });
   },
 
   getById(id) {

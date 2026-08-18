@@ -16,6 +16,8 @@ export const saleApi = {
     skip_count = 0,
     sort_by,
     sort_dir,
+    invoice_status,
+    payment_status,
   } = {}) {
     const params = new URLSearchParams();
 
@@ -39,6 +41,14 @@ export const saleApi = {
 
     if (date_to) {
       params.set('date_to', String(date_to));
+    }
+
+    if (invoice_status && invoice_status !== 'all') {
+      params.set('invoice_status', String(invoice_status));
+    }
+
+    if (payment_status && payment_status !== 'all') {
+      params.set('payment_status', String(payment_status));
     }
 
     if (skip_count) {

@@ -155,6 +155,8 @@ async function findAll(
     accountId,
     dateFrom,
     dateTo,
+    billStatus,
+    paymentStatus,
     skipCount = false,
     pagination = null,
     sortBy = 'created_at',
@@ -199,6 +201,27 @@ async function findAll(
   if (dateTo) {
     conditions.push('COALESCE(bill_date, created_at) < DATE_ADD(?, INTERVAL 1 DAY)');
     values.push(dateTo);
+  }
+
+  if (billStatus === 'return') {
+    conditions.push(`
+      local_id IN (
+        SELECT purchase_id
+        FROM purchase_returns
+        WHERE org_id = ?
+          AND status = 1
+      )
+    `);
+    values.push(orgId);
+  } else if (billStatus && billStatus !== 'all') {
+    conditions.push('bill_status = ?');
+    values.push(billStatus);
+  }
+
+  if (paymentStatus === 'paid') {
+    conditions.push('COALESCE(remaining, 0) <= 0');
+  } else if (paymentStatus === 'unpaid') {
+    conditions.push('COALESCE(remaining, 0) > 0');
   }
 
   return paginateSelect(executor, {

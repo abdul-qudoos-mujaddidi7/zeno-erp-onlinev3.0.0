@@ -29,6 +29,13 @@ router.get(
 );
 
 router.get(
+  '/summary',
+  asyncHandler(
+    productController.summary,
+  ),
+);
+
+router.get(
   '/:id',
   validate({
     params: productIdParamsSchema,
