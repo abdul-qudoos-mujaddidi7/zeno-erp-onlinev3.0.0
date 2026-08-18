@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Freebuff Logo Preview</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f3f4f6;
+            padding: 40px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { color: #1e40af; margin-bottom: 30px; font-size: 24px; }
+        .logo-section { 
+            background: white; 
+            border-radius: 12px; 
+            padding: 30px; 
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .logo-section h2 { color: #374151; margin-bottom: 20px; font-size: 18px; }
+        .logo-display { 
+            display: flex; 
+            align-items: center; 
+            gap: 30px;
+        }
+        .variants { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
+        .variant { 
+            text-align: center; 
+            padding: 20px; 
+            background: #f9fafb; 
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        .variant p { color: #6b7280; font-size: 12px; }
+        .dark-bg { background: #1f2937; }
+        .dark-bg p { color: #9ca3af; }
+        .color-palette { 
+            display: flex; 
+            gap: 10px; 
+            margin-top: 20px;
+        }
+        .color-swatch {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Freebuff Logo Preview</h1>
+        
+        <div class="logo-section">
+            <h2>Full Logo (Horizontal)</h2>
+            <div class="logo-display">
+                <!-- Inline SVG Logo -->
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+                    <defs>
+                        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+                        </linearGradient>
+                        <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+                        </linearGradient>
+                        <filter id="shadow" x="-5%" y="-5%" width="110%" height="120%">
+                            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#1e40af" flood-opacity="0.3"/>
+                        </filter>
+                    </defs>
+                    
+                    <!-- Icon: stylized box/inventory with checkmark -->
+                    <g transform="translate(15, 10)" filter="url(#shadow)">
+                        <!-- Box body -->
+                        <path d="M50 25 L50 75 L15 75 L15 25 L50 25 Z" fill="url(#grad1)" stroke="#1e3a8a" stroke-width="1.5"/>
+                        <!-- Box top -->
+                        <path d="M15 25 L32.5 10 L82.5 10 L65 25 Z" fill="url(#grad2)" stroke="#1e3a8a" stroke-width="1.5"/>
+                        <!-- Box right side -->
+                        <path d="M65 25 L82.5 10 L82.5 60 L65 75 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1.5"/>
+                        <!-- Box divider lines -->
+                        <line x1="15" y1="50" x2="65" y2="50" stroke="#1e3a8a" stroke-width="1" opacity="0.4"/>
+                        <line x1="65" y1="50" x2="82.5" y2="35" stroke="#1e3a8a" stroke-width="1" opacity="0.4"/>
+                        <!-- Checkmark -->
+                        <path d="M30 55 L42 67 L62 38" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </g>
+                    
+                    <!-- Text: FREEBUFF -->
+                    <text x="115" y="62" font-family="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" font-size="42" font-weight="700" fill="url(#grad1)" letter-spacing="2">
+                        FREEBUFF
+                    </text>
+                    
+                    <!-- Subtitle -->
+                    <text x="115" y="88" font-family="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" font-size="13" fill="#6b7280" letter-spacing="4" font-weight="400">
+                        POS &amp; INVENTORY
+                    </text>
+                    
+                    <!-- Accent line -->
+                    <rect x="115" y="95" width="80" height="2" rx="1" fill="url(#grad2)" opacity="0.6"/>
+                </svg>
+            </div>
+        </div>
+
+        <div class="logo-section">
+            <h2>Icon Only</h2>
+            <div class="variants">
+                <div class="variant">
+                    <!-- 64x64 Icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" style="margin-bottom: 10px;">
+                        <defs>
+                            <linearGradient id="grad1b" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+                            </linearGradient>
+                            <linearGradient id="grad2b" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+                            </linearGradient>
+                            <filter id="shadowb" x="-5%" y="-5%" width="110%" height="120%">
+                                <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#1e40af" flood-opacity="0.3"/>
+                            </filter>
+                        </defs>
+                        
+                        <!-- Rounded background -->
+                        <rect x="2" y="2" width="60" height="60" rx="12" fill="white" stroke="#e5e7eb" stroke-width="1"/>
+                        
+                        <!-- Icon: stylized box/inventory with checkmark -->
+                        <g transform="translate(8, 8)" filter="url(#shadowb)">
+                            <!-- Box body -->
+                            <path d="M22 10 L22 34 L5 34 L5 10 L22 10 Z" fill="url(#grad1b)" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box top -->
+                            <path d="M5 10 L13.5 3 L36.5 3 L28 10 Z" fill="url(#grad2b)" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box right side -->
+                            <path d="M28 10 L36.5 3 L36.5 27 L28 34 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box divider lines -->
+                            <line x1="5" y1="22" x2="28" y2="22" stroke="#1e3a8a" stroke-width="0.8" opacity="0.4"/>
+                            <line x1="28" y1="22" x2="36.5" y2="15" stroke="#1e3a8a" stroke-width="0.8" opacity="0.4"/>
+                            <!-- Checkmark -->
+                            <path d="M12 25 L18 31 L26 18" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                    </svg>
+                    <p>64×64</p>
+                </div>
+                
+                <div class="variant">
+                    <!-- 48x48 Icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="48" height="48" style="margin-bottom: 10px;">
+                        <defs>
+                            <linearGradient id="grad1c" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+                            </linearGradient>
+                            <linearGradient id="grad2c" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+                            </linearGradient>
+                            <filter id="shadowc" x="-5%" y="-5%" width="110%" height="120%">
+                                <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#1e40af" flood-opacity="0.3"/>
+                            </filter>
+                        </defs>
+                        
+                        <!-- Rounded background -->
+                        <rect x="2" y="2" width="60" height="60" rx="12" fill="white" stroke="#e5e7eb" stroke-width="1"/>
+                        
+                        <!-- Icon: stylized box/inventory with checkmark -->
+                        <g transform="translate(8, 8)" filter="url(#shadowc)">
+                            <!-- Box body -->
+                            <path d="M22 10 L22 34 L5 34 L5 10 L22 10 Z" fill="url(#grad1c)" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box top -->
+                            <path d="M5 10 L13.5 3 L36.5 3 L28 10 Z" fill="url(#grad2c)" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box right side -->
+                            <path d="M28 10 L36.5 3 L36.5 27 L28 34 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box divider lines -->
+                            <line x1="5" y1="22" x2="28" y2="22" stroke="#1e3a8a" stroke-width="0.8" opacity="0.4"/>
+                            <line x1="28" y1="22" x2="36.5" y2="15" stroke="#1e3a8a" stroke-width="0.8" opacity="0.4"/>
+                            <!-- Checkmark -->
+                            <path d="M12 25 L18 31 L26 18" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                    </svg>
+                    <p>48×48</p>
+                </div>
+                
+                <div class="variant">
+                    <!-- 32x32 Icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="32" height="32" style="margin-bottom: 10px;">
+                        <defs>
+                            <linearGradient id="grad1d" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+                            </linearGradient>
+                            <linearGradient id="grad2d" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+                            </linearGradient>
+                            <filter id="shadowd" x="-5%" y="-5%" width="110%" height="120%">
+                                <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#1e40af" flood-opacity="0.3"/>
+                            </filter>
+                        </defs>
+                        
+                        <!-- Rounded background -->
+                        <rect x="2" y="2" width="60" height="60" rx="12" fill="white" stroke="#e5e7eb" stroke-width="1"/>
+                        
+                        <!-- Icon: stylized box/inventory with checkmark -->
+                        <g transform="translate(8, 8)" filter="url(#shadowd)">
+                            <!-- Box body -->
+                            <path d="M22 10 L22 34 L5 34 L5 10 L22 10 Z" fill="url(#grad1d)" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box top -->
+                            <path d="M5 10 L13.5 3 L36.5 3 L28 10 Z" fill="url(#grad2d)" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box right side -->
+                            <path d="M28 10 L36.5 3 L36.5 27 L28 34 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box divider lines -->
+                            <line x1="5" y1="22" x2="28" y2="22" stroke="#1e3a8a" stroke-width="0.8" opacity="0.4"/>
+                            <line x1="28" y1="22" x2="36.5" y2="15" stroke="#1e3a8a" stroke-width="0.8" opacity="0.4"/>
+                            <!-- Checkmark -->
+                            <path d="M12 25 L18 31 L26 18" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                    </svg>
+                    <p>32×32</p>
+                </div>
+                
+                <div class="variant dark-bg">
+                    <!-- 64x64 Icon on dark -->
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" style="margin-bottom: 10px;">
+                        <defs>
+                            <linearGradient id="grad1e" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+                            </linearGradient>
+                            <linearGradient id="grad2e" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+                            </linearGradient>
+                            <filter id="shadowe" x="-5%" y="-5%" width="110%" height="120%">
+                                <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#1e40af" flood-opacity="0.3"/>
+                            </filter>
+                        </defs>
+                        
+                        <!-- Rounded background -->
+                        <rect x="2" y="2" width="60" height="60" rx="12" fill="white" stroke="#e5e7eb" stroke-width="1"/>
+                        
+                        <!-- Icon: stylized box/inventory with checkmark -->
+                        <g transform="translate(8, 8)" filter="url(#shadowe)">
+                            <!-- Box body -->
+                            <path d="M22 10 L22 34 L5 34 L5 10 L22 10 Z" fill="url(#grad1e)" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box top -->
+                            <path d="M5 10 L13.5 3 L36.5 3 L28 10 Z" fill="url(#grad2e)" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box right side -->
+                            <path d="M28 10 L36.5 3 L36.5 27 L28 34 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1"/>
+                            <!-- Box divider lines -->
+                            <line x1="5" y1="22" x2="28" y2="22" stroke="#1e3a8a" stroke-width="0.8" opacity="0.4"/>
+                            <line x1="28" y1="22" x2="36.5" y2="15" stroke="#1e3a8a" stroke-width="0.8" opacity="0.4"/>
+                            <!-- Checkmark -->
+                            <path d="M12 25 L18 31 L26 18" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </g>
+                    </svg>
+                    <p>Dark Background</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="logo-section">
+            <h2>Brand Colors</h2>
+            <div class="color-palette">
+                <div class="color-swatch" style="background: #1e40af;">Primary</div>
+                <div class="color-swatch" style="background: #2563eb;">Blue</div>
+                <div class="color-swatch" style="background: #3b82f6;">Light Blue</div>
+                <div class="color-swatch" style="background: #60a5fa;">Accent</div>
+                <div class="color-swatch" style="background: #1f2937;">Dark</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#1e40af" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Icon: stylized box/inventory with checkmark -->
+  <g transform="translate(15, 10)" filter="url(#shadow)">
+    <!-- Box body -->
+    <path d="M50 25 L50 75 L15 75 L15 25 L50 25 Z" fill="url(#grad1)" stroke="#1e3a8a" stroke-width="1.5"/>
+    <!-- Box top -->
+    <path d="M15 25 L32.5 10 L82.5 10 L65 25 Z" fill="url(#grad2)" stroke="#1e3a8a" stroke-width="1.5"/>
+    <!-- Box right side -->
+    <path d="M65 25 L82.5 10 L82.5 60 L65 75 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1.5"/>
+    <!-- Box divider lines -->
+    <line x1="15" y1="50" x2="65" y2="50" stroke="#1e3a8a" stroke-width="1" opacity="0.4"/>
+    <line x1="65" y1="50" x2="82.5" y2="35" stroke="#1e3a8a" stroke-width="1" opacity="0.4"/>
+    <!-- Checkmark -->
+    <path d="M30 55 L42 67 L62 38" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  
+  <!-- Text: FREEBUFF -->
+  <text x="115" y="62" font-family="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" font-size="42" font-weight="700" fill="url(#grad1)" letter-spacing="2">
+    FREEBUFF
+  </text>
+  
+  <!-- Subtitle -->
+  <text x="115" y="88" font-family="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" font-size="13" fill="#6b7280" letter-spacing="4" font-weight="400">
+    POS &amp; INVENTORY
+  </text>
+  
+  <!-- Accent line -->
+  <rect x="115" y="95" width="80" height="2" rx="1" fill="url(#grad2)" opacity="0.6"/>
+</svg>

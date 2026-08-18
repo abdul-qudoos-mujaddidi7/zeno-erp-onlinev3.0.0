@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="120%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#1e40af" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Rounded background -->
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="white" stroke="#e5e7eb" stroke-width="1"/>
+  
+  <!-- Icon: stylized box/inventory with checkmark -->
+  <g transform="translate(8, 8)" filter="url(#shadow)">
+    <!-- Box body -->
+    <path d="M22 10 L22 34 L5 34 L5 10 L22 10 Z" fill="url(#grad1)" stroke="#1e3a8a" stroke-width="1"/>
+    <!-- Box top -->
+    <path d="M5 10 L13.5 3 L36.5 3 L28 10 Z" fill="url(#grad2)" stroke="#1e3a8a" stroke-width="1"/>
+    <!-- Box right side -->
+    <path d="M28 10 L36.5 3 L36.5 27 L28 34 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1"/>
+    <!-- Box divider lines -->
+    <line x1="5" y1="22" x2="28" y2="22" stroke="#1e3a8a" stroke-width="0.8" opacity="0.4"/>
+    <line x1="28" y1="22" x2="36.5" y2="15" stroke="#1e3a8a" stroke-width="0.8" opacity="0.4"/>
+    <!-- Checkmark -->
+    <path d="M12 25 L18 31 L26 18" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
