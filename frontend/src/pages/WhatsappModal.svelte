@@ -102,9 +102,34 @@
 
 🙏 از خرید و اعتماد شما سپاسگزاریم.`;
 
+  const DEFAULT_EXCHANGE_CREATED_TEMPLATE = `🏢 {{نام شرکت}}
+🗓️ {{تاریخ}}
+
+💱 نرخ تبادله ارز
+🔢 شماره تبادله: {{شماره تبادله}}
+
+از ارز: {{ارز اول}}
+به ارز: {{ارز دوم}}
+📈 نرخ: {{نرخ}}
+
+👤 حساب: {{اسم حساب}}
+👥 حساب همتا: {{حساب همتا}}
+💰 مقدار اول: {{مقدار اول}}
+💰 مقدار دوم: {{مقدار دوم}}
+
+📝 توضیحات: {{توضیحات}}`;
+
   $: sale_created_template =
     $settings_all.find((s) => s.key === 'sale_created_template')?.value ||
     DEFAULT_SALE_CREATED_TEMPLATE;
+
+  $: exchange_created_template =
+    $settings_all.find((s) => s.key === 'exchange_created_template')?.value ||
+    DEFAULT_EXCHANGE_CREATED_TEMPLATE;
+
+  $: exchange_created_template =
+    $settings_all.find((s) => s.key === 'exchange_created_template')?.value ||
+    DEFAULT_EXCHANGE_CREATED_TEMPLATE;
 
   $: account_whatsapp_welcome_template =
     $settings_all.find(
@@ -888,6 +913,42 @@
         .join(company_phone2)
         .split('{{آدرس شرکت}}')
         .join(company_address);
+
+      phone = accdata?.phone
+        ? normalizeWhatsappPhone(accdata.phone)
+        : '';
+    } else if (temp == 'exchange_created_template') {
+      const exchangeValue = acc_id || {};
+      const exchangeDate = String(exchangeValue.date || '');
+      const dateParts = exchangeDate
+        ? showDate(exchangeDate.slice(0, 10), 'forPDF')
+        : ['', '', ''];
+      const formattedDate = exchangeDate
+        ? `${dateParts[0]} ${dateParts[1]} ${dateParts[2]} مطابق ${exchangeDate.slice(8, 10)} ${monthNames[parseInt(exchangeDate.slice(5, 7), 10) - 1] || ''} ${exchangeDate.slice(0, 4)}`
+        : '';
+      const firstAccountName = getWhatsappAccountName(accdata) || '-';
+      const peerAccountName = getWhatsappAccountName(secondAcc) || '-';
+      const firstAmount = Number(exchangeValue.first_entry_debit || exchangeValue.first_entry_credit || 0)
+        .toLocaleString(undefined, { maximumFractionDigits: 3 });
+      const secondAmount = Number(exchangeValue.second_entry_debit || exchangeValue.second_entry_credit || 0)
+        .toLocaleString(undefined, { maximumFractionDigits: 3 });
+
+      message = String(exchange_created_template || DEFAULT_EXCHANGE_CREATED_TEMPLATE)
+        .split('{{نام شرکت}}').join(company_name)
+        .split('{{تاریخ}}').join(formattedDate)
+        .split('{{شماره تبادله}}').join(shortID(exchangeValue.id || '-'))
+        .split('{{ارز اول}}').join(t(exchangeValue.first_currency) || exchangeValue.first_currency || '-')
+        .split('{{ارز دوم}}').join(t(exchangeValue.second_currency) || exchangeValue.second_currency || '-')
+        .split('{{نرخ}}').join(Number(exchangeValue.rate || 0).toLocaleString(undefined, { maximumFractionDigits: 6 }))
+        .split('{{اسم حساب}}').join(firstAccountName)
+        .split('{{حساب همتا}}').join(peerAccountName)
+        .split('{{مقدار اول}}').join(`${firstAmount} ${t(exchangeValue.first_currency) || exchangeValue.first_currency || ''}`)
+        .split('{{مقدار دوم}}').join(`${secondAmount} ${t(exchangeValue.second_currency) || exchangeValue.second_currency || ''}`)
+        .split('{{توضیحات}}').join(exchangeValue.description || '')
+        .split('{{ایمیل شرکت}}').join(company_email)
+        .split('{{شماره شرکت}}').join(company_phone)
+        .split('{{شماره۲ شرکت}}').join(company_phone2)
+        .split('{{آدرس شرکت}}').join(company_address);
 
       phone = accdata?.phone
         ? normalizeWhatsappPhone(accdata.phone)

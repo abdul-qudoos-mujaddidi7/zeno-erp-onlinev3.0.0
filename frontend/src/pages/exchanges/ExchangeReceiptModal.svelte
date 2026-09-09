@@ -8,6 +8,7 @@
 
   import { showDate } from '../../calendar.js';
 import { accountApi } from '../../api/accountApi.js';
+import WhatsappModal from '../WhatsappModal.svelte';
 import { settingsApi } from '../../api/settingsApi.js';
 
   export let exchange = {};
@@ -19,6 +20,7 @@ import { settingsApi } from '../../api/settingsApi.js';
   }
 
   let addressEl;
+  let WhatsappModalRef = null;
   function fitText(el, maxFont = 12, minFont = 6) {
     if (!el) return;
 
@@ -58,6 +60,23 @@ import { settingsApi } from '../../api/settingsApi.js';
     if (t('Lang') === 'ps') out = acc.name_ps || acc.name || '';
     out = out || 'Unknown';
     return out;
+  }
+
+  function openExchangeWhatsapp() {
+    const firstAccount = accounts.find(
+      (account) => account.id === exchange?.first_entry_account,
+    );
+    const secondAccount = accounts.find(
+      (account) => account.id === exchange?.second_entry_account,
+    );
+
+    WhatsappModalRef?.openModal(
+      'exchange_created_template',
+      exchange,
+      firstAccount,
+      {},
+      secondAccount,
+    );
   }
   onMount(async () => {
     // Load all dependencies in order
@@ -264,11 +283,17 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
       <div class="modal-footer">
         <button class="btn btn-secondary" on:click={close}><i class="bi bi-x-lg"></i> {t('Close')}</button>
 
+          <button class="btn btn-success" on:click={openExchangeWhatsapp}>
+            <i class="bi bi-whatsapp"></i> {t('Whatsapp')}
+          </button>
+
         <button class="btn btn-primary" on:click={printReceipt} style="color:#ffffff !important;"><i class="bi bi-printer" style="color:#ffffff !important;"></i> {t('Print')}</button>
       </div>
     </div>
   </div>
 </div>
+
+<WhatsappModal bind:this={WhatsappModalRef} />
 
 <style>
   td {

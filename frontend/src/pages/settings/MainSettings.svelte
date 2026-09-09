@@ -105,6 +105,23 @@ import { settingsApi } from '../../api/settingsApi.js';
 
 🙏 از خرید و اعتماد شما سپاسگزاریم.`;
 
+  const DEFAULT_EXCHANGE_CREATED_TEMPLATE = `🏢 {{نام شرکت}}
+🗓️ {{تاریخ}}
+
+💱 نرخ تبادله ارز
+🔢 شماره تبادله: {{شماره تبادله}}
+
+از ارز: {{ارز اول}}
+به ارز: {{ارز دوم}}
+📈 نرخ: {{نرخ}}
+
+👤 حساب: {{اسم حساب}}
+👥 حساب همتا: {{حساب همتا}}
+💰 مقدار اول: {{مقدار اول}}
+💰 مقدار دوم: {{مقدار دوم}}
+
+📝 توضیحات: {{توضیحات}}`;
+
     const LEGACY_MESSAGING_TEMPLATE_VALUES = {
       account_whatsapp_welcome_template: [
         `سلام محترم *{{اسم مشتری}}*،
@@ -613,6 +630,12 @@ import { settingsApi } from '../../api/settingsApi.js';
         type: 'textarea',
         key: 'sale_created_template',
         value: DEFAULT_SALE_CREATED_TEMPLATE,
+      },
+      {
+        category: 'Messaging',
+        type: 'textarea',
+        key: 'exchange_created_template',
+        value: DEFAULT_EXCHANGE_CREATED_TEMPLATE,
       },
     ];
 
