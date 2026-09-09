@@ -5,14 +5,11 @@
 
   import { t, lang, translate_org_type, settings_all, shortID } from '../i18n/i18n';
 
-
   import { showDate } from '../calendar.js';
-
 
   // ensure component re-renders when language changes
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
-
 
   const DEFAULT_CUSTOMER_ACCOUNT_CREATED_TEMPLATE = `مشتری گرامی {{اسم مشتری}}،
 
@@ -81,6 +78,7 @@
   $: patient_created_template = $settings_all.find((s) => s.key === 'patient_created_template')?.value || '';
   $: journal_created_template = $settings_all.find((s) => s.key === 'journal_created_template')?.value || '';
   $: appointment_created_template = $settings_all.find((s) => s.key === 'appointment_created_template')?.value || '';
+
   const DEFAULT_SALE_CREATED_TEMPLATE = `🏢 {{نام شرکت}}
 🗓️ {{تاریخ}}
 
@@ -90,7 +88,7 @@
 محترم {{اسم حساب}}،
 
 🛒 محصولات:
-🛍️ {{محصولات}}
+{{محصولات}}
 
 💰 مجموع بل: {{مجموع بل}}
 🎁 تخفیف: {{تخفیف}}
@@ -107,17 +105,17 @@
   $: sale_created_template =
     $settings_all.find((s) => s.key === 'sale_created_template')?.value ||
     DEFAULT_SALE_CREATED_TEMPLATE;
+
   $: account_whatsapp_welcome_template =
     $settings_all.find(
       (s) => s.key === 'account_whatsapp_welcome_template',
     )?.value ||
     account_created_template ||
     DEFAULT_CUSTOMER_ACCOUNT_CREATED_TEMPLATE;
+
   $: account_whatsapp_balance_template = $settings_all.find((s) => s.key === 'account_whatsapp_balance_template')?.value || '';
   $: account_whatsapp_note_template = $settings_all.find((s) => s.key === 'account_whatsapp_note_template')?.value || '';
 
-
-  
   $: company_name = $settings_all.find((s) => s.key === 'company_name')?.value || '';
   $: company_phone = $settings_all.find((s) => s.key === 'company_phone')?.value || '';
   $: company_phone2 = $settings_all.find((s) => s.key === 'company_phone2')?.value || '';
@@ -131,32 +129,23 @@
 
   let readOnlyMessage = true;
 
-  const footer = "\n\n\`تهیه شده توسط زینو ای آر پی\`";
-// `*{{نام شرکت}}*
-// {{تاریخ}}
+  const footer = "\n\n`تهیه شده توسط زینو ای آر پی`";
 
-// نام حساب: {{اسم حساب}}
-// شماره حساب: {{شماره حساب}}
-// مقدار پول: {{مقدار پول}}
+  let monthNames = [
+    'جنوری',
+    'فبروری',
+    'مارچ',
+    'اپریل',
+    'می',
+    'جون',
+    'جولای',
+    'اگست',
+    'سپتمبر',
+    'اکتوبر',
+    'نومبر',
+    'دسمبر',
+  ];
 
-// {{توضیحات}}`,
-
-
-let monthNames = [
-  'جنوری',
-  'فبروری',
-  'مارچ',
-  'اپریل',
-  'می',
-  'جون',
-  'جولای',
-  'اگست',
-  'سپتمبر',
-  'اکتوبر',
-  'نومبر',
-  'دسمبر'
-
-]
   function normalizeWhatsappPhone(value = '') {
     return value.startsWith('07') ? '+93' + value.slice(1) : value;
   }
@@ -425,21 +414,21 @@ let monthNames = [
     readOnlyMessage = true;
 
     if (temp == 'patient_created_template') {
-        message = patient_created_template
-          .split('{{نام شرکت}}')
-          .join(company_name)
-          .split('{{کد مریض}}')
-          .join(accdata.code)
-          .split('{{اسم مریض}}')
-          .join(accdata.name)
-          .split('{{ایمیل شرکت}}')
-          .join(company_email)
-          .split('{{شماره شرکت}}')
-          .join(company_phone)
-          .split('{{شماره۲ شرکت}}')
-          .join(company_phone2)
-          .split('{{آدرس شرکت}}')
-          .join(company_address);
+      message = patient_created_template
+        .split('{{نام شرکت}}')
+        .join(company_name)
+        .split('{{کد مریض}}')
+        .join(accdata.code)
+        .split('{{اسم مریض}}')
+        .join(accdata.name)
+        .split('{{ایمیل شرکت}}')
+        .join(company_email)
+        .split('{{شماره شرکت}}')
+        .join(company_phone)
+        .split('{{شماره۲ شرکت}}')
+        .join(company_phone2)
+        .split('{{آدرس شرکت}}')
+        .join(company_address);
 
       if (accdata.phone) {
         phone = accdata.phone.startsWith('07') ? '+93' + accdata.phone.slice(1) : accdata.phone;
@@ -621,26 +610,47 @@ let monthNames = [
       phone = accdata?.phone
         ? normalizeWhatsappPhone(accdata.phone)
         : '';
-    }  else if (temp == 'appointment_created_template') {
+    } else if (temp == 'appointment_created_template') {
       message = appointment_created_template
         .split('{{نام شرکت}}')
         .join(company_name)
         .split('{{تاریخ}}')
-        .join(showDate(acc_id.date,"forPDF")[0]+" "+showDate(acc_id.date,"forPDF")[1]+" "+showDate(acc_id.date,"forPDF")[2]+" مطابق "+acc_id.date.slice(8,10)+" "+monthNames[parseInt(acc_id.date.slice(5,7))-1]+" "+acc_id.date.slice(0,4))
+        .join(
+          showDate(acc_id.date, 'forPDF')[0] +
+            ' ' +
+            showDate(acc_id.date, 'forPDF')[1] +
+            ' ' +
+            showDate(acc_id.date, 'forPDF')[2] +
+            ' مطابق ' +
+            acc_id.date.slice(8, 10) +
+            ' ' +
+            monthNames[parseInt(acc_id.date.slice(5, 7)) - 1] +
+            ' ' +
+            acc_id.date.slice(0, 4),
+        )
         .split('{{دیپارتمنت}}')
         .join(referenceText)
         .split('{{اسم مریض}}')
         .join(accdata.name)
         .split('{{داکتر}}')
-        .join(secondAcc.first_name+" "+secondAcc.last_name)
+        .join(secondAcc.first_name + ' ' + secondAcc.last_name)
         .split('{{کد مریض}}')
         .join(accdata.code)
         .split('{{مقدار پول}}')
-        .join(t('Appointment Fee')+": "+Number(acc_id.fee||0).toLocaleString(undefined, { maximumFractionDigits: 3 })+" "+t(acc_id.currency))
+        .join(
+          t('Appointment Fee') +
+            ': ' +
+            Number(acc_id.fee || 0).toLocaleString(undefined, {
+              maximumFractionDigits: 3,
+            }) +
+            ' ' +
+            t(acc_id.currency),
+        )
         .split('{{شماره نوبت}}')
         .join(acc_id.serial_no)
         .split('{{توضیحات}}')
-        .join(acc_id.description?"توضیحات: "+acc_id.description:"");
+        .join(acc_id.description ? 'توضیحات: ' + acc_id.description : '');
+
       if (accdata.phone) {
         phone = accdata.phone.startsWith('07') ? '+93' + accdata.phone.slice(1) : accdata.phone;
       }
@@ -657,6 +667,13 @@ let monthNames = [
           ).toLocaleString(undefined, {
             maximumFractionDigits: 3,
           });
+
+          const unitPrice = formatSaleMoney(
+            item?.unit_price ??
+              item?.calculated_price ??
+              0,
+            item?.currency || saleValue.currency,
+          );
 
           const subtotal = formatSaleMoney(
             item?.subtotal ??
@@ -676,7 +693,7 @@ let monthNames = [
 
           return `\u200F${index + 1}. ${
             item?.product_name || '-'
-          } — ${quantity}${unit ? ` ${unit}` : ''} — ${subtotal}`;
+          } — ${quantity}${unit ? ` ${unit}` : ''} — ${unitPrice} — ${subtotal}`;
         })
         .join('\n');
 
@@ -875,7 +892,6 @@ let monthNames = [
       phone = accdata?.phone
         ? normalizeWhatsappPhone(accdata.phone)
         : '';
-
     }
 
     readOnlyMessage = true;
@@ -1148,7 +1164,6 @@ let monthNames = [
     background: #f8fafc;
     color: #334155;
   }
-
 
   .wa-input[dir='ltr'] {
     direction: ltr;
