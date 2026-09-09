@@ -7,6 +7,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { accountApi } from '../../api/accountApi.js';
   import { journalApi } from '../../api/journalApi.js';
   import AppModal from '../../components/common/AppModal.svelte';
+  import WhatsappModal from '../WhatsappModal.svelte';
 
   import { t, lang, translate_org_type, shortID, settings_all } from '../../i18n/i18n';
   $: _lang = $lang;
@@ -30,6 +31,7 @@ import { currencyApi } from '../../api/currencyApi.js';
   $: settings = $settings_all || [];
   let generics = [];
   let addressEl;
+  let WhatsappModalRef = null;
 
   const dispatch = createEventDispatcher();
 
@@ -39,6 +41,57 @@ import { currencyApi } from '../../api/currencyApi.js';
 
   function showA4() {
     dispatch('showA4');
+  }
+
+  function getSaleExpenseAmount(saleData = {}) {
+    const directValues = [
+      saleData.expense_amount,
+      saleData.expenses_amount,
+      saleData.total_expenses,
+      saleData.additional_expenses,
+      saleData.shipping_cost,
+      saleData.delivery_cost,
+      saleData.service_charge,
+    ];
+
+    for (const value of directValues) {
+      const amount = Number(value);
+      if (Number.isFinite(amount)) return amount;
+    }
+
+    return Number(saleData.expenses || 0) || 0;
+  }
+
+  function openSaleWhatsapp() {
+    const billSubtotal = items.reduce(
+      (sum, item) => sum + Number(item.subtotal || 0),
+      0,
+    );
+    const discountAmount = Number(calculateDiscountAmount(sale) || 0);
+    const expenseAmount = getSaleExpenseAmount(sale);
+    const payableAmount = Number(
+      sale?.total_amount ?? billSubtotal - discountAmount + expenseAmount,
+    );
+    const paid = payments.reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0,
+    );
+
+    WhatsappModalRef?.openModal(
+      'sale_created_template',
+      {
+        ...sale,
+        items,
+        paid,
+        due: payableAmount - paid,
+        bill_subtotal: billSubtotal,
+        discount_amount: discountAmount,
+        expense_amount: expenseAmount,
+        payable_amount: payableAmount,
+      },
+      customer,
+      {},
+    );
   }
 
   let allJournals = [];
@@ -651,10 +704,13 @@ td {
 
   <svelte:fragment slot="footer">
     <div class="receipt-actions-grid">
-     
       <button type="button" class="app-modal-btn app-modal-btn--secondary" on:click={showA4}>
         <i class="bi bi-file-earmark-pdf"></i>
         {t('A4')}
+      </button>
+      <button type="button" class="app-modal-btn receipt-whatsapp-btn" on:click={openSaleWhatsapp}>
+        <i class="bi bi-whatsapp"></i>
+        {t('Whatsapp')}
       </button>
       <button type="button" class="app-modal-btn app-modal-btn--primary" on:click={printReceipt}>
         <i class="bi bi-printer"></i>
@@ -663,6 +719,8 @@ td {
     </div>
   </svelte:fragment>
 </AppModal>
+
+<WhatsappModal bind:this={WhatsappModalRef} />
 
 <style>
   table {
@@ -807,13 +865,24 @@ td {
   .receipt-actions-grid {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
 
   .receipt-actions-grid :global(.app-modal-btn) {
     width: 100%;
     justify-content: center;
+  }
+
+  .receipt-whatsapp-btn {
+    background: #198754;
+    border-color: #198754;
+    color: #fff;
+  }
+
+  .receipt-whatsapp-btn:hover {
+    background: #157347;
+    border-color: #146c43;
   }
 
   @media (max-width: 420px) {
