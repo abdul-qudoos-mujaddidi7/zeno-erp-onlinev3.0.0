@@ -4,7 +4,7 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
   import { supported, t, setLanguage, isRTL, lang, translate_org_type, settings_all } from '../i18n/i18n';
-  import { location, link } from 'svelte-spa-router';
+  import { location, querystring, link } from 'svelte-spa-router';
   import { auth } from '../auth/authStore';
 import { userApi } from '../api/userApi.js';
 
@@ -136,8 +136,9 @@ import { userApi } from '../api/userApi.js';
   } else {
     currentWarehouse = null;
   }
-  $: locQuery = loc.includes('?') ? loc.slice(loc.indexOf('?') + 1) : '';
+  $: locQuery = $querystring || '';
   $: accountViewTab = new URLSearchParams(locQuery).get('tab') || 'info';
+  $: salesTab = new URLSearchParams(locQuery).get('tab') === 'products' ? 'products' : 'sales';
   $: pageKey = (function () {
     // if dashboard/accounts/5, extract accounts part and show "Accounts - View"
     if (locPath.startsWith('/dashboard/account/') && locPath.split('/').length === 4) {
@@ -493,15 +494,20 @@ import { userApi } from '../api/userApi.js';
     switch (loc) {
       case '/dashboard':
         return '<i class="bi bi-speedometer2 me-2"></i> ' + t('Dashboard');
-      case '/dashboard/sales':
-        return `<ul class="navbar-nav me-auto">
-            <li class="nav-item">
+      case '/dashboard/sales': {
+        return `<ul class="navbar-nav me-auto stock-top-tabs">
+            <li class="nav-item stock-top-tabs__icon">
               <i class="bi bi-cart-check"></i>
-              </li>
+            </li>
             <li class="nav-item">
-              <a class="nav-link active py-0" href="javascript:void(0)"><small>${t('Sales')}</small></a>
+              <a class="nav-link ${salesTab === 'sales' ? 'active' : ''} py-0" href="/#/dashboard/sales"><small>${t('Sales')}</small></a>
+            </li>
+            <li class="nav-item d-flex align-items-center"><div class="nav-divider"></div></li>
+            <li class="nav-item">
+              <a class="nav-link ${salesTab === 'products' ? 'active' : ''} py-0" href="/#/dashboard/sales?tab=products"><small>${t('Products Report')}</small></a>
             </li>
           </ul>`;
+      }
       case '/dashboard/prescriptions':
         return `<ul class="navbar-nav me-auto">
             <li class="nav-item">

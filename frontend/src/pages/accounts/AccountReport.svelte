@@ -1059,6 +1059,11 @@
     box-shadow: none;
   }
 
+  :global(html.dark) .account-report-summary :global(.summary-card) {
+    border-color: var(--erp-border);
+    background: var(--erp-surface);
+  }
+
   .account-report-summary :global(.summary-icon) {
     width: 2.35rem;
     height: 2.35rem;
@@ -1083,6 +1088,10 @@
     line-height: 1.45;
     font-variant-numeric: tabular-nums;
     text-align: start;
+  }
+
+  :global(html.dark) .report-summary-values {
+    color: var(--erp-text);
   }
 
   .amount-inline,

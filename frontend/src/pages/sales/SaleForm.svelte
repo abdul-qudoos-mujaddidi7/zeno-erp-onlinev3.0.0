@@ -1112,8 +1112,23 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
     return (sourceItems || []).map((item) => {
       const product = products.find((row) => Number(row.id) === Number(item.product_id));
+      /*
+       * The table edits calculated_price; unit_price can keep the product's
+       * original sell price. The receipt must show the price actually
+       * charged, so re-sync unit_price before rendering the receipt.
+       */
+      const effectiveUnitPrice =
+        item.calculated_price != null && item.calculated_price !== ''
+          ? Number(item.calculated_price)
+          : Number(item.unit_price || 0);
+      const effectiveSubtotal =
+        item.subtotal != null && item.subtotal !== ''
+          ? Number(item.subtotal)
+          : effectiveUnitPrice * Number(item.quantity || 0);
       return {
         ...item,
+        unit_price: effectiveUnitPrice,
+        subtotal: effectiveSubtotal,
         product_name: item.product_name || product?.name || 'Unknown',
         unit_name:
           item.unit_name ||

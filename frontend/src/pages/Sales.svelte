@@ -10,6 +10,7 @@
   import { calculateRemainingAndBenefitOfAllSales } from './sales/SalesHelper.js';
   import SaleA4ReceiptModal from './sales/SaleA4ReceiptModal.svelte';
   import SaleReceiptModal from './sales/SaleReceiptModal.svelte';
+  import ProductsReport from './accounts/ProductsReport.svelte';
   import SummaryCard from '../components/common/SummaryCard.svelte';
   import FilterSelect from '../components/common/FilterSelect.svelte';
   import FilterToolbar from '../components/common/FilterToolbar.svelte';
@@ -72,6 +73,7 @@ import { saleApi } from '../api/saleApi.js';
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('keyup', handleKeyUp);
+    window.removeEventListener('hashchange', syncTabFromHash);
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   });
 
@@ -81,6 +83,19 @@ import { saleApi } from '../api/saleApi.js';
 
   export let account_id = null;
   const scopedAccountId = account_id;
+
+  /*
+   * The page shares the account-view tab convention: ?tab=products
+   * shows the Products Report (for the selected customer, if any).
+   */
+  let activeTab = 'sales';
+  let salesLoaded = false;
+
+  function syncTabFromHash() {
+    const hash = window.location.hash || '';
+    const query = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '';
+    activeTab = new URLSearchParams(query).get('tab') === 'products' ? 'products' : 'sales';
+  }
   
   let searchTerm = '';
   let filterStatus = 'all';
@@ -164,6 +179,44 @@ import { saleApi } from '../api/saleApi.js';
     }
   }
 
+  /*
+   * The table only holds the current page. For PDF/Excel exports the
+   * user expects every record that matches the active filters, so
+   * re-fetch all matching rows with the same server-side filters
+   * (search, customer, status, payment status, dates and sorting).
+   */
+  async function fetchAllSalesForExport() {
+    /* The backend caps limit at 200 (MAX_LIMIT). */
+    const pageSize = 200;
+    const all = [];
+    let page = 1;
+
+    for (;;) {
+      const response = await saleApi.getAll({
+        status: 1,
+        search: searchTerm.trim(),
+        account_id: account_id || undefined,
+        invoice_status: filterStatus !== 'all' ? filterStatus : undefined,
+        payment_status: filterPaymentStatus !== 'all' ? filterPaymentStatus : undefined,
+        page,
+        limit: pageSize,
+        skip_count: 1,
+        date_from: fromDate || undefined,
+        date_to: toDate || undefined,
+        sort_by: sortColumn,
+        sort_dir: sortDirection,
+      });
+
+      const rows = response?.data || [];
+      all.push(...rows);
+
+      if (!rows.length || !response?.meta?.hasMore) break;
+      page += 1;
+    }
+
+    return all;
+  }
+
   async function exportSales(format) {
     if (exportingReport) return;
 
@@ -172,14 +225,34 @@ import { saleApi } from '../api/saleApi.js';
     try {
       const exporter = format === 'excel' ? generateExcel : generatePDF;
 
+      const allSales = await fetchAllSalesForExport();
+
+      /*
+       * Summary totals must cover the whole exported dataset,
+       * not just the rows currently visible on the page.
+       */
+      const exportSalesAmount = allSales.reduce((totals, s) => {
+        if (!s.invoice_status || s.invoice_status !== 'confirmed') return totals;
+        if (!totals[s.currency]) totals[s.currency] = 0;
+        totals[s.currency] += Number(s.total_amount || 0);
+        return totals;
+      }, {});
+
+      const exportBenefitAmount = allSales.reduce((totals, s) => {
+        if (!s.invoice_status || s.invoice_status !== 'confirmed') return totals;
+        if (!totals[s.currency]) totals[s.currency] = 0;
+        totals[s.currency] += Number(s.benefit || 0);
+        return totals;
+      }, {});
+
       await exporter(
         'sales',
-        filteredSales,
+        allSales,
         fromDate,
         toDate,
-        filteredSales.length,
-        totalSalesAmount,
-        totalBenefitAmount,
+        allSales.length,
+        exportSalesAmount,
+        exportBenefitAmount,
       );
     } catch (error) {
       console.error('Failed to generate sales report:', error);
@@ -224,6 +297,7 @@ import { saleApi } from '../api/saleApi.js';
   }
 
   async function load() {
+    if (activeTab !== 'sales') return;
     const requestId = ++loadRequestId;
     lastPageKey = getSalesQueryKey();
     loading = true;
@@ -279,11 +353,12 @@ import { saleApi } from '../api/saleApi.js';
   }
 
   onMount(async () => {
+    syncTabFromHash();
+    window.addEventListener('hashchange', syncTabFromHash);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     lastPageKey = getSalesQueryKey();
     bootstrapped = true;
-    await load();
     tick().then(() => setDatePickers(handleDateChange));
     if (addPaymentModal) {
       addPaymentModalInstance = new window.mdb.Modal(addPaymentModal);
@@ -303,6 +378,12 @@ import { saleApi } from '../api/saleApi.js';
       lastPageKey = key;
       load();
     }
+  }
+
+  /* First arrival on the sales tab; the products tab skips the sales load. */
+  $: if (bootstrapped && activeTab === 'sales' && !salesLoaded) {
+    salesLoaded = true;
+    load();
   }
 
   function getPageNumbers(current, total) {
@@ -464,6 +545,8 @@ import { saleApi } from '../api/saleApi.js';
 
 {#if !permissions?.some((p) => p.code === 'Sales' && p.view)}
   <h3 class="permission-denied"><i class="bi bi-exclamation-triangle"></i>{t('No access allowed')}</h3>
+{:else if activeTab === 'products'}
+  <ProductsReport account_id={account_id} />
 {:else}
   <IndexPageLayout
     dir={t('dir')}

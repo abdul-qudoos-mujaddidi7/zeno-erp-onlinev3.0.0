@@ -847,7 +847,8 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
 
       items[existingIndex].subtotal =
         items[existingIndex].quantity *
-        items[existingIndex].unit_price;
+        (Number(items[existingIndex].calculated_price) ||
+          Number(items[existingIndex].unit_price) || 0);
     } else {
       affectedRowIndex = items.length;
 

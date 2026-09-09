@@ -14,11 +14,19 @@ function buildSaleQuery({
   const conditions = [
     's.org_id = ?',
     's.status = 1',
-    's.account_id = ?',
+  ];
+  const values = [orgId];
+
+  if (accountId != null) {
+    conditions.push('s.account_id = ?');
+    values.push(accountId);
+  }
+
+  conditions.push(
     'si.org_id = ?',
     'si.status = 1',
-  ];
-  const values = [orgId, accountId, orgId];
+  );
+  values.push(orgId);
 
   if (productId !== undefined && productId !== null && productId !== '') {
     conditions.push('si.product_id = ?');
@@ -100,11 +108,19 @@ function buildPurchaseQuery({
   const conditions = [
     'p.org_id = ?',
     'p.status = 1',
-    'p.account_id = ?',
+  ];
+  const values = [orgId];
+
+  if (accountId != null) {
+    conditions.push('p.account_id = ?');
+    values.push(accountId);
+  }
+
+  conditions.push(
     'pi.org_id = ?',
     'pi.status = 1',
-  ];
-  const values = [orgId, accountId, orgId];
+  );
+  values.push(orgId);
 
   if (productId !== undefined && productId !== null && productId !== '') {
     conditions.push('pi.product_id = ?');

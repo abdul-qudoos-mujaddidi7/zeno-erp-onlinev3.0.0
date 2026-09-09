@@ -162,12 +162,24 @@ async function productItems(req, res) {
   return sendListResponse(res, result);
 }
 
+async function allProductItems(req, res) {
+  const result =
+    await accountService.listAccountProductItems({
+      user: req.user,
+      accountId: null,
+      filters: req.validated.query,
+    });
+
+  return sendListResponse(res, result);
+}
+
 module.exports = {
   list,
   balances,
   creditDebit,
   reportBootstrap,
   productItems,
+  allProductItems,
   getById,
   create,
   update,

@@ -781,21 +781,30 @@ async function listAccountProductItems({
     orgId,
   } = getAuthenticatedIdentity(user);
 
-  const account =
-    await accountRepository.findByLocalId(
-      db,
-      {
-        orgId,
-        localId: accountId,
-      },
-    );
+  /*
+   * accountId is optional: when omitted the report covers every
+   * customer/supplier instead of a single account (used by the
+   * Sales page "Products" tab).
+   */
+  let account = null;
 
-  if (!account) {
-    throw new AppError(
-      'Account not found.',
-      404,
-      'ACCOUNT_NOT_FOUND',
-    );
+  if (accountId != null) {
+    account =
+      await accountRepository.findByLocalId(
+        db,
+        {
+          orgId,
+          localId: accountId,
+        },
+      );
+
+    if (!account) {
+      throw new AppError(
+        'Account not found.',
+        404,
+        'ACCOUNT_NOT_FOUND',
+      );
+    }
   }
 
   const pagination = resolvePagination(filters) || {
@@ -809,7 +818,7 @@ async function listAccountProductItems({
    * have purchases. Narrowing avoids a useless second scan.
    */
   let itemType = filters.item_type || 'all';
-  if (itemType === 'all') {
+  if (itemType === 'all' && account) {
     if (Number(account.account_type_id) === 4) itemType = 'sale';
     else if (Number(account.account_type_id) === 3) itemType = 'purchase';
   }
@@ -818,7 +827,7 @@ async function listAccountProductItems({
     db,
     {
       orgId,
-      accountId: Number(accountId),
+      accountId: accountId != null ? Number(accountId) : null,
       itemType,
       productId: filters.product_id,
       search: filters.search || '',

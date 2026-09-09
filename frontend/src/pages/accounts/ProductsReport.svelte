@@ -74,14 +74,6 @@
   }
 
   async function load() {
-    if (!account_id) {
-      items = [];
-      products = [];
-      totalPages = 1;
-      loading = false;
-      return;
-    }
-
     const requestId = ++loadRequestId;
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     loading = true;
@@ -90,7 +82,7 @@
       const lookupsPromise = loadLookups();
 
       const response = await accountApi.getProductItems(account_id, {
-        item_type: filterStatus === 'all' ? 'all' : filterStatus,
+        item_type: filterStatus,
         product_id: selectedProduct !== 'all' ? Number(selectedProduct) : undefined,
         search: searchTerm.trim(),
         date_from: fromDate || undefined,
@@ -171,7 +163,7 @@
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   });
 
-  $: if (bootstrapped && account_id) {
+  $: if (bootstrapped) {
     void currentPage;
     void itemsPerPage;
     const key = `${currentPage}|${itemsPerPage}`;
@@ -208,6 +200,57 @@
     return rangeWithDots;
   }
 
+  function decorateItem(item) {
+    const product = products.find((p) => p.id == item.product_id);
+    const unit = units.find((u) => u.id == item.product_unit_id);
+    return {
+      ...item,
+      product_name: product?.name || product?.code || item.product_id,
+      product_unit_name: unit?.name || '',
+      invoice_text:
+        item.document_number || shortID(item.sale_id || item.purchase_id || item.product_id),
+    };
+  }
+
+  function sumSubtotals(rows) {
+    return rows.reduce((totals, s) => {
+      if (!totals[s.currency]) totals[s.currency] = 0;
+      totals[s.currency] += Number(s.subtotal) || 0;
+      return totals;
+    }, {});
+  }
+
+  /*
+   * The table only holds the current page. For PDF/Excel exports,
+   * fetch every row that matches the active filters instead.
+   */
+  async function fetchAllItemsForExport() {
+    const pageSize = 200;
+    const all = [];
+    let page = 1;
+
+    for (;;) {
+      const response = await accountApi.getProductItems(account_id, {
+        item_type: filterStatus,
+        product_id: selectedProduct !== 'all' ? Number(selectedProduct) : undefined,
+        search: searchTerm.trim(),
+        date_from: fromDate || undefined,
+        date_to: toDate || undefined,
+        page,
+        limit: pageSize,
+        skip_count: 1,
+      });
+
+      const rows = response?.data || [];
+      all.push(...rows);
+
+      if (!rows.length || !response?.meta?.hasMore) break;
+      page += 1;
+    }
+
+    return all;
+  }
+
   async function exportProducts(format) {
     if (exportingReport) return;
 
@@ -216,13 +259,15 @@
     try {
       const exporter = format === 'excel' ? generateExcel : generatePDF;
 
+      const allItems = (await fetchAllItemsForExport()).map(decorateItem);
+
       await exporter(
         'account_products_report',
-        pdfItems,
+        allItems,
         fromDate,
         toDate,
-        pdfItems.length,
-        pageTotalAmount,
+        allItems.length,
+        sumSubtotals(allItems),
       );
     } catch (error) {
       console.error('Failed to generate the account products report:', error);
@@ -261,23 +306,9 @@
     return result;
   })();
 
-  $: pdfItems = paginatedItems.map((item) => {
-    const product = products.find((p) => p.id == item.product_id);
-    const unit = units.find((u) => u.id == item.product_unit_id);
-    return {
-      ...item,
-      product_name: product?.name || product?.code || item.product_id,
-      product_unit_name: unit?.name || '',
-      invoice_text:
-        item.document_number || shortID(item.sale_id || item.purchase_id || item.product_id),
-    };
-  });
+  $: pdfItems = paginatedItems.map(decorateItem);
 
-  $: pageTotalAmount = paginatedItems.reduce((totals, s) => {
-    if (!totals[s.currency]) totals[s.currency] = 0;
-    totals[s.currency] += Number(s.subtotal) || 0;
-    return totals;
-  }, {});
+  $: pageTotalAmount = sumSubtotals(paginatedItems);
 
   $: enable_services = $settings_all.find((s) => s.key === 'enable_services')?.value == 1;
 

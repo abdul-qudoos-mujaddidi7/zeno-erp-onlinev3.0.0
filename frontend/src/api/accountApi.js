@@ -102,7 +102,10 @@ export const accountApi = {
     if (page != null || limit != null) {
       appendPaginationParams(params, { page, limit });
     }
-    return api.get(`${BASE_URL}/${accountId}/product-items?${params.toString()}`);
+    const base = accountId != null
+      ? `${BASE_URL}/${accountId}/product-items`
+      : `${BASE_URL}/product-items`;
+    return api.get(`${base}?${params.toString()}`);
   },
 
   getById(id) {

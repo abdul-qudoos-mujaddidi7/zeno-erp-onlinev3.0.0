@@ -61,6 +61,16 @@ router.get(
 );
 
 router.get(
+  '/product-items',
+  validate({
+    query: accountProductItemsQuerySchema,
+  }),
+  asyncHandler(
+    accountController.allProductItems,
+  ),
+);
+
+router.get(
   '/:id/product-items',
   validate({
     params: accountIdParamsSchema,
