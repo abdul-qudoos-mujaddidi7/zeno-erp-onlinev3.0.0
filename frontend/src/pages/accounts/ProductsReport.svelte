@@ -448,7 +448,7 @@
     {:else}
       <DataTable
         ariaLabel={t('Products Report')}
-        minWidth="780px"
+        minWidth="920px"
         dense
         striped
         hover={false}
@@ -459,6 +459,7 @@
           <tr>
             <th class="cursor-pointer" on:click={() => setSort('created_at')}>{t('Date')}</th>
             <th>{t('Invoice #')}</th>
+            <th>{t('Account')}</th>
             <th class="cursor-pointer" on:click={() => setSort('product_id')}
               >{enable_services ? t('Product or Service') : t('Product')}</th>
             <th class="col-start cursor-pointer" on:click={() => setSort('unit_price')}>{t('Unit Price')}</th>
@@ -477,6 +478,14 @@
               {#if row.purchase_id}
                 <button class="report-link" on:click={() => push(`/dashboard/purchases/${row.purchase_id}`)}
                   >{row.document_number || shortID(row.purchase_id)}</button>
+              {/if}
+            </td>
+            <td>
+              {#if row.account_id}
+                <button class="product-link" on:click={() => push(`/dashboard/account/${row.account_id}?tab=financial-report`)}
+                  >{row.account_name_fa || row.account_name || '—'}</button>
+              {:else}
+                <span>—</span>
               {/if}
             </td>
             <td>

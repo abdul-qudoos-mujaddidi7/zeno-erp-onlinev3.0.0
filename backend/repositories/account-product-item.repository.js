@@ -61,12 +61,12 @@ function buildSaleQuery({
   values.push(String(Number(limit)));
 
   return {
-    sql: `
-      SELECT
+    sql: `      SELECT
         si.local_id AS id,
         si.local_id,
         si.sale_id,
         NULL AS purchase_id,
+        s.account_id,
         si.product_id,
         si.product_unit_id,
         si.quantity,
@@ -77,7 +77,10 @@ function buildSaleQuery({
         s.invoice_number AS document_number,
         'sale' AS item_type,
         pr.name AS product_name,
-        pu.name AS product_unit_name
+        pu.name AS product_unit_name,
+        ac.name AS account_name,
+        ac.name_fa AS account_name_fa,
+        ac.name_ps AS account_name_ps
       FROM sales s
       INNER JOIN sale_items si
         ON si.org_id = s.org_id
@@ -87,7 +90,10 @@ function buildSaleQuery({
        AND pr.local_id = si.product_id
       LEFT JOIN product_units pu
         ON pu.org_id = si.org_id
-       AND pu.local_id = si.product_unit_id
+        AND pu.local_id = si.product_unit_id
+      LEFT JOIN accounts ac
+        ON ac.org_id = s.org_id
+        AND ac.local_id = s.account_id
       WHERE ${conditions.join(' AND ')}
       ORDER BY COALESCE(s.invoice_date, s.created_at) DESC, si.local_id DESC
       LIMIT ?
@@ -155,12 +161,12 @@ function buildPurchaseQuery({
   values.push(String(Number(limit)));
 
   return {
-    sql: `
-      SELECT
+    sql: `      SELECT
         pi.local_id AS id,
         pi.local_id,
         NULL AS sale_id,
         pi.purchase_id,
+        p.account_id,
         pi.product_id,
         pi.product_unit_id,
         pi.quantity,
@@ -171,7 +177,10 @@ function buildPurchaseQuery({
         p.bill_number AS document_number,
         'purchase' AS item_type,
         pr.name AS product_name,
-        pu.name AS product_unit_name
+        pu.name AS product_unit_name,
+        ac.name AS account_name,
+        ac.name_fa AS account_name_fa,
+        ac.name_ps AS account_name_ps
       FROM purchases p
       INNER JOIN purchase_items pi
         ON pi.org_id = p.org_id
@@ -181,7 +190,10 @@ function buildPurchaseQuery({
        AND pr.local_id = pi.product_id
       LEFT JOIN product_units pu
         ON pu.org_id = pi.org_id
-       AND pu.local_id = pi.product_unit_id
+        AND pu.local_id = pi.product_unit_id
+      LEFT JOIN accounts ac
+        ON ac.org_id = p.org_id
+        AND ac.local_id = p.account_id
       WHERE ${conditions.join(' AND ')}
       ORDER BY COALESCE(p.bill_date, p.created_at) DESC, pi.local_id DESC
       LIMIT ?
