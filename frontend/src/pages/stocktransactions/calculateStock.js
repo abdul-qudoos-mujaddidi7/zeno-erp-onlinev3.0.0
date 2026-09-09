@@ -258,65 +258,114 @@ export async function convertUnit(
   );
 }
 
-export async function decomposeQuantity(
+function roundQty(value) {
+  return Number(Number(value || 0).toFixed(9));
+}
+
+function hasLinkedSubunit(unit) {
+  return Number(unit?.subunit_id) > 0 && Number(unit?.subunit_multiple) > 0;
+}
+
+export function decomposeQuantityWithUnits(
   quantity,
   unitId,
+  unitsList = [],
 ) {
-  await loadUnits();
+  const list = unitsList || [];
+  const unitsById = new Map(
+    list.map((unit) => [
+      Number(unit.id),
+      unit,
+    ]),
+  );
 
-  const chain = [];
-  let current = unitMap.get(Number(unitId));
+  const start = unitsById.get(Number(unitId));
+  const numericQuantity = Number(quantity || 0);
 
-  while (current) {
-    chain.push(current);
+  if (!start) {
+    if (!numericQuantity) return [];
 
-    if (!current.subunit_id) {
+    return [
+      {
+        unit_id: Number(unitId) || 0,
+        unit_name: '',
+        quantity: numericQuantity,
+      },
+    ];
+  }
+
+  const down = [];
+  const seenDown = new Set();
+  let current = start;
+
+  while (current && !seenDown.has(Number(current.id))) {
+    seenDown.add(Number(current.id));
+    down.push(current);
+
+    if (!hasLinkedSubunit(current)) {
       break;
     }
 
-    current = unitMap.get(
-      Number(current.subunit_id),
-    );
+    const next = unitsById.get(Number(current.subunit_id));
+    if (!next) {
+      break;
+    }
+
+    current = next;
   }
 
-  if (!chain.length) {
-    return [];
+  const up = [];
+  const used = new Set([Number(start.id)]);
+  current = start;
+
+  while (current) {
+    const parent = list.find(
+      (unit) =>
+        Number(unit.subunit_id) === Number(current.id) &&
+        Number(unit.subunit_multiple) > 0 &&
+        !used.has(Number(unit.id)),
+    );
+
+    if (!parent) {
+      break;
+    }
+
+    used.add(Number(parent.id));
+    up.unshift(parent);
+    current = parent;
+  }
+
+  const chain = [...up, ...down];
+  const sign = numericQuantity < 0 ? -1 : 1;
+  let qtyInLargest = Math.abs(numericQuantity);
+
+  for (let index = up.length - 1; index >= 0; index -= 1) {
+    qtyInLargest /= Number(up[index].subunit_multiple);
   }
 
   if (chain.length === 1) {
     return [
       {
-        unit_id: Number(unitId),
-        unit_name: chain[0].name,
-        quantity: Number(quantity || 0),
+        unit_id: Number(start.id),
+        unit_name: start.name,
+        quantity: roundQty(numericQuantity),
       },
     ];
   }
 
-  const numericQuantity = Number(quantity || 0);
-  const sign = numericQuantity < 0 ? -1 : 1;
-  let smallestQty = Math.abs(numericQuantity);
+  let smallestQty = qtyInLargest;
 
-  for (
-    let index = 0;
-    index < chain.length - 1;
-    index += 1
-  ) {
-    smallestQty *= Number(
-      chain[index].subunit_multiple || 1,
-    );
+  for (let index = 0; index < chain.length - 1; index += 1) {
+    smallestQty *= Number(chain[index].subunit_multiple || 1);
   }
 
-  smallestQty = Math.round(smallestQty);
+  smallestQty = roundQty(smallestQty);
 
   const result = [];
 
-  for (
-    let index = 0;
-    index < chain.length;
-    index += 1
-  ) {
+  for (let index = 0; index < chain.length; index += 1) {
     const unit = chain[index];
+    const isLast = index === chain.length - 1;
     let factor = 1;
 
     for (
@@ -324,25 +373,43 @@ export async function decomposeQuantity(
       childIndex < chain.length - 1;
       childIndex += 1
     ) {
-      factor *= Number(
-        chain[childIndex].subunit_multiple || 1,
-      );
+      factor *= Number(chain[childIndex].subunit_multiple || 1);
     }
 
-    const amount = Math.floor(
-      smallestQty / factor,
-    );
+    const rawAmount = isLast
+      ? smallestQty / factor
+      : Math.floor(smallestQty / factor);
+    const amount = roundQty(rawAmount);
 
-    result.push({
-      unit_id: Number(unit.id),
-      unit_name: unit.name,
-      quantity: amount * sign,
-    });
+    if (amount !== 0) {
+      result.push({
+        unit_id: Number(unit.id),
+        unit_name: unit.name,
+        quantity: amount * sign,
+      });
+    }
 
-    smallestQty -= amount * factor;
+    smallestQty = roundQty(smallestQty - Math.floor(rawAmount) * factor);
+
+    if (isLast) {
+      smallestQty = 0;
+    }
   }
 
   return result;
+}
+
+export async function decomposeQuantity(
+  quantity,
+  unitId,
+) {
+  await loadUnits();
+
+  return decomposeQuantityWithUnits(
+    quantity,
+    unitId,
+    units,
+  );
 }
 
 /**
@@ -441,6 +508,16 @@ export async function calculateAllStocks(
             `${products.length} | ` +
             `Product ID: ${product.id}`;
         }
+      }
+
+      try {
+        await productApi.reconcileStock(product.id);
+      } catch (error) {
+        console.error(
+          'Failed to reconcile stock for product',
+          product.id,
+          error,
+        );
       }
     }
 

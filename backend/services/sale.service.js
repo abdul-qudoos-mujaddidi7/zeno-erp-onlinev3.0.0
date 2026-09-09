@@ -37,6 +37,10 @@ const {
   convertCurrencyAmount,
 } = require('../utils/currency');
 
+const {
+  convertItemQuantityToProductUnit,
+} = require('../utils/unitConversion');
+
 const accountService =
   require('./account.service');
 
@@ -74,6 +78,18 @@ function getAuthenticatedIdentity(user) {
 
 function isConfirmed(billStatus) {
   return String(billStatus || '') === 'confirmed';
+}
+
+async function toProductStockQuantity(connection, orgId, item) {
+  return convertItemQuantityToProductUnit(
+    connection,
+    {
+      orgId,
+      productId: item.product_id,
+      fromUnitId: item.product_unit_id,
+      quantity: item.quantity,
+    },
+  );
 }
 
 async function persistSaleBatchCosts(
@@ -549,12 +565,18 @@ async function createSale({
        * UI-only.
        */
       if (isConfirmed(data.invoice_status)) {
+        const stockQty = await toProductStockQuantity(
+          connection,
+          orgId,
+          item,
+        );
+
         await saleRepository.adjustProductQuantity(
           connection,
           {
             orgId,
             productId: item.product_id,
-            delta: -Number(item.quantity || 0),
+            delta: -stockQty.quantity,
           },
         );
 
@@ -570,8 +592,8 @@ async function createSale({
             userId,
             warehouseId: data.warehouse_id,
             productId: item.product_id,
-            productUnitId: item.product_unit_id,
-            delta: -Number(item.quantity || 0),
+            productUnitId: stockQty.productUnitId,
+            delta: -stockQty.quantity,
           },
         );
 
@@ -845,12 +867,18 @@ async function updateSale({
           continue;
         }
 
+        const stockQty = await toProductStockQuantity(
+          connection,
+          orgId,
+          item,
+        );
+
         await saleRepository.adjustProductQuantity(
           connection,
           {
             orgId,
             productId: item.product_id,
-            delta: Number(item.quantity || 0),
+            delta: stockQty.quantity,
           },
         );
 
@@ -861,8 +889,8 @@ async function updateSale({
             userId,
             warehouseId: oldSale.warehouse_id,
             productId: item.product_id,
-            productUnitId: item.product_unit_id,
-            delta: Number(item.quantity || 0),
+            productUnitId: stockQty.productUnitId,
+            delta: stockQty.quantity,
           },
         );
 
@@ -1159,12 +1187,18 @@ async function updateSale({
         isConfirmed(nextStatus)
       ) {
         for (const item of oldActiveItems) {
+          const stockQty = await toProductStockQuantity(
+            connection,
+            orgId,
+            item,
+          );
+
           await saleRepository.adjustProductQuantity(
             connection,
             {
               orgId,
               productId: item.product_id,
-              delta: Number(item.quantity || 0),
+              delta: stockQty.quantity,
             },
           );
 
@@ -1175,8 +1209,8 @@ async function updateSale({
               userId,
               warehouseId: oldSale.warehouse_id,
               productId: item.product_id,
-              productUnitId: item.product_unit_id,
-              delta: Number(item.quantity || 0),
+              productUnitId: stockQty.productUnitId,
+              delta: stockQty.quantity,
             },
           );
 
@@ -1218,12 +1252,18 @@ async function updateSale({
 
       if (isConfirmed(nextStatus)) {
         for (const item of data.items) {
+          const stockQty = await toProductStockQuantity(
+            connection,
+            orgId,
+            item,
+          );
+
           await saleRepository.adjustProductQuantity(
             connection,
             {
               orgId,
               productId: item.product_id,
-              delta: -Number(item.quantity || 0),
+              delta: -stockQty.quantity,
             },
           );
 
@@ -1234,8 +1274,8 @@ async function updateSale({
               userId,
               warehouseId: data.warehouse_id ?? oldSale.warehouse_id,
               productId: item.product_id,
-              productUnitId: item.product_unit_id,
-              delta: -Number(item.quantity || 0),
+              productUnitId: stockQty.productUnitId,
+              delta: -stockQty.quantity,
             },
           );
 
@@ -1428,12 +1468,18 @@ async function deleteSale({
           continue;
         }
 
+        const stockQty = await toProductStockQuantity(
+          connection,
+          orgId,
+          item,
+        );
+
         await saleRepository.adjustProductQuantity(
           connection,
           {
             orgId,
             productId: item.product_id,
-            delta: Number(item.quantity || 0),
+            delta: stockQty.quantity,
           },
         );
 
@@ -1444,8 +1490,8 @@ async function deleteSale({
             userId,
             warehouseId: oldSale.warehouse_id,
             productId: item.product_id,
-            productUnitId: item.product_unit_id,
-            delta: Number(item.quantity || 0),
+            productUnitId: stockQty.productUnitId,
+            delta: stockQty.quantity,
           },
         );
 
@@ -2093,12 +2139,18 @@ async function createReturn({
        * A sale return restores the returned quantity to
        * stock.
        */
+      const stockQty = await toProductStockQuantity(
+        connection,
+        orgId,
+        item,
+      );
+
       await saleRepository.adjustProductQuantity(
         connection,
         {
           orgId,
           productId: item.product_id,
-          delta: Number(item.quantity || 0),
+          delta: stockQty.quantity,
         },
       );
 
@@ -2109,8 +2161,8 @@ async function createReturn({
           userId,
           warehouseId: data.warehouse_id ?? sale.warehouse_id,
           productId: item.product_id,
-          productUnitId: item.product_unit_id,
-          delta: Number(item.quantity || 0),
+          productUnitId: stockQty.productUnitId,
+          delta: stockQty.quantity,
         },
       );
 
@@ -2306,12 +2358,18 @@ async function deleteReturn({
         continue;
       }
 
+      const stockQty = await toProductStockQuantity(
+        connection,
+        orgId,
+        item,
+      );
+
       await saleRepository.adjustProductQuantity(
         connection,
         {
           orgId,
           productId: item.product_id,
-          delta: -Number(item.quantity || 0),
+          delta: -stockQty.quantity,
         },
       );
 
@@ -2322,8 +2380,8 @@ async function deleteReturn({
           userId,
           warehouseId: oldReturn.warehouse_id,
           productId: item.product_id,
-          productUnitId: item.product_unit_id,
-          delta: -Number(item.quantity || 0),
+          productUnitId: stockQty.productUnitId,
+          delta: -stockQty.quantity,
         },
       );
 

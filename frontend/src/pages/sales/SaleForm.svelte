@@ -8,6 +8,7 @@ import { settingsApi } from '../../api/settingsApi.js';
   import AccountModal from '../accounts/AccountModal.svelte';
   import FilterSelect from '../../components/common/FilterSelect.svelte';
   import AppDatePicker from '../../components/common/AppDatePicker.svelte';
+  import TiptapEditor from '../../TiptapEditor.svelte';
 
   import { toast } from '../../ToastUI/toast.js';
   import { push } from 'svelte-spa-router';
@@ -1872,12 +1873,18 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       </div>
 
       <div class="sale-field sale-field--description">
-        <div class="sale-description-body sale-description-body--details">
-          <textarea
-            bind:value={form.description}
-            rows="2"
-            placeholder={t('Description')} />
-        </div>
+        {#if enable_smart_description}
+          <div class="sale-rich-editor sale-description-body--details">
+            <TiptapEditor bind:value={form.description} />
+          </div>
+        {:else}
+          <div class="sale-description-body sale-description-body--details">
+            <textarea
+              bind:value={form.description}
+              rows="2"
+              placeholder={t('Description')} />
+          </div>
+        {/if}
       </div>
     </div>
   </section>

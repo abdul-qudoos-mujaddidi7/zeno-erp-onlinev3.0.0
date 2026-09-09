@@ -357,9 +357,69 @@ router.post("/register", async (req, res) => {
           value: "",
         },
         {
+          category: "Company Profile",
+          type: "color",
+          key: "brand_primary_color",
+          value: "#3B71CA",
+        },
+        {
+          category: "Company Profile",
+          type: "color",
+          key: "brand_secondary_color",
+          value: "#54B4D3",
+        },
+        {
+          category: "Miscellaneous",
+          type: "boolean",
+          key: "enable_show_qr_code",
+          value: "0",
+        },
+        {
+          category: "Miscellaneous",
+          type: "boolean",
+          key: "enable_a4_default_print_mode",
+          value: "0",
+        },
+        {
           category: "Sale",
           type: "int",
           key: "invoice_index",
+          value: "1",
+        },
+        {
+          category: "Inventory Record",
+          type: "int",
+          key: "record_index",
+          value: "1",
+        },
+        {
+          category: "Inventory Record",
+          type: "string",
+          key: "record_index_prefix",
+          value: "INR-",
+        },
+        {
+          category: "Sale",
+          type: "boolean",
+          key: "enable_due_date",
+          value: "0",
+        },
+        {
+          category: "Sale",
+          type: "boolean",
+          key: "enable_smart_description",
+          value: "0",
+        },
+        {
+          category: "Sale",
+          type: "boolean",
+          key: "enable_show_category_in_invoice",
+          value: "0",
+        },
+        {
+          category: "Sale",
+          type: "boolean",
+          key: "enable_vertical_info",
           value: "1",
         },
         {
@@ -373,6 +433,48 @@ router.post("/register", async (req, res) => {
           type: "string",
           key: "pos_index_prefix",
           value: "POS-",
+        },
+        {
+          category: "Sale",
+          type: "boolean",
+          key: "enable_full_table",
+          value: "0",
+        },
+        {
+          category: "Sale",
+          type: "int",
+          key: "bill_max_items",
+          value: "100",
+        },
+        {
+          category: "Sale",
+          type: "boolean",
+          key: "enable_bill_of_warehouse",
+          value: "0",
+        },
+        {
+          category: "Sale",
+          type: "boolean",
+          key: "enable_show_buy_price",
+          value: "0",
+        },
+        {
+          category: "Sale",
+          type: "html",
+          key: "default_sale_description",
+          value: "",
+        },
+        {
+          category: "Sale",
+          type: "boolean",
+          key: "enable_show_latest_sale_price",
+          value: "0",
+        },
+        {
+          category: "Sale",
+          type: "boolean",
+          key: "enable_show_buy_price_and_latest_sale_price_in_item",
+          value: "0",
         },
         {
           category: "Stock Transfer",
@@ -398,12 +500,24 @@ router.post("/register", async (req, res) => {
           key: "bill_index_prefix",
           value: "BILL-",
         },
+        {
+          category: "Purchase",
+          type: "boolean",
+          key: "enable_purchase_bill_due_date",
+          value: "0",
+        },
+        {
+          category: "Purchase",
+          type: "boolean",
+          key: "enable_purchase_items_discount",
+          value: "0",
+        },
 
         {
           category: "Product",
           type: "boolean",
           key: "enable_heaviness",
-          value: 0,
+          value: "0",
         },
         {
           category: "Product",
@@ -503,6 +617,225 @@ router.post("/register", async (req, res) => {
           type: "string",
           key: "patient_index_prefix",
           value: type && type == "hospital" ? "P" : "C",
+        },
+        {
+          category: "Product",
+          type: "boolean",
+          key: "enable_require_buy_sell_price",
+          value: "1",
+        },
+        {
+          category: "Product",
+          type: "boolean",
+          key: "enable_product_benefit_percentage",
+          value: "0",
+        },
+        {
+          category: "Product",
+          type: "int",
+          key: "default_product_benefit_percentage",
+          value: "25",
+        },
+        {
+          category: "Prescriptions",
+          type: "int",
+          key: "prescription_index",
+          value: "1",
+        },
+        {
+          category: "Prescriptions",
+          type: "string",
+          key: "prescription_index_prefix",
+          value: "PRE-",
+        },
+        {
+          category: "Laboratory",
+          type: "user",
+          key: "main_technician",
+          value: "",
+        },
+        {
+          category: "Laboratory",
+          type: "int",
+          key: "labtest_index",
+          value: "1",
+        },
+        {
+          category: "Laboratory",
+          type: "string",
+          key: "labtest_index_prefix",
+          value: "LT-",
+        },
+        {
+          category: "Messaging",
+          type: "textarea",
+          key: "account_whatsapp_welcome_template",
+          value: `سلام محترم {{اسم مشتری}}،
+
+✅ حساب شما در سیستم {{نام شرکت}} با موفقیت ایجاد شد.
+
+💳 شماره حساب: {{شماره حساب}}
+
+📊 از این پس تمامی معاملات و گزارش‌های شما به‌صورت منظم ثبت و قابل پیگیری خواهد بود.
+
+در صورت نیاز به معلومات بیشتر، با ما در تماس باشید.
+
+🏢 {{نام شرکت}}
+📧 {{ایمیل شرکت}}
+📞 {{شماره شرکت}} | {{شماره۲ شرکت}}
+📍 {{آدرس شرکت}}
+
+🙏 از اعتماد شما سپاسگزاریم.`,
+        },
+        {
+          category: "Messaging",
+          type: "textarea",
+          key: "account_whatsapp_balance_template",
+          value: `🏢 {{نام شرکت}}
+🗓️ {{تاریخ}}
+
+📊 گزارش بیلانس حساب
+
+سلام محترم {{اسم مشتری}}،
+⚖️ بیلانس فعلی : {{بیلانس}}
+
+در صورت نیاز به جزئیات بیشتر یا دریافت صورتحساب کامل، لطفاً با ما در تماس باشید.
+
+🏢 {{نام شرکت}}
+📞 {{شماره شرکت}}
+📧 {{ایمیل شرکت}}
+
+🙏 از اعتماد شما سپاسگزاریم.`,
+        },
+        {
+          category: "Messaging",
+          type: "textarea",
+          key: "account_whatsapp_note_template",
+          value: `🏢 {{نام شرکت}}
+🗓️ {{تاریخ}}
+
+📢 اطلاعیه
+
+سلام محترم {{اسم مشتری}}،
+
+{{متن اطلاعیه}}
+
+در صورت نیاز به معلومات بیشتر، لطفاً با ما در تماس باشید.
+
+📞 {{شماره شرکت}}
+📧 {{ایمیل شرکت}}
+📍 {{آدرس شرکت}}
+
+🙏 با احترام،
+{{نام شرکت}}`,
+        },
+        {
+          category: "Messaging",
+          type: "textarea",
+          key: "account_created_template",
+          value: `سلام محترم *{{اسم مشتری}}*،
+  حساب شما در سیستم *{{نام شرکت}}* با موفقیت ایجاد شد
+
+  از این پس تمام معاملات و گزارشات شما به صورت منظم ثبت و قابل پیگیری خواهد بود.
+  از اعتماد شما سپاس گذاریم.
+
+  شماره حساب شما: {{شماره حساب}}
+
+  در صورت نیاز به معلومات بیشتر، با ما در تماس شوید.
+
+  {{نام شرکت}}
+  {{ایمیل شرکت}}
+  {{شماره شرکت}} {{شماره۲ شرکت}}
+  {{آدرس شرکت}}
+
+  تشکر`,
+        },
+        {
+          category: "Messaging",
+          type: "textarea",
+          key: "journal_created_template",
+          value: `🏢 {{نام شرکت}}
+🗓️ {{تاریخ}}
+
+🧾 رسید روزنامچه
+
+🔖 شماره بل: {{شماره بل}}
+
+محترم {{اسم حساب}}👤
+💰 مبلغ: {{مقدار}}
+
+⚖️ بیلانس فعلی: {{بیلانس}}
+
+🗃️ حساب همتا: {{حساب همتا}}
+
+💬 توضیحات : {{توضیحات}}`,
+        },
+        {
+          category: "Messaging",
+          type: "textarea",
+          key: "sale_created_template",
+          value: `🏢 {{نام شرکت}}
+🗓️ {{تاریخ}}
+
+بل فروش
+
+🔢 شماره بل: {{شماره بل}}
+
+محترم {{اسم حساب}}،
+
+🛒 محصولات:
+{{محصولات}}
+
+💰 مجموع بل: {{مجموع بل}}
+🎁 تخفیف: {{تخفیف}}
+✅ مبلغ قابل پرداخت: {{رسید بل}}
+
+🟥 بیلانس قبلی: {{بیلانس قبلی}}
+⚖️ بیلانس فعلی: {{بیلانس}}
+
+💬 توضیحات: {{توضیحات}}
+
+🙏 از خرید و اعتماد شما سپاسگزاریم.`,
+        },
+        {
+          category: "Messaging",
+          type: "textarea",
+          key: "patient_created_template",
+          value: `سلام محترم *{{اسم مریض}}*،
+  حساب شما در سیستم *{{نام شرکت}}* با موفقیت ایجاد شد
+
+  از این پس تمام مسایل و گزارشات شما به صورت منظم ثبت و قابل پیگیری خواهد بود.
+  از اعتماد شما سپاس گذاریم.
+
+  کد مریض: {{کد مریض}}
+
+  در صورت نیاز به معلومات بیشتر، با ما در تماس شوید.
+
+  {{نام شرکت}}
+  {{ایمیل شرکت}}
+  {{شماره شرکت}} {{شماره۲ شرکت}}
+  {{آدرس شرکت}}
+
+  تشکر`,
+        },
+        {
+          category: "Messaging",
+          type: "textarea",
+          key: "appointment_created_template",
+          value: `*{{نام شرکت}}*
+  {{تاریخ}}
+
+  شماره نوبت: *{{شماره نوبت}}*
+
+  کد مریض: {{کد مریض}}
+  نام مریض: *{{اسم مریض}}*
+
+  *{{مقدار پول}}*
+
+  داکتر: {{داکتر}}
+  دیپارتمنت: {{دیپارتمنت}}
+
+  {{توضیحات}}`,
         },
       ];
       const currencies = [
@@ -1468,7 +1801,7 @@ router.post("/register", async (req, res) => {
             s.category || null,
             s.type || null,
             s.key,
-            s.value,
+            s.value == null ? "" : String(s.value),
             s.description || "",
             s.status || 1,
             now,

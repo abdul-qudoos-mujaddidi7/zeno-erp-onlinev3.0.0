@@ -25,6 +25,11 @@ const {
   generateLocalId,
 } = require('../utils/generateLocalId');
 
+const {
+  convertQuantityBetweenUnits,
+  getOrgUnits,
+} = require('../utils/unitConversion');
+
 const INCOMING_STOCK_TYPES = new Set([
   'purchase',
   'sale_return',
@@ -73,8 +78,60 @@ function isManualAdjustment(tx) {
 function isOpeningStockMovement(tx) {
   return (
     isManualAdjustment(tx) &&
-    String(tx?.transaction_type || '') === 'adjustment_in'
+    String(tx?.transaction_type || '') === 'adjustment_in' &&
+    String(tx?.reference_id ?? '').trim() !== '' &&
+    String(tx?.reference_id) === String(tx?.product_id)
   );
+}
+
+function compareOpeningMovements(first, second) {
+  const firstTime = Date.parse(first?.date || first?.created_at || 0) || 0;
+  const secondTime = Date.parse(second?.date || second?.created_at || 0) || 0;
+  if (firstTime !== secondTime) {
+    return firstTime - secondTime;
+  }
+
+  try {
+    const firstId = BigInt(first?.id);
+    const secondId = BigInt(second?.id);
+    if (firstId < secondId) return -1;
+    if (firstId > secondId) return 1;
+    return 0;
+  } catch {
+    return String(first?.id ?? '').localeCompare(String(second?.id ?? ''));
+  }
+}
+
+async function findDesignatedOpeningId(
+  connection,
+  {
+    orgId,
+    productId,
+  },
+) {
+  if (!productId) {
+    return null;
+  }
+
+  const movements =
+    await stockTransactionRepository.findAll(
+      connection,
+      {
+        orgId,
+        filters: {
+          product_id: productId,
+          reference_type: 'manual_adjustment',
+          transaction_type: 'adjustment_in',
+          status: 1,
+        },
+      },
+    );
+
+  const openings = (movements || [])
+    .filter((row) => isOpeningStockMovement(row))
+    .sort(compareOpeningMovements);
+
+  return openings[0] ? String(openings[0].id) : null;
 }
 
 async function setWarehouseBalance(
@@ -176,6 +233,8 @@ async function reconcileProductStock(
         },
       );
     const openingQty = Math.abs(toNumber(product?.initial_quantity));
+    const baseUnitId = productUnitId || product?.product_unit_id;
+    const units = await getOrgUnits(connection, orgId);
     const movements =
       await stockTransactionRepository.findAll(
         connection,
@@ -188,24 +247,47 @@ async function reconcileProductStock(
         },
       );
 
+    const designatedOpeningId =
+      await findDesignatedOpeningId(
+        connection,
+        {
+          orgId,
+          productId,
+        },
+      );
     let usedOpening = false;
+    let designatedOpeningQty = null;
 
     for (const movement of movements) {
       const warehouseKey = String(movement.warehouse_id || '');
       if (!warehouseKey) continue;
 
+      const convertedQty = convertQuantityBetweenUnits(
+        toNumber(movement.quantity),
+        movement.product_unit_id || baseUnitId,
+        baseUnitId,
+        units,
+      );
+
       let effect;
 
-      if (!usedOpening && isOpeningStockMovement(movement)) {
+      if (
+        !usedOpening &&
+        designatedOpeningId &&
+        String(movement.id) === String(designatedOpeningId)
+      ) {
+        const movementQty = Math.abs(convertedQty);
+        const qty = movementQty > 1e-9 ? movementQty : openingQty;
         effect = stockEffect(
           'adjustment_in',
-          Math.max(Math.abs(toNumber(movement.quantity)), openingQty),
+          qty,
         );
+        designatedOpeningQty = qty;
         usedOpening = true;
       } else {
         effect = stockEffect(
           movement.transaction_type,
-          movement.quantity,
+          convertedQty,
         );
       }
 
@@ -223,6 +305,23 @@ async function reconcileProductStock(
           toNumber(totalsByWarehouse.get(warehouseKey)) + openingQty,
         );
       }
+    }
+
+    if (
+      designatedOpeningQty != null &&
+      Math.abs(designatedOpeningQty - openingQty) > 1e-9
+    ) {
+      await productRepository.update(
+        connection,
+        {
+          orgId,
+          localId: productId,
+          userId,
+          data: {
+            initial_quantity: designatedOpeningQty,
+          },
+        },
+      );
     }
   }
 
@@ -468,9 +567,17 @@ async function applyManualAdjustmentInventory(
   const productUnitId =
     next.product_unit_id || previous.product_unit_id;
   const openingQuantity = Math.abs(toNumber(next.quantity));
+  const designatedOpeningId =
+    await findDesignatedOpeningId(
+      connection,
+      {
+        orgId,
+        productId,
+      },
+    );
   const isOpening =
-    isOpeningStockMovement(previous) ||
-    isOpeningStockMovement(next);
+    String(designatedOpeningId) === String(next.id) ||
+    String(designatedOpeningId) === String(previous.id);
 
   if (isOpening) {
     await productRepository.update(

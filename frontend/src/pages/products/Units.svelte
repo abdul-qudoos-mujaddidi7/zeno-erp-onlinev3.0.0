@@ -90,7 +90,7 @@
                                     {#if unit.subunit_id}
                                 {Number(unit.subunit_multiple||0).toLocaleString(undefined,{maximumFractionDigits:6})}
                                         {#each units as u}
-                                            {#if u.id === unit.subunit_id}
+                                            {#if Number(u.id) === Number(unit.subunit_id)}
                                                 {u.name}
                                             {/if}
                                         {/each}

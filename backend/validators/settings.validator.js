@@ -16,6 +16,28 @@ const nullableString = (maxLength) =>
       .nullable(),
   );
 
+/*
+ * Settings values are stored as text. The UI often sends booleans/ints
+ * as numbers (0, 1, 25), so coerce them before validation.
+ */
+const settingValueSchema = z.preprocess(
+  (value) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (value === null) {
+      return null;
+    }
+
+    return String(value);
+  },
+  z
+    .string()
+    .max(12_000_000, 'Setting value is too long.')
+    .nullable(),
+);
+
 const settingFields = {
   category: nullableString(50),
 
@@ -33,11 +55,7 @@ const settingFields = {
    * value is longtext in MySQL and may hold large payloads
    * (e.g. base64 company logos), so allow up to ~12 MB.
    */
-  value: z
-    .string()
-    .max(12_000_000, 'Setting value is too long.')
-    .nullable()
-    .optional(),
+  value: settingValueSchema.optional(),
 
   description: nullableString(65535),
 
@@ -52,11 +70,7 @@ const settingFields = {
 
 const createSettingSchema = z.object({
   ...settingFields,
-  value: z
-    .string()
-    .max(12_000_000, 'Setting value is too long.')
-    .nullable()
-    .default(null),
+  value: settingValueSchema.optional().default(null),
 });
 
 const updateSettingSchema = z

@@ -165,7 +165,7 @@ async function reconcileProductStock({
       );
     }
 
-    await require('./stock-transaction.service').syncWarehouseBalancesToProduct(
+    await require('./stock-transaction.service').reconcileProductStock(
       connection,
       {
         orgId,

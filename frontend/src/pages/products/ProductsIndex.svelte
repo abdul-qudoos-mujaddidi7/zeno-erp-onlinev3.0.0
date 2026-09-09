@@ -37,6 +37,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
 
   import {
     calculateAllStocks,
+    decomposeQuantityWithUnits,
     resolveInventoryMethod,
   } from '../stocktransactions/calculateStock.js';
 
@@ -492,18 +493,24 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   }
 
   function getUnitName(id) {
-    return units.find((u) => u.id === id)?.name || '';
+    return units.find((unit) => Number(unit.id) === Number(id))?.name || '';
   }
 
   function getProductUnitParts(product) {
-    try {
-      return JSON.parse(product.benefit || '{}')?.unit_parts || [];
-    } catch (e) {
-      return [];
-    }
+    return decomposeQuantityWithUnits(
+      product?.quantity,
+      product?.product_unit_id,
+      units,
+    ).filter((part) => Number(part.quantity) !== 0);
   }
 
-  let showUnitParts = false;
+  let expandedUnitKey = '';
+
+  function toggleUnitParts(product) {
+    const key = String(product?.id ?? '');
+    if (!key) return;
+    expandedUnitKey = expandedUnitKey === key ? '' : key;
+  }
 
   function productStatusLabel(status) {
     if (status === 'active') return t('Active');
@@ -1030,18 +1037,17 @@ import { saleItemApi } from '../../api/saleItemApi.js';
                     type="button"
                     class="quantity-cell"
                     title={t('Show unit details')}
-                    on:click={() => {
-                      showUnitParts = !showUnitParts;
-                    }}>
-                    {#if showUnitParts}
+                    on:click|stopPropagation={() => toggleUnitParts(product)}>
+                    {#if expandedUnitKey === String(product.id) && getProductUnitParts(product).length}
                       <span class="unit-parts">
-                        {#each getProductUnitParts(product) as part}
-                          {#if part.quantity !== 0}
-                            <StatusBadge tone={part.quantity > 0 ? 'positive' : 'negative'}>
-                              <span dir="ltr">{formatQty(Number(part.quantity))}</span>
-                              <span>{part.unit_name}</span>
-                            </StatusBadge>
+                        {#each getProductUnitParts(product) as part, partIndex}
+                          {#if partIndex > 0}
+                            <span class="unit-parts-plus">+</span>
                           {/if}
+                          <StatusBadge tone={Number(part.quantity) > 0 ? 'positive' : 'negative'}>
+                            <span dir="ltr">{formatQty(Number(part.quantity))}</span>
+                            <span>{part.unit_name}</span>
+                          </StatusBadge>
                         {/each}
                       </span>
                     {:else}
@@ -1308,6 +1314,12 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     align-items: center;
     flex-wrap: wrap;
     gap: 0.25rem;
+  }
+
+  .unit-parts-plus {
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 700;
   }
 
   .status-control {

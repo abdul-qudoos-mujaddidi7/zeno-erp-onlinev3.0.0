@@ -770,6 +770,30 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     content: ' ';
   }
 
+  .pd-header-meta__desc :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.5rem 0;
+  }
+
+  .pd-header-meta__desc :global(th),
+  .pd-header-meta__desc :global(td) {
+    border: 1px solid #cbd5e1;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-weight: 400;
+    color: #0f172a;
+  }
+
+  .pd-header-meta__desc :global(th) {
+    background: #f1f5f9;
+    font-weight: 600;
+  }
+
+  .pd-header-meta__desc :global(p) {
+    margin: 0;
+  }
+
   .pd-header-meta dt {
     margin: 0 0 1px;
     font-size: 11px;
@@ -1267,6 +1291,19 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
   :global(html.dark) .pd-table td,
   :global([data-mdb-theme='dark']) .pd-table td {
+    border-color: #2b3b52;
+    color: #dbe7f7;
+  }
+
+  :global(html.dark) .pd-header-meta__desc :global(th),
+  :global([data-mdb-theme='dark']) .pd-header-meta__desc :global(th) {
+    border-color: #334762;
+    background: #172033;
+    color: #a9b7ca;
+  }
+
+  :global(html.dark) .pd-header-meta__desc :global(td),
+  :global([data-mdb-theme='dark']) .pd-header-meta__desc :global(td) {
     border-color: #2b3b52;
     color: #dbe7f7;
   }

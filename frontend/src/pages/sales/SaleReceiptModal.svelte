@@ -149,9 +149,10 @@ import { currencyApi } from '../../api/currencyApi.js';
     }
 
     await tick();
-    fitText(addressEl);
+    fitReceiptText();
   });
   function printReceipt() {
+    fitReceiptText();
     const content = document.getElementById('receipt-content').innerHTML;
     const styles = `
         <style>
@@ -197,7 +198,7 @@ td, th {
 
   th:nth-child(1),
   td:nth-child(1) {
-    width: 40%; /* product */
+    width: 34%; /* product */
   }
 
   th:nth-child(2),
@@ -212,7 +213,7 @@ td, th {
 
   th:nth-child(4),
   td:nth-child(4) {
-    width: 20%; /* subtotal */
+    width: 26%; /* subtotal */
   }
 
   .product-name {
@@ -226,8 +227,17 @@ td, th {
   td:nth-child(4) {
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 8pt;
+    text-overflow: clip;
+  }
+  .fit-amount {
+    display: block;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+    overflow-wrap: normal;
+    word-break: normal;
+    line-height: 1.2;
   }
 
 
@@ -254,7 +264,7 @@ body { margin: 0; }
 table {border-bottom: 2px solid #000 !important}
 td {
     border-bottom: 1px solid #000 !important;
-    font-size: 9pt !important;
+    font-size: 9pt;
     padding: 4px 4px !important;
   }
   th {
@@ -295,7 +305,12 @@ td {
   }
 
   function fitText(el, maxFont = 12, minFont = 6) {
-    if (!el) return;
+    if (!el || el.clientWidth <= 0) return;
+
+    el.style.whiteSpace = 'nowrap';
+    el.style.overflowWrap = 'normal';
+    el.style.wordBreak = 'normal';
+    el.style.fontSize = maxFont + 'px';
 
     let low = minFont;
     let high = maxFont;
@@ -306,7 +321,7 @@ td {
 
       el.style.fontSize = mid + 'px';
 
-      if (el.scrollWidth <= el.clientWidth) {
+      if (el.scrollWidth <= el.clientWidth + 0.5) {
         best = mid;
         low = mid + 0.5;
       } else {
@@ -315,6 +330,22 @@ td {
     }
 
     el.style.fontSize = best + 'px';
+  }
+
+  function fitReceiptText() {
+    fitText(addressEl);
+    document.querySelectorAll('#receipt-content .fit-amount').forEach((el) => {
+      fitText(el, 11, 5);
+    });
+  }
+
+  $: amountFitKey = (items || [])
+    .map((item) => `${item.quantity}|${item.unit_price}|${item.subtotal}|${item.unit_name}|${item.currency_symbol}`)
+    .join(';');
+
+  $: if (typeof document !== 'undefined') {
+    void amountFitKey;
+    tick().then(fitReceiptText);
   }
 
   $: total = Number(
@@ -511,22 +542,24 @@ td {
                     </td>
 
                     <td class="center fw-bold">
-                      <span>
+                      <span class="fit-amount">
                         {Number(it.quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}
                         {it.unit_name}
                       </span>
                     </td>
-                    <td class="center fw-bold"
-                      ><span>
+                    <td class="center fw-bold">
+                      <span class="fit-amount">
                         {Number(it.unit_price).toLocaleString(undefined, {
                           maximumFractionDigits: 3,
-                        })}&nbsp;{it.currency_symbol}</span>
+                        })}&nbsp;{it.currency_symbol}
+                      </span>
                     </td>
-                    <td class="center fw-bold"
-                      ><span
-                        >{Number(it.subtotal).toLocaleString(undefined, {
+                    <td class="center fw-bold">
+                      <span class="fit-amount">
+                        {Number(it.subtotal).toLocaleString(undefined, {
                           maximumFractionDigits: 3,
-                        })}&nbsp;{it.currency_symbol}</span>
+                        })}&nbsp;{it.currency_symbol}
+                      </span>
                     </td>
                   </tr>
                 {/each}
@@ -637,7 +670,7 @@ td {
   }
   td {
     border-bottom: 1px solid #000 !important;
-    font-size: 9pt !important;
+    font-size: 9pt;
     padding: 4px 4px !important;
   }
   th {
@@ -653,7 +686,7 @@ td {
 
   th:nth-child(1),
   td:nth-child(1) {
-    width: 40%; /* product */
+    width: 34%; /* product */
   }
 
   th:nth-child(2),
@@ -668,7 +701,7 @@ td {
 
   th:nth-child(4),
   td:nth-child(4) {
-    width: 20%; /* subtotal */
+    width: 26%; /* subtotal */
   }
 
   .product-name {
@@ -682,8 +715,17 @@ td {
   td:nth-child(4) {
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 8pt;
+    text-overflow: clip;
+  }
+  .fit-amount {
+    display: block;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+    overflow-wrap: normal;
+    word-break: normal;
+    line-height: 1.2;
   }
 
   .brand {

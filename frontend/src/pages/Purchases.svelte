@@ -405,10 +405,6 @@ import { accountApi } from '../api/accountApi.js';
   $: purchaseRemainingMap = (() => {
     const map = {};
     for (const p of purchases || []) {
-      if (p.remaining !== undefined && p.remaining !== null) {
-        map[p.id] = Number(p.remaining) || 0;
-        continue;
-      }
       const paid = Number(paymentsByPurchase?.[p.id] || 0);
       const ret = Number(returnsByPurchase?.[p.id] || 0);
       map[p.id] = Number(p.total_amount || 0) - paid - ret;
@@ -493,6 +489,8 @@ import { accountApi } from '../api/accountApi.js';
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
     if (currentPage !== 1) currentPage = 1;
+    lastPageKey = getPurchasesQueryKey();
+    load();
   }
 </script>
 

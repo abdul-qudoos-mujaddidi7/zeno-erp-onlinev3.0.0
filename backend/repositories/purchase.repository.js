@@ -222,14 +222,34 @@ async function findAll(
     `);
     values.push(orgId);
   } else if (billStatus && billStatus !== 'all') {
-    conditions.push('bill_status = ?');
-    values.push(billStatus);
+    conditions.push('LOWER(TRIM(COALESCE(bill_status, \'\'))) = ?');
+    values.push(String(billStatus).trim().toLowerCase());
   }
 
+  const outstandingSql = `
+    (
+      COALESCE(total_amount, 0)
+      - COALESCE((
+          SELECT SUM(pp.amount)
+          FROM purchase_payments pp
+          WHERE pp.org_id = purchases.org_id
+            AND pp.purchase_id = purchases.local_id
+            AND pp.status = 1
+        ), 0)
+      - COALESCE((
+          SELECT SUM(pr.total_amount)
+          FROM purchase_returns pr
+          WHERE pr.org_id = purchases.org_id
+            AND pr.purchase_id = purchases.local_id
+            AND pr.status = 1
+        ), 0)
+    )
+  `;
+
   if (paymentStatus === 'paid') {
-    conditions.push('COALESCE(remaining, 0) <= 0');
+    conditions.push(`${outstandingSql} <= 0`);
   } else if (paymentStatus === 'unpaid') {
-    conditions.push('COALESCE(remaining, 0) > 0');
+    conditions.push(`${outstandingSql} > 0`);
   }
 
   return paginateSelect(executor, {

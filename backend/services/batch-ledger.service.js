@@ -25,6 +25,10 @@ const {
 } = require('../utils/generateLocalId');
 
 const {
+  convertItemQuantityToProductUnit,
+} = require('../utils/unitConversion');
+
+const {
   sortOpenBatches,
 } = require('../utils/fifoBatches');
 
@@ -108,7 +112,16 @@ async function createPurchaseBatches(
   }
 
   for (const item of items || []) {
-    const quantity = toNumber(item.quantity);
+    const stockQty = await convertItemQuantityToProductUnit(
+      connection,
+      {
+        orgId,
+        productId: item.product_id,
+        fromUnitId: item.product_unit_id,
+        quantity: item.quantity,
+      },
+    );
+    const quantity = toNumber(stockQty.quantity);
     if (quantity <= 0) continue;
 
     await stockBatchRepository.recordBatch(
@@ -164,7 +177,16 @@ async function consumeBatches(
   const itemCosts = [];
 
   for (const item of items || []) {
-    const quantity = toNumber(item.quantity);
+    const stockQty = await convertItemQuantityToProductUnit(
+      connection,
+      {
+        orgId,
+        productId: item.product_id,
+        fromUnitId: item.product_unit_id,
+        quantity: item.quantity,
+      },
+    );
+    const quantity = toNumber(stockQty.quantity);
     if (quantity <= 0) {
       itemCosts.push({
         sale_item_id: item.sale_item_id || null,

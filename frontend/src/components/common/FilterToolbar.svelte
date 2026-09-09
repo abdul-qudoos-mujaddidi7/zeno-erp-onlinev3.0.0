@@ -53,6 +53,7 @@
   function clickOutside(node) {
     function handleWindowClick(event) {
       if (!filtersOpen) return;
+      if (event.target.closest?.('.filter-select__menu')) return;
 
       if (!node.contains(event.target)) {
         filtersOpen = false;

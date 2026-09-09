@@ -304,14 +304,64 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
   }
 
   /*
-   * In this report, adjustment_in is the product's opening quantity.
-   * It must always be the first transaction used in the calculation,
-   * regardless of created_at values changed by synchronization.
-   * Because the table is displayed newest -> oldest, it will therefore
-   * always appear at the bottom of the report.
+   * Opening stock is only the earliest product-create movement
+   * (manual_adjustment + adjustment_in, reference_id = product_id).
+   * Later incoming adjustments stay in date order so their quantity
+   * is not added onto the opening row's running balance.
    */
+  let openingTransactionIds = new Set();
+
+  function isOpeningCandidate(transaction) {
+    return (
+      String(transaction?.transaction_type || '') === 'adjustment_in' &&
+      String(transaction?.reference_type || '') === 'manual_adjustment' &&
+      String(transaction?.reference_id ?? '').trim() !== '' &&
+      String(transaction?.reference_id) === String(transaction?.product_id)
+    );
+  }
+
+  function collectOpeningIds(transactions) {
+    const earliestByProduct = new Map();
+
+    for (const transaction of transactions) {
+      if (!isOpeningCandidate(transaction)) continue;
+
+      const productId = String(transaction.product_id ?? '');
+      if (!productId) continue;
+
+      const current = earliestByProduct.get(productId);
+      if (!current) {
+        earliestByProduct.set(productId, transaction);
+        continue;
+      }
+
+      const currentDay = startOfBusinessDay(
+        current.date || current.created_at || current.updated_at,
+      );
+      const nextDay = startOfBusinessDay(
+        transaction.date || transaction.created_at || transaction.updated_at,
+      );
+
+      if (nextDay < currentDay) {
+        earliestByProduct.set(productId, transaction);
+        continue;
+      }
+
+      if (
+        nextDay === currentDay &&
+        compareStableTransactionIds(transaction.id, current.id) < 0
+      ) {
+        earliestByProduct.set(productId, transaction);
+      }
+    }
+
+    return new Set(
+      [...earliestByProduct.values()].map((row) => String(row.id)),
+    );
+  }
+
   function isOpeningInputAdjustment(transaction) {
-    return transaction?.transaction_type === 'adjustment_in';
+    return openingTransactionIds.has(String(transaction?.id ?? ''));
   }
 
   /*
@@ -414,7 +464,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
       const firstIsOpening = isOpeningInputAdjustment(first);
       const secondIsOpening = isOpeningInputAdjustment(second);
 
-      /* Always keep adjustment_in at the bottom of the visible report. */
+      /* Keep only the designated opening row at the bottom of the report. */
       if (firstIsOpening !== secondIsOpening) {
         return firstIsOpening ? 1 : -1;
       }
@@ -575,28 +625,48 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     const purchaseById = new Map(purchases.map((item) => [String(item.id).trim(), item]));
     const accountById = new Map(accounts.map((item) => [String(item.id).trim(), item]));
 
-    const hasOpening = stockTransactions.some((transaction) => isOpeningInputAdjustment(transaction));
-    const openingQuantity = Number(product.initial_quantity || 0);
+    const groupProducts =
+      productGroupProducts.length > 0
+        ? productGroupProducts
+        : [product];
+    const openingProductIds = new Set(
+      stockTransactions
+        .filter((transaction) => isOpeningCandidate(transaction))
+        .map((transaction) => String(transaction.product_id)),
+    );
+    const syntheticOpenings = [];
 
-    if (!hasOpening && openingQuantity > 0) {
-      stockTransactions = [
-        {
-          id: `opening-${product.id}`,
-          warehouse_id: product.initial_warehouse_id,
-          product_id: product.id,
-          product_unit_id: product.product_unit_id,
-          reference_id: product.id,
+    for (const groupProduct of groupProducts) {
+      const openingQuantity = Number(groupProduct.initial_quantity || 0);
+      if (
+        openingQuantity > 0 &&
+        !openingProductIds.has(String(groupProduct.id))
+      ) {
+        syntheticOpenings.push({
+          id: `opening-${groupProduct.id}`,
+          warehouse_id: groupProduct.initial_warehouse_id,
+          product_id: groupProduct.id,
+          product_unit_id: groupProduct.product_unit_id,
+          reference_id: groupProduct.id,
           reference_type: 'manual_adjustment',
           transaction_type: 'adjustment_in',
           quantity: openingQuantity,
-          date: product.created_at,
-          created_at: product.created_at,
+          date: groupProduct.created_at,
+          created_at: groupProduct.created_at,
           description: t('Opening Stock'),
           status: 1,
-        },
+        });
+      }
+    }
+
+    if (syntheticOpenings.length) {
+      stockTransactions = [
+        ...syntheticOpenings,
         ...stockTransactions,
       ];
     }
+
+    openingTransactionIds = collectOpeningIds(stockTransactions);
 
     stockTransactions =
       stockTransactions.map(
@@ -662,23 +732,19 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
             };
           }
 
-          if (
-            transaction.reference_type === 'manual_adjustment' ||
-            transaction.transaction_type === 'adjustment_in' ||
-            transaction.transaction_type === 'adjustment_out'
-          ) {
+          if (isOpeningInputAdjustment(transaction)) {
             const adjustmentProduct =
               productGroupProducts.find((item) =>
-                sameId(item.id, transaction.reference_id),
+                sameId(item.id, transaction.product_id || transaction.reference_id),
               ) || product;
 
             return {
               ...transaction,
 
               /*
-               * The initial input adjustment belongs to product creation.
-               * Using product.created_at keeps it below later purchases/sales
-               * even when stock_transactions were rebuilt by synchronization.
+               * Only the designated opening row is pinned to product
+               * creation time so later incoming adjustments keep their
+               * own date in the running balance.
                */
               source_created_at:
                 adjustmentProduct?.created_at ||
@@ -723,7 +789,6 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     let runningOutgoing = 0;
     const runningBalance = {};
     const calculatedTransactions = [];
-    let usedOpeningSeed = false;
 
     for (const transaction of stockTransactions) {
       const convertedQuantity = convertUnitSync(
@@ -736,12 +801,15 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
         convertedQuantity || 0,
       );
 
-      if (isOpeningInputAdjustment(transaction) && !usedOpeningSeed) {
-        quantity = Math.max(
-          Math.abs(quantity),
-          Number(product.initial_quantity || 0),
-        );
-        usedOpeningSeed = true;
+      if (isOpeningInputAdjustment(transaction) && Math.abs(quantity) <= 1e-9) {
+        const openingProduct =
+          productGroupProducts.find((item) =>
+            sameId(item.id, transaction.product_id),
+          ) || product;
+        const openingQuantity = Number(openingProduct.initial_quantity || 0);
+        if (openingQuantity > 0) {
+          quantity = openingQuantity;
+        }
       }
 
       const totalCost = Number(
@@ -837,25 +905,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     outQty = runningOutgoing;
     balance = { ...runningBalance };
 
-    /*
-     * Overview, warehouses tab, and the newest report row must all
-     * show products.quantity. If opening stock is missing from the
-     * movement list, shift the running balances so they end there.
-     */
     const canonicalQuantity = Number(product.quantity);
-    if (
-      Number.isFinite(canonicalQuantity) &&
-      calculatedTransactions.length > 0
-    ) {
-      const shift = canonicalQuantity - runningQuantity;
-      if (shift !== 0) {
-        for (const row of calculatedTransactions) {
-          row.qtyBalance = Number(row.qtyBalance || 0) + shift;
-        }
-        runningQuantity = canonicalQuantity;
-      }
-    }
-
     qtyBalance = Number.isFinite(canonicalQuantity)
       ? canonicalQuantity
       : runningQuantity;
@@ -869,7 +919,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
       const firstIsOpening = isOpeningInputAdjustment(first);
       const secondIsOpening = isOpeningInputAdjustment(second);
 
-      /* Newest transactions first, opening adjustment always last. */
+      /* Newest transactions first; only the designated opening stays last. */
       if (firstIsOpening !== secondIsOpening) {
         return firstIsOpening ? 1 : -1;
       }
@@ -1170,6 +1220,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     }
 
     await hydrateProductGroup(product);
+    await refreshCanonicalStock();
 
     const [categoryRes, unitRes, imgRes] = await Promise.all([
       product.category_id

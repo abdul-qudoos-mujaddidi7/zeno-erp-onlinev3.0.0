@@ -682,15 +682,19 @@ import { settingsApi } from '../../api/settingsApi.js';
     // Track editing
     let editingId = null;
 
+    function toSettingValue(value) {
+      if (value == null) return '';
+      return String(value);
+    }
+
     async function manageDefaultSettings() {
       try {
         settings = (await settingsApi.getAll({ status: 1 }))?.data || [];
 
-        if (settings.length > 0) {
-          for (const ds of defaultSettings) {
+        for (const ds of defaultSettings) {
+          try {
             let setting = settings.find((s) => s.key == ds.key);
             if (setting) {
-              // console.log('setting found key:', setting.key);
               if (setting.category != ds.category) {
                 console.log('wrong category for key:', setting.key);
                 await settingsApi.update(setting.id, {
@@ -722,7 +726,7 @@ import { settingsApi } from '../../api/settingsApi.js';
 
               if (isLegacyTemplateValue) {
                 await settingsApi.update(setting.id, {
-                  value: ds.value,
+                  value: toSettingValue(ds.value),
                 });
                 setting.value = ds.value;
                 console.log('Updated default messaging template:', setting.key);
@@ -741,16 +745,18 @@ import { settingsApi } from '../../api/settingsApi.js';
               }
             } else {
               console.log('setting Not Found! Key:', ds.key);
-              let newId = await settingsApi.create({
+              await settingsApi.create({
                 category: ds.category,
                 type: ds.type,
                 key: ds.key,
-                value: ds.value,
+                value: toSettingValue(ds.value),
                 description: ds.description || '',
                 status: ds.status || 1,
               });
               console.log('added Setting! Key:', ds.key);
             }
+          } catch (settingErr) {
+            console.error('Failed to sync setting:', ds.key, settingErr);
           }
         }
       } catch (err) {
