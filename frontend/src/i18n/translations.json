@@ -494,6 +494,7 @@
     "Total Accounts": "کل حساب‌ها",
     "Total Patients": "کل مریضان",
     "Total Products": "کل محصولات",
+    "Total Quantity": "تعداد کل",
     "Total Services": "کل خدمات",
     "Total Warehouses": "کل گدام‌ها",
     "Total Departments": "کل دیپارتمنت ها",
@@ -993,7 +994,7 @@
     "Produced Product": "محصول تولید شده",
 
     "Financial Report": "گزارش مالی",
-    "Products Report": "گزارش محصولات",
+    "Products Report": "گزارش فروشات",
     "Products & Services Report": "گزارش محصولات و خدمات",
 
     "Product or Service": "محصول یا خدمت",

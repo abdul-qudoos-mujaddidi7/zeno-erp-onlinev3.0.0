@@ -27,6 +27,7 @@
   let currencies = [];
   let products = [];
   let items = [];
+  let summaryItems = [];
   let pdfItems = [];
 
   export let account_id = null;
@@ -73,13 +74,53 @@
     lookupsLoaded = true;
   }
 
+  async function fetchAllForSummary() {
+    const pageSize = 200;
+    const all = [];
+    let page = 1;
+    for (;;) {
+      const response = await accountApi.getProductItems(account_id, {
+        item_type: filterStatus,
+        product_id: selectedProduct !== 'all' ? Number(selectedProduct) : undefined,
+        search: searchTerm.trim(),
+        date_from: fromDate || undefined,
+        date_to: toDate || undefined,
+        page,
+        limit: pageSize,
+        skip_count: 1,
+      });
+      const rows = response?.data || [];
+      all.push(...rows);
+      if (!rows.length || !response?.meta?.hasMore) break;
+      page += 1;
+    }
+    return all;
+  }
+
+  let summaryRequestId = 0;
+  let needsSummaryRefresh = false;
+
+  async function loadSummary() {
+    const reqId = ++summaryRequestId;
+    try {
+      const all = await fetchAllForSummary();
+      if (reqId === summaryRequestId) summaryItems = all;
+    } catch (e) {
+      console.error('Failed to load summary:', e);
+      if (reqId === summaryRequestId) summaryItems = [];
+    }
+  }
+
   async function load() {
     const requestId = ++loadRequestId;
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     loading = true;
+    const shouldRefreshSummary = needsSummaryRefresh;
+    needsSummaryRefresh = false;
 
     try {
       const lookupsPromise = loadLookups();
+      const summaryPromise = shouldRefreshSummary ? loadSummary() : Promise.resolve();
 
       const response = await accountApi.getProductItems(account_id, {
         item_type: filterStatus,
@@ -115,7 +156,7 @@
           })
         : Promise.resolve();
 
-      await Promise.all([lookupsPromise, productPromise]);
+      await Promise.all([lookupsPromise, productPromise, summaryPromise]);
 
       for (const row of items) {
         if (row.product_name && !products.some((p) => Number(p.id) === Number(row.product_id))) {
@@ -145,6 +186,7 @@
   function scheduleSearchReload() {
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
+      needsSummaryRefresh = true;
       if (currentPage !== 1) currentPage = 1;
       else load();
     }, 300);
@@ -155,6 +197,7 @@
     toDate = '';
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     bootstrapped = true;
+    needsSummaryRefresh = true;
     await load();
     tick().then(() => setDatePickers(handleDateChange));
   });
@@ -259,7 +302,7 @@
     try {
       const exporter = format === 'excel' ? generateExcel : generatePDF;
 
-      const allItems = (await fetchAllItemsForExport()).map(decorateItem);
+      const allItems = (summaryItems.length ? summaryItems : await fetchAllItemsForExport()).map(decorateItem);
 
       await exporter(
         'account_products_report',
@@ -314,16 +357,6 @@
 
   $: reportFilters = [
     {
-      key: 'type',
-      label: t('Type'),
-      value: filterStatus,
-      options: [
-        { value: 'all', label: t('All Items') },
-        { value: 'sale', label: t('Sale Items') },
-        { value: 'purchase', label: t('Purchase Items') },
-      ],
-    },
-    {
       key: 'fromDate',
       label: t('From Date'),
       value: fromDate,
@@ -357,6 +390,7 @@
     if (key === 'product') selectedProduct = value;
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
+    needsSummaryRefresh = true;
     currentPage = 1;
     lastPageKey = `1|${itemsPerPage}`;
     load();
@@ -368,18 +402,25 @@
     selectedProduct = 'all';
     fromDate = '';
     toDate = '';
+    needsSummaryRefresh = true;
     currentPage = 1;
     lastPageKey = `1|${itemsPerPage}`;
     load();
   }
 
+  $: summaryTotalAmount = sumSubtotals(summaryItems);
   $: totalAmountHtml =
-    Object.entries(pageTotalAmount)
+    Object.entries(summaryTotalAmount)
       .map(
         ([currency, amount]) =>
           `<span class="amount-inline"><span dir="ltr">${Number(amount).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span><span>${t(currency || '')}</span></span>`,
       )
       .join('<br />') || '0';
+
+  $: saleItemCount = summaryItems.filter((r) => r.item_type === 'sale').length;
+  $: totalQuantity = summaryItems.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+  $: totalQuantityHtml =
+    `<span class="amount-inline"><span dir="ltr">${totalQuantity.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span></span>`;
 </script>
 
 <div class="products-report-page" dir={t('dir')}>
@@ -429,15 +470,26 @@
     <svelte:fragment slot="stats">
       <div class="index-summary-grid product-report-summary">
         <SummaryCard
-          label={enable_services
-            ? t('Total') + t('-of-') + t('Products & Services')
-            : t('Total Products Amount')}
+          label={t('Total Amount')}
           icon="bi-cash-stack"
           tone="cyan">
           <div class="report-summary-values">
             {@html totalAmountHtml}
           </div>
         </SummaryCard>
+        <SummaryCard
+          label={t('Total Quantity')}
+          icon="bi-box-seam"
+          tone="green">
+          {@html totalQuantityHtml}
+        </SummaryCard>
+        <SummaryCard
+          label={t('Sale Items')}
+          icon="bi-bag-check"
+          tone="blue">
+          {saleItemCount}
+        </SummaryCard>
+
       </div>
     </svelte:fragment>
 
@@ -545,7 +597,11 @@
   }
 
   .product-report-summary {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  :global(.index-statistics) {
+    padding-inline: 0 !important;
   }
 
   .report-date {
@@ -585,5 +641,18 @@
 
   .report-summary-values {
     text-align: start;
+  }
+
+
+   :global(.index-statistics) {
+    padding-inline: 0 !important;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .index-summary-grid.product-report-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    max-width: 100%;
   }
 </style>

@@ -80,7 +80,7 @@ import { settingsApi } from '../../api/settingsApi.js';
 
 🗃️ حساب همتا: {{حساب همتا}}
 
-💬 توضیحات : {{توضیحات}}`;
+ : {{توضیحات}}`;
 
     const DEFAULT_SALE_CREATED_TEMPLATE = `🏢 {{نام شرکت}}
 🗓️ {{تاریخ}}
