@@ -1,1 +1,0 @@
-import{A as i}from"./index-q9XjAqVJ.js";function a(e,n=null){if(!e||typeof e!="string")return n;const t=e.trim();if(!t)return n;if(t.startsWith("{"))try{const r=JSON.parse(t),o=localStorage.getItem("token")||"none";return`${i}/api/v2/system/loadimage/${r?.table}/${r?.fieldName}/${r?.serveid}/${o}`}catch{return n}return t}export{a as r};
