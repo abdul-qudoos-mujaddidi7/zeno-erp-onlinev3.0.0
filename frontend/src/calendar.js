@@ -15,6 +15,20 @@ function parseDateOnly(dateStr) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+export function getKabulDate(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kabul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value).reduce((result, part) => {
+    result[part.type] = part.value;
+    return result;
+  }, {});
+
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 function showDate(inputDate, context = 'default') {
   const date = parseDateOnly(inputDate);
 

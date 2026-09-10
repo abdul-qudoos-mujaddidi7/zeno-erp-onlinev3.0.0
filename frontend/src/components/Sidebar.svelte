@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { link, location } from 'svelte-spa-router';
+  import { link, location, querystring } from 'svelte-spa-router';
   import { t, lang, settings_all, translate_org_type, supported, setLanguage, isRTL } from '../i18n/i18n';
   
   $: _lang = $lang;
@@ -33,6 +33,7 @@ import { settingsApi } from '../api/settingsApi.js';
   }
 
   let profileMenuOpen = false;
+  let reportsMenuOpen = false;
   let isDesktop = true;
   let desktopMedia;
   let syncDesktop = () => {};
@@ -127,6 +128,17 @@ import { settingsApi } from '../api/settingsApi.js';
   let shiftPressed = false;
   let ctrlPressed = false;
   $: loc = $location ? $location.replace(/\/+$/g, '') : '';
+  $: salesTab = new URLSearchParams($querystring || '').get('tab') || 'sales';
+  $: reportsMenuActive =
+    loc === '/dashboard/stock-adjustments' ||
+    loc.startsWith('/dashboard/accounts/report') ||
+    loc.startsWith('/dashboard/accounts/general-report') ||
+    (loc === '/dashboard/sales' && salesTab === 'products');
+  $: if (reportsMenuActive) reportsMenuOpen = true;
+
+  function toggleReportsMenu() {
+    reportsMenuOpen = !reportsMenuOpen;
+  }
 
   function handleKeyDown(e) {
     if (localStorage.getItem('role_id') == '5') return;
@@ -271,7 +283,7 @@ import { settingsApi } from '../api/settingsApi.js';
           use:link
           href="/dashboard/accounts/list"
           class="list-group-item list-group-item-action {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-          class:active={loc.startsWith('/dashboard/accounts/') || loc.startsWith('/dashboard/account/')}>
+          class:active={!reportsMenuActive && (loc.startsWith('/dashboard/accounts/') || loc.startsWith('/dashboard/account/'))}>
           <i class="bi bi-people me-2"></i>
           {t('Accounts')}
         </a>
@@ -348,7 +360,7 @@ import { settingsApi } from '../api/settingsApi.js';
           (shiftPressed && ctrlPressed)
             ? ''
             : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-          class:active={$location === '/dashboard/sales'}>
+          class:active={$location === '/dashboard/sales' && salesTab !== 'products'}>
           <i class="bi bi-cart-check me-2"></i>
           {t('Sales')}
         </a>
@@ -480,20 +492,48 @@ import { settingsApi } from '../api/settingsApi.js';
           <i class="bi bi-box-seam me-2"></i>
           {t('Stock Transactions')}
         </a>
-        {#if permissions?.some(p => p.code === "Products" && p.view)}
-          <a use:link href="/dashboard/stock-adjustments"
-            class="list-group-item list-group-item-action"
-            class:active={$location === '/dashboard/stock-adjustments'}>
-            <i class="bi bi-sliders me-2"></i>
-            {t('Stock adjustments')}
-          </a>
-        {/if}
-        <a use:link href="/dashboard/reports"
-          class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
-          class:active={$location === '/dashboard/reports'}>
-          <i class="bi bi-file-bar-graph me-2"></i>
-          {t('Reports')}
-        </a>
+        <div class="sidebar-report-group" class:open={reportsMenuOpen}>
+          <button
+            type="button"
+            class="list-group-item list-group-item-action sidebar-report-toggle"
+            class:active={reportsMenuActive}
+            aria-expanded={reportsMenuOpen}
+            on:click={toggleReportsMenu}>
+            <i class="bi bi-file-bar-graph me-2"></i>
+            <span>{t('Reports')}</span>
+            <i class="bi bi-chevron-down sidebar-report-chevron" aria-hidden="true"></i>
+          </button>
+          {#if reportsMenuOpen}
+            <div class="sidebar-report-links">
+              {#if permissions?.some(p => p.code === "Products" && p.view)}
+                <a use:link href="/dashboard/stock-adjustments"
+                  class="list-group-item list-group-item-action"
+                  class:active={loc === '/dashboard/stock-adjustments'}>
+                  <i class="bi bi-sliders me-2"></i>
+                  {t('Stock adjustments')}
+                </a>
+              {/if}
+              <a use:link href="/dashboard/accounts/report"
+                class="list-group-item list-group-item-action"
+                class:active={loc.startsWith('/dashboard/accounts/report')}>
+                <i class="bi bi-person-lines-fill me-2"></i>
+                {t('Report')}
+              </a>
+              <a use:link href="/dashboard/accounts/general-report"
+                class="list-group-item list-group-item-action"
+                class:active={loc.startsWith('/dashboard/accounts/general-report')}>
+                <i class="bi bi-journal-text me-2"></i>
+                {t('General Report')}
+              </a>
+              <a use:link href="/dashboard/sales?tab=products"
+                class="list-group-item list-group-item-action"
+                class:active={loc === '/dashboard/sales' && salesTab === 'products'}>
+                <i class="bi bi-box-seam me-2"></i>
+                {t('Products Report')}
+              </a>
+            </div>
+          {/if}
+        </div>
         {#if permissions?.some(p => p.code === "Settings" && p.view)}
           <a use:link href="/dashboard/settings/main"
             class="list-group-item list-group-item-action"
@@ -729,16 +769,15 @@ import { settingsApi } from '../api/settingsApi.js';
     overflow-y: auto;
     padding: 0;
     scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 transparent;
+    scrollbar-width: none;
   }
 
   .sidebar-menu::-webkit-scrollbar {
-    width: 6px;
+    display: none;
   }
 
   .sidebar-menu::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: #cbd5e1;
+    display: none;
   }
 
   .sidebar-menu :global(.list-group-item) {
@@ -763,11 +802,11 @@ import { settingsApi } from '../api/settingsApi.js';
   }
 
   :global(html.dark) .sidebar-menu {
-    scrollbar-color: #475569 transparent;
+    scrollbar-width: none;
   }
 
   :global(html.dark) .sidebar-menu::-webkit-scrollbar-thumb {
-    background: #475569;
+    display: none;
   }
 
   :global(html.dark) .sidebar-menu :global(.list-group-item) {
@@ -843,6 +882,53 @@ import { settingsApi } from '../api/settingsApi.js';
 
   .sidebar-menu :global(.list-group-item.active::before) {
     background: transparent;
+  }
+
+  .sidebar-report-group {
+    margin: 0.08rem 0;
+  }
+
+  .sidebar-report-toggle {
+    width: 100%;
+    cursor: pointer;
+    text-align: start;
+  }
+
+  .sidebar-report-toggle span {
+    flex: 1 1 auto;
+  }
+
+  .sidebar-report-chevron {
+    width: auto !important;
+    height: auto !important;
+    margin-inline-start: auto !important;
+    font-size: 0.68rem !important;
+    transition: transform 0.18s ease;
+  }
+
+  .sidebar-report-group.open .sidebar-report-chevron {
+    transform: rotate(180deg);
+  }
+
+  .sidebar-report-links {
+    margin: 0.15rem 0 0.35rem;
+    padding-inline-start: 0.8rem;
+    border-inline-start: 1px solid #dbe5f1;
+  }
+
+  .sidebar-report-links :global(.list-group-item) {
+    min-height: 2.35rem;
+    margin: 0.04rem 0;
+    padding-block: 0.38rem;
+    font-size: 0.74rem;
+  }
+
+  :global(html.dark) .sidebar-report-links {
+    border-color: #475569;
+  }
+
+  #erp-sidebar.collapsed .sidebar-report-links {
+    display: none;
   }
 
   .sidebar-profile {

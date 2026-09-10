@@ -436,8 +436,8 @@
 
   function formatSummaryValues(balance, type) {
     return getCurrencyInfoArray(balance)
-      .map((cur) => formatAmountInline(cur[type], cur.code))
-      .join('<br />') || '0';
+      .map((cur) => `<div class="summary-currency-line">${formatAmountInline(cur[type], cur.code)}</div>`)
+      .join('') || '0';
   }
 
   $: reportToolbarFilters = [
@@ -1081,13 +1081,27 @@
     font-weight: 700;
   }
 
+  .account-report-summary :global(.summary-value) {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: visible;
+    white-space: normal;
+  }
+
   .report-summary-values {
     color: #13213a;
     font-size: 0.86rem;
     font-weight: 800;
     line-height: 1.45;
     font-variant-numeric: tabular-nums;
-    text-align: start;
+    text-align: center;
+  }
+
+  :global(.summary-currency-line) {
+    display: block !important;
+    width: 100%;
+    min-height: 1.35rem;
   }
 
   :global(html.dark) .report-summary-values {

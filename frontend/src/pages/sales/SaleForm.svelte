@@ -17,7 +17,7 @@ import { settingsApi } from '../../api/settingsApi.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
-  import { showDate, setDatePickers } from '../../calendar.js';
+  import { showDate, setDatePickers, getKabulDate } from '../../calendar.js';
   let accountModalRef;
 
   import { calculateRemainingAndBenefit, resolveCostCurrency } from './SalesHelper.js';
@@ -41,7 +41,7 @@ import { settingsApi } from '../../api/settingsApi.js';
   $: default_sale_description = $settings_all.find((s) => s.key === 'default_sale_description')?.value || '';
   $: enable_smart_description = $settings_all.find((s) => s.key === 'enable_smart_description')?.value == 1;
 
-  let date = new Date().toISOString().slice(0, 10);
+  let date = getKabulDate();
   let due_date = null;
 
   $: if (enable_due_date && !due_date) {
@@ -185,7 +185,7 @@ import { settingsApi } from '../../api/settingsApi.js';
     account_id: '',
     sale_type: '',
     invoice_number: '',
-    invoice_date: new Date().toISOString().slice(0, 10),
+    invoice_date: getKabulDate(),
     due_date: null,
     description: $settings_all.find((s) => s.key === 'default_sale_description')?.value || '',
     currency: '',
@@ -1360,7 +1360,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   }
 
   function resetForm() {
-    date = new Date().toISOString().slice(0, 10);
+    date = getKabulDate();
     due_date = null;
     form = {
       ...form,
@@ -1368,7 +1368,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       account_id: '',
       sale_type: '',
       invoice_number: '',
-      invoice_date: new Date().toISOString().slice(0, 10),
+      invoice_date: getKabulDate(),
       due_date: null,
       description: $settings_all.find((s) => s.key === 'default_sale_description')?.value || '',
     };

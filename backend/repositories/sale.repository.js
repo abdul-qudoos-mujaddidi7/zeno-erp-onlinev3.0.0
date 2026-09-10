@@ -132,6 +132,15 @@ const {
   paginateSelect,
 } = require('../utils/pagination');
 
+function kabulDateBoundaryUtc(dateString, endOfDay = false) {
+  const match = String(dateString || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return dateString;
+
+  const milliseconds = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), endOfDay ? 24 : 0, 0);
+  const date = new Date(milliseconds - (4 * 60 + 30) * 60 * 1000);
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 function saleListOrderSql(sortBy = 'created_at', sortDir = 'desc') {
   const dir = String(sortDir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   const invoiceSeq = `CAST(SUBSTRING_INDEX(invoice_number, '-', -1) AS UNSIGNED)`;
@@ -207,13 +216,13 @@ async function findAll(
   }
 
   if (dateFrom) {
-    conditions.push('COALESCE(invoice_date, created_at) >= ?');
-    values.push(dateFrom);
+    conditions.push('(invoice_date >= ? OR (invoice_date IS NULL AND created_at >= ?))');
+    values.push(dateFrom, kabulDateBoundaryUtc(dateFrom));
   }
 
   if (dateTo) {
-    conditions.push('COALESCE(invoice_date, created_at) < DATE_ADD(?, INTERVAL 1 DAY)');
-    values.push(dateTo);
+    conditions.push('(invoice_date < DATE_ADD(?, INTERVAL 1 DAY) OR (invoice_date IS NULL AND created_at < ?))');
+    values.push(dateTo, kabulDateBoundaryUtc(dateTo, true));
   }
 
   if (invoiceStatus && invoiceStatus !== 'all') {

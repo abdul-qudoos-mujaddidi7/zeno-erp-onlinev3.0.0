@@ -424,9 +424,16 @@ import { saleApi } from '../api/saleApi.js';
   }
 
   function getLocalDate() {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().split('T')[0];
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kabul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date()).reduce((result, part) => {
+      result[part.type] = part.value;
+      return result;
+    }, {});
+    return `${parts.year}-${parts.month}-${parts.day}`;
   }
 
   let fromDate = '';
