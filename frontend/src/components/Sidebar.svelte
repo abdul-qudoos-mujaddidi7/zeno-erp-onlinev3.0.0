@@ -127,14 +127,19 @@ import { settingsApi } from '../api/settingsApi.js';
 
   let shiftPressed = false;
   let ctrlPressed = false;
+  let previousSidebarLocation = '';
   $: loc = $location ? $location.replace(/\/+$/g, '') : '';
   $: salesTab = new URLSearchParams($querystring || '').get('tab') || 'sales';
   $: reportsMenuActive =
     loc === '/dashboard/stock-adjustments' ||
-    loc.startsWith('/dashboard/accounts/report') ||
-    loc.startsWith('/dashboard/accounts/general-report') ||
+    loc === '/dashboard/accounts/report' ||
+    loc === '/dashboard/accounts/general-report' ||
     (loc === '/dashboard/sales' && salesTab === 'products');
   $: if (reportsMenuActive) reportsMenuOpen = true;
+  $: if ($location !== previousSidebarLocation) {
+    previousSidebarLocation = $location;
+    if (!reportsMenuActive) reportsMenuOpen = false;
+  }
 
   function toggleReportsMenu() {
     reportsMenuOpen = !reportsMenuOpen;
@@ -515,13 +520,13 @@ import { settingsApi } from '../api/settingsApi.js';
               {/if}
               <a use:link href="/dashboard/accounts/report"
                 class="list-group-item list-group-item-action"
-                class:active={loc.startsWith('/dashboard/accounts/report')}>
+                class:active={loc === '/dashboard/accounts/report'}>
                 <i class="bi bi-person-lines-fill me-2"></i>
                 {t('Report')}
               </a>
               <a use:link href="/dashboard/accounts/general-report"
                 class="list-group-item list-group-item-action"
-                class:active={loc.startsWith('/dashboard/accounts/general-report')}>
+                class:active={loc === '/dashboard/accounts/general-report'}>
                 <i class="bi bi-journal-text me-2"></i>
                 {t('General Report')}
               </a>

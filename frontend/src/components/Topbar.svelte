@@ -186,20 +186,20 @@ import { userApi } from '../api/userApi.js';
               <i class="bi bi-people"></i>
               </li>
             <li class="nav-item">
-              <a class="nav-link ${loc.startsWith('/dashboard/accounts/list') ? 'active' : ''} py-0" href="/#/dashboard/accounts/list"><small>${t('Accounts')}</small></a>
+              <a class="nav-link ${locPath === '/dashboard/accounts/list' ? 'active' : ''} py-0" href="/#/dashboard/accounts/list"><small>${t('Accounts')}</small></a>
             </li>
 
             <li class="nav-item d-flex align-items-center">
   <div class="nav-divider"></div>
 </li>
             <li class="nav-item">
-              <a class="nav-link ${loc.startsWith('/dashboard/accounts/report') ? 'active' : ''} py-0" href="/#/dashboard/accounts/report"><small>${t('Report')}</small></a>
+              <a class="nav-link ${locPath === '/dashboard/accounts/report' ? 'active' : ''} py-0" href="/#/dashboard/accounts/report"><small>${t('Report')}</small></a>
             </li>
             <li class="nav-item d-flex align-items-center">
   <div class="nav-divider"></div>
 </li>
             <li class="nav-item">
-              <a class="nav-link ${loc.startsWith('/dashboard/accounts/general-report') ? 'active' : ''} py-0" href="/#/dashboard/accounts/general-report"><small>${t('General Report')}</small></a>
+              <a class="nav-link ${locPath === '/dashboard/accounts/general-report' ? 'active' : ''} py-0" href="/#/dashboard/accounts/general-report"><small>${t('General Report')}</small></a>
             </li>
           </ul>
           `;

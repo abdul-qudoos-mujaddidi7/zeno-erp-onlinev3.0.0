@@ -679,7 +679,11 @@
               icon="bi-arrow-down-left"
               tone="green">
               <div class="report-summary-values">
-                {@html creditSummary}
+                {#if summaryCurrencies.length}
+                  {#each summaryCurrencies as cur}
+                    <div class="summary-currency-line">{@html formatAmountInline(cur.credit, cur.code)}</div>
+                  {/each}
+                {:else}0{/if}
               </div>
             </SummaryCard>
 
@@ -688,7 +692,11 @@
               icon="bi-arrow-up-right"
               tone="amber">
               <div class="report-summary-values">
-                {@html debitSummary}
+                {#if summaryCurrencies.length}
+                  {#each summaryCurrencies as cur}
+                    <div class="summary-currency-line">{@html formatAmountInline(cur.debit, cur.code)}</div>
+                  {/each}
+                {:else}0{/if}
               </div>
             </SummaryCard>
 
@@ -697,7 +705,11 @@
               icon="bi-wallet2"
               tone="cyan">
               <div class="report-summary-values">
-                {@html balanceSummary}
+                {#if summaryCurrencies.length}
+                  {#each summaryCurrencies as cur}
+                    <div class="summary-currency-line">{@html formatAmountInline(cur.balance, cur.code)}</div>
+                  {/each}
+                {:else}0{/if}
               </div>
             </SummaryCard>
           </div>
