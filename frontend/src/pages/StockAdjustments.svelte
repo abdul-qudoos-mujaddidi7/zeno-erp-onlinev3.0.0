@@ -134,11 +134,11 @@
     document.addEventListener('click', handleClick);
     return { destroy: () => document.removeEventListener('click', handleClick) };
   }
-  function openNewAdjustment() { error = ''; view = 'new'; }
+  async function openNewAdjustment() { error = ''; await loadReferences(); view = 'new'; }
   function showHistory() { error = ''; view = 'history'; loadList(); }
   function handleFilterChange(event) { filters = { ...filters, [event.detail.key]: event.detail.value }; loadList(); }
   function resetFilters() { historySearch = ''; filters = { product_id: '', warehouse_id: '', adjustment_type: '', date_from: '', date_to: '' }; loadList(); }
-  async function save() {
+  async function save(mode = 'history') {
     error = '';
     if (!form.product_id || !form.warehouse_id || quantity <= 0 || !form.reason.trim()) {
       error = t('Select a product and warehouse, enter a positive quantity, and provide a reason.');
@@ -153,8 +153,10 @@
       const result = await stockAdjustmentApi.create({ ...form, qty: quantity });
       const saved = result.data;
       toast.success(t('Stock adjusted'), (saved.product_name || t('Product')) + ': ' + number(saved.after_qty) + ' ' + t('system units remaining'));
+      await loadReferences();
       form = { product_id: '', warehouse_id: '', adjustment_type: 'increase', qty: '', reason: t('Physical stock count'), note: '' };
-      productSearch = ''; warehouseSearch = ''; showProductDropdown = false; showWarehouseDropdown = false; warehouseQty = 0; view = 'history'; await loadList();
+      productSearch = ''; warehouseSearch = ''; showProductDropdown = false; showWarehouseDropdown = false; warehouseQty = 0;
+      if (mode === 'again') { view = 'new'; } else { view = 'history'; await loadList(); }
     } catch (cause) { error = cause.message; } finally { saving = false; }
   }
   onMount(async () => { try { await loadReferences(); await loadList(); } catch (cause) { error = cause.message; loading = false; } });
@@ -217,7 +219,7 @@
           </div>
 
           <div class="form-grid"><label class="form-field"><span>{t('Reason')}</span><select bind:value={form.reason}>{#each reasons as reason}<option value={reason}>{reason}</option>{/each}</select></label><label class="form-field"><span>{t('Note')} <em>{t('Optional')}</em></span><textarea bind:value={form.note} rows="2" placeholder={t('Add count sheet, shelf, or incident details')}></textarea></label></div>
-          <div class="form-actions"><ActionButton type="submit" icon="bi-check2-circle" label={t('Save adjustment')} loading={saving} disabled={saving || !selectedProduct || !form.warehouse_id} /><ActionButton variant="secondary" label={t('Cancel')} on:click={showHistory} /></div>
+          <div class="form-actions"><ActionButton type="submit" icon="bi-check2-circle" label={t('Save adjustment')} loading={saving} disabled={saving || !selectedProduct || !form.warehouse_id} /><ActionButton type="button" variant="secondary" label={t('Save adjustment and add another')} loading={saving} disabled={saving || !selectedProduct || !form.warehouse_id} on:click={() => save('again')} /><ActionButton type="button" variant="secondary" label={t('Cancel')} on:click={showHistory} /></div>
         </form>
       </section>
     </div>
