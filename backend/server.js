@@ -7,6 +7,8 @@ const multer = require("multer");
 const fs = require("fs");
 
 const apiV2Routes = require("./routes/v2");
+const auth = require("./middleware/auth");
+const stockAdjustmentRoutes = require("./routes/v2/stock-adjustment.routes");
 const notFound = require("./middleware/notFound");
 const errorHandler = require("./middleware/errorHandler");
 
@@ -85,6 +87,8 @@ app.use("/api/superadmin", require("./routes/components/superadmin"));
 
 // New fully-online API. Existing routes remain active during migration.
 app.use("/api/v2", apiV2Routes);
+// Compatibility endpoint for integrations that use the non-versioned REST path.
+app.use("/api/stock-adjustments", auth, stockAdjustmentRoutes);
 
 app.get("/api/server-time", (req, res) => {
   res.json({

@@ -480,6 +480,14 @@ import { settingsApi } from '../api/settingsApi.js';
           <i class="bi bi-box-seam me-2"></i>
           {t('Stock Transactions')}
         </a>
+        {#if permissions?.some(p => p.code === "Products" && p.view)}
+          <a use:link href="/dashboard/stock-adjustments"
+            class="list-group-item list-group-item-action"
+            class:active={$location === '/dashboard/stock-adjustments'}>
+            <i class="bi bi-sliders me-2"></i>
+            {t('Stock adjustments')}
+          </a>
+        {/if}
         <a use:link href="/dashboard/reports"
           class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
           class:active={$location === '/dashboard/reports'}>

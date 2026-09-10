@@ -51,6 +51,7 @@
   const loadStock = () => import('../pages/Stock.svelte');
   const loadServicesIndex = () => import('../pages/products/ServicesIndex.svelte');
   const loadStockTransactions = () => import('../pages/StockTransactions.svelte');
+  const loadStockAdjustments = () => import('../pages/StockAdjustments.svelte');
   const loadProductForm = () => import('../pages/products/ProductForm.svelte');
   const loadProduct = () => import('../pages/Product.svelte');
   const loadReports = () => import('../pages/Reports.svelte');
@@ -302,6 +303,10 @@
         <AsyncPage loader={loadServicesIndex} />
       {:else if loc === '/dashboard/stock-transactions'}
         <AsyncPage loader={loadStockTransactions} />
+      {:else if loc === '/dashboard/stock-adjustments'}
+        <div class="route-fill route-fill--scrollable">
+          <AsyncPage loader={loadStockAdjustments} />
+        </div>
       {:else if loc.startsWith('/dashboard/product-form/')}
         <AsyncPage loader={loadProductForm} {productFormId} />
       {:else if loc.startsWith('/dashboard/product/')}
@@ -382,6 +387,14 @@
   min-height: 0;
   overflow: hidden;
 }
+
+  /* The adjustment editor is taller than the dashboard viewport. */
+  .route-fill--scrollable {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
 
   /* Non-list form pages still need to scroll the whole page */
   .erp-page-main:not(:has([class*='-table-card'])):not(:has(.table-card)):not(:has(.journals-card)):not(:has(.exchanges-card)):not(:has(.card > .card-body.p-0)):not(:has(.card > .card-body .table-responsive)) {

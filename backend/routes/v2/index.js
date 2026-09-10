@@ -156,6 +156,9 @@ const utilityMeterRoutes =
 const meterReadingRoutes =
   require('./meter-reading.routes');
 
+const stockAdjustmentRoutes =
+  require('./stock-adjustment.routes');
+
 const router = express.Router();
 
 /*
@@ -421,6 +424,11 @@ router.use(
 router.use(
   '/meter-readings',
   meterReadingRoutes,
+);
+
+router.use(
+  '/stock-adjustments',
+  stockAdjustmentRoutes,
 );
 
 module.exports = router;
