@@ -376,6 +376,7 @@
         showReceipt = true;
         showA4Receipt = false;
       }
+      componentRoot?.closest('.quick-entry-modal')?.classList.add('receipt-open');
     } else {
       dispatch('saved', { journal: data });
     }
@@ -390,12 +391,15 @@
     );
   }
 
+  }
+
   function closeReceipt() {
     showReceipt = false;
     showA4Receipt = false;
+    componentRoot?.closest('.quick-entry-modal')?.classList.remove('receipt-open');
     dispatch('saved', { journal: savedJournal });
   }
-}
+
   function resetForm() {
     date = new Date().toISOString().slice(0, 10);
     description = '';
@@ -1458,17 +1462,25 @@ import { purchaseApi } from '../../api/purchaseApi.js';
     </div>
   </div>
   {#if showReceipt}
-    <JournalReceiptModal journal={savedJournal} on:close={closeReceipt} />
+    <div use:portal>
+      <JournalReceiptModal journal={savedJournal} on:close={closeReceipt} />
+    </div>
   {/if}
   {#if showA4Receipt}
-    <JournalA4ReceiptModal
-      journal={savedJournal}
-      on:close={closeReceipt}
-      on:show80mm={() => ((showReceipt = true), (showA4Receipt = false))} />
+    <div use:portal>
+      <JournalA4ReceiptModal
+        journal={savedJournal}
+        on:close={closeReceipt}
+        on:show80mm={() => ((showReceipt = true), (showA4Receipt = false))} />
+    </div>
   {/if}
 {/if}
 
 <style>
+  :global(.quick-entry-modal.receipt-open) {
+    visibility: hidden;
+  }
+
   .journal-form-page {
     --journal-control-height: 2rem;
     --journal-label-offset: 1.05rem;
