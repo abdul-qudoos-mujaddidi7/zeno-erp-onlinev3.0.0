@@ -199,8 +199,8 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
   }
 </script>
 
-<div class="modal-backdrop show" style="z-index:1040;" on:click={close}></div>
-<div class="modal d-block" tabindex="-1" style="z-index:1050;">
+<div class="modal-backdrop show" style="z-index:10060;" on:click={close}></div>
+<div class="modal d-block" tabindex="-1" style="z-index:10070;">
   <div class="modal-dialog modal-lg modal-dialog-centered" style="max-width: 750px;">
     <div class="modal-content">
       <div class="modal-header">

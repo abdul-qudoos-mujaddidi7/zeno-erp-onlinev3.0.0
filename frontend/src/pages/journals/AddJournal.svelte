@@ -368,8 +368,6 @@
     await loadAccounts();
     await tick();
 
-    dispatch('saved', { journal: data });
-
     if (!general) {
       if (enable_a4_default_print_mode) {
         showA4Receipt = true;
@@ -378,6 +376,8 @@
         showReceipt = true;
         showA4Receipt = false;
       }
+    } else {
+      dispatch('saved', { journal: data });
     }
 
     toast.success(t('Success'), t('Journal saved successfully.'));
@@ -388,6 +388,12 @@
       t('Error'),
       t('An error occurred while saving the journal. Please try again.')
     );
+  }
+
+  function closeReceipt() {
+    showReceipt = false;
+    showA4Receipt = false;
+    dispatch('saved', { journal: savedJournal });
   }
 }
   function resetForm() {
@@ -1452,12 +1458,12 @@ import { purchaseApi } from '../../api/purchaseApi.js';
     </div>
   </div>
   {#if showReceipt}
-    <JournalReceiptModal journal={savedJournal} on:close={() => (showReceipt = false)} />
+    <JournalReceiptModal journal={savedJournal} on:close={closeReceipt} />
   {/if}
   {#if showA4Receipt}
     <JournalA4ReceiptModal
       journal={savedJournal}
-      on:close={() => (showA4Receipt = false)}
+      on:close={closeReceipt}
       on:show80mm={() => ((showReceipt = true), (showA4Receipt = false))} />
   {/if}
 {/if}
