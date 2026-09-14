@@ -24,7 +24,9 @@
     t('Theft/Loss'),
     t('Other'),
   ];
+
   const number = (value) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 3 });
+  const ALL_WAREHOUSES = '__all__';
   let view = 'history';
   let products = [], warehouses = [], adjustments = [], report = [];
   let loading = true, saving = false, error = '', productSearch = '', warehouseSearch = '', historySearch = '', warehouseQty = 0;
@@ -41,13 +43,17 @@
   let productResultsEl = null;
 
   $: selectedProduct = products.find((item) => String(item.id) === String(form.product_id)) || null;
-  $: selectedWarehouse = warehouses.find((item) => String(item.id) === String(form.warehouse_id)) || null;
+  $: selectedWarehouse = form.warehouse_id === ALL_WAREHOUSES
+    ? { id: ALL_WAREHOUSES, name: t('All warehouses'), isAll: true }
+    : warehouses.find((item) => String(item.id) === String(form.warehouse_id)) || null;
+  $: isAllWarehouses = form.warehouse_id === ALL_WAREHOUSES;
+  $: hasSpecificWarehouse = Boolean(form.warehouse_id) && !isAllWarehouses;
   /*
    * Zeroing resets the product's own stock and its warehouse balances on the
    * server, so anything above zero in either place is worth zeroing.
    */
   $: productQty = Number(selectedProduct?.quantity || 0);
-  $: canZeroStock = Boolean(selectedProduct && selectedWarehouse) && (productQty !== 0 || Number(warehouseQty || 0) !== 0);
+  $: canZeroStock = Boolean(selectedProduct && hasSpecificWarehouse) && (productQty !== 0 || Number(warehouseQty || 0) !== 0);
   // Rank matches so the product the user means surfaces first even when a
   // short query matches hundreds of rows.
   function productMatchRank(item, needle) {
@@ -77,7 +83,19 @@
   })();
   $: visibleProducts = matchingProducts.slice(0, productResultLimit);
   $: hasMoreProducts = matchingProducts.length > visibleProducts.length;
-  $: matchingWarehouses = warehouses.filter((item) => String(item.name || '').toLowerCase().includes(warehouseSearch.trim().toLowerCase())).slice(0, 10);
+  $: warehouseOptions = [
+    { id: ALL_WAREHOUSES, name: t('All warehouses'), isAll: true },
+    ...warehouses,
+  ];
+  // When a warehouse is already selected, clicking the field should still show
+  // every warehouse. Once the user types, handleWarehouseSearch clears the
+  // selected id and this becomes a normal search filter.
+  $: warehouseNeedle = selectedWarehouse && warehouseSearch === selectedWarehouse.name
+    ? ''
+    : warehouseSearch.trim().toLowerCase();
+  $: matchingWarehouses = warehouseOptions.filter((item) =>
+    String(item.name || '').toLowerCase().includes(warehouseNeedle)
+  );
   $: quantity = Number(form.qty || 0);
   $: resultingQty = Number(selectedProduct?.quantity || 0) + (form.adjustment_type === 'increase' ? quantity : -quantity);
   $: resultingWarehouseQty = warehouseQty + (form.adjustment_type === 'increase' ? quantity : -quantity);
@@ -116,10 +134,22 @@
   }
   async function loadWarehouseQty() {
     warehouseQty = 0;
-    if (!form.product_id || !form.warehouse_id) return;
+    if (!form.product_id) return;
     try {
-      const result = await warehouseProductApi.getAll({ product_id: form.product_id, warehouse_id: form.warehouse_id, status: 1 });
-      warehouseQty = Number(result?.data?.[0]?.quantity || 0);
+      const warehouseId = form.warehouse_id;
+      const useAllWarehouses = warehouseId === ALL_WAREHOUSES || !warehouseId;
+      const params = { product_id: form.product_id, status: 1 };
+      if (!useAllWarehouses) {
+        params.warehouse_id = warehouseId;
+      }
+      const result = await warehouseProductApi.getAll(params);
+      const rows = Array.isArray(result?.data) ? result.data : [];
+      if (useAllWarehouses) {
+        warehouseQty = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+      } else {
+        warehouseQty = Number(rows?.[0]?.quantity || 0);
+      }
+
     } catch (_) { warehouseQty = 0; }
   }
   function resetProductResults() {
@@ -152,8 +182,15 @@
   function selectProduct(product) {
     productSearch = product.name;
     resetProductResults();
-    form = { ...form, product_id: product.id };
+    form = {
+      ...form,
+      product_id: product.id,
+      warehouse_id: ALL_WAREHOUSES,
+    };
+    warehouseSearch = t('All warehouses');
+    activeWarehouseIndex = 0;
     showProductDropdown = false;
+    showWarehouseDropdown = false;
     loadWarehouseQty();
   }
   function selectWarehouse(warehouse) {
@@ -206,8 +243,8 @@
   }
   function openZeroStock() {
     error = '';
-    if (!selectedProduct || !selectedWarehouse) {
-      error = t('Select a product and warehouse before zeroing the stock.');
+    if (!selectedProduct || !hasSpecificWarehouse) {
+      error = t('Select a product and a specific warehouse before zeroing the stock.');
       return;
     }
     if (!canZeroStock) {
@@ -245,8 +282,8 @@
   function resetFilters() { historySearch = ''; filters = { product_id: '', warehouse_id: '', adjustment_type: '', date_from: '', date_to: '' }; loadList(); }
   async function save(mode = 'history') {
     error = '';
-    if (!form.product_id || !form.warehouse_id || quantity <= 0 || !form.reason.trim()) {
-      error = t('Select a product and warehouse, enter a positive quantity, and provide a reason.');
+    if (!form.product_id || !hasSpecificWarehouse || quantity <= 0 || !form.reason.trim()) {
+      error = t('Select a product and a specific warehouse, enter a positive quantity, and provide a reason.');
       return;
     }
     if (form.adjustment_type === 'decrease' && (resultingQty < 0 || resultingWarehouseQty < 0)) {
@@ -281,6 +318,7 @@
       <FilterToolbar searchValue={historySearch} searchPlaceholder={t('Search adjustments')} filters={adjustmentFilters} filterLabel={t('Filter adjustments')} resetLabel={t('Clear filters')} on:searchChange={(event) => (historySearch = event.detail)} on:filterChange={handleFilterChange} on:reset={resetFilters} />
     {/if}
   </svelte:fragment>
+
   <svelte:fragment slot="stats">
     {#if view === 'history'}
       <div class="index-summary-grid">
@@ -316,15 +354,16 @@
 
           <div class="form-grid product-warehouse-row">
             <label class="form-field lookup-field" use:closeLookupOnOutsideClick><span>{t('Product')}</span><div class="lookup-control" on:click|stopPropagation><i class="bi bi-search" aria-hidden="true"></i><input type="search" value={productSearch} on:input={handleProductSearch} on:focus={() => (showProductDropdown = true)} on:keydown={(event) => handleLookupKeydown(event, 'product')} placeholder={t('Select product')} autocomplete="off" required /></div>{#if showProductDropdown}<div class="lookup-results" bind:this={productResultsEl} on:scroll={loadMoreProducts} on:click|stopPropagation>{#each visibleProducts as product, index (product.id)}<button type="button" class:active={index === activeProductIndex} on:mousedown|preventDefault={() => selectProduct(product)}><strong>{product.name}</strong>{#if product.code}<small>{product.code}</small>{/if}</button>{/each}{#if !matchingProducts.length}<div class="lookup-empty">{t('No products found.')}</div>{/if}{#if hasMoreProducts}<div class="lookup-more">{number(visibleProducts.length)} / {number(matchingProducts.length)}</div>{/if}</div>{/if}</label>
-            <label class="form-field lookup-field" use:closeLookupOnOutsideClick><span>{t('Warehouse')}</span><div class="lookup-control" on:click|stopPropagation><i class="bi bi-search" aria-hidden="true"></i><input type="search" value={warehouseSearch} on:input={handleWarehouseSearch} on:focus={() => (showWarehouseDropdown = true)} on:keydown={(event) => handleLookupKeydown(event, 'warehouse')} placeholder={t('Select warehouse')} autocomplete="off" required /></div>{#if showWarehouseDropdown}<div class="lookup-results" on:click|stopPropagation>{#each matchingWarehouses as warehouse, index (warehouse.id)}<button type="button" class:active={index === activeWarehouseIndex} on:mousedown|preventDefault={() => selectWarehouse(warehouse)}><strong>{warehouse.name}</strong></button>{/each}{#if !matchingWarehouses.length}<div class="lookup-empty">{t('No warehouses found.')}</div>{/if}</div>{/if}</label>
+            <label class="form-field lookup-field" use:closeLookupOnOutsideClick><span>{t('Warehouse')}</span><div class="lookup-control" on:click|stopPropagation><i class="bi bi-search" aria-hidden="true"></i><input type="search" value={warehouseSearch} on:input={handleWarehouseSearch} on:focus={() => (showWarehouseDropdown = true)} on:keydown={(event) => handleLookupKeydown(event, 'warehouse')} placeholder={t('Select warehouse')} autocomplete="off" required /></div>{#if showWarehouseDropdown}<div class="lookup-results" on:click|stopPropagation>{#each matchingWarehouses as warehouse, index (warehouse.id)}<button type="button" class:active={index === activeWarehouseIndex} class:all-warehouses={warehouse.isAll} on:mousedown|preventDefault={() => selectWarehouse(warehouse)}><strong>{#if warehouse.isAll}<i class="bi bi-buildings" aria-hidden="true"></i>{/if}{warehouse.name}</strong>{#if warehouse.isAll}<small>{t('Total stock')}</small>{/if}</button>{/each}{#if !matchingWarehouses.length}<div class="lookup-empty">{t('No warehouses found.')}</div>{/if}</div>{/if}</label>
           </div>
+
           <div class="form-grid adjustment-grid">
-            <fieldset class="direction-field"><legend>{t('Direction')}</legend><label><input type="radio" bind:group={form.adjustment_type} value="increase" /><span class="increase"><i class="bi bi-plus-lg"></i>{t('Increase')}</span></label><label><input type="radio" bind:group={form.adjustment_type} value="decrease" /><span class="decrease"><i class="bi bi-dash-lg"></i>{t('Decrease')}</span></label><button type="button" class="zero-btn" disabled={zeroing} title={t('Set the stock of this product to zero')} on:click={openZeroStock}><i class="bi bi-slash-circle"></i>{t('Zero out')}</button></fieldset>
+            <fieldset class="direction-field"><legend>{t('Direction')}</legend><label><input type="radio" bind:group={form.adjustment_type} value="increase" /><span class="increase"><i class="bi bi-plus-lg"></i>{t('Increase')}</span></label><label><input type="radio" bind:group={form.adjustment_type} value="decrease" /><span class="decrease"><i class="bi bi-dash-lg"></i>{t('Decrease')}</span></label><button type="button" class="zero-btn" disabled={zeroing || !selectedProduct || !hasSpecificWarehouse} title={t('Set the stock of this product to zero')} on:click={openZeroStock}><i class="bi bi-slash-circle"></i>{t('Zero out')}</button></fieldset>
             <label class="form-field"><span>{t('Quantity')}</span><input type="number" min="0.001" step="0.001" bind:value={form.qty} placeholder="0.000" required /></label>
           </div>
 
           <div class="form-grid"><label class="form-field"><span>{t('Reason')}</span><select bind:value={form.reason}>{#each reasons as reason}<option value={reason}>{reason}</option>{/each}</select></label><label class="form-field"><span>{t('Note')} <em>{t('Optional')}</em></span><textarea bind:value={form.note} rows="2" placeholder={t('Add count sheet, shelf, or incident details')}></textarea></label></div>
-          <div class="form-actions"><ActionButton type="submit" icon="bi-check2-circle" label={t('Save adjustment')} loading={saving} disabled={saving || !selectedProduct || !form.warehouse_id} /><ActionButton type="button" variant="secondary" label={t('Save adjustment and add another')} loading={saving} disabled={saving || !selectedProduct || !form.warehouse_id} on:click={() => save('again')} /><ActionButton type="button" variant="secondary" label={t('Cancel')} on:click={showHistory} /></div>
+          <div class="form-actions"><ActionButton type="submit" icon="bi-check2-circle" label={t('Save adjustment')} loading={saving} disabled={saving || !selectedProduct || !hasSpecificWarehouse} /><ActionButton type="button" variant="secondary" label={t('Save adjustment and add another')} loading={saving} disabled={saving || !selectedProduct || !hasSpecificWarehouse} on:click={() => save('again')} /><ActionButton type="button" variant="secondary" label={t('Cancel')} on:click={showHistory} /></div>
         </form>
       </section>
     </div>
@@ -406,6 +445,21 @@
   .form-field input,.form-field select,.form-field textarea { width:100%; min-height:2.45rem; padding:.48rem .65rem; border:1px solid #d6e0ed; border-radius:.55rem; outline:0; background:#fff; color:#172033; direction:rtl; text-align:right; font:inherit; font-size:.8rem; }.form-field textarea { min-height:4.6rem; resize:vertical; }.form-field input:focus,.form-field select:focus,.form-field textarea:focus { border-color:#79a8f8; box-shadow:0 0 0 3px rgba(37,99,235,.09); }
   .lookup-field { position:relative; }.lookup-control { display:flex; align-items:center; min-height:2.45rem; overflow:hidden; border:1px solid #d6e0ed; border-radius:.55rem; background:#fff; direction:rtl; }.lookup-control:focus-within { border-color:#79a8f8; box-shadow:0 0 0 3px rgba(37,99,235,.09); }.lookup-control i { flex:0 0 2.1rem; color:#94a3b8; text-align:center; }.lookup-control input { min-height:2.35rem; border:0; box-shadow:none; }.lookup-control input:focus { border:0; box-shadow:none; }.lookup-more { padding:.4rem; border-top:1px solid #edf1f5; color:#94a3b8; font-size:.68rem; font-weight:700; text-align:center; }
   .lookup-results { position:absolute; z-index:20; top:calc(100% + .35rem); right:0; left:0; max-height:14rem; overflow:auto; padding:.25rem; border:1px solid #d6e0ed; border-radius:.55rem; background:#fff; box-shadow:0 8px 22px rgba(15,23,42,.12); }.lookup-results button { display:flex; align-items:flex-start; justify-content:space-between; width:100%; gap:.75rem; padding:.55rem .65rem; border:0; border-radius:.4rem; background:transparent; color:#172033; direction:rtl; text-align:right; cursor:pointer; }.lookup-results button:hover,.lookup-results button.active { background:#eff6ff; }.lookup-results strong { overflow:hidden; font-size:.78rem; text-overflow:ellipsis; white-space:nowrap; }.lookup-results small { flex:0 0 auto; color:#94a3b8; font-size:.68rem; }.lookup-empty { padding:.8rem; color:#94a3b8; font-size:.74rem; text-align:center; }
+  .lookup-results button.all-warehouses {
+    border-bottom:1px solid #dbe5f0;
+    background:#f8fbff;
+    color:#0f6efd;
+  }
+  .lookup-results button.all-warehouses:hover,
+  .lookup-results button.all-warehouses.active {
+    background:#eaf3ff;
+  }
+  .lookup-results button.all-warehouses strong {
+    display:flex;
+    align-items:center;
+    gap:.4rem;
+  }
+
   /* FIX: force product + warehouse onto one row and let long select text shrink */
   .product-warehouse-row { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
   .product-warehouse-row .form-field select { min-width:0; max-width:100%; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
