@@ -11,6 +11,7 @@ export const stockAdjustmentApi = {
   },
   getById: (id) => api.get(`${BASE_URL}/${id}`),
   create: (data) => api.post(BASE_URL, data),
+  zeroStock: (data) => api.post(`${BASE_URL}/zero-stock`, data),
   getReport(filters = {}) {
     const params = new URLSearchParams();
     ['product_id', 'warehouse_id', 'adjustment_type', 'date_from', 'date_to'].forEach((key) => {

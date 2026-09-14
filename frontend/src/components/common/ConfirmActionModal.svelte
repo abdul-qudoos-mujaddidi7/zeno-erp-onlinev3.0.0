@@ -29,6 +29,13 @@
     variant: 'danger',
     icon: '',
   };
+  /*
+   * Optional wording overrides. Callers reusing this warning for something
+   * other than a deletion (for example zeroing stock) can replace the
+   * "confirm deletion" wording; the defaults keep the original text.
+   */
+  export let confirmInstruction = '';
+  export let confirmErrorMessage = '';
 
   const dispatch = createEventDispatcher();
 
@@ -38,9 +45,11 @@
 
   async function handleAction() {
     if (confirmationText !== String(randomNumber)) {
-      confirmError = t(
-        'Confirmation text does not match. Please type the correct number to confirm deletion.',
-      );
+      confirmError =
+        confirmErrorMessage ||
+        t(
+          'Confirmation text does not match. Please type the correct number to confirm deletion.',
+        );
       return;
     }
     confirmError = '';
@@ -93,7 +102,7 @@
 
     <div class="app-modal-field">
       <label for={inputId}>
-        {t(`To confirm deletion, please type`)} {randomNumber} {t(`in the box below:`)}
+        {confirmInstruction || t(`To confirm deletion, please type`)} {randomNumber} {t(`in the box below:`)}
       </label>
       <input
         id={inputId}

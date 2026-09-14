@@ -12,6 +12,7 @@
   import EmptyState from '../components/common/EmptyState.svelte';
   import StatusBadge from '../components/common/StatusBadge.svelte';
   import IndexPageLayout from '../lib/components/index/IndexPageLayout.svelte';
+  import ConfirmActionModal from '../components/common/ConfirmActionModal.svelte';
   import { t, lang } from '../i18n/i18n';
   import { showDate } from '../calendar.js';
 
@@ -28,14 +29,54 @@
   let products = [], warehouses = [], adjustments = [], report = [];
   let loading = true, saving = false, error = '', productSearch = '', warehouseSearch = '', historySearch = '', warehouseQty = 0;
   let showProductDropdown = false, showWarehouseDropdown = false, activeProductIndex = 0, activeWarehouseIndex = 0;
+  let showZeroModal = false, zeroing = false;
   let form = { product_id: '', warehouse_id: '', adjustment_type: 'increase', qty: '', reason: t('Physical stock count'), note: '' };
   let filters = { product_id: '', warehouse_id: '', adjustment_type: '', date_from: '', date_to: '' };
 
+  // The catalog holds thousands of rows, so the dropdown renders a page at a
+  // time and grows as the user scrolls. Rendering every match at once cost
+  // ~170ms per keystroke on a one-letter query.
+  const PRODUCT_RESULT_PAGE = 100;
+  let productResultLimit = PRODUCT_RESULT_PAGE;
+  let productResultsEl = null;
+
   $: selectedProduct = products.find((item) => String(item.id) === String(form.product_id)) || null;
-  $: matchingProducts = products.filter((item) => {
+  $: selectedWarehouse = warehouses.find((item) => String(item.id) === String(form.warehouse_id)) || null;
+  /*
+   * Zeroing resets the product's own stock and its warehouse balances on the
+   * server, so anything above zero in either place is worth zeroing.
+   */
+  $: productQty = Number(selectedProduct?.quantity || 0);
+  $: canZeroStock = Boolean(selectedProduct && selectedWarehouse) && (productQty !== 0 || Number(warehouseQty || 0) !== 0);
+  // Rank matches so the product the user means surfaces first even when a
+  // short query matches hundreds of rows.
+  function productMatchRank(item, needle) {
+    const name = String(item.name || '').toLowerCase();
+    const code = String(item.code || '').toLowerCase();
+    if (name === needle || code === needle) return 0;
+    if (name.startsWith(needle) || code.startsWith(needle)) return 1;
+    if (name.split(/[\s\-_/.]+/).some((word) => word.startsWith(needle))) return 2;
+    if (name.includes(needle) || code.includes(needle)) return 3;
+    if (String(item.description || '').toLowerCase().includes(needle)) return 4;
+    return -1;
+  }
+  // Archived products can never be adjusted, so keep them out of the lookup
+  // entirely. The API is already asked for active products; this is a guard for
+  // rows that slip through on older backends.
+  $: adjustableProducts = products.filter((item) => !item.product_status || item.product_status === 'active');
+  $: matchingProducts = (() => {
     const needle = productSearch.trim().toLowerCase();
-    return !needle || [item.name, item.code, item.barcode, item.sku, item.product_code].some((value) => String(value || '').toLowerCase().includes(needle));
-  }).slice(0, 10);
+    // Browsing (no query) lists the whole catalog alphabetically; the list is
+    // scrollable, so users can reach every product instead of a truncated page.
+    if (!needle) return adjustableProducts;
+    return adjustableProducts
+      .map((item) => ({ item, rank: productMatchRank(item, needle) }))
+      .filter((row) => row.rank >= 0)
+      .sort((a, b) => a.rank - b.rank)
+      .map((row) => row.item);
+  })();
+  $: visibleProducts = matchingProducts.slice(0, productResultLimit);
+  $: hasMoreProducts = matchingProducts.length > visibleProducts.length;
   $: matchingWarehouses = warehouses.filter((item) => String(item.name || '').toLowerCase().includes(warehouseSearch.trim().toLowerCase())).slice(0, 10);
   $: quantity = Number(form.qty || 0);
   $: resultingQty = Number(selectedProduct?.quantity || 0) + (form.adjustment_type === 'increase' ? quantity : -quantity);
@@ -56,7 +97,12 @@
   ];
 
   async function loadReferences() {
-    const [productsResult, warehousesResult] = await Promise.all([productApi.getAll({ status: 1, limit: 200 }), warehouseApi.getAll({ status: 1 })]);
+    // No limit: the API caps `limit` at 200 rows, which silently made every
+    // product past the 200th name unreachable in the search box below.
+    const [productsResult, warehousesResult] = await Promise.all([
+      productApi.getAll({ status: 1, product_status: 'active' }),
+      warehouseApi.getAll({ status: 1 }),
+    ]);
     products = productsResult?.data || [];
     warehouses = warehousesResult?.data || [];
   }
@@ -76,8 +122,23 @@
       warehouseQty = Number(result?.data?.[0]?.quantity || 0);
     } catch (_) { warehouseQty = 0; }
   }
+  function resetProductResults() {
+    productResultLimit = PRODUCT_RESULT_PAGE;
+  }
+  function loadMoreProducts() {
+    if (!productResultsEl || !hasMoreProducts) return;
+    if (productResultsEl.scrollTop + productResultsEl.clientHeight >= productResultsEl.scrollHeight - 32) {
+      productResultLimit += PRODUCT_RESULT_PAGE;
+    }
+  }
+  function revealActiveProduct() {
+    if (activeProductIndex >= productResultLimit) productResultLimit = activeProductIndex + PRODUCT_RESULT_PAGE;
+    requestAnimationFrame(() => productResultsEl?.querySelector('button.active')?.scrollIntoView({ block: 'nearest' }));
+  }
   function handleProductSearch(event) {
     productSearch = event.currentTarget.value;
+    resetProductResults();
+    if (productResultsEl) productResultsEl.scrollTop = 0;
     form = { ...form, product_id: '' };
     showProductDropdown = true;
     activeProductIndex = 0;
@@ -90,6 +151,7 @@
   }
   function selectProduct(product) {
     productSearch = product.name;
+    resetProductResults();
     form = { ...form, product_id: product.id };
     showProductDropdown = false;
     loadWarehouseQty();
@@ -104,6 +166,7 @@
     const options = type === 'product' ? matchingProducts : matchingWarehouses;
     const isOpen = type === 'product' ? showProductDropdown : showWarehouseDropdown;
     let activeIndex = type === 'product' ? activeProductIndex : activeWarehouseIndex;
+    let arrowMoved = false;
     if (event.key === 'Escape') {
       if (type === 'product') showProductDropdown = false;
       else showWarehouseDropdown = false;
@@ -116,13 +179,20 @@
         else showWarehouseDropdown = true;
       }
       if (options.length) activeIndex = (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+      arrowMoved = true;
     } else if (event.key === 'Enter' && isOpen && options.length) {
       event.preventDefault();
       if (type === 'product') selectProduct(options[activeIndex] || options[0]);
       else selectWarehouse(options[activeIndex] || options[0]);
     }
-    if (type === 'product') activeProductIndex = activeIndex;
-    else activeWarehouseIndex = activeIndex;
+    if (type === 'product') {
+      activeProductIndex = activeIndex;
+      // The list is paged, so keyboard navigation has to extend the window and
+      // scroll the highlighted row into view.
+      if (arrowMoved) revealActiveProduct();
+    } else {
+      activeWarehouseIndex = activeIndex;
+    }
   }
   function closeLookupOnOutsideClick(node) {
     const handleClick = (event) => {
@@ -133,6 +203,41 @@
     };
     document.addEventListener('click', handleClick);
     return { destroy: () => document.removeEventListener('click', handleClick) };
+  }
+  function openZeroStock() {
+    error = '';
+    if (!selectedProduct || !selectedWarehouse) {
+      error = t('Select a product and warehouse before zeroing the stock.');
+      return;
+    }
+    if (!canZeroStock) {
+      error = t('This product has no stock to zero.');
+      return;
+    }
+    showZeroModal = true;
+  }
+  async function zeroStock() {
+    if (!canZeroStock) { showZeroModal = false; return; }
+    zeroing = true; error = '';
+    try {
+      // The server resets both balances; the client never sends an amount.
+      const result = await stockAdjustmentApi.zeroStock({
+        product_id: form.product_id,
+        warehouse_id: form.warehouse_id,
+        reason: t('Zero out'),
+        note: null,
+      });
+      const saved = result.data;
+      showZeroModal = false;
+      toast.success(t('Stock zeroed'), (saved.product_name || t('Product')) + ': ' + number(saved.after_qty) + ' ' + t('system units remaining'));
+      await loadReferences();
+      await loadWarehouseQty();
+      await loadList();
+    } catch (cause) {
+      showZeroModal = false;
+      error = cause.message;
+      toast.error(t('Error'), cause.message);
+    } finally { zeroing = false; }
   }
   async function openNewAdjustment() { error = ''; await loadReferences(); view = 'new'; }
   function showHistory() { error = ''; view = 'history'; loadList(); }
@@ -210,11 +315,11 @@
         <form class="adjustment-form" on:submit|preventDefault={save}>
 
           <div class="form-grid product-warehouse-row">
-            <label class="form-field lookup-field" use:closeLookupOnOutsideClick><span>{t('Product')}</span><div class="lookup-control" on:click|stopPropagation><i class="bi bi-search" aria-hidden="true"></i><input type="search" value={productSearch} on:input={handleProductSearch} on:focus={() => (showProductDropdown = true)} on:keydown={(event) => handleLookupKeydown(event, 'product')} placeholder={t('Select product')} autocomplete="off" required /></div>{#if showProductDropdown}<div class="lookup-results" on:click|stopPropagation>{#each matchingProducts as product, index (product.id)}<button type="button" class:active={index === activeProductIndex} on:mousedown|preventDefault={() => selectProduct(product)}><strong>{product.name}</strong></button>{/each}{#if !matchingProducts.length}<div class="lookup-empty">{t('No products found.')}</div>{/if}</div>{/if}</label>
+            <label class="form-field lookup-field" use:closeLookupOnOutsideClick><span>{t('Product')}</span><div class="lookup-control" on:click|stopPropagation><i class="bi bi-search" aria-hidden="true"></i><input type="search" value={productSearch} on:input={handleProductSearch} on:focus={() => (showProductDropdown = true)} on:keydown={(event) => handleLookupKeydown(event, 'product')} placeholder={t('Select product')} autocomplete="off" required /></div>{#if showProductDropdown}<div class="lookup-results" bind:this={productResultsEl} on:scroll={loadMoreProducts} on:click|stopPropagation>{#each visibleProducts as product, index (product.id)}<button type="button" class:active={index === activeProductIndex} on:mousedown|preventDefault={() => selectProduct(product)}><strong>{product.name}</strong>{#if product.code}<small>{product.code}</small>{/if}</button>{/each}{#if !matchingProducts.length}<div class="lookup-empty">{t('No products found.')}</div>{/if}{#if hasMoreProducts}<div class="lookup-more">{number(visibleProducts.length)} / {number(matchingProducts.length)}</div>{/if}</div>{/if}</label>
             <label class="form-field lookup-field" use:closeLookupOnOutsideClick><span>{t('Warehouse')}</span><div class="lookup-control" on:click|stopPropagation><i class="bi bi-search" aria-hidden="true"></i><input type="search" value={warehouseSearch} on:input={handleWarehouseSearch} on:focus={() => (showWarehouseDropdown = true)} on:keydown={(event) => handleLookupKeydown(event, 'warehouse')} placeholder={t('Select warehouse')} autocomplete="off" required /></div>{#if showWarehouseDropdown}<div class="lookup-results" on:click|stopPropagation>{#each matchingWarehouses as warehouse, index (warehouse.id)}<button type="button" class:active={index === activeWarehouseIndex} on:mousedown|preventDefault={() => selectWarehouse(warehouse)}><strong>{warehouse.name}</strong></button>{/each}{#if !matchingWarehouses.length}<div class="lookup-empty">{t('No warehouses found.')}</div>{/if}</div>{/if}</label>
           </div>
           <div class="form-grid adjustment-grid">
-            <fieldset class="direction-field"><legend>{t('Direction')}</legend><label><input type="radio" bind:group={form.adjustment_type} value="increase" /><span class="increase"><i class="bi bi-plus-lg"></i>{t('Increase')}</span></label><label><input type="radio" bind:group={form.adjustment_type} value="decrease" /><span class="decrease"><i class="bi bi-dash-lg"></i>{t('Decrease')}</span></label></fieldset>
+            <fieldset class="direction-field"><legend>{t('Direction')}</legend><label><input type="radio" bind:group={form.adjustment_type} value="increase" /><span class="increase"><i class="bi bi-plus-lg"></i>{t('Increase')}</span></label><label><input type="radio" bind:group={form.adjustment_type} value="decrease" /><span class="decrease"><i class="bi bi-dash-lg"></i>{t('Decrease')}</span></label><button type="button" class="zero-btn" disabled={zeroing} title={t('Set the stock of this product to zero')} on:click={openZeroStock}><i class="bi bi-slash-circle"></i>{t('Zero out')}</button></fieldset>
             <label class="form-field"><span>{t('Quantity')}</span><input type="number" min="0.001" step="0.001" bind:value={form.qty} placeholder="0.000" required /></label>
           </div>
 
@@ -236,6 +341,42 @@
     </DataTable>
   {/if}
 </IndexPageLayout>
+
+{#if showZeroModal && selectedProduct && selectedWarehouse}
+  <ConfirmActionModal
+    title={t('Zero out')}
+    icon="bi-slash-circle"
+    variant="danger"
+    dangerAlert
+    saving={zeroing}
+    savingLabel={t('Zeroing stock...')}
+    warningMessage={t('This sets the stock of this product to zero.')}
+    warningDetail={t('A stock adjustment is recorded so the change stays visible in the adjustment history.')}
+    stats={[
+      { label: t('Product'), value: selectedProduct.name },
+      { label: t('Warehouse'), value: selectedWarehouse.name },
+      { label: t('System quantity'), value: number(productQty) },
+      { label: t('Warehouse quantity'), value: number(warehouseQty) },
+      { label: t('New system quantity'), value: number(0) },
+      { label: t('New warehouse quantity'), value: number(0) },
+    ]}
+    actionLabel={t('Zero out')}
+    actionIcon="bi-slash-circle"
+    actionVariant="danger"
+    inputId="zero-stock-confirm-input"
+    confirmInstruction={t('To zero the stock, please type')}
+    confirmErrorMessage={t('Confirmation number does not match. Please type the correct number to set the stock to zero.')}
+    confirmPrompt={{
+      title: t('Are you sure?'),
+      message: t('This sets the stock of this product to zero.'),
+      confirmText: t('Yes, zero it!'),
+      cancelText: t('Cancel'),
+      variant: 'danger',
+      icon: 'bi-slash-circle',
+    }}
+    on:confirm={zeroStock}
+    on:close={() => (showZeroModal = false)} />
+{/if}
 
 <style>
   /* The shared index layout clips content for table views. This route also
@@ -263,13 +404,17 @@
   .form-card-header h1 { margin:0; color:#172033; font-size:1rem; font-weight:800; }.form-card-header p,.count-preview header small { display:block; margin:.18rem 0 0; color:#64748b; font-size:.76rem; line-height:1.45; }.count-preview header strong { color:#334155; font-size:.82rem; }
   .adjustment-form { display:grid; gap:1rem; padding:1.1rem; direction:rtl; }.form-section h2 { margin:0; color:#334155; font-size:.82rem; font-weight:800; }.form-section p { margin:.18rem 0 0; color:#7c8da3; font-size:.72rem; }.form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; }.form-field { display:grid; min-width:0; gap:.38rem; color:#475569; font-size:.74rem; font-weight:750; text-align:right; }.form-field--full { grid-column:1 / -1; }.form-field em { margin-right:.2rem; color:#94a3b8; font-size:.67rem; font-style:normal; font-weight:500; }
   .form-field input,.form-field select,.form-field textarea { width:100%; min-height:2.45rem; padding:.48rem .65rem; border:1px solid #d6e0ed; border-radius:.55rem; outline:0; background:#fff; color:#172033; direction:rtl; text-align:right; font:inherit; font-size:.8rem; }.form-field textarea { min-height:4.6rem; resize:vertical; }.form-field input:focus,.form-field select:focus,.form-field textarea:focus { border-color:#79a8f8; box-shadow:0 0 0 3px rgba(37,99,235,.09); }
-  .lookup-field { position:relative; }.lookup-control { display:flex; align-items:center; min-height:2.45rem; overflow:hidden; border:1px solid #d6e0ed; border-radius:.55rem; background:#fff; direction:rtl; }.lookup-control:focus-within { border-color:#79a8f8; box-shadow:0 0 0 3px rgba(37,99,235,.09); }.lookup-control i { flex:0 0 2.1rem; color:#94a3b8; text-align:center; }.lookup-control input { min-height:2.35rem; border:0; box-shadow:none; }.lookup-control input:focus { border:0; box-shadow:none; }.lookup-results { position:absolute; z-index:20; top:calc(100% + .35rem); right:0; left:0; max-height:14rem; overflow:auto; padding:.25rem; border:1px solid #d6e0ed; border-radius:.55rem; background:#fff; box-shadow:0 8px 22px rgba(15,23,42,.12); }.lookup-results button { display:flex; align-items:flex-start; justify-content:space-between; width:100%; gap:.75rem; padding:.55rem .65rem; border:0; border-radius:.4rem; background:transparent; color:#172033; direction:rtl; text-align:right; cursor:pointer; }.lookup-results button:hover,.lookup-results button.active { background:#eff6ff; }.lookup-results strong { overflow:hidden; font-size:.78rem; text-overflow:ellipsis; white-space:nowrap; }.lookup-results small { flex:0 0 auto; color:#94a3b8; font-size:.68rem; }.lookup-empty { padding:.8rem; color:#94a3b8; font-size:.74rem; text-align:center; }
+  .lookup-field { position:relative; }.lookup-control { display:flex; align-items:center; min-height:2.45rem; overflow:hidden; border:1px solid #d6e0ed; border-radius:.55rem; background:#fff; direction:rtl; }.lookup-control:focus-within { border-color:#79a8f8; box-shadow:0 0 0 3px rgba(37,99,235,.09); }.lookup-control i { flex:0 0 2.1rem; color:#94a3b8; text-align:center; }.lookup-control input { min-height:2.35rem; border:0; box-shadow:none; }.lookup-control input:focus { border:0; box-shadow:none; }.lookup-more { padding:.4rem; border-top:1px solid #edf1f5; color:#94a3b8; font-size:.68rem; font-weight:700; text-align:center; }
+  .lookup-results { position:absolute; z-index:20; top:calc(100% + .35rem); right:0; left:0; max-height:14rem; overflow:auto; padding:.25rem; border:1px solid #d6e0ed; border-radius:.55rem; background:#fff; box-shadow:0 8px 22px rgba(15,23,42,.12); }.lookup-results button { display:flex; align-items:flex-start; justify-content:space-between; width:100%; gap:.75rem; padding:.55rem .65rem; border:0; border-radius:.4rem; background:transparent; color:#172033; direction:rtl; text-align:right; cursor:pointer; }.lookup-results button:hover,.lookup-results button.active { background:#eff6ff; }.lookup-results strong { overflow:hidden; font-size:.78rem; text-overflow:ellipsis; white-space:nowrap; }.lookup-results small { flex:0 0 auto; color:#94a3b8; font-size:.68rem; }.lookup-empty { padding:.8rem; color:#94a3b8; font-size:.74rem; text-align:center; }
   /* FIX: force product + warehouse onto one row and let long select text shrink */
   .product-warehouse-row { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
   .product-warehouse-row .form-field select { min-width:0; max-width:100%; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
-  .adjustment-grid { grid-template-columns:minmax(0,1.65fr) minmax(9rem,.35fr); align-items:end; }.direction-field { display:grid; grid-template-columns:1fr 1fr; gap:.55rem; margin:0; padding:0; border:0; }.direction-field legend { grid-column:1 / -1; color:#475569; font-size:.74rem; font-weight:750; }.direction-field input { position:absolute; opacity:0; }.direction-field span { display:flex; align-items:center; justify-content:center; gap:.35rem; min-height:2.45rem; border:1px solid #d6e0ed; border-radius:.55rem; color:#475569; font-size:.78rem; font-weight:750; cursor:pointer; }.direction-field input:checked + .increase { border-color:#93c5fd; background:#eff6ff; color:#0f6efd; }.direction-field input:checked + .decrease { border-color:#fca5a5; background:#fff1f2; color:#be123c; }
+  .adjustment-grid { grid-template-columns:minmax(0,1.65fr) minmax(9rem,.35fr); align-items:end; }.direction-field { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.55rem; margin:0; padding:0; border:0; }.direction-field legend { grid-column:1 / -1; color:#475569; font-size:.74rem; font-weight:750; }.direction-field input { position:absolute; opacity:0; }.direction-field span { display:flex; align-items:center; justify-content:center; gap:.35rem; min-height:2.45rem; border:1px solid #d6e0ed; border-radius:.55rem; color:#475569; font-size:.78rem; font-weight:750; cursor:pointer; }  .direction-field input:checked + .increase { border-color:#93c5fd; background:#eff6ff; color:#0f6efd; }.direction-field input:checked + .decrease { border-color:#fca5a5; background:#fff1f2; color:#be123c; }
+  .direction-field .zero-btn { display:flex; align-items:center; justify-content:center; gap:.35rem; min-height:2.45rem; padding:.45rem .55rem; border:1px solid #fcd34d; border-radius:.55rem; background:#fffbeb; color:#b45309; font:inherit; font-size:.78rem; font-weight:750; white-space:nowrap; cursor:pointer; transition:background .15s ease,border-color .15s ease,color .15s ease; }
+  .direction-field .zero-btn:hover:not(:disabled) { border-color:#f59e0b; background:#fef3c7; color:#92400e; }
+  .direction-field .zero-btn:disabled { border-color:#e2e8f0; background:#f8fafc; color:#cbd5e1; cursor:not-allowed; }
   .form-actions { display:flex; justify-content:flex-end; gap:.5rem; padding-top:.15rem; border-top:1px solid #edf1f5; }.form-actions :global(.action-btn) { min-height:2.45rem; padding-inline:.9rem; }
   .count-preview { align-self:start; overflow:hidden; }.preview-product { display:grid; gap:.1rem; padding:.85rem 1rem .4rem; }.preview-product strong { color:#172033; font-size:.83rem; }.preview-product small { color:#94a3b8; font-size:.68rem; }.count-preview dl { margin:0; padding:.25rem 1rem 1rem; }.count-preview dl>div { display:flex; justify-content:space-between; gap:.5rem; padding:.72rem 0; border-bottom:1px solid #edf1f5; }.count-preview dt { color:#64748b; font-size:.74rem; font-weight:650; }.count-preview dd { margin:0; color:#334155; font-size:.84rem; font-weight:800; }.preview-change dd { color:#047857; }.preview-change.decrease dd,.preview-result dd.invalid { color:#b91c1c; }.preview-result { border-bottom:0!important; }.preview-result dd { color:#0f6efd; font-size:.95rem!important; }.preview-empty { display:grid; place-items:center; min-height:19rem; padding:1rem; color:#94a3b8; text-align:center; }.preview-empty i { color:#cbd5e1; font-size:2rem; }.preview-empty p { max-width:13rem; margin:.5rem 0 0; font-size:.76rem; line-height:1.5; }
-  :global(html.dark) .adjustment-form-card,:global(html.dark) .count-preview { border-color:var(--erp-border); background:var(--erp-surface); }:global(html.dark) .form-card-header,:global(html.dark) .count-preview header { border-color:var(--erp-border); background:var(--erp-surface-soft); }:global(html.dark) .form-card-header h1,:global(html.dark) .count-preview header strong,:global(html.dark) .preview-product strong,:global(html.dark) .count-preview dd,:global(html.dark) .product-cell { color:var(--erp-text); }:global(html.dark) .form-field,:global(html.dark) .form-section h2,:global(html.dark) .direction-field legend,:global(html.dark) .direction-field span { color:var(--erp-text-soft); }:global(html.dark) .form-field input,:global(html.dark) .form-field select,:global(html.dark) .form-field textarea,:global(html.dark) .direction-field span { border-color:var(--erp-border); background:var(--erp-surface-soft); color:var(--erp-text); }:global(html.dark) .count-preview dl>div,:global(html.dark) .form-actions { border-color:var(--erp-border); }
+  :global(html.dark) .adjustment-form-card,:global(html.dark) .count-preview { border-color:var(--erp-border); background:var(--erp-surface); }:global(html.dark) .form-card-header,:global(html.dark) .count-preview header { border-color:var(--erp-border); background:var(--erp-surface-soft); }:global(html.dark) .form-card-header h1,:global(html.dark) .count-preview header strong,:global(html.dark) .preview-product strong,:global(html.dark) .count-preview dd,:global(html.dark) .product-cell { color:var(--erp-text); }:global(html.dark) .form-field,:global(html.dark) .form-section h2,:global(html.dark) .direction-field legend,:global(html.dark) .direction-field span { color:var(--erp-text-soft); }:global(html.dark) .form-field input,:global(html.dark) .form-field select,:global(html.dark) .form-field textarea,:global(html.dark) .direction-field span { border-color:var(--erp-border); background:var(--erp-surface-soft); color:var(--erp-text); }:global(html.dark) .direction-field .zero-btn { border-color:#78551a; background:#3a2c0c; color:#fbbf24; }:global(html.dark) .direction-field .zero-btn:hover:not(:disabled) { border-color:#b45309; background:#4a3708; color:#fcd34d; }:global(html.dark) .direction-field .zero-btn:disabled { border-color:var(--erp-border); background:var(--erp-surface-soft); color:var(--erp-muted); }:global(html.dark) .count-preview dl>div,:global(html.dark) .form-actions { border-color:var(--erp-border); }
   @media(max-width:991.98px) { .adjustment-editor { grid-template-columns:1fr; }.count-preview { display:none; } } @media(max-width:767.98px) { .index-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.form-grid,.adjustment-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.form-field--full { grid-column:auto; }.form-actions :global(.action-btn) { flex:1; } } @media(max-width:420px) { .index-summary-grid { grid-template-columns:1fr; }.form-grid,.adjustment-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.direction-field { grid-template-columns:1fr; } }
 </style>

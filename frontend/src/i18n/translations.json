@@ -219,7 +219,18 @@
     "System accounts cannot be deleted.": "System accounts cannot be deleted.",
     "PDF": "PDF",
     "Excel": "Excel",
-    "Download": "Download"
+    "Download": "Download",
+    "Zero out": "Zero out",
+    "Zeroing stock...": "Zeroing stock...",
+    "Stock zeroed": "Stock zeroed",
+    "Set the stock of this product to zero": "Set the stock of this product to zero",
+    "This sets the stock of this product to zero.": "این عمل موجودی این محصول را صفر می‌کند.",
+    "A stock adjustment is recorded so the change stays visible in the adjustment history.": "A stock adjustment is recorded so the change stays visible in the adjustment history.",
+    "To zero the stock, please type": "To zero the stock, please type",
+    "Confirmation number does not match. Please type the correct number to set the stock to zero.": "Confirmation number does not match. Please type the correct number to set the stock to zero.",
+    "Yes, zero it!": "Yes, zero it!",
+    "Select a product and warehouse before zeroing the stock.": "Select a product and warehouse before zeroing the stock.",
+    "This product has no stock to zero.": "This product has no stock to zero."
   },
   "fa": {
     "Welcome": "خوش آمدید",
@@ -1727,7 +1738,18 @@
     "Please enter a debit or credit amount greater than zero.": "لطفاً یک مبلغ باقیدار یا طلبکار بزرگتر از صفر وارد کنید.",
     "System": "سیستمی",
     "System accounts cannot be edited.": "حساب‌های پیش‌فرض سیستم قابل ویرایش نیستند.",
-    "System accounts cannot be deleted.": "حساب‌های پیش‌فرض سیستم قابل حذف نیستند."
+    "System accounts cannot be deleted.": "حساب‌های پیش‌فرض سیستم قابل حذف نیستند.",
+    "Zero out": "صفر سازی",
+    "Zeroing stock...": "در حال صفر سازی...",
+    "Stock zeroed": "موجودی صفر شد",
+    "Set the stock of this product to zero": "موجودی این محصول را صفر کنید",
+    "This sets the stock of this product to zero.": "این عمل موجودی این محصول را صفر می‌کند.",
+    "A stock adjustment is recorded so the change stays visible in the adjustment history.": "یک تعدیل موجودی ثبت می‌شود تا این تغییر در تاریخچه تنظیمات قابل مشاهده بماند.",
+    "To zero the stock, please type": "برای صفر سازی موجودی، لطفاً تایپ کنید",
+    "Confirmation number does not match. Please type the correct number to set the stock to zero.": "شماره تایید مطابقت ندارد. لطفاً شماره صحیح را برای صفر کردن موجودی وارد کنید.",
+    "Yes, zero it!": "بله، صفر کن!",
+    "Select a product and warehouse before zeroing the stock.": "قبل از صفر سازی، محصول و گدام را انتخاب کنید.",
+    "This product has no stock to zero.": "این محصول موجودی‌ای برای صفر کردن ندارد."
   },
   "ps": {
     "Welcome": "ښه راغلاست",

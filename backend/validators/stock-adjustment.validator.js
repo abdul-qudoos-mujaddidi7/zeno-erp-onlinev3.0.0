@@ -13,6 +13,18 @@ const createStockAdjustmentSchema = z.object({
     z.string().trim().max(65535).nullable()),
 });
 
+/**
+ * Zeroing carries no quantity or direction: the service derives both from the
+ * stock that is actually there, so users cannot hand it an amount.
+ */
+const zeroStockAdjustmentSchema = z.object({
+  product_id: positiveId,
+  warehouse_id: positiveId,
+  reason: z.string().trim().min(1, 'Reason is required.').max(255),
+  note: z.preprocess((value) => value === '' || value == null ? null : value,
+    z.string().trim().max(65535).nullable()),
+});
+
 const listStockAdjustmentsSchema = z.object({
   product_id: positiveId.optional(),
   warehouse_id: positiveId.optional(),
@@ -23,4 +35,4 @@ const listStockAdjustmentsSchema = z.object({
 
 const stockAdjustmentIdParamsSchema = z.object({ id: positiveId });
 
-module.exports = { createStockAdjustmentSchema, listStockAdjustmentsSchema, stockAdjustmentIdParamsSchema };
+module.exports = { createStockAdjustmentSchema, zeroStockAdjustmentSchema, listStockAdjustmentsSchema, stockAdjustmentIdParamsSchema };

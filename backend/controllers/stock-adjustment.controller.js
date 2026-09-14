@@ -11,7 +11,11 @@ async function create(req, res) {
   const adjustment = await service.createStockAdjustment({ user: req.user, data: req.validated.body, requestContext: getRequestContext(req) });
   res.status(201).json({ success: true, message: 'Stock adjusted successfully.', data: adjustment });
 }
+async function zero(req, res) {
+  const adjustment = await service.zeroStockAdjustment({ user: req.user, data: req.validated.body, requestContext: getRequestContext(req) });
+  res.status(201).json({ success: true, message: 'Stock zeroed successfully.', data: adjustment });
+}
 async function report(req, res) {
   res.json({ success: true, data: await service.getAdjustmentReport({ user: req.user, filters: req.validated.query }) });
 }
-module.exports = { list, getById, create, report };
+module.exports = { list, getById, create, zero, report };

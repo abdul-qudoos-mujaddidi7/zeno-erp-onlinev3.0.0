@@ -359,6 +359,45 @@ async function adjustQuantity(
   );
 }
 
+/**
+ * Reset every warehouse balance of one product to zero.
+ *
+ * Zeroing is a product-wide operation: a product's aggregate quantity has to
+ * stay equal to the sum of its warehouse balances, so balances in warehouses
+ * other than the selected one are cleared too.
+ */
+async function zeroQuantities(
+  connection,
+  {
+    orgId,
+    userId,
+    productId,
+  },
+) {
+  if (!orgId || !productId) {
+    return;
+  }
+
+  await connection.execute(
+    `
+      UPDATE warehouse_products
+      SET
+        quantity = 0,
+        version = COALESCE(version, 0) + 1,
+        updated_by = ?,
+        updated_at = NOW(3)
+      WHERE org_id = ?
+        AND product_id = ?
+        AND COALESCE(quantity, 0) <> 0
+    `,
+    [
+      userId,
+      orgId,
+      productId,
+    ],
+  );
+}
+
 module.exports = {
   findAll,
   findByLocalId,
@@ -367,4 +406,5 @@ module.exports = {
   update,
   softDelete,
   adjustQuantity,
+  zeroQuantities,
 };

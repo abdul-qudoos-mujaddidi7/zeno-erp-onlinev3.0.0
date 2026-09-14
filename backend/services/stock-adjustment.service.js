@@ -76,6 +76,62 @@ async function createStockAdjustment({ user, data, requestContext }) {
   } finally { connection.release(); }
 }
 
+/**
+ * Reset a product's stock to zero.
+ *
+ * A regular adjustment cannot express this: when stock was never allocated to a
+ * warehouse (or its warehouse balance drifted from the aggregate), the decrease
+ * is rejected by the insufficient-stock guard above. Zeroing therefore resets
+ * the product aggregate and its warehouse balances together, and still records
+ * a stock adjustment plus a stock movement so the change is auditable.
+ */
+async function zeroStockAdjustment({ user, data, requestContext }) {
+  const { orgId, userId } = identity(user);
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const product = await adjustmentRepository.findProductForUpdate(connection, { orgId, productId: data.product_id });
+    if (!product) throw new AppError('The selected product does not exist or is inactive.', 422, 'PRODUCT_NOT_FOUND');
+    if (!await adjustmentRepository.warehouseExists(connection, { orgId, warehouseId: data.warehouse_id })) {
+      throw new AppError('The selected warehouse does not exist or is inactive.', 422, 'WAREHOUSE_NOT_FOUND');
+    }
+    const warehouseStock = await adjustmentRepository.findWarehouseForUpdate(connection, { orgId, warehouseId: data.warehouse_id, productId: data.product_id });
+    const beforeQty = Number(product.quantity || 0);
+    const beforeWarehouseQty = Number(warehouseStock?.quantity || 0);
+    if (!beforeQty && !beforeWarehouseQty) {
+      throw new AppError(`The stock of ${product.name} is already zero.`, 422, 'STOCK_ALREADY_ZERO');
+    }
+
+    // The aggregate and every warehouse balance are cleared, so the product ends
+    // up at zero with its balances still adding up.
+    const productDelta = -beforeQty;
+    const movement = productDelta !== 0 ? productDelta : -beforeWarehouseQty;
+    const adjustmentType = movement >= 0 ? 'increase' : 'decrease';
+    const qty = Math.abs(movement);
+
+    await productRepository.adjustQuantity(connection, { orgId, productId: data.product_id, delta: productDelta });
+    await warehouseProductRepository.zeroQuantities(connection, { orgId, userId, productId: data.product_id });
+    const adjustmentId = await adjustmentRepository.create(connection, { orgId, userId, productId: data.product_id,
+      warehouseId: data.warehouse_id, adjustmentType, qty, reason: data.reason, note: data.note,
+      beforeQty, afterQty: 0, beforeWarehouseQty, afterWarehouseQty: 0 });
+    await stockTransactionRepository.recordMovement(connection, { orgId, userId, data: { warehouse_id: data.warehouse_id,
+      product_id: data.product_id, product_unit_id: warehouseStock?.product_unit_id || product.product_unit_id,
+      reference_id: adjustmentId, reference_type: 'stock_adjustment', transaction_type: adjustmentType === 'increase' ? 'adjustment_in' : 'adjustment_out',
+      quantity: qty, date: new Date(), description: `Stock adjustment: ${data.reason}${data.note ? ` — ${data.note}` : ''}`, status: 1 } });
+    await activityRepository.create(connection, { orgId, userId, action: 'create', tableName: 'stock_adjustments', entityId: adjustmentId,
+      oldValues: { product_qty: beforeQty, warehouse_qty: beforeWarehouseQty }, newValues: { product_qty: 0, warehouse_qty: 0, ...data },
+      description: `Zeroed ${product.name} stock (was ${beforeQty} in total, ${beforeWarehouseQty} in warehouse ${data.warehouse_id}).`, ...requestContext });
+    await connection.commit();
+    return getStockAdjustment({ user, adjustmentId });
+  } catch (error) {
+    await connection.rollback();
+    if (error?.code === 'ER_LOCK_DEADLOCK' || error?.code === 'ER_LOCK_WAIT_TIMEOUT') {
+      throw new AppError('Stock changed concurrently. Please refresh and try again.', 409, 'STOCK_CONCURRENT_UPDATE');
+    }
+    throw error;
+  } finally { connection.release(); }
+}
+
 async function getAdjustmentReport({ user, filters }) {
   const { orgId } = identity(user);
   const rows = await adjustmentRepository.findAll(db, { orgId, productId: filters.product_id, warehouseId: filters.warehouse_id,
@@ -86,4 +142,4 @@ async function getAdjustmentReport({ user, filters }) {
   return [...byProduct.values()];
 }
 
-module.exports = { listStockAdjustments, getStockAdjustment, createStockAdjustment, getAdjustmentReport };
+module.exports = { listStockAdjustments, getStockAdjustment, createStockAdjustment, zeroStockAdjustment, getAdjustmentReport };
