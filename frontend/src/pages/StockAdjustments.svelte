@@ -31,7 +31,7 @@
   let products = [], warehouses = [], adjustments = [], report = [];
   let loading = true, saving = false, error = '', productSearch = '', warehouseSearch = '', historySearch = '', warehouseQty = 0;
   let showProductDropdown = false, showWarehouseDropdown = false, activeProductIndex = 0, activeWarehouseIndex = 0;
-  let showZeroModal = false, zeroing = false;
+  let showZeroModal = false, zeroing = false, showZeroAllModal = false, zeroingAll = false;
   let form = { product_id: '', warehouse_id: '', adjustment_type: 'increase', qty: '', reason: t('Physical stock count'), note: '' };
   let filters = { product_id: '', warehouse_id: '', adjustment_type: '', date_from: '', date_to: '' };
 
@@ -54,6 +54,10 @@
    */
   $: productQty = Number(selectedProduct?.quantity || 0);
   $: canZeroStock = Boolean(selectedProduct && hasSpecificWarehouse) && (productQty !== 0 || Number(warehouseQty || 0) !== 0);
+  // Catalog preview for the "zero everything" warning. The server computes the
+  // authoritative figures; these follow the products the page has loaded.
+  $: stockHolders = adjustableProducts.filter((item) => Number(item.quantity || 0) !== 0);
+  $: catalogueUnits = stockHolders.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   // Rank matches so the product the user means surfaces first even when a
   // short query matches hundreds of rows.
   function productMatchRank(item, needle) {
@@ -276,6 +280,31 @@
       toast.error(t('Error'), cause.message);
     } finally { zeroing = false; }
   }
+  function openZeroAll() {
+    error = '';
+    showZeroAllModal = true;
+  }
+
+  async function zeroAllStock() {
+    zeroingAll = true; error = '';
+    try {
+      // No product and no amount: the server resets the whole catalog.
+      const result = await stockAdjustmentApi.zeroAllStock({ reason: t('Zero all stock'), note: null });
+      const summary = result.data || {};
+      showZeroAllModal = false;
+      toast.success(t('Stock zeroed for all products'),
+        number(summary.products_zeroed || 0) + ' ' + t('products zeroed') + ' \u00b7 '
+        + number(summary.units_removed || 0) + ' ' + t('units removed') + ' \u00b7 '
+        + number(summary.units_added || 0) + ' ' + t('units added'));
+      await loadReferences();
+      await loadList();
+    } catch (cause) {
+      showZeroAllModal = false;
+      error = cause.message;
+      toast.error(t('Error'), cause.message);
+    } finally { zeroingAll = false; }
+  }
+
   async function openNewAdjustment() { error = ''; await loadReferences(); view = 'new'; }
   function showHistory() { error = ''; view = 'history'; loadList(); }
   function handleFilterChange(event) { filters = { ...filters, [event.detail.key]: event.detail.value }; loadList(); }
@@ -358,7 +387,7 @@
           </div>
 
           <div class="form-grid adjustment-grid">
-            <fieldset class="direction-field"><legend>{t('Direction')}</legend><label><input type="radio" bind:group={form.adjustment_type} value="increase" /><span class="increase"><i class="bi bi-plus-lg"></i>{t('Increase')}</span></label><label><input type="radio" bind:group={form.adjustment_type} value="decrease" /><span class="decrease"><i class="bi bi-dash-lg"></i>{t('Decrease')}</span></label><button type="button" class="zero-btn" disabled={zeroing || !selectedProduct || !hasSpecificWarehouse} title={t('Set the stock of this product to zero')} on:click={openZeroStock}><i class="bi bi-slash-circle"></i>{t('Zero out')}</button></fieldset>
+            <fieldset class="direction-field"><legend>{t('Direction')}</legend><label><input type="radio" bind:group={form.adjustment_type} value="increase" /><span class="increase"><i class="bi bi-plus-lg"></i>{t('Increase')}</span></label><label><input type="radio" bind:group={form.adjustment_type} value="decrease" /><span class="decrease"><i class="bi bi-dash-lg"></i>{t('Decrease')}</span></label><button type="button" class="zero-btn" disabled={zeroing || !selectedProduct || !hasSpecificWarehouse} title={t('Set the stock of this product to zero')} on:click={openZeroStock}><i class="bi bi-slash-circle"></i>{t('Zero out')}</button><button type="button" class="zero-btn zero-all-btn" disabled={zeroingAll || saving} title={t('Zero all stock')} on:click={openZeroAll}><i class="bi bi-slash-circle"></i>{t('Zero all')}</button></fieldset>
             <label class="form-field"><span>{t('Quantity')}</span><input type="number" min="0.001" step="0.001" bind:value={form.qty} placeholder="0.000" required /></label>
           </div>
 
@@ -417,6 +446,39 @@
     on:close={() => (showZeroModal = false)} />
 {/if}
 
+{#if showZeroAllModal}
+  <ConfirmActionModal
+    title={t('Zero all stock')}
+    icon="bi-slash-circle"
+    variant="danger"
+    dangerAlert
+    saving={zeroingAll}
+    savingLabel={t('Zeroing all stock...')}
+    warningMessage={t('This sets the stock of every product in the catalog to zero.')}
+    warningDetail={t('It cannot be undone. Each product keeps an adjustment record with its previous quantity.')}
+    stats={[
+      { label: t('Products with stock'), value: number(stockHolders.length) },
+      { label: t('Total stock'), value: number(catalogueUnits) },
+      { label: t('New stock for every product'), value: number(0) },
+    ]}
+    actionLabel={t('Zero all')}
+    actionIcon="bi-slash-circle"
+    actionVariant="danger"
+    inputId="zero-all-stock-confirm-input"
+    confirmInstruction={t('To zero the whole catalog, please type')}
+    confirmErrorMessage={t('Confirmation number does not match. Please type the correct number to zero all stock.')}
+    confirmPrompt={{
+      title: t('Are you sure?'),
+      message: t('This sets the stock of every product to zero.'),
+      confirmText: t('Yes, zero everything!'),
+      cancelText: t('Cancel'),
+      variant: 'danger',
+      icon: 'bi-slash-circle',
+    }}
+    on:confirm={zeroAllStock}
+    on:close={() => (showZeroAllModal = false)} />
+{/if}
+
 <style>
   /* The shared index layout clips content for table views. This route also
      contains a taller editor, so its content pane must own vertical scroll. */
@@ -463,12 +525,15 @@
   /* FIX: force product + warehouse onto one row and let long select text shrink */
   .product-warehouse-row { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
   .product-warehouse-row .form-field select { min-width:0; max-width:100%; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
-  .adjustment-grid { grid-template-columns:minmax(0,1.65fr) minmax(9rem,.35fr); align-items:end; }.direction-field { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.55rem; margin:0; padding:0; border:0; }.direction-field legend { grid-column:1 / -1; color:#475569; font-size:.74rem; font-weight:750; }.direction-field input { position:absolute; opacity:0; }.direction-field span { display:flex; align-items:center; justify-content:center; gap:.35rem; min-height:2.45rem; border:1px solid #d6e0ed; border-radius:.55rem; color:#475569; font-size:.78rem; font-weight:750; cursor:pointer; }  .direction-field input:checked + .increase { border-color:#93c5fd; background:#eff6ff; color:#0f6efd; }.direction-field input:checked + .decrease { border-color:#fca5a5; background:#fff1f2; color:#be123c; }
+  .adjustment-grid { grid-template-columns:minmax(0,1.65fr) minmax(9rem,.35fr); align-items:end; }.direction-field { display:grid; grid-template-columns:repeat(auto-fit,minmax(7rem,1fr)); gap:.55rem; margin:0; padding:0; border:0; }.direction-field legend { grid-column:1 / -1; color:#475569; font-size:.74rem; font-weight:750; }.direction-field input { position:absolute; opacity:0; }.direction-field span { display:flex; align-items:center; justify-content:center; gap:.35rem; min-height:2.45rem; border:1px solid #d6e0ed; border-radius:.55rem; color:#475569; font-size:.78rem; font-weight:750; cursor:pointer; }  .direction-field input:checked + .increase { border-color:#93c5fd; background:#eff6ff; color:#0f6efd; }.direction-field input:checked + .decrease { border-color:#fca5a5; background:#fff1f2; color:#be123c; }
   .direction-field .zero-btn { display:flex; align-items:center; justify-content:center; gap:.35rem; min-height:2.45rem; padding:.45rem .55rem; border:1px solid #fcd34d; border-radius:.55rem; background:#fffbeb; color:#b45309; font:inherit; font-size:.78rem; font-weight:750; white-space:nowrap; cursor:pointer; transition:background .15s ease,border-color .15s ease,color .15s ease; }
   .direction-field .zero-btn:hover:not(:disabled) { border-color:#f59e0b; background:#fef3c7; color:#92400e; }
   .direction-field .zero-btn:disabled { border-color:#e2e8f0; background:#f8fafc; color:#cbd5e1; cursor:not-allowed; }
+  /* Catalog-wide reset: same shape as the single-product reset, stronger colour. */
+  .direction-field .zero-all-btn { border-color:#fda4af; background:#fff1f2; color:#be123c; }
+  .direction-field .zero-all-btn:hover:not(:disabled) { border-color:#fb7185; background:#ffe4e6; color:#9f1239; }
   .form-actions { display:flex; justify-content:flex-end; gap:.5rem; padding-top:.15rem; border-top:1px solid #edf1f5; }.form-actions :global(.action-btn) { min-height:2.45rem; padding-inline:.9rem; }
   .count-preview { align-self:start; overflow:hidden; }.preview-product { display:grid; gap:.1rem; padding:.85rem 1rem .4rem; }.preview-product strong { color:#172033; font-size:.83rem; }.preview-product small { color:#94a3b8; font-size:.68rem; }.count-preview dl { margin:0; padding:.25rem 1rem 1rem; }.count-preview dl>div { display:flex; justify-content:space-between; gap:.5rem; padding:.72rem 0; border-bottom:1px solid #edf1f5; }.count-preview dt { color:#64748b; font-size:.74rem; font-weight:650; }.count-preview dd { margin:0; color:#334155; font-size:.84rem; font-weight:800; }.preview-change dd { color:#047857; }.preview-change.decrease dd,.preview-result dd.invalid { color:#b91c1c; }.preview-result { border-bottom:0!important; }.preview-result dd { color:#0f6efd; font-size:.95rem!important; }.preview-empty { display:grid; place-items:center; min-height:19rem; padding:1rem; color:#94a3b8; text-align:center; }.preview-empty i { color:#cbd5e1; font-size:2rem; }.preview-empty p { max-width:13rem; margin:.5rem 0 0; font-size:.76rem; line-height:1.5; }
-  :global(html.dark) .adjustment-form-card,:global(html.dark) .count-preview { border-color:var(--erp-border); background:var(--erp-surface); }:global(html.dark) .form-card-header,:global(html.dark) .count-preview header { border-color:var(--erp-border); background:var(--erp-surface-soft); }:global(html.dark) .form-card-header h1,:global(html.dark) .count-preview header strong,:global(html.dark) .preview-product strong,:global(html.dark) .count-preview dd,:global(html.dark) .product-cell { color:var(--erp-text); }:global(html.dark) .form-field,:global(html.dark) .form-section h2,:global(html.dark) .direction-field legend,:global(html.dark) .direction-field span { color:var(--erp-text-soft); }:global(html.dark) .form-field input,:global(html.dark) .form-field select,:global(html.dark) .form-field textarea,:global(html.dark) .direction-field span { border-color:var(--erp-border); background:var(--erp-surface-soft); color:var(--erp-text); }:global(html.dark) .direction-field .zero-btn { border-color:#78551a; background:#3a2c0c; color:#fbbf24; }:global(html.dark) .direction-field .zero-btn:hover:not(:disabled) { border-color:#b45309; background:#4a3708; color:#fcd34d; }:global(html.dark) .direction-field .zero-btn:disabled { border-color:var(--erp-border); background:var(--erp-surface-soft); color:var(--erp-muted); }:global(html.dark) .count-preview dl>div,:global(html.dark) .form-actions { border-color:var(--erp-border); }
+  :global(html.dark) .adjustment-form-card,:global(html.dark) .count-preview { border-color:var(--erp-border); background:var(--erp-surface); }:global(html.dark) .form-card-header,:global(html.dark) .count-preview header { border-color:var(--erp-border); background:var(--erp-surface-soft); }:global(html.dark) .form-card-header h1,:global(html.dark) .count-preview header strong,:global(html.dark) .preview-product strong,:global(html.dark) .count-preview dd,:global(html.dark) .product-cell { color:var(--erp-text); }:global(html.dark) .form-field,:global(html.dark) .form-section h2,:global(html.dark) .direction-field legend,:global(html.dark) .direction-field span { color:var(--erp-text-soft); }:global(html.dark) .form-field input,:global(html.dark) .form-field select,:global(html.dark) .form-field textarea,:global(html.dark) .direction-field span { border-color:var(--erp-border); background:var(--erp-surface-soft); color:var(--erp-text); }:global(html.dark) .direction-field .zero-btn { border-color:#78551a; background:#3a2c0c; color:#fbbf24; }:global(html.dark) .direction-field .zero-btn:hover:not(:disabled) { border-color:#b45309; background:#4a3708; color:#fcd34d; }:global(html.dark) .direction-field .zero-btn:disabled { border-color:var(--erp-border); background:var(--erp-surface-soft); color:var(--erp-muted); }:global(html.dark) .direction-field .zero-all-btn { border-color:#7f1d1d; background:#3b1416; color:#fda4af; }:global(html.dark) .direction-field .zero-all-btn:hover:not(:disabled) { border-color:#b91c1c; background:#4a1a1d; color:#fecdd3; }:global(html.dark) .count-preview dl>div,:global(html.dark) .form-actions { border-color:var(--erp-border); }
   @media(max-width:991.98px) { .adjustment-editor { grid-template-columns:1fr; }.count-preview { display:none; } } @media(max-width:767.98px) { .index-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.form-grid,.adjustment-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.form-field--full { grid-column:auto; }.form-actions :global(.action-btn) { flex:1; } } @media(max-width:420px) { .index-summary-grid { grid-template-columns:1fr; }.form-grid,.adjustment-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.direction-field { grid-template-columns:1fr; } }
 </style>

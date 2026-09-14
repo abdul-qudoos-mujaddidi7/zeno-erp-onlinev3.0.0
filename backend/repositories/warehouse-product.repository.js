@@ -398,6 +398,43 @@ async function zeroQuantities(
   );
 }
 
+/**
+ * Reset every warehouse balance in the organization to zero. Used by the
+ * catalog-wide reset, which clears the product aggregates and the warehouse
+ * balances together so they cannot drift apart.
+ */
+async function zeroAllQuantities(
+  connection,
+  {
+    orgId,
+    userId,
+  },
+) {
+  if (!orgId) {
+    return 0;
+  }
+
+  const [result] = await connection.execute(
+    `
+      UPDATE warehouse_products
+      SET
+        quantity = 0,
+        version = COALESCE(version, 0) + 1,
+        updated_by = ?,
+        updated_at = NOW(3)
+      WHERE org_id = ?
+        AND status = 1
+        AND COALESCE(quantity, 0) <> 0
+    `,
+    [
+      userId,
+      orgId,
+    ],
+  );
+
+  return result.affectedRows;
+}
+
 module.exports = {
   findAll,
   findByLocalId,
@@ -407,4 +444,5 @@ module.exports = {
   softDelete,
   adjustQuantity,
   zeroQuantities,
+  zeroAllQuantities,
 };

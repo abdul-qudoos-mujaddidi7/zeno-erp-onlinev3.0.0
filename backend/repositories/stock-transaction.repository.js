@@ -417,6 +417,52 @@ async function recordMovement(
   );
 }
 
+/*
+ * Bulk counterpart of recordMovement, for operations that move stock for the
+ * whole catalog at once. Same columns, still inside the caller's transaction.
+ */
+async function recordMovements(
+  connection,
+  {
+    orgId,
+    userId,
+    rows,
+    chunkSize = 200,
+  },
+) {
+  const {
+    generateLocalId,
+  } = require('../utils/generateLocalId');
+
+  for (let start = 0; start < rows.length; start += chunkSize) {
+    const chunk = rows.slice(start, start + chunkSize);
+    const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NOW(3), NOW(3))').join(', ');
+    const values = chunk.flatMap((row) => [
+      orgId,
+      generateLocalId(),
+      row.warehouse_id ?? null,
+      row.product_id ?? null,
+      row.product_unit_id ?? null,
+      row.reference_id ?? null,
+      row.reference_type ?? null,
+      row.transaction_type ?? null,
+      row.quantity ?? null,
+      row.date || new Date(),
+      row.description ?? null,
+      userId,
+      userId,
+    ]);
+
+    await connection.execute(
+      `INSERT INTO stock_transactions
+        (org_id, local_id, warehouse_id, product_id, product_unit_id, reference_id, reference_type,
+          transaction_type, quantity, date, description, version, created_by, updated_by, created_at, updated_at)
+        VALUES ${placeholders}`,
+      values,
+    );
+  }
+}
+
 module.exports = {
   findAll,
   findByLocalId,
@@ -424,4 +470,5 @@ module.exports = {
   update,
   softDelete,
   recordMovement,
+  recordMovements,
 };

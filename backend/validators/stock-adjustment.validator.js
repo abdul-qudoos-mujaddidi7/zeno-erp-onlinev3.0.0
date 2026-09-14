@@ -25,6 +25,16 @@ const zeroStockAdjustmentSchema = z.object({
     z.string().trim().max(65535).nullable()),
 });
 
+/**
+ * The catalog-wide reset carries no product or quantity either: it always
+ * targets every product that still holds stock.
+ */
+const zeroAllStockAdjustmentSchema = z.object({
+  reason: z.string().trim().min(1, 'Reason is required.').max(255),
+  note: z.preprocess((value) => value === '' || value == null ? null : value,
+    z.string().trim().max(65535).nullable()),
+});
+
 const listStockAdjustmentsSchema = z.object({
   product_id: positiveId.optional(),
   warehouse_id: positiveId.optional(),
@@ -35,4 +45,5 @@ const listStockAdjustmentsSchema = z.object({
 
 const stockAdjustmentIdParamsSchema = z.object({ id: positiveId });
 
-module.exports = { createStockAdjustmentSchema, zeroStockAdjustmentSchema, listStockAdjustmentsSchema, stockAdjustmentIdParamsSchema };
+module.exports = { createStockAdjustmentSchema, zeroStockAdjustmentSchema, zeroAllStockAdjustmentSchema,
+  listStockAdjustmentsSchema, stockAdjustmentIdParamsSchema };

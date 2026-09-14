@@ -503,6 +503,28 @@ async function summarizeIndexTotals(
   };
 }
 
+/*
+ * Catalog-wide counterpart of adjustQuantity: reset the quantity of every
+ * active product in the organization. Soft-deleted products are left alone so
+ * a reset never rewrites rows that hold no live stock.
+ */
+async function zeroAllQuantities(connection, { orgId }) {
+  const [result] = await connection.execute(
+    `
+      UPDATE products
+      SET
+        quantity = 0,
+        updated_at = NOW(3)
+      WHERE org_id = ?
+        AND status = 1
+        AND COALESCE(quantity, 0) <> 0
+    `,
+    [orgId],
+  );
+
+  return result.affectedRows;
+}
+
 module.exports = {
   findAll,
   findByLocalId,
@@ -510,5 +532,6 @@ module.exports = {
   update,
   softDelete,
   adjustQuantity,
+  zeroAllQuantities,
   summarizeIndexTotals,
 };
