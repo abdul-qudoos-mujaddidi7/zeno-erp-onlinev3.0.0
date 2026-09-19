@@ -2,6 +2,9 @@ const {
   resolveBatchReceivedAt,
 } = require('../utils/fifoBatches');
 
+const AppError =
+  require('../errors/AppError');
+
 const STOCK_BATCH_FIELDS = [
   'warehouse_id',
   'product_id',
@@ -414,6 +417,7 @@ async function findOpenBatches(
     productId,
     warehouseId,
     method,
+    forUpdate = false,
   },
 ) {
   const direction =
@@ -421,6 +425,11 @@ async function findOpenBatches(
       ? 'DESC'
       : 'ASC';
 
+  /*
+   * Deterministic order (received day, then created_at, then local_id)
+   * is the lock order too, so concurrent consumptions take the same
+   * rows in the same sequence and cannot deadlock or double-consume.
+   */
   const [rows] = await connection.execute(
     `
       SELECT
@@ -432,6 +441,7 @@ async function findOpenBatches(
         AND status = 1
         AND quantity_remaining > 0
       ORDER BY CAST(received_at AS DATE) ${direction}, created_at ${direction}, local_id ${direction}
+      ${forUpdate ? 'FOR UPDATE' : ''}
     `,
     [
       orgId,
@@ -452,6 +462,18 @@ async function updateRemaining(
     quantityRemaining,
   },
 ) {
+  /*
+   * Hard guard: a batch layer must never be driven negative, whatever the
+   * caller computed. This is the last line of defence for batch integrity.
+   */
+  if (Number(quantityRemaining) < -1e-9) {
+    throw new AppError(
+      'Batch remaining quantity cannot become negative.',
+      409,
+      'NEGATIVE_BATCH_REMAINING',
+    );
+  }
+
   await connection.execute(
     `
       UPDATE stock_batches
@@ -681,6 +703,40 @@ async function findConsumptions(
   return rows;
 }
 
+async function findConsumptionsForBatches(
+  executor,
+  {
+    orgId,
+    batchIds,
+    status = 1,
+  },
+) {
+  if (!batchIds || batchIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = batchIds.map(() => '?').join(', ');
+
+  const [rows] = await executor.execute(
+    `
+      SELECT
+        ${BATCH_CONSUMPTION_COLUMNS}
+      FROM batch_consumptions
+      WHERE org_id = ?
+        AND stock_batch_id IN (${placeholders})
+        AND status = ?
+      ORDER BY local_id ASC
+    `,
+    [
+      orgId,
+      ...batchIds,
+      status,
+    ],
+  );
+
+  return rows;
+}
+
 async function softDeleteConsumption(
   connection,
   {
@@ -721,5 +777,6 @@ module.exports = {
   revertBatchesBySource,
   createConsumption,
   findConsumptions,
+  findConsumptionsForBatches,
   softDeleteConsumption,
 };

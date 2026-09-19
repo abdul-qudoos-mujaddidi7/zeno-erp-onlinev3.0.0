@@ -30,6 +30,10 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
+const {
+  itemQuantityInProductUnit,
+} = require('../utils/unitConversion');
+
 const accountService =
   require('./account.service');
 
@@ -70,6 +74,24 @@ function getAuthenticatedIdentity(user) {
 
 function isConfirmed(billStatus) {
   return String(billStatus || '') === 'confirmed';
+}
+
+/*
+ * A purchase line is entered in a business unit; product stock, the
+ * per-warehouse balance and the FIFO/LIFO layers created for the same
+ * line are all kept in the product's base unit. Every inventory write in
+ * this service (create, edit, draft reversal, delete, return, return
+ * reversal) goes through this one conversion so the forward and reverse
+ * quantities are always symmetrical.
+ */
+async function toProductStockQuantity(connection, orgId, item) {
+  return itemQuantityInProductUnit(
+    connection,
+    {
+      orgId,
+      item,
+    },
+  );
 }
 
 /*
@@ -364,56 +386,69 @@ async function createPurchase({
        * moves stock. Drafts are UI-only.
        */
       if (isConfirmed(data.bill_status)) {
-        await purchaseRepository.adjustProductQuantity(
+        const stockQty = await toProductStockQuantity(
           connection,
-          {
-            orgId,
-            productId: item.product_id,
-            delta: Number(item.quantity || 0),
-          },
+          orgId,
+          item,
         );
 
         /*
-         * Warehouse balances: the purchase header carries the
-         * warehouse, so the per-warehouse row moves in lockstep
-         * with the product quantity inside the same transaction.
+         * A service is not inventory: its line, totals and prices are
+         * kept, but it moves no stock and writes no inventory movement.
          */
-        await warehouseProductRepository.adjustQuantity(
-          connection,
-          {
-            orgId,
-            userId,
-            warehouseId: data.warehouse_id,
-            productId: item.product_id,
-            productUnitId: item.product_unit_id,
-            delta: Number(item.quantity || 0),
-          },
-        );
-
-        await stockTransactionRepository.recordMovement(
-          connection,
-          {
-            orgId,
-            userId,
-            data: {
-              warehouse_id: data.warehouse_id,
-              product_id: item.product_id,
-              product_unit_id: item.product_unit_id,
-              reference_id: localId,
-              reference_type: 'purchase',
-              transaction_type: 'purchase',
-              quantity: Number(item.quantity || 0),
-              unit_cost: Number(item.unit_price || 0),
-              total_cost: Number(item.subtotal || 0),
-              currency: item.currency || data.currency || null,
-              peer_price: Number(item.sell_price || 0),
-              peer_currency: item.sell_currency || data.currency || null,
-              date: data.bill_date || new Date(),
-              description: `Purchase Bill #${data.bill_number || ''}`,
-              status: 1,
+        if (!stockQty.isService) {
+          await purchaseRepository.adjustProductQuantity(
+            connection,
+            {
+              orgId,
+              productId: item.product_id,
+              delta: stockQty.quantity,
             },
-          },
-        );
+          );
+
+          /*
+           * Warehouse balances: the purchase header carries the
+           * warehouse, so the per-warehouse row moves in lockstep
+           * with the product quantity inside the same transaction.
+           * Both are in the product base unit.
+           */
+          await warehouseProductRepository.adjustQuantity(
+            connection,
+            {
+              orgId,
+              userId,
+              warehouseId: data.warehouse_id,
+              productId: item.product_id,
+              productUnitId: stockQty.productUnitId,
+              delta: stockQty.quantity,
+            },
+          );
+
+          await stockTransactionRepository.recordMovement(
+            connection,
+            {
+              orgId,
+              userId,
+              data: {
+                warehouse_id: data.warehouse_id,
+                product_id: item.product_id,
+                product_unit_id: item.product_unit_id,
+                reference_id: localId,
+                reference_type: 'purchase',
+                transaction_type: 'purchase',
+                quantity: Number(item.quantity || 0),
+                unit_cost: Number(item.unit_price || 0),
+                total_cost: Number(item.subtotal || 0),
+                currency: item.currency || data.currency || null,
+                peer_price: Number(item.sell_price || 0),
+                peer_currency: item.sell_currency || data.currency || null,
+                date: data.bill_date || new Date(),
+                description: `Purchase Bill #${data.bill_number || ''}`,
+                status: 1,
+              },
+            },
+          );
+        }
 
         await purchaseRepository.updateProductPrices(
           connection,
@@ -538,6 +573,322 @@ async function createPurchase({
   }
 }
 
+/*
+ * Step 2.6 — backend-authoritative purchase reversal.
+ *
+ * A confirmed purchase changes four things: product + warehouse stock,
+ * its own FIFO/LIFO batch layers, its payments (with their journals and
+ * the purchase `remaining` value), and its posted purchase journal.
+ * Reverting it (to draft, or by deleting it) must undo all four inside
+ * ONE transaction. These helpers are shared by updatePurchase
+ * (confirmed -> draft) and deletePurchase so the frontend only ever
+ * sends a single request instead of orchestrating the reversal itself.
+ */
+
+/*
+ * Rejects the reversal while any of the purchase's own stock has already
+ * been consumed by a later sale, transfer or waste (FIFO/LIFO orgs).
+ */
+async function assertPurchaseReversibleOnConnection(
+  connection,
+  {
+    orgId,
+    purchaseId,
+  },
+) {
+  await batchLedger.assertPurchaseReversible(
+    connection,
+    {
+      orgId,
+      purchaseId,
+    },
+  );
+}
+
+/*
+ * Purchase returns belong to the purchase's own lifecycle (goods went
+ * back to the supplier), so they are undone BEFORE the purchase' layers
+ * are zeroed: a return had put its quantity back into the original
+ * layers, and that quantity has to leave again together with the
+ * purchase. Doing it in the other order would restore into layers that
+ * are already gone.
+ */
+async function revertPurchaseReturnsOnConnection(
+  connection,
+  {
+    orgId,
+    userId,
+    purchaseId,
+  },
+) {
+  const returns =
+    await purchaseRepository.findReturnsByPurchase(
+      connection,
+      {
+        orgId,
+        purchaseId,
+        includeDeleted: true,
+      },
+    );
+
+  for (const purchaseReturn of returns) {
+    if (Number(purchaseReturn.status) === 0) {
+      continue;
+    }
+
+    /*
+     * Undo the return's own stock/batch deduction first, so the purchase
+     * reversal leaves the pre-purchase stock level intact.
+     */
+    await revertPurchaseReturnStockOnConnection(
+      connection,
+      {
+        orgId,
+        userId,
+        purchaseReturn,
+      },
+    );
+
+    await purchaseRepository.softDeleteReturn(
+      connection,
+      {
+        orgId,
+        localId: purchaseReturn.id,
+        userId,
+      },
+    );
+
+    await purchaseRepository.softDeleteReturnItemsByReturn(
+      connection,
+      {
+        orgId,
+        returnId: purchaseReturn.id,
+        userId,
+      },
+    );
+
+    /*
+     * Account process: soft-delete the return journal so the
+     * supplier/PAYABLE balances revert.
+     */
+    await journalRepository.softDeleteByReference(
+      connection,
+      {
+        orgId,
+        referenceId: purchaseReturn.id,
+        referenceType: 'purchase_return',
+        userId,
+      },
+    );
+  }
+}
+
+/*
+ * Removes the purchase's payments through the Step 1 authoritative
+ * payment service, so the payment rows, their journals, the purchase
+ * `remaining` value and the account aggregates stay consistent. No
+ * payment-reversal logic is duplicated here.
+ */
+async function revertPurchasePaymentsOnConnection(
+  connection,
+  {
+    orgId,
+    userId,
+    purchaseId,
+  },
+) {
+  const payments =
+    await purchaseRepository.findPaymentsByPurchase(
+      connection,
+      {
+        orgId,
+        purchaseId,
+        includeDeleted: true,
+      },
+    );
+
+  for (const payment of payments) {
+    if (Number(payment.status) === 0) {
+      continue;
+    }
+
+    await paymentPosting.softDeleteBillPaymentOnConnection(
+      connection,
+      {
+        orgId,
+        userId,
+        payment,
+        isSale: false,
+      },
+    );
+  }
+}
+
+/*
+ * Removes the purchase's own inventory contribution: product quantity,
+ * warehouse quantity, the compensating stock movement, and (for
+ * FIFO/LIFO) the purchase's batch layers.
+ */
+async function revertPurchaseInventoryOnConnection(
+  connection,
+  {
+    orgId,
+    userId,
+    purchase,
+    items,
+    movementDescription,
+  },
+) {
+  const purchaseId = purchase.id;
+
+  for (const item of items) {
+    if (Number(item.status) === 0) {
+      continue;
+    }
+
+    /*
+     * Reverse the exact BASE-UNIT quantity the confirmation applied, by
+     * re-deriving it from the same stored line, so receiving and
+     * reverting can never disagree for a multi-unit product.
+     */
+    const stockQty = await toProductStockQuantity(
+      connection,
+      orgId,
+      item,
+    );
+
+    /* Services are not inventory: no stock balance, no movement. */
+    if (stockQty.isService) {
+      continue;
+    }
+
+    await purchaseRepository.adjustProductQuantity(
+      connection,
+      {
+        orgId,
+        productId: item.product_id,
+        delta: -stockQty.quantity,
+      },
+    );
+
+    await warehouseProductRepository.adjustQuantity(
+      connection,
+      {
+        orgId,
+        userId,
+        warehouseId: purchase.warehouse_id,
+        productId: item.product_id,
+        productUnitId: stockQty.productUnitId,
+        delta: -stockQty.quantity,
+      },
+    );
+
+    await stockTransactionRepository.recordMovement(
+      connection,
+      {
+        orgId,
+        userId,
+        data: {
+          warehouse_id: purchase.warehouse_id,
+          product_id: item.product_id,
+          product_unit_id: item.product_unit_id,
+          reference_id: purchaseId,
+          reference_type: 'purchase',
+          transaction_type: 'purchase_revert',
+          quantity: -Number(item.quantity || 0),
+          unit_cost: Number(item.unit_price || 0),
+          total_cost: -Number(item.subtotal || 0),
+          currency: item.currency || purchase.currency || null,
+          peer_price: Number(item.sell_price || 0),
+          peer_currency: item.sell_currency || purchase.currency || null,
+          date: new Date(),
+          description:
+            movementDescription || `Purchase #${purchaseId} stock reverted`,
+          status: 1,
+        },
+      },
+    );
+  }
+
+  await batchLedger.revertPurchaseBatches(
+    connection,
+    {
+      orgId,
+      userId,
+      purchaseId,
+    },
+  );
+}
+
+/*
+ * Full reversal of a confirmed purchase inside the caller's transaction:
+ * returns -> payments -> inventory/batches -> posted purchase journal.
+ * The caller decides what to do with the purchase row itself (draft it or
+ * soft-delete it).
+ */
+async function revertConfirmedPurchaseOnConnection(
+  connection,
+  {
+    orgId,
+    userId,
+    purchaseId,
+    purchase,
+    items,
+    movementDescription,
+  },
+) {
+  await assertPurchaseReversibleOnConnection(
+    connection,
+    {
+      orgId,
+      purchaseId,
+    },
+  );
+
+  await revertPurchaseReturnsOnConnection(
+    connection,
+    {
+      orgId,
+      userId,
+      purchaseId,
+    },
+  );
+
+  await revertPurchasePaymentsOnConnection(
+    connection,
+    {
+      orgId,
+      userId,
+      purchaseId,
+    },
+  );
+
+  await revertPurchaseInventoryOnConnection(
+    connection,
+    {
+      orgId,
+      userId,
+      purchase,
+      items,
+      movementDescription,
+    },
+  );
+
+  /*
+   * Account process: soft-delete the purchase journal so the supplier
+   * balance no longer counts the phantom credit.
+   */
+  await journalRepository.softDeleteByReference(
+    connection,
+    {
+      orgId,
+      referenceId: purchaseId,
+      referenceType: 'purchase',
+      userId,
+    },
+  );
+}
+
 async function updatePurchase({
   user,
   purchaseId,
@@ -604,25 +955,33 @@ async function updatePurchase({
       data.bill_status ?? oldPurchase.bill_status;
 
     /*
-     * Account process: when a confirmed purchase is reverted
-     * to draft (PurchaseDraftModal), the posted purchase
-     * journal is soft-deleted so the supplier balance no
-     * longer counts the phantom credit. When a draft is
-     * confirmed through an edit, the journal is posted below
-     * (items branch).
+     * Account process: when a confirmed purchase is reverted to draft
+     * (PurchaseDraftModal) the WHOLE reversal runs here, in this one
+     * transaction: returns, payments (through the Step 1 authoritative
+     * payment service), product/warehouse stock, FIFO/LIFO layers, the
+     * compensating stock movements and the posted purchase journal. The
+     * frontend only sends { bill_status: 'draft' }.
+     *
+     * Nothing runs when the purchase is not currently confirmed, so an
+     * already-draft purchase can never be reversed twice. When a draft is
+     * confirmed through an edit, the journal is posted below (items
+     * branch).
      */
     if (
       isConfirmed(oldPurchase.bill_status) &&
       nextBillStatus &&
       !isConfirmed(nextBillStatus)
     ) {
-      await journalRepository.softDeleteByReference(
+      await revertConfirmedPurchaseOnConnection(
         connection,
         {
           orgId,
-          referenceId: purchaseId,
-          referenceType: 'purchase',
           userId,
+          purchaseId,
+          purchase: oldPurchase,
+          items: oldItems,
+          movementDescription:
+            `Purchase #${purchaseId} reverted to draft, stock deducted`,
         },
       );
     }
@@ -784,12 +1143,23 @@ async function updatePurchase({
         isConfirmed(nextBillStatus)
       ) {
         for (const item of oldActiveItems) {
+          const stockQty = await toProductStockQuantity(
+            connection,
+            orgId,
+            item,
+          );
+
+          /* Services are not inventory: no stock balance, no movement. */
+          if (stockQty.isService) {
+            continue;
+          }
+
           await purchaseRepository.adjustProductQuantity(
             connection,
             {
               orgId,
               productId: item.product_id,
-              delta: -Number(item.quantity || 0),
+              delta: -stockQty.quantity,
             },
           );
 
@@ -800,8 +1170,8 @@ async function updatePurchase({
               userId,
               warehouseId: oldPurchase.warehouse_id,
               productId: item.product_id,
-              productUnitId: item.product_unit_id,
-              delta: -Number(item.quantity || 0),
+              productUnitId: stockQty.productUnitId,
+              delta: -stockQty.quantity,
             },
           );
 
@@ -843,51 +1213,63 @@ async function updatePurchase({
 
       if (isConfirmed(nextBillStatus)) {
         for (const item of data.items) {
-          await purchaseRepository.adjustProductQuantity(
+          const stockQty = await toProductStockQuantity(
             connection,
-            {
-              orgId,
-              productId: item.product_id,
-              delta: Number(item.quantity || 0),
-            },
+            orgId,
+            item,
           );
 
-          await warehouseProductRepository.adjustQuantity(
-            connection,
-            {
-              orgId,
-              userId,
-              warehouseId: data.warehouse_id ?? oldPurchase.warehouse_id,
-              productId: item.product_id,
-              productUnitId: item.product_unit_id,
-              delta: Number(item.quantity || 0),
-            },
-          );
-
-          await stockTransactionRepository.recordMovement(
-            connection,
-            {
-              orgId,
-              userId,
-              data: {
-                warehouse_id: data.warehouse_id ?? oldPurchase.warehouse_id,
-                product_id: item.product_id,
-                product_unit_id: item.product_unit_id,
-                reference_id: purchaseId,
-                reference_type: 'purchase',
-                transaction_type: 'purchase',
-                quantity: Number(item.quantity || 0),
-                unit_cost: Number(item.unit_price || 0),
-                total_cost: Number(item.subtotal || 0),
-                currency: item.currency || data.currency || oldPurchase.currency || null,
-                peer_price: Number(item.sell_price || 0),
-                peer_currency: item.sell_currency || data.currency || oldPurchase.currency || null,
-                date: data.bill_date || oldPurchase.bill_date || new Date(),
-                description: `Purchase Bill #${data.bill_number || oldPurchase.bill_number || ''}`,
-                status: 1,
+          /*
+           * A service is not inventory: its line, totals and prices are
+           * kept, but it moves no stock and writes no inventory movement.
+           */
+          if (!stockQty.isService) {
+            await purchaseRepository.adjustProductQuantity(
+              connection,
+              {
+                orgId,
+                productId: item.product_id,
+                delta: stockQty.quantity,
               },
-            },
-          );
+            );
+
+            await warehouseProductRepository.adjustQuantity(
+              connection,
+              {
+                orgId,
+                userId,
+                warehouseId: data.warehouse_id ?? oldPurchase.warehouse_id,
+                productId: item.product_id,
+                productUnitId: stockQty.productUnitId,
+                delta: stockQty.quantity,
+              },
+            );
+
+            await stockTransactionRepository.recordMovement(
+              connection,
+              {
+                orgId,
+                userId,
+                data: {
+                  warehouse_id: data.warehouse_id ?? oldPurchase.warehouse_id,
+                  product_id: item.product_id,
+                  product_unit_id: item.product_unit_id,
+                  reference_id: purchaseId,
+                  reference_type: 'purchase',
+                  transaction_type: 'purchase',
+                  quantity: Number(item.quantity || 0),
+                  unit_cost: Number(item.unit_price || 0),
+                  total_cost: Number(item.subtotal || 0),
+                  currency: item.currency || data.currency || oldPurchase.currency || null,
+                  peer_price: Number(item.sell_price || 0),
+                  peer_currency: item.sell_currency || data.currency || oldPurchase.currency || null,
+                  date: data.bill_date || oldPurchase.bill_date || new Date(),
+                  description: `Purchase Bill #${data.bill_number || oldPurchase.bill_number || ''}`,
+                  status: 1,
+                },
+              },
+            );
+          }
 
           await purchaseRepository.updateProductPrices(
             connection,
@@ -1040,63 +1422,24 @@ async function deletePurchase({
       );
 
     /*
-     * Revert stock that a confirmed purchase added.
+     * Batch safety: a FIFO/LIFO purchase whose layers have already been
+     * consumed by a later sale, transfer or waste cannot be reversed
+     * without corrupting inventory, so reject instead of guessing.
      */
-    if (isConfirmed(oldPurchase.bill_status)) {
-      for (const item of oldItems) {
-        if (Number(item.status) === 0) {
-          continue;
-        }
+    await assertPurchaseReversibleOnConnection(
+      connection,
+      {
+        orgId,
+        purchaseId,
+      },
+    );
 
-        await purchaseRepository.adjustProductQuantity(
-          connection,
-          {
-            orgId,
-            productId: item.product_id,
-            delta: -Number(item.quantity || 0),
-          },
-        );
-
-        await warehouseProductRepository.adjustQuantity(
-          connection,
-          {
-            orgId,
-            userId,
-            warehouseId: oldPurchase.warehouse_id,
-            productId: item.product_id,
-            productUnitId: item.product_unit_id,
-            delta: -Number(item.quantity || 0),
-          },
-        );
-
-        await stockTransactionRepository.recordMovement(
-          connection,
-          {
-            orgId,
-            userId,
-            data: {
-              warehouse_id: oldPurchase.warehouse_id,
-              product_id: item.product_id,
-              product_unit_id: item.product_unit_id,
-              reference_id: purchaseId,
-              reference_type: 'purchase',
-              transaction_type: 'purchase_revert',
-              quantity: -Number(item.quantity || 0),
-              unit_cost: Number(item.unit_price || 0),
-              total_cost: -Number(item.subtotal || 0),
-              currency: item.currency || oldPurchase.currency || null,
-              peer_price: Number(item.sell_price || 0),
-              peer_currency: item.sell_currency || oldPurchase.currency || null,
-              date: new Date(),
-              description: `Deleted purchase #${purchaseId}, stock deducted`,
-              status: 1,
-            },
-          },
-        );
-      }
-    }
-
-    await batchLedger.revertPurchaseBatches(
+    /*
+     * Returns and payments are undone through the shared reversal helpers
+     * (payments via the Step 1 authoritative payment service) so deleting
+     * a purchase can never leave an orphan payment or return behind.
+     */
+    await revertPurchaseReturnsOnConnection(
       connection,
       {
         orgId,
@@ -1104,6 +1447,43 @@ async function deletePurchase({
         purchaseId,
       },
     );
+
+    await revertPurchasePaymentsOnConnection(
+      connection,
+      {
+        orgId,
+        userId,
+        purchaseId,
+      },
+    );
+
+    /*
+     * Revert stock that a confirmed purchase added. A draft purchase never
+     * touched stock, but its layers are still healed in case the
+     * organization changed its inventory method after the fact.
+     */
+    if (isConfirmed(oldPurchase.bill_status)) {
+      await revertPurchaseInventoryOnConnection(
+        connection,
+        {
+          orgId,
+          userId,
+          purchase: oldPurchase,
+          items: oldItems,
+          movementDescription:
+            `Deleted purchase #${purchaseId}, stock deducted`,
+        },
+      );
+    } else {
+      await batchLedger.revertPurchaseBatches(
+        connection,
+        {
+          orgId,
+          userId,
+          purchaseId,
+        },
+      );
+    }
 
     const deletedPurchase =
       await purchaseRepository.softDelete(
@@ -1137,104 +1517,6 @@ async function deletePurchase({
         userId,
       },
     );
-
-    const payments =
-      await purchaseRepository.findPaymentsByPurchase(
-        connection,
-        {
-          orgId,
-          purchaseId,
-          includeDeleted: true,
-        },
-      );
-
-    for (const payment of payments) {
-      if (Number(payment.status) === 1) {
-        await purchaseRepository.softDeletePayment(
-          connection,
-          {
-            orgId,
-            localId: payment.id,
-            userId,
-          },
-        );
-
-        /*
-         * Account process: soft-delete the payment journals
-         * so the supplier/treasury balances revert.
-         */
-        await journalRepository.softDeleteByReference(
-          connection,
-          {
-            orgId,
-            referenceId: payment.id,
-            referenceType: 'purchase_payment',
-            userId,
-          },
-        );
-      }
-    }
-
-    const returns =
-      await purchaseRepository.findReturnsByPurchase(
-        connection,
-        {
-          orgId,
-          purchaseId,
-          includeDeleted: true,
-        },
-      );
-
-    for (const purchaseReturn of returns) {
-      if (Number(purchaseReturn.status) === 0) {
-        continue;
-      }
-
-      /*
-       * Undo the return's own stock/batch deduction first, so deleting
-       * the purchase leaves the pre-purchase stock level intact.
-       */
-      await revertPurchaseReturnStockOnConnection(
-        connection,
-        {
-          orgId,
-          userId,
-          purchaseReturn,
-        },
-      );
-
-      await purchaseRepository.softDeleteReturn(
-        connection,
-        {
-          orgId,
-          localId: purchaseReturn.id,
-          userId,
-        },
-      );
-
-      await purchaseRepository.softDeleteReturnItemsByReturn(
-        connection,
-        {
-          orgId,
-          returnId: purchaseReturn.id,
-          userId,
-        },
-      );
-
-      /*
-       * Account process: soft-delete the return journal so
-       * the supplier/PAYABLE balances revert.
-       */
-      await journalRepository.softDeleteByReference(
-        connection,
-        {
-          orgId,
-          referenceId: purchaseReturn.id,
-          referenceType: 'purchase_return',
-          userId,
-        },
-      );
-    }
 
     await activityRepository.create(
       connection,
@@ -1515,14 +1797,26 @@ async function createReturn({
       createdItems.push(createdItem);
 
       /*
-       * A return removes the returned quantity from stock.
+       * A return removes the returned quantity from stock, converted
+       * into the product base unit like every other inventory write.
        */
+      const stockQty = await toProductStockQuantity(
+        connection,
+        orgId,
+        item,
+      );
+
+      /* Services are not inventory: no stock balance, no movement. */
+      if (stockQty.isService) {
+        continue;
+      }
+
       await purchaseRepository.adjustProductQuantity(
         connection,
         {
           orgId,
           productId: item.product_id,
-          delta: -Number(item.quantity || 0),
+          delta: -stockQty.quantity,
         },
       );
 
@@ -1533,8 +1827,8 @@ async function createReturn({
           userId,
           warehouseId: data.warehouse_id ?? purchase.warehouse_id,
           productId: item.product_id,
-          productUnitId: item.product_unit_id,
-          delta: -Number(item.quantity || 0),
+          productUnitId: stockQty.productUnitId,
+          delta: -stockQty.quantity,
         },
       );
 
@@ -1699,12 +1993,28 @@ async function revertPurchaseReturnStockOnConnection(
       continue;
     }
 
+    /*
+     * Mirror of the return's own deduction, in base units, so a return
+     * reversal never leaves the product/warehouse balance off by the
+     * unit ratio.
+     */
+    const stockQty = await toProductStockQuantity(
+      connection,
+      orgId,
+      item,
+    );
+
+    /* Services are not inventory: no stock balance, no movement. */
+    if (stockQty.isService) {
+      continue;
+    }
+
     await purchaseRepository.adjustProductQuantity(
       connection,
       {
         orgId,
         productId: item.product_id,
-        delta: Number(item.quantity || 0),
+        delta: stockQty.quantity,
       },
     );
 
@@ -1715,8 +2025,8 @@ async function revertPurchaseReturnStockOnConnection(
         userId,
         warehouseId: purchaseReturn.warehouse_id,
         productId: item.product_id,
-        productUnitId: item.product_unit_id,
-        delta: Number(item.quantity || 0),
+        productUnitId: stockQty.productUnitId,
+        delta: stockQty.quantity,
       },
     );
 

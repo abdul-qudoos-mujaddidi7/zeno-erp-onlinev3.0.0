@@ -26,6 +26,10 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
+const {
+  itemQuantityInProductUnit,
+} = require('../utils/unitConversion');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -76,8 +80,28 @@ async function applyWasteStock(
   },
 ) {
   for (const item of items || []) {
-    const quantity = Number(item.quantity || 0);
-    if (quantity <= 0) continue;
+    const enteredQuantity = Number(item.quantity || 0);
+    if (enteredQuantity <= 0) continue;
+
+    /*
+     * Product and warehouse balances are kept in the product base unit,
+     * while the movement keeps the entered quantity together with its
+     * product_unit_id (the ledger convention used everywhere else).
+     */
+    const stockQty = await itemQuantityInProductUnit(
+      connection,
+      {
+        orgId,
+        item,
+      },
+    );
+
+    /* A service is not inventory: it can never be wasted out of stock. */
+    if (stockQty.isService) {
+      continue;
+    }
+
+    const quantity = Number(stockQty.quantity || 0);
 
     await wasteRepository.adjustProductQuantity(
       connection,
@@ -95,7 +119,7 @@ async function applyWasteStock(
         userId,
         warehouseId,
         productId: item.product_id,
-        productUnitId: item.product_unit_id,
+        productUnitId: stockQty.productUnitId,
         delta: sign * quantity,
       },
     );
@@ -112,7 +136,7 @@ async function applyWasteStock(
           reference_id: wasteId,
           reference_type: 'waste',
           transaction_type: sign < 0 ? 'waste' : 'waste_revert',
-          quantity: sign * quantity,
+          quantity: sign * enteredQuantity,
           unit_cost: Number(item.unit_price || 0),
           total_cost: sign * Number(item.subtotal || 0),
           currency: item.currency || defaultCurrency || null,

@@ -29,6 +29,10 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
+const {
+  itemQuantityInProductUnit,
+} = require('../utils/unitConversion');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -85,8 +89,28 @@ async function applyTransferStock(
   },
 ) {
   for (const item of items || []) {
-    const quantity = Number(item.quantity || 0);
-    if (quantity <= 0) continue;
+    const enteredQuantity = Number(item.quantity || 0);
+    if (enteredQuantity <= 0) continue;
+
+    /*
+     * Warehouse balances are kept in the product base unit, while the
+     * movement keeps the entered quantity together with its
+     * product_unit_id (the ledger convention used everywhere else).
+     */
+    const stockQty = await itemQuantityInProductUnit(
+      connection,
+      {
+        orgId,
+        item,
+      },
+    );
+
+    /* A service is not inventory: there is nothing to transfer. */
+    if (stockQty.isService) {
+      continue;
+    }
+
+    const quantity = Number(stockQty.quantity || 0);
 
     await warehouseProductRepository.adjustQuantity(
       connection,
@@ -95,7 +119,7 @@ async function applyTransferStock(
         userId,
         warehouseId: sourceWarehouseId,
         productId: item.product_id,
-        productUnitId: item.product_unit_id,
+        productUnitId: stockQty.productUnitId,
         delta: sign * quantity,
       },
     );
@@ -107,7 +131,7 @@ async function applyTransferStock(
         userId,
         warehouseId: destWarehouseId,
         productId: item.product_id,
-        productUnitId: item.product_unit_id,
+        productUnitId: stockQty.productUnitId,
         delta: -sign * quantity,
       },
     );
@@ -124,7 +148,7 @@ async function applyTransferStock(
           reference_id: transferId,
           reference_type: 'stock_transfer',
           transaction_type: sign < 0 ? 'transfer_out' : 'transfer_out_revert',
-          quantity: sign * quantity,
+          quantity: sign * enteredQuantity,
           unit_cost: Number(item.unit_price || 0),
           total_cost: sign * Number(item.subtotal || 0),
           currency: item.currency || defaultCurrency || null,
@@ -149,7 +173,7 @@ async function applyTransferStock(
           reference_id: transferId,
           reference_type: 'stock_transfer',
           transaction_type: sign < 0 ? 'transfer_in' : 'transfer_in_revert',
-          quantity: -sign * quantity,
+          quantity: -sign * enteredQuantity,
           unit_cost: Number(item.unit_price || 0),
           total_cost: -sign * Number(item.subtotal || 0),
           currency: item.currency || defaultCurrency || null,

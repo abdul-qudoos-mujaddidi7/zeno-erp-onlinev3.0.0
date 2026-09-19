@@ -548,6 +548,53 @@ function stockEffect(transactionType, quantity) {
   return toNumber(quantity);
 }
 
+/*
+ * A manual adjustment movement is entered in a business unit and stored
+ * with its product_unit_id, while products.quantity and
+ * warehouse_products.quantity are kept in the product base unit. The
+ * stock effect of a movement therefore has to be expressed in the base
+ * unit before it is applied.
+ */
+async function movementQuantityInBaseUnit(
+  connection,
+  {
+    orgId,
+    productId,
+    movement,
+  },
+) {
+  const quantity = toNumber(movement?.quantity);
+
+  if (!quantity || !productId) {
+    return quantity;
+  }
+
+  const product =
+    await productRepository.findByLocalId(
+      connection,
+      {
+        orgId,
+        localId: productId,
+      },
+    );
+
+  const baseUnitId =
+    product?.product_unit_id || movement.product_unit_id;
+
+  if (!baseUnitId) {
+    return quantity;
+  }
+
+  const units = await getOrgUnits(connection, orgId);
+
+  return convertQuantityBetweenUnits(
+    quantity,
+    movement.product_unit_id || baseUnitId,
+    baseUnitId,
+    units,
+  );
+}
+
 async function applyManualAdjustmentInventory(
   connection,
   {
@@ -566,6 +613,26 @@ async function applyManualAdjustmentInventory(
   const newWarehouseId = next.warehouse_id || previous.warehouse_id;
   const productUnitId =
     next.product_unit_id || previous.product_unit_id;
+
+  /*
+   * A service holds no inventory, so a manual movement for one never
+   * moves product/warehouse stock and never designates opening stock.
+   */
+  const stockProduct =
+    await productRepository.findByLocalId(
+      connection,
+      {
+        orgId,
+        localId: productId,
+      },
+    );
+
+  if (
+    String(stockProduct?.type || '').trim().toLowerCase() === 'service'
+  ) {
+    return;
+  }
+
   const openingQuantity = Math.abs(toNumber(next.quantity));
   const designatedOpeningId =
     await findDesignatedOpeningId(
@@ -623,11 +690,25 @@ async function applyManualAdjustmentInventory(
 
   const oldEffect = stockEffect(
     previous.transaction_type,
-    previous.quantity,
+    await movementQuantityInBaseUnit(
+      connection,
+      {
+        orgId,
+        productId,
+        movement: previous,
+      },
+    ),
   );
   const newEffect = stockEffect(
     next.transaction_type,
-    next.quantity,
+    await movementQuantityInBaseUnit(
+      connection,
+      {
+        orgId,
+        productId,
+        movement: next,
+      },
+    ),
   );
   const productDelta = newEffect - oldEffect;
   const warehouseChanged = !sameId(oldWarehouseId, newWarehouseId);

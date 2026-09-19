@@ -5,6 +5,7 @@ const productRepository = require('../repositories/product.repository');
 const warehouseProductRepository = require('../repositories/warehouse-product.repository');
 const stockTransactionRepository = require('../repositories/stock-transaction.repository');
 const activityRepository = require('../repositories/activity.repository');
+const batchLedger = require('./batch-ledger.service');
 
 function identity(user) {
   const orgId = Number(user?.org_id); const userId = Number(user?.local_id);
@@ -12,6 +13,14 @@ function identity(user) {
     throw new AppError('Invalid authenticated user.', 401, 'INVALID_IDENTITY');
   }
   return { orgId, userId };
+}
+
+/*
+ * A service is not physical inventory, so it must never take part in a
+ * stock adjustment.
+ */
+function isServiceProduct(product) {
+  return String(product?.type || '').trim().toLowerCase() === 'service';
 }
 
 async function listStockAdjustments({ user, filters }) {
@@ -50,6 +59,30 @@ async function createStockAdjustment({ user, data, requestContext }) {
       throw new AppError(`Cannot decrease ${product.name}: available warehouse stock is ${beforeWarehouseQty}.`, 422, 'INSUFFICIENT_STOCK', { available_qty: beforeWarehouseQty });
     }
 
+    /*
+     * A service holds no inventory, so an adjustment for one is refused.
+     * (The zero-stock / zero-all repair paths stay available for cleaning
+     * up drift left behind by history.)
+     */
+    if (isServiceProduct(product)) {
+      throw new AppError(`Cannot adjust stock for ${product.name}: it is a service and holds no inventory.`, 422, 'SERVICE_HAS_NO_STOCK');
+    }
+
+    const isBatchOrg = batchLedger.isBatchMethod(await batchLedger.getInventoryMethod(connection, orgId));
+
+    /*
+     * A positive adjustment puts inventory INTO the system, which for a
+     * FIFO/LIFO organization means creating a real layer with a real
+     * unit cost. Neither the adjustment form nor stock_adjustments
+     * captures any cost (no unit cost, no buy price, no reference cost),
+     * and a sale price or the product's last buy price is not the cost of
+     * this event. Inventing one would corrupt FIFO/LIFO COGS, so the
+     * increase is refused until a deliberate cost policy exists.
+     */
+    if (isBatchOrg && delta > 0) {
+      throw new AppError('A stock increase cannot be recorded for a FIFO/LIFO organization: it would create an inventory layer with no captured cost. Adjust the stock up through a purchase (which carries a cost), or add a cost policy to stock adjustments first.', 409, 'ADJUSTMENT_COST_POLICY_REQUIRED');
+    }
+
     // Keep the established aggregate and warehouse balances in lockstep.
     await productRepository.adjustQuantity(connection, { orgId, productId: data.product_id, delta });
     await warehouseProductRepository.adjustQuantity(connection, { orgId, userId, warehouseId: data.warehouse_id,
@@ -57,6 +90,17 @@ async function createStockAdjustment({ user, data, requestContext }) {
     const adjustmentId = await adjustmentRepository.create(connection, { orgId, userId, productId: data.product_id,
       warehouseId: data.warehouse_id, adjustmentType: data.adjustment_type, qty, reason: data.reason, note: data.note,
       beforeQty, afterQty, beforeWarehouseQty, afterWarehouseQty });
+
+    /*
+     * A negative adjustment has to draw down the actual layers using the
+     * organization's costing order, so product/warehouse stock and the
+     * layer totals stay equal. A shortfall throws here and rolls the whole
+     * adjustment back.
+     */
+    if (isBatchOrg) {
+      await batchLedger.consumeAdjustmentBatches(connection, { orgId, userId, adjustmentId,
+        warehouseId: data.warehouse_id, productId: data.product_id, quantity: qty });
+    }
     // Retain a canonical stock movement for existing stock-history reports.
     await stockTransactionRepository.recordMovement(connection, { orgId, userId, data: { warehouse_id: data.warehouse_id,
       product_id: data.product_id, product_unit_id: warehouseStock?.product_unit_id || product.product_unit_id,
@@ -111,6 +155,9 @@ async function zeroStockAdjustment({ user, data, requestContext }) {
 
     await productRepository.adjustQuantity(connection, { orgId, productId: data.product_id, delta: productDelta });
     await warehouseProductRepository.zeroQuantities(connection, { orgId, userId, productId: data.product_id });
+    // The layers must be cleared with the balances, or they keep holding
+    // stock that was just declared gone.
+    await batchLedger.zeroProductBatches(connection, { orgId, userId, productId: data.product_id });
     const adjustmentId = await adjustmentRepository.create(connection, { orgId, userId, productId: data.product_id,
       warehouseId: data.warehouse_id, adjustmentType, qty, reason: data.reason, note: data.note,
       beforeQty, afterQty: 0, beforeWarehouseQty, afterWarehouseQty: 0 });
@@ -219,6 +266,8 @@ async function zeroAllStock({ user, data, requestContext }) {
     // balances are cleared together, so they stay consistent with each other.
     await productRepository.zeroAllQuantities(connection, { orgId });
     const balancesCleared = await warehouseProductRepository.zeroAllQuantities(connection, { orgId, userId });
+    // Same for a catalog-wide reset: every active layer is cleared with it.
+    await batchLedger.zeroAllBatches(connection, { orgId, userId });
     await stockTransactionRepository.recordMovements(connection, { orgId, userId, rows: movements });
     await activityRepository.create(connection, { orgId, userId, action: 'create', tableName: 'stock_adjustments',
       entityId: adjustmentIds[0] || null,

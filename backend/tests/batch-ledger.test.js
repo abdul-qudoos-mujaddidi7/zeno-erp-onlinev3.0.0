@@ -34,6 +34,9 @@ const productUnitRepository =
 const batchLedger =
   require('../services/batch-ledger.service');
 
+/* Captured before the per-test stubs replace it, so the real guard runs. */
+const realUpdateRemaining = stockBatchRepository.updateRemaining;
+
 const USER = { org_id: 42, local_id: 7 };
 
 let state;
@@ -90,6 +93,7 @@ function addBatch({
 function installStubs() {
   state = {
     method: 'FIFO',
+    stockMinus: false,
     batches: [],
     consumptions: [],
   };
@@ -174,6 +178,18 @@ function installStubs() {
       }
       return true;
     });
+
+  stockBatchRepository.findConsumptionsForBatches = async (
+    conn,
+    { batchIds, status = 1 },
+  ) =>
+    state.consumptions.filter(
+      (row) =>
+        Number(row.status) === Number(status) &&
+        (batchIds || [])
+          .map(String)
+          .includes(String(row.stock_batch_id)),
+    );
 
   stockBatchRepository.softDeleteConsumption = async (conn, { localId }) => {
     const row = state.consumptions.find(
@@ -705,8 +721,101 @@ test('a batch update failure propagates so the caller can roll back', async () =
   assert.equal(remaining('A'), 5);
 });
 
-test('insufficient batch stock is consumed best-effort (documents current behaviour)', async () => {
+/* ================== INSUFFICIENT BATCH STOCK POLICY ================= */
+
+test('insufficient batch stock is rejected when stock-minus is off (default)', async () => {
   addBatch({ batchId: 'A', quantityIn: 2, receivedAt: '2026-01-01' });
+
+  await assert.rejects(
+    () =>
+      batchLedger.consumeSaleBatches(connection, {
+        orgId: 42,
+        userId: 7,
+        saleId: 'S1',
+        warehouseId: 1,
+        items: [{ product_id: 10, product_unit_id: 1, quantity: 5 }],
+      }),
+    (error) => error.code === 'INSUFFICIENT_BATCH_STOCK',
+  );
+
+  // nothing was partially consumed and no consumption row was written
+  assert.equal(remaining('A'), 2);
+  assert.equal(state.consumptions.length, 0);
+});
+
+test('LIFO insufficient batch stock is also rejected', async () => {
+  state.method = 'LIFO';
+  addBatch({ batchId: 'A', quantityIn: 2, receivedAt: '2026-01-01' });
+
+  await assert.rejects(
+    () =>
+      batchLedger.consumeSaleBatches(connection, {
+        orgId: 42,
+        userId: 7,
+        saleId: 'S1',
+        warehouseId: 1,
+        items: [{ product_id: 10, product_unit_id: 1, quantity: 5 }],
+      }),
+    (error) => error.code === 'INSUFFICIENT_BATCH_STOCK',
+  );
+
+  assert.equal(remaining('A'), 2);
+  assert.equal(state.consumptions.length, 0);
+});
+
+test('a rejected consumption writes no consumption rows for any item', async () => {
+  addBatch({ batchId: 'A', quantityIn: 10, receivedAt: '2026-01-01' });
+  addBatch({
+    batchId: 'B',
+    productId: 11,
+    quantityIn: 1,
+    receivedAt: '2026-01-01',
+  });
+
+  await assert.rejects(
+    () =>
+      batchLedger.consumeSaleBatches(connection, {
+        orgId: 42,
+        userId: 7,
+        saleId: 'S1',
+        warehouseId: 1,
+        items: [
+          { product_id: 10, product_unit_id: 1, quantity: 5 },
+          { product_id: 11, product_unit_id: 1, quantity: 5 },
+        ],
+      }),
+    (error) => error.code === 'INSUFFICIENT_BATCH_STOCK',
+  );
+
+  assert.equal(state.consumptions.length, 0);
+  assert.equal(remaining('A'), 10);
+  assert.equal(remaining('B'), 1);
+});
+
+test('stock-minus enabled cannot bypass FIFO/LIFO batch coverage', async () => {
+  state.stockMinus = true;
+  addBatch({ batchId: 'A', quantityIn: 2, receivedAt: '2026-01-01' });
+
+  await assert.rejects(
+    () =>
+      batchLedger.consumeSaleBatches(connection, {
+        orgId: 42,
+        userId: 7,
+        saleId: 'S1',
+        warehouseId: 1,
+        items: [{ product_id: 10, product_unit_id: 1, quantity: 5 }],
+      }),
+    (error) => error.code === 'INSUFFICIENT_BATCH_STOCK',
+  );
+
+  /* no partial consumption and no half-costed quantity */
+  assert.equal(remaining('A'), 2);
+  assert.equal(state.consumptions.length, 0);
+});
+
+test('stock-minus enabled still consumes fully when the layers cover the sale', async () => {
+  state.stockMinus = true;
+  addBatch({ batchId: 'A', quantityIn: 5, receivedAt: '2026-01-01' });
 
   const costs = await batchLedger.consumeSaleBatches(connection, {
     orgId: 42,
@@ -716,7 +825,137 @@ test('insufficient batch stock is consumed best-effort (documents current behavi
     items: [{ product_id: 10, product_unit_id: 1, quantity: 5 }],
   });
 
-  // consumption is capped at available; the shortfall is not fabricated
   assert.equal(remaining('A'), 0);
-  assert.equal(costs[0].fifo_cost, 20);
+  assert.equal(costs[0].fifo_cost, 50);
+  assert.equal(costs[0].consumed_quantity, 5);
+  assert.equal(costs[0].covered, true);
+});
+
+test('the same quantity cannot be consumed twice', async () => {
+  addBatch({ batchId: 'A', quantityIn: 5, receivedAt: '2026-01-01' });
+
+  await batchLedger.consumeSaleBatches(connection, {
+    orgId: 42,
+    userId: 7,
+    saleId: 'S1',
+    warehouseId: 1,
+    items: [{ product_id: 10, product_unit_id: 1, quantity: 5 }],
+  });
+
+  await assert.rejects(
+    () =>
+      batchLedger.consumeSaleBatches(connection, {
+        orgId: 42,
+        userId: 7,
+        saleId: 'S2',
+        warehouseId: 1,
+        items: [{ product_id: 10, product_unit_id: 1, quantity: 5 }],
+      }),
+    (error) => error.code === 'INSUFFICIENT_BATCH_STOCK',
+  );
+
+  assert.equal(remaining('A'), 0);
+});
+
+/* =================== PURCHASE REVERSIBILITY GUARD ================== */
+
+function addPurchaseBatch(batchId, quantityIn, sourceId = 'P1') {
+  return addBatch({
+    batchId,
+    quantityIn,
+    receivedAt: '2026-01-01',
+    sourceType: 'purchase',
+    sourceId,
+  });
+}
+
+function addConsumption(overrides) {
+  state.consumptions.push({
+    local_id: nextId(),
+    org_id: 42,
+    status: 1,
+    operation_type: 'sale',
+    ...overrides,
+  });
+}
+
+test('intact purchase batches are reversible', async () => {
+  addPurchaseBatch('P-A', 10);
+
+  await batchLedger.assertPurchaseReversible(connection, {
+    orgId: 42,
+    purchaseId: 'P1',
+  });
+});
+
+test('purchase returns do not block reversal', async () => {
+  addPurchaseBatch('P-A', 10);
+  state.batches[0].quantity_remaining = 7;
+
+  addConsumption({
+    operation_type: 'purchase_return',
+    stock_batch_id: 'P-A',
+    quantity: 3,
+  });
+
+  await batchLedger.assertPurchaseReversible(connection, {
+    orgId: 42,
+    purchaseId: 'P1',
+  });
+});
+
+test('a purchase whose stock was consumed by a later sale is not reversible', async () => {
+  addPurchaseBatch('P-A', 10);
+  state.batches[0].quantity_remaining = 4;
+
+  addConsumption({
+    operation_type: 'sale',
+    sale_id: 'S1',
+    stock_batch_id: 'P-A',
+    quantity: 6,
+  });
+
+  await assert.rejects(
+    () =>
+      batchLedger.assertPurchaseReversible(connection, {
+        orgId: 42,
+        purchaseId: 'P1',
+      }),
+    (error) => error.code === 'PURCHASE_STOCK_ALREADY_CONSUMED',
+  );
+});
+
+test('CLASSIC purchases have no batch guard', async () => {
+  state.method = 'CLASSIC';
+  addPurchaseBatch('P-A', 10);
+
+  await batchLedger.assertPurchaseReversible(connection, {
+    orgId: 42,
+    purchaseId: 'P1',
+  });
+});
+
+test('purchase with no batch layers is reversible', async () => {
+  await batchLedger.assertPurchaseReversible(connection, {
+    orgId: 42,
+    purchaseId: 'P1',
+  });
+});
+
+/* ================= NEGATIVE BATCH REMAINING GUARD ================== */
+
+test('the batch repository refuses to write a negative remaining', async () => {
+  await assert.rejects(
+    () =>
+      realUpdateRemaining(
+        { async execute() {} },
+        {
+          orgId: 42,
+          localId: 'A',
+          userId: 7,
+          quantityRemaining: -1,
+        },
+      ),
+    (error) => error.code === 'NEGATIVE_BATCH_REMAINING',
+  );
 });

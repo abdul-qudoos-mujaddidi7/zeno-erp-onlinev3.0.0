@@ -34,7 +34,7 @@ const {
 } = require('../utils/pagination');
 
 const {
-  convertItemQuantityToProductUnit,
+  itemQuantityInProductUnit,
 } = require('../utils/unitConversion');
 
 const accountService =
@@ -79,14 +79,18 @@ function isConfirmed(billStatus) {
   return String(billStatus || '') === 'confirmed';
 }
 
+/*
+ * A document line is entered in a business unit; every inventory balance
+ * (products.quantity, warehouse_products.quantity, batch layers) is kept
+ * in the product's base unit. This is the single conversion entry point
+ * shared by the sale, purchase, transfer and waste services.
+ */
 async function toProductStockQuantity(connection, orgId, item) {
-  return convertItemQuantityToProductUnit(
+  return itemQuantityInProductUnit(
     connection,
     {
       orgId,
-      productId: item.product_id,
-      fromUnitId: item.product_unit_id,
-      quantity: item.quantity,
+      item,
     },
   );
 }
@@ -106,9 +110,26 @@ async function persistSaleBatchCosts(
   for (let index = 0; index < (createdItems || []).length; index += 1) {
     const created = createdItems[index];
     const item = items?.[index] || {};
-    const fifoCost = Number(itemCosts[index]?.fifo_cost) || 0;
-    if (!created || fifoCost <= 0) continue;
+    const entry = itemCosts[index];
 
+    if (!created) continue;
+
+    /*
+     * A successful FIFO/LIFO sale is always fully covered by layers, so
+     * every unit of the line has a real batch cost. Coverage is decided
+     * by the CONSUMED QUANTITY, never by the cost: a legitimate layer
+     * may cost zero, and it must still store a deterministic result
+     * (fifo_cost = 0, profit = revenue) instead of being skipped.
+     */
+    if (!entry?.covered) {
+      throw new AppError(
+        'Sale line is not fully covered by inventory batches, so its cost is unknown.',
+        409,
+        'INCOMPLETE_BATCH_COST_COVERAGE',
+      );
+    }
+
+    const fifoCost = Number(entry.fifo_cost) || 0;
     const quantity = Number(item.quantity ?? created.quantity) || 0;
     const unitPrice = Number(item.unit_price ?? created.unit_price) || 0;
     const localId = created.local_id || created.id;
@@ -570,6 +591,11 @@ async function createSale({
           item,
         );
 
+        /* Services are not inventory: no stock balance, no movement. */
+        if (stockQty.isService) {
+          continue;
+        }
+
         await saleRepository.adjustProductQuantity(
           connection,
           {
@@ -871,6 +897,11 @@ async function updateSale({
           orgId,
           item,
         );
+
+        /* Services are not inventory: no stock balance, no movement. */
+        if (stockQty.isService) {
+          continue;
+        }
 
         await saleRepository.adjustProductQuantity(
           connection,
@@ -1205,6 +1236,11 @@ async function updateSale({
             item,
           );
 
+          /* Services are not inventory: no stock balance, no movement. */
+          if (stockQty.isService) {
+            continue;
+          }
+
           await saleRepository.adjustProductQuantity(
             connection,
             {
@@ -1269,6 +1305,11 @@ async function updateSale({
             orgId,
             item,
           );
+
+          /* Services are not inventory: no stock balance, no movement. */
+          if (stockQty.isService) {
+            continue;
+          }
 
           await saleRepository.adjustProductQuantity(
             connection,
@@ -1485,6 +1526,11 @@ async function deleteSale({
           orgId,
           item,
         );
+
+        /* Services are not inventory: no stock balance, no movement. */
+        if (stockQty.isService) {
+          continue;
+        }
 
         await saleRepository.adjustProductQuantity(
           connection,
@@ -1985,6 +2031,11 @@ async function createReturn({
         item,
       );
 
+      /* Services are not inventory: no stock balance, no movement. */
+      if (stockQty.isService) {
+        continue;
+      }
+
       await saleRepository.adjustProductQuantity(
         connection,
         {
@@ -2173,6 +2224,11 @@ async function revertSaleReturnStockOnConnection(
       orgId,
       item,
     );
+
+    /* Services are not inventory: no stock balance, no movement. */
+    if (stockQty.isService) {
+      continue;
+    }
 
     await saleRepository.adjustProductQuantity(
       connection,
@@ -2378,4 +2434,6 @@ module.exports = {
   deletePayment,
   createReturn,
   deleteReturn,
+  /* Exported for the Step 2.7 inventory-costing regression tests. */
+  persistSaleBatchCosts,
 };

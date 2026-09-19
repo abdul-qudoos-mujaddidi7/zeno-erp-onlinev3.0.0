@@ -204,11 +204,44 @@ async function convertItemQuantityToProductUnit(
   return {
     quantity: converted,
     productUnitId: toUnitId || null,
+    isService:
+      String(product?.type || '').trim().toLowerCase() === 'service',
   };
+}
+
+/*
+ * ONE authoritative answer to "what does this document line mean in
+ * product base units?".
+ *
+ * Every stock-affecting service must go through this before it touches
+ * products.quantity, warehouse_products.quantity, stock_batches or
+ * batch_consumptions, so all inventory balances are kept in the
+ * product's base unit while the document line itself stays in whatever
+ * business unit the user picked (and stock_transactions keeps the
+ * entered quantity together with its product_unit_id so it can be
+ * converted back on rebuild).
+ */
+async function itemQuantityInProductUnit(
+  executor,
+  {
+    orgId,
+    item,
+  },
+) {
+  return convertItemQuantityToProductUnit(
+    executor,
+    {
+      orgId,
+      productId: item?.product_id,
+      fromUnitId: item?.product_unit_id,
+      quantity: item?.quantity,
+    },
+  );
 }
 
 module.exports = {
   convertQuantityBetweenUnits,
   convertItemQuantityToProductUnit,
+  itemQuantityInProductUnit,
   getOrgUnits,
 };

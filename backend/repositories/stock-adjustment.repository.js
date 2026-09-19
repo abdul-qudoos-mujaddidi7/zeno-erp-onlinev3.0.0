@@ -28,7 +28,7 @@ async function findById(executor, { orgId, id }) {
 }
 
 async function findProductForUpdate(connection, { orgId, productId }) {
-  const [rows] = await connection.execute(`SELECT local_id AS id, name, code, product_unit_id, COALESCE(quantity, 0) AS quantity
+  const [rows] = await connection.execute(`SELECT local_id AS id, name, code, product_unit_id, type, COALESCE(quantity, 0) AS quantity
     FROM products WHERE org_id = ? AND local_id = ? AND status = 1 FOR UPDATE`, [orgId, productId]);
   return rows[0] || null;
 }

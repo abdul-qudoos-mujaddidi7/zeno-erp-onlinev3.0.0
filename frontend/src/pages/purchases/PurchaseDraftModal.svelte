@@ -10,8 +10,7 @@
 
     import { push } from "svelte-spa-router";
 
-    import { calculateProductStock } from "../stocktransactions/calculateStock.js";
-import { stockTransactionApi } from '../../api/stockTransactionApi.js';
+    import { stockTransactionApi } from '../../api/stockTransactionApi.js';
     export let purchase;
 
     const dispatch = createEventDispatcher();
@@ -91,38 +90,19 @@ import { stockTransactionApi } from '../../api/stockTransactionApi.js';
     async function doDraftPurchase() {
         saving = true;
         try {
-            // Delete payments and returns through the backend API
-            for (const p of purchase_payments) {
-                await purchaseApi.removePayment(p.id);
-            }
-
-            for (const r of purchase_returns) {
-                await purchaseApi.removeReturn(r.id);
-            }
-
-            // The backend soft-deletes the purchase/payment/return
-            // journals when the purchase is deleted or its payments
-            // and returns are removed.
-
-            // Mark associated stock transactions as deleted
-
-            let stockTransToDelete = (await stockTransactionApi.getAll({ status: 1, reference_type: "purchase", reference_id: purchase.id }))?.data || [];
-
-            // Mark purchase_return stock transactions as deleted
-            for (const ret of purchase_returns) {
-                let retStockTransToDelete = (await stockTransactionApi.getAll({ status: 1, reference_type: "purchase_return", reference_id: ret.id }))?.data || [];
-                stockTransToDelete = stockTransToDelete.concat(
-                    retStockTransToDelete,
-                );
-            }
-
-            for (const st of stockTransToDelete) {
-                await stockTransactionApi.remove(st.id);
-                await calculateProductStock(
-                    Number(st.product_id),'single'
-                );
-            }
-
+            /*
+             * ONE authoritative request.
+             *
+             * The backend reverses the whole document inside a single
+             * transaction — returns, payments (with their journals and the
+             * purchase remaining balance), product / warehouse quantities,
+             * stock movements, FIFO/LIFO batch layers and the posted
+             * purchase journal — and only then stores the draft status.
+             *
+             * The frontend must never mutate any of that itself: a failure
+             * now rolls the entire reversal back instead of leaving the
+             * purchase (and its stock) half-drafted.
+             */
             await purchaseApi.update(purchase.id, { bill_status: "draft" });
 
             toast.success(t("Drafted!"), t("Purchase drafted successfully."));
@@ -132,7 +112,19 @@ import { stockTransactionApi } from '../../api/stockTransactionApi.js';
             push(`/dashboard/purchases`);
         } catch (e) {
             console.error("Error drafting purchase:", e);
-            toast.error(t("Error"), t("An error occurred while drafting the purchase."));
+
+            if (e?.code === "PURCHASE_STOCK_ALREADY_CONSUMED") {
+                toast.error(
+                    t("Cannot Draft"),
+                    e?.message ||
+                        t("This purchase's stock has already been used by a later sale, transfer or waste."),
+                );
+            } else {
+                toast.error(
+                    t("Error"),
+                    e?.message || t("An error occurred while drafting the purchase."),
+                );
+            }
         } finally {
             saving = false;
         }

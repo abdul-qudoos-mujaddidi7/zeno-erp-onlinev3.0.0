@@ -10,8 +10,7 @@
 
     import { push } from "svelte-spa-router";
 
-    import { calculateProductStock } from "../stocktransactions/calculateStock.js";
-import { stockTransactionApi } from '../../api/stockTransactionApi.js';
+    import { stockTransactionApi } from '../../api/stockTransactionApi.js';
     export let purchase;
 
     const dispatch = createEventDispatcher();
@@ -91,29 +90,20 @@ import { stockTransactionApi } from '../../api/stockTransactionApi.js';
     async function doDeletePurchase() {
         saving = true;
         try {
-            // The backend soft-deletes the purchase header, its items,
-            // payments, returns, return items and their journals in
-            // one transaction.
+            /*
+             * ONE authoritative request. The backend reverses the whole
+             * document inside a single transaction — returns, payments
+             * (with their journals and the purchase remaining balance),
+             * product / warehouse quantities, stock movements, FIFO/LIFO
+             * batch layers and the posted purchase journal — and then
+             * soft-deletes the purchase header and its items.
+             *
+             * The frontend must never delete stock transactions or
+             * recalculate product stock itself: inventory history is kept
+             * as explicit compensating movements, and a failure rolls the
+             * whole reversal back.
+             */
             await purchaseApi.remove(purchase.id);
-
-            // Mark associated stock transactions as deleted
-
-            let stockTransToDelete = (await stockTransactionApi.getAll({ status: 1, reference_type: "purchase", reference_id: purchase.id }))?.data || [];
-
-            // Mark purchase_return stock transactions as deleted
-            for (const ret of purchase_returns) {
-                let retStockTransToDelete = (await stockTransactionApi.getAll({ status: 1, reference_type: "purchase_return", reference_id: ret.id }))?.data || [];
-                stockTransToDelete = stockTransToDelete.concat(
-                    retStockTransToDelete,
-                );
-            }
-
-            for (const st of stockTransToDelete) {
-                await stockTransactionApi.remove(st.id);
-                await calculateProductStock(
-                    Number(st.product_id),'single'
-                );
-            }
 
             toast.success(t("Deleted!"), t("Purchase deleted successfully."));
 
@@ -122,7 +112,19 @@ import { stockTransactionApi } from '../../api/stockTransactionApi.js';
             push(`/dashboard/purchases`);
         } catch (e) {
             console.error("Error deleting purchase:", e);
-            toast.error(t("Error"), t("An error occurred while deleting the purchase."));
+
+            if (e?.code === "PURCHASE_STOCK_ALREADY_CONSUMED") {
+                toast.error(
+                    t("Cannot Delete"),
+                    e?.message ||
+                        t("This purchase's stock has already been used by a later sale, transfer or waste."),
+                );
+            } else {
+                toast.error(
+                    t("Error"),
+                    e?.message || t("An error occurred while deleting the purchase."),
+                );
+            }
         } finally {
             saving = false;
         }

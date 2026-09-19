@@ -1353,7 +1353,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       }
     } catch (err) {
       console.error(err);
-      toast.error(t('Error'), t('Failed to save sale. Please try again.'));
+      /*
+       * Surface the backend reason (e.g. a FIFO/LIFO sale refused with
+       * INSUFFICIENT_BATCH_STOCK because the layers cannot cover it).
+       */
+      toast.error(
+        t('Error'),
+        err?.message || t('Failed to save sale. Please try again.'),
+      );
     }
 
     loading = false;
