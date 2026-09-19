@@ -162,6 +162,9 @@ const stockAdjustmentRoutes =
 const reconciliationRoutes =
   require('./reconciliation.routes');
 
+const fiscalYearRoutes =
+  require('./fiscal-year.routes');
+
 const router = express.Router();
 
 /*
@@ -437,6 +440,11 @@ router.use(
 router.use(
   '/reconciliation',
   reconciliationRoutes,
+);
+
+router.use(
+  '/fiscal-years',
+  fiscalYearRoutes,
 );
 
 module.exports = router;

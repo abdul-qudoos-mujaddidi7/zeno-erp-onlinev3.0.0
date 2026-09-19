@@ -38,6 +38,32 @@ const additionalInitialBalanceSchema = z.object({
   currency: nullableString(50),
 });
 
+/*
+ * OPTIONAL accounting date for the initial-balance journals. Omitting it keeps
+ * the previous behaviour, so existing callers are unaffected.
+ *
+ * Only the calendar day is accepted. A full timestamp would let a client push
+ * an opening balance into a different day (and fiscal year) through its own
+ * timezone, which is the exact failure this field exists to prevent.
+ */
+const effectiveDate = z.preprocess(
+  (value) => {
+    if (value === '' || value === undefined || value === null) {
+      return undefined;
+    }
+
+    return value;
+  },
+  z
+    .string()
+    .trim()
+    .regex(
+      /^\d{4}-\d{2}-\d{2}$/,
+      'effective_date must be YYYY-MM-DD',
+    )
+    .optional(),
+);
+
 const accountFields = {
   name: z
     .string({
@@ -113,6 +139,7 @@ const createAccountSchema = z.object({
     .array(additionalInitialBalanceSchema)
     .optional()
     .default([]),
+  effective_date: effectiveDate,
 });
 
 const updateAccountSchema = z

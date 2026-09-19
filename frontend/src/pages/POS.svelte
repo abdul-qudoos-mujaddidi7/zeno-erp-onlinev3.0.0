@@ -30,6 +30,7 @@ import { productUnitApi } from '../api/productUnitApi.js';
   $: enable_a4_default_print_mode = $settings_all.find((s) => s.key === 'enable_a4_default_print_mode')?.value == 1;
 
   import { calculateRemainingAndBenefit, resolveCostCurrency } from './sales/SalesHelper.js';
+  import { getKabulDate } from '../calendar.js';
 import { currencyApi } from '../api/currencyApi.js';
 import { warehouseApi } from '../api/warehouseApi.js';
 import { saleApi } from '../api/saleApi.js';
@@ -716,7 +717,8 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
         account_id: selectedCustomer.id,
         sale_type: 'pos',
         invoice_number: pos_index_prefix + invoice_index,
-        invoice_date: new Date().toISOString().slice(0, 10),
+        /* the business accounting day, not a UTC instant */
+        invoice_date: getKabulDate(),
         due_date: null,
         total_amount: payableAmount,
         discount_amount: Number(discount_amount || 0),
@@ -745,7 +747,7 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
           account_id: treasury_ID || selectedCustomer.id,
           amount: Number(paymentAmount || 0),
           currency: payCurrency,
-          payment_date: new Date().toISOString(),
+          payment_date: getKabulDate(),
           description: 'POS Cash Payment',
           status: 1,
         });

@@ -57,6 +57,10 @@ const productUnitRepository =
 const purchaseService =
   require('../services/purchase.service');
 
+const {
+  localDateOnly,
+} = require('../utils/accountingDate');
+
 const AppError = require('../errors/AppError');
 
 const USER = { org_id: 42, local_id: 7 };
@@ -454,11 +458,17 @@ function installStubs({
     code: 'PAYABLE',
   });
 
-  journalRepository.create = async (conn, { localId, data }) => ({
-    id: localId,
-    local_id: localId,
-    ...data,
-  });
+  journalRepository.create = async (conn, { localId, data }) => {
+    const journal = {
+      id: localId,
+      local_id: localId,
+      ...data,
+    };
+
+    state.journals.push(journal);
+
+    return journal;
+  };
 
   /*
    * Unit conversion: product 10 has base unit 1, and one carton is 12
@@ -1206,4 +1216,118 @@ test('PurchaseDeleteModal performs exactly one authoritative mutation', () => {
 test('PurchaseDeleteModal no longer deletes stock transactions or recalculates stock', () => {
   assert.doesNotMatch(deleteModalSource, /stockTransactionApi\.remove\(/);
   assert.doesNotMatch(deleteModalSource, /calculateProductStock/);
+});
+
+/* =================================================================== */
+/* accounting date (Step 3.5)                                           */
+/* =================================================================== */
+/*
+ * The purchase return journal used to be stamped with the UTC calendar day
+ * at posting time. For a UTC+4:30 book that files a return into the wrong
+ * day — and potentially the wrong fiscal year — for the first hours of
+ * every local day. It must use the return's own date.
+ */
+
+/*
+ * installStubs seeds pre-existing journal rows for the fixture, so these
+ * tests only inspect the journals written by the call under test.
+ */
+function newJournalsOfType(since, referenceType) {
+  return state.journals
+    .slice(since)
+    .filter((journal) => journal.reference_type === referenceType);
+}
+
+test('a purchase return journal is dated from return_date, not posting time', async () => {
+  installStubs({ withPayment: false, stock: 10 });
+
+  const before = state.journals.length;
+
+  await purchaseService.createReturn({
+    user: USER,
+    purchaseId: '2001',
+    data: {
+      total_amount: 200,
+      currency: 'AFN',
+      warehouse_id: 1,
+      return_date: '2026-12-31',
+      items: [
+        {
+          product_id: 10,
+          product_unit_id: BASE_UNIT_ID,
+          quantity: 2,
+          unit_price: 80,
+          subtotal: 160,
+        },
+      ],
+    },
+    requestContext: REQUEST_CONTEXT,
+  });
+
+  const returnJournals = newJournalsOfType(before, 'purchase_return');
+
+  assert.equal(returnJournals.length, 1);
+  assert.equal(returnJournals[0].date, '2026-12-31');
+});
+
+test('a purchase return journal falls back to the local day when no date is given', async () => {
+  installStubs({ withPayment: false, stock: 10 });
+
+  const before = state.journals.length;
+
+  await purchaseService.createReturn({
+    user: USER,
+    purchaseId: '2001',
+    data: {
+      total_amount: 200,
+      currency: 'AFN',
+      warehouse_id: 1,
+      items: [
+        {
+          product_id: 10,
+          product_unit_id: BASE_UNIT_ID,
+          quantity: 2,
+          unit_price: 80,
+          subtotal: 160,
+        },
+      ],
+    },
+    requestContext: REQUEST_CONTEXT,
+  });
+
+  const returnJournals = newJournalsOfType(before, 'purchase_return');
+
+  assert.equal(returnJournals.length, 1);
+  assert.equal(returnJournals[0].date, localDateOnly(new Date()));
+});
+
+test('a confirmed purchase journal is dated from bill_date', async () => {
+  /* the seeded purchase starts as a draft so confirming posts its journal */
+  installStubs({ billStatus: 'draft', withPayment: false, stock: 0 });
+
+  const before = state.journals.length;
+
+  await purchaseService.updatePurchase({
+    user: USER,
+    purchaseId: '2001',
+    data: {
+      bill_status: 'confirmed',
+      bill_date: '2026-04-17',
+      total_amount: 1200,
+      account_id: 'SUP-1',
+      warehouse_id: 1,
+    },
+    requestContext: REQUEST_CONTEXT,
+  });
+
+  const purchaseJournals = newJournalsOfType(before, 'purchase');
+
+  assert.ok(
+    purchaseJournals.length >= 1,
+    'confirming a purchase must post a purchase journal',
+  );
+
+  for (const journal of purchaseJournals) {
+    assert.equal(journal.date, '2026-04-17');
+  }
 });

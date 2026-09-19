@@ -1,5 +1,6 @@
 import { mount, unmount } from 'svelte';
 import AppDatePicker from './components/common/AppDatePicker.svelte';
+import { toAccountingDateString } from './utils/accountingDate.js';
 
 function parseDateOnly(dateStr) {
   const match = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -15,18 +16,12 @@ function parseDateOnly(dateStr) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+/*
+ * Kept as the historical name used across the app; the rule itself lives in
+ * utils/accountingDate.js so business dates have exactly one implementation.
+ */
 export function getKabulDate(value = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kabul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(value).reduce((result, part) => {
-    result[part.type] = part.value;
-    return result;
-  }, {});
-
-  return `${parts.year}-${parts.month}-${parts.day}`;
+  return toAccountingDateString(value);
 }
 
 function showDate(inputDate, context = 'default') {

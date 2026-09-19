@@ -132,6 +132,7 @@ import { settingsApi } from '../api/settingsApi.js';
   $: salesTab = new URLSearchParams($querystring || '').get('tab') || 'sales';
   $: reportsMenuActive =
     loc === '/dashboard/stock-adjustments' ||
+    loc === '/dashboard/fiscal-years' ||
     loc === '/dashboard/accounts/report' ||
     loc === '/dashboard/accounts/general-report' ||
     (loc === '/dashboard/sales' && salesTab === 'products');
@@ -518,6 +519,12 @@ import { settingsApi } from '../api/settingsApi.js';
                   {t('Stock adjustments')}
                 </a>
               {/if}
+              <a use:link href="/dashboard/fiscal-years"
+                class="list-group-item list-group-item-action"
+                class:active={loc === '/dashboard/fiscal-years'}>
+                <i class="bi bi-calendar-range me-2"></i>
+                {t('Fiscal years')}
+              </a>
               <a use:link href="/dashboard/accounts/report"
                 class="list-group-item list-group-item-action"
                 class:active={loc === '/dashboard/accounts/report'}>

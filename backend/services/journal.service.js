@@ -29,6 +29,9 @@ const accountService =
 const paymentPosting =
   require('./payment-posting.service');
 
+const fiscalYearService =
+  require('./fiscal-year.service');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -80,14 +83,37 @@ async function listJournals({
 
   const pagination = resolvePagination(filters);
 
+  let dateFrom = filters.date_from;
+  let dateTo = filters.date_to;
+
+  /*
+   * Optional fiscal-year scoping for existing reports. A fiscal year is
+   * resolved to its start/end dates, and an explicit custom range always
+   * takes precedence — the existing date filters are never removed.
+   */
+  if (
+    filters.fiscal_year_id &&
+    !dateFrom &&
+    !dateTo
+  ) {
+    const fiscalYear =
+      await fiscalYearService.getFiscalYear({
+        user,
+        fiscalYearId: filters.fiscal_year_id,
+      });
+
+    dateFrom = fiscalYear.start_date;
+    dateTo = fiscalYear.end_date;
+  }
+
   const listParams = {
     orgId,
     status: filters.status,
     search: filters.search,
     referenceId: filters.reference_id,
     referenceType: filters.reference_type,
-    dateFrom: filters.date_from,
-    dateTo: filters.date_to,
+    dateFrom,
+    dateTo,
     accountId: filters.account_id,
     excludeSystemAccounts:
       Number(filters.exclude_system_accounts) === 1,

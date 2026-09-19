@@ -7,8 +7,9 @@ import { settingsApi } from '../../api/settingsApi.js';
   import { push } from 'svelte-spa-router';
   import FilterSelect from '../../components/common/FilterSelect.svelte';
   import { toast } from '../../ToastUI/toast.js';
-  import { showDate } from '../../calendar.js';
+  import { showDate, getKabulDate } from '../../calendar.js';
   import AppDatePicker from '../../components/common/AppDatePicker.svelte';
+  import { accountingDateOfStoredValue } from '../../utils/accountingDate.js';
   import { t, lang, translate_org_type, settings_all } from '../../i18n/i18n';
 import { currencyApi } from '../../api/currencyApi.js';
 import { warehouseApi } from '../../api/warehouseApi.js';
@@ -35,10 +36,15 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   $: enable_batch_setting = $settings_all.find((s) => s.key === 'enable_batch')?.value == 1;
 
   let accountModalRef;
-  let date = new Date().toISOString().slice(0, 10);
+  /*
+   * The bill date is the purchase's accounting date, so it must be the
+   * business calendar day rather than the UTC day. The due date is a
+   * calendar day too, so it is derived the same way.
+   */
+  let date = getKabulDate();
   let due_date = null;
   $: if (enable_purchase_bill_due_date && !due_date) {
-    due_date = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    due_date = getKabulDate(new Date(Date.now() + 10 * 24 * 60 * 60 * 1000));
   }
   $: form.bill_date = date;
   $: form.due_date = due_date;
@@ -311,7 +317,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     warehouse_id: '',
     account_id: '',
     bill_number: '',
-    bill_date: new Date().toISOString().slice(0, 10),
+    bill_date: getKabulDate(),
     description: '',
     due_date: null,
     currency: '',
@@ -1014,7 +1020,8 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
             account_id: second_entry_account,
             amount: nextPaymentAmount,
             currency: paymentCurrency,
-            payment_date: new Date().toISOString(),
+            /* the business accounting day, not a UTC instant */
+            payment_date: getKabulDate(),
             description: paymentDescription,
           });
           payId = paymentResponse?.data?.id || null;
@@ -1047,13 +1054,18 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     loading = false;
   }
   function resetForm() {
-    date = new Date().toISOString().slice(0, 10);
+    /*
+     * The bill date is the purchase's accounting date: it decides the
+     * journal date and therefore the fiscal year. The UTC day would be
+     * yesterday for the first hours of every local day.
+     */
+    date = getKabulDate();
     form = {
       ...form,
       warehouse_id: '',
       account_id: '',
       bill_number: '',
-      bill_date: new Date().toISOString().slice(0, 10),
+      bill_date: getKabulDate(),
       due_date: null,
       description: '',
     };

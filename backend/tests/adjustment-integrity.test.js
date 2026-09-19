@@ -58,6 +58,10 @@ const activityRepository =
 const saleRepository =
   require('../repositories/sale.repository');
 
+const {
+  localDateOnly,
+} = require('../utils/accountingDate');
+
 const settingsRepository =
   require('../repositories/settings.repository');
 
@@ -445,10 +449,13 @@ function installStubs() {
     return sale;
   };
 
-  journalRepository.create = async (conn, { localId, data }) => ({
-    id: localId,
-    ...data,
-  });
+  journalRepository.create = async (conn, { localId, data }) => {
+    const journal = { id: localId, ...data };
+
+    state.journals.push(journal);
+
+    return journal;
+  };
 
   journalRepository.softDeleteByReference = async () => 0;
   journalRepository.findAll = async () => ({ data: [], total: 0 });
@@ -1167,4 +1174,117 @@ test('reverting a sale to draft restores only the physical line', async () => {
   assert.equal(stockMovements().length, 1);
   assert.equal(stockMovements()[0].product_id, PHYSICAL);
   assert.equal(stockMovements()[0].transaction_type, 'sale_revert');
+});
+
+/* =================================================================== */
+/* accounting date (Step 3.5)                                           */
+/* =================================================================== */
+
+test('a sale return journal is dated from return_date, not posting time', async () => {
+  const sale = seedDraftSaleWithItems([PHYSICAL]);
+  sale.invoice_status = 'confirmed';
+  addProductQty(PHYSICAL, 8);
+  addWarehouseQty(PHYSICAL, 8);
+
+  await saleService.createReturn({
+    user: USER,
+    saleId: 'S1',
+    data: {
+      total_amount: 100,
+      currency: 'AFN',
+      warehouse_id: 1,
+      return_date: '2026-12-31',
+      items: [
+        {
+          product_id: PHYSICAL,
+          product_unit_id: BASE_UNIT_ID,
+          quantity: 2,
+          unit_price: 50,
+          subtotal: 100,
+        },
+      ],
+    },
+    requestContext: REQUEST_CONTEXT,
+  });
+
+  const returnJournals = state.journals.filter(
+    (journal) => journal.reference_type === 'sale_return',
+  );
+
+  assert.equal(returnJournals.length, 1);
+  assert.equal(returnJournals[0].date, '2026-12-31');
+});
+
+test('a confirmed sale journal is dated from invoice_date, not posting time', async () => {
+  seedDraftSaleWithItems([PHYSICAL]);
+  addProductQty(PHYSICAL, 10);
+  addWarehouseQty(PHYSICAL, 10);
+
+  await saleService.createSale({
+    user: USER,
+    data: {
+      invoice_status: 'confirmed',
+      total_amount: 200,
+      account_id: 'CUST-1',
+      warehouse_id: 1,
+      invoice_date: '2026-05-06',
+      items: [
+        {
+          product_id: PHYSICAL,
+          product_unit_id: BASE_UNIT_ID,
+          quantity: 1,
+          unit_price: 200,
+          subtotal: 200,
+        },
+      ],
+    },
+    requestContext: REQUEST_CONTEXT,
+  });
+
+  const saleJournals = state.journals.filter(
+    (journal) => journal.reference_type === 'sale',
+  );
+
+  assert.ok(
+    saleJournals.length >= 1,
+    'confirming a sale must post a sale journal',
+  );
+
+  for (const journal of saleJournals) {
+    assert.equal(journal.date, '2026-05-06');
+  }
+});
+
+test('a sale return journal falls back to the local day when no date is given', async () => {
+  const sale = seedDraftSaleWithItems([PHYSICAL]);
+  sale.invoice_status = 'confirmed';
+  addProductQty(PHYSICAL, 8);
+  addWarehouseQty(PHYSICAL, 8);
+
+  await saleService.createReturn({
+    user: USER,
+    saleId: 'S1',
+    data: {
+      total_amount: 100,
+      currency: 'AFN',
+      warehouse_id: 1,
+      items: [
+        {
+          product_id: PHYSICAL,
+          product_unit_id: BASE_UNIT_ID,
+          quantity: 2,
+          unit_price: 50,
+          subtotal: 100,
+        },
+      ],
+    },
+    requestContext: REQUEST_CONTEXT,
+  });
+
+  const returnJournals = state.journals.filter(
+    (journal) => journal.reference_type === 'sale_return',
+  );
+
+  assert.equal(returnJournals.length, 1);
+  assert.equal(returnJournals[0].date, localDateOnly(new Date()));
 });

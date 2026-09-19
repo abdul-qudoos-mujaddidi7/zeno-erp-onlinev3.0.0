@@ -37,6 +37,10 @@ const {
   itemQuantityInProductUnit,
 } = require('../utils/unitConversion');
 
+const {
+  accountingDate,
+} = require('../utils/accountingDate');
+
 const accountService =
   require('./account.service');
 
@@ -2124,7 +2128,13 @@ async function createReturn({
         userId,
         requestContext,
         data: {
-          date: new Date().toISOString().slice(0, 10),
+          /*
+           * The return carries its own accounting date. The previous value
+           * was the UTC calendar day at posting time, which files a return
+           * into the wrong day (and potentially the wrong fiscal year) for
+           * part of every day in a non-UTC timezone.
+           */
+          date: accountingDate(saleReturn.return_date),
           reference_id: returnLocalId,
           reference_type: 'sale_return',
           description:

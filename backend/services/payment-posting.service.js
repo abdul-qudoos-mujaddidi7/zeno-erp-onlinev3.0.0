@@ -53,6 +53,10 @@ const {
   convertCurrencyAmount,
 } = require('../utils/currency');
 
+const {
+  accountingDate,
+} = require('../utils/accountingDate');
+
 function billRepository(isSale) {
   return isSale ? saleRepository : purchaseRepository;
 }
@@ -407,6 +411,17 @@ async function postBillPaymentJournals(
       ? 'Payment for Sales Invoice'
       : 'Payment for Purchase Invoice');
 
+  /*
+   * The payment carries its own accounting date. The journal must use it
+   * rather than the moment the posting happened, so a payment recorded on
+   * 31 Dec for a December bill is filed in December — and therefore in the
+   * fiscal year the user intended — even when it is entered days later.
+   *
+   * A payment with no usable date falls back to today's LOCAL calendar day,
+   * never the UTC day.
+   */
+  const journalDate = accountingDate(payment.payment_date);
+
   const referenceType = paymentReferenceType(isSale);
 
   // SALES/PURCHASE <-> RECEIVABLE/PAYABLE
@@ -417,7 +432,7 @@ async function postBillPaymentJournals(
       userId,
       requestContext,
       data: {
-        date: new Date().toISOString(),
+        date: journalDate,
         reference_id: payment.id,
         reference_type: referenceType,
         description: paymentDescription,
@@ -443,7 +458,7 @@ async function postBillPaymentJournals(
       userId,
       requestContext,
       data: {
-        date: new Date().toISOString(),
+        date: journalDate,
         reference_id: payment.id,
         reference_type: referenceType,
         description: paymentDescription,

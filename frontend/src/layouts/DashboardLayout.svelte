@@ -52,6 +52,7 @@
   const loadServicesIndex = () => import('../pages/products/ServicesIndex.svelte');
   const loadStockTransactions = () => import('../pages/StockTransactions.svelte');
   const loadStockAdjustments = () => import('../pages/StockAdjustments.svelte');
+  const loadFiscalYears = () => import('../pages/FiscalYears.svelte');
   const loadProductForm = () => import('../pages/products/ProductForm.svelte');
   const loadProduct = () => import('../pages/Product.svelte');
   const loadReports = () => import('../pages/Reports.svelte');
@@ -306,6 +307,10 @@
       {:else if loc === '/dashboard/stock-adjustments'}
         <div class="route-fill route-fill--scrollable">
           <AsyncPage loader={loadStockAdjustments} />
+        </div>
+      {:else if loc === '/dashboard/fiscal-years'}
+        <div class="route-fill route-fill--scrollable">
+          <AsyncPage loader={loadFiscalYears} />
         </div>
       {:else if loc.startsWith('/dashboard/product-form/')}
         <AsyncPage loader={loadProductForm} {productFormId} />

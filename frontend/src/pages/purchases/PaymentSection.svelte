@@ -11,6 +11,11 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import AccountModal from '../accounts/AccountModal.svelte';
 import { currencyApi } from '../../api/currencyApi.js';
 import { purchaseApi } from '../../api/purchaseApi.js';
+  import AppDatePicker from '../../components/common/AppDatePicker.svelte';
+  import {
+    todayAccountingDate,
+    accountingDateOfStoredValue,
+  } from '../../utils/accountingDate.js';
 import { accountApi } from '../../api/accountApi.js';
 import { accountTypeApi } from '../../api/accountTypeApi.js';
 import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
@@ -26,6 +31,9 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   let returnsWithItems = [];
 
   let paymentType = 'Payment';
+
+  /* the accounting day of the payment being added; defaults to today */
+  let paymentDate = todayAccountingDate();
 
   export let purchaseId;
 
@@ -258,7 +266,11 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       account_id: second_entry_account,
       amount: paymentType == 'Payment' ? Number(amount) : Number(amount) * -1,
       currency: currency,
-      payment_date: new Date().toISOString(),
+      /*
+       * The business accounting day, not a UTC instant, so the journal the
+       * backend derives from it lands in the right day and fiscal year.
+       */
+      payment_date: paymentDate || todayAccountingDate(),
       description: description,
     });
     const paymentId = paymentResponse.data.id;
@@ -269,6 +281,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
      */
     amount = '';
     description = '';
+    paymentDate = todayAccountingDate();
     showAddPaymentForm = false;
     load();
   }
@@ -335,6 +348,9 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   async function toggleAddPaymentForm() {
     showAddPaymentForm = !showAddPaymentForm;
     if (showAddPaymentForm) {
+      /* never reuse a date left over from a previous edit */
+      paymentDate = todayAccountingDate();
+
       await ensurePickerAccounts();
       await tick();
       setTimeout(() => {
@@ -537,6 +553,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               </div>
 
               <div class="purchase-form-field">
+                <AppDatePicker
+                  label={t('Payment date')}
+                  value={paymentDate}
+                  on:change={(event) => (paymentDate = event.detail)}
+                />
+              </div>
+
+              <div class="purchase-form-field">
                 <label class="purchase-form-field__label">{t('From Account')}</label>
                 <div class="purchase-account-picker">
                   <button
@@ -613,7 +637,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                 {#each payments as p}
                   <tr>
                     <td class="pd-table__col-date">
-                      <span dir="ltr">{p.payment_date.slice(0, 10)}</span>
+                      <span dir="ltr">{accountingDateOfStoredValue(p.payment_date)}</span>
                     </td>
                     <td class="pd-table__col-desc">{p.description || '—'}</td>
                     <td class="pd-table__amount pd-table__col-num">

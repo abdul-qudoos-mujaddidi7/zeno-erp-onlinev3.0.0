@@ -100,6 +100,18 @@ const journalListQuerySchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'date_to must be YYYY-MM-DD')
     .optional(),
 
+  /*
+   * Optional fiscal-year scoping. It resolves to the year's start/end
+   * dates, and an explicit date_from/date_to always wins so the existing
+   * custom range filter keeps working unchanged.
+   */
+  fiscal_year_id: z
+    .coerce
+    .number()
+    .int()
+    .positive()
+    .optional(),
+
   exclude_system_accounts: z
     .coerce
     .number()

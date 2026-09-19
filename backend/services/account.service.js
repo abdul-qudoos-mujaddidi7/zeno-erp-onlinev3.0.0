@@ -23,6 +23,10 @@ const {
 const ttlCache =
   require('../utils/ttlCache');
 
+const {
+  accountingDate,
+} = require('../utils/accountingDate');
+
 const accountTypeRepository =
   require('../repositories/account-type.repository');
 
@@ -351,6 +355,7 @@ async function createInitialBalanceJournals({
   initialBalanceType,
   balance,
   additionalInitialBalances,
+  effectiveDate,
 }) {
   const parsedBalance = parseFloat(balance) || 0;
 
@@ -376,6 +381,15 @@ async function createInitialBalanceJournals({
     );
   }
 
+  /*
+   * An opening balance is an accounting event with a date the user chooses,
+   * not with the date the record happened to be created. Callers may pass
+   * `effective_date` (OPTIONAL and additive); when it is omitted the previous
+   * behaviour is preserved exactly, except that the fallback is now the
+   * server's LOCAL calendar day rather than the UTC one.
+   */
+  const journalDate = accountingDate(effectiveDate);
+
   async function createJournal(entry) {
     const journalLocalId = generateLocalId();
 
@@ -386,7 +400,7 @@ async function createInitialBalanceJournals({
         localId: journalLocalId,
         userId,
         data: {
-          date: new Date(),
+          date: journalDate,
           reference_id: account.id,
           reference_type: 'account',
           description: `Initial balance for account ${name}`,
@@ -509,6 +523,7 @@ async function createAccount({
       balance: rawBalance,
       additionalInitialBalances:
         data.additional_initial_balances,
+      effectiveDate: data.effective_date,
     });
 
     await activityRepository.create(

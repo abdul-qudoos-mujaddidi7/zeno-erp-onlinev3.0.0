@@ -16,8 +16,12 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { confirmModal } from '../../components/common/confirmModal.js';
 
   import JournalReceiptModal from '../journals/JournalReceiptModal.svelte';  import { calculateRemainingAndBenefit,calculateDiscountAmount } from './SalesHelper.js';
-  import JournalA4ReceiptModal from '../journals/JournalA4ReceiptModal.svelte';
-import { saleApi } from '../../api/saleApi.js';
+  import JournalA4ReceiptModal from '../journals/JournalA4ReceiptModal.svelte';  import { saleApi } from '../../api/saleApi.js';
+  import AppDatePicker from '../../components/common/AppDatePicker.svelte';
+  import {
+    todayAccountingDate,
+    accountingDateOfStoredValue,
+  } from '../../utils/accountingDate.js';
 import { accountApi } from '../../api/accountApi.js';
 import { accountTypeApi } from '../../api/accountTypeApi.js';
 import { journalApi } from '../../api/journalApi.js';
@@ -41,6 +45,9 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   let totalReturnAmount = 0;
 
   let paymentType = 'Receive'; // or "credit"
+
+  /* the accounting day of the payment being added; defaults to today */
+  let paymentDate = todayAccountingDate();
 
   export let saleId;
   export let benefit = null;
@@ -262,7 +269,11 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       account_id: second_entry_account,
       amount: paymentType == 'Receive' ? Number(amount) : Number(amount) * -1,
       currency: currency,
-      payment_date: new Date().toISOString(),
+      /*
+       * The business accounting day, not a UTC instant, so the journal the
+       * backend derives from it lands in the right day and fiscal year.
+       */
+      payment_date: paymentDate || todayAccountingDate(),
       description: description,
       status: 1,
     });
@@ -289,7 +300,8 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       showA4Receipt = false;
     }
     amount = '';
-    
+    paymentDate = todayAccountingDate();
+
     await calculateRemainingAndBenefit(Number(saleId));
     load();
   }
@@ -356,6 +368,9 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   async function toggleAddPaymentForm() {
     showAddPaymentForm = !showAddPaymentForm;
     if (showAddPaymentForm) {
+      /* never reuse a date left over from a previous edit */
+      paymentDate = todayAccountingDate();
+
       await ensurePickerAccounts();
     }
   }
@@ -503,6 +518,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               </ul>
             </div>
 
+            <div class="sale-add-payment__date my-3">
+              <AppDatePicker
+                label={t('Payment date')}
+                value={paymentDate}
+                on:change={(event) => (paymentDate = event.detail)}
+              />
+            </div>
+
             <div class="input-group input-group-sm justify-content-end mt-3">
               <input type="text" class="form-control" bind:value={description} placeholder={t('Description')} />
               <button
@@ -561,7 +584,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               <tbody>
                 {#each payments as p}
                   <tr>
-                    <td class="pd-table__col-date">{p.payment_date.slice(0, 10)}</td>
+                    <td class="pd-table__col-date">{accountingDateOfStoredValue(p.payment_date)}</td>
                     <td class="pd-table__col-desc">{p.description || '—'}</td>
                     <td class="pd-table__amount pd-table__col-num">
                       <span class="pd-table__num">

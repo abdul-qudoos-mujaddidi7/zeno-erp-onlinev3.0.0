@@ -4,6 +4,10 @@ const {
   paginationQuerySchema,
 } = require('../utils/pagination');
 
+const {
+  paymentDateSchema,
+} = require('./payment-date.validator');
+
 const nullableString = (maxLength) =>
   z.preprocess(
     (value) => {
@@ -96,7 +100,7 @@ const saleBodySchema = z.object({
       account_id: nullableNumber(),
       amount: nullableNumber(),
       currency: nullableString(50),
-      payment_date: nullableString(50),
+      payment_date: paymentDateSchema,
       description: nullableString(65535),
       request_id: nullableString(100),
       status: z
@@ -116,7 +120,7 @@ const paymentBodySchema = z.object({
   account_id: nullableNumber(),
   amount: nullableNumber(),
   currency: nullableString(50),
-  payment_date: nullableString(50),
+  payment_date: paymentDateSchema,
   description: nullableString(65535),
   request_id: nullableString(100),
   status: z

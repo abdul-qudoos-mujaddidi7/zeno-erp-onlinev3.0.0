@@ -1,5 +1,9 @@
 const { z } = require('zod');
 
+const {
+  paymentDateSchema,
+} = require('./payment-date.validator');
+
 const nullableNumber = z.preprocess(
   (value) => {
     if (value === '' || value === undefined || value === null) {
@@ -33,11 +37,7 @@ const paymentBodyShape = {
     .nullable()
     .optional(),
 
-  payment_date: z
-    .string()
-    .max(50)
-    .nullable()
-    .optional(),
+  payment_date: paymentDateSchema,
 
   description: z
     .string()

@@ -46,6 +46,10 @@ const activityRepository =
 const paymentPosting =
   require('../services/payment-posting.service');
 
+const {
+  localDateOnly,
+} = require('../utils/accountingDate');
+
 const salePaymentService =
   require('../services/sale-payment.service');
 
@@ -840,4 +844,385 @@ test('missing SALES account aborts the payment', async () => {
       }),
     (error) => error.code === 'SALES_ACCOUNT_NOT_FOUND',
   );
+});
+
+/* ========================= ACCOUNTING DATE ========================== */
+/*
+ * Step 3.5. A payment's journals are dated from the payment's own
+ * accounting date, never from the moment the posting ran. Posting time and
+ * accounting time are different concepts, and only the second one decides
+ * which fiscal year a payment belongs to.
+ */
+
+function journalDates(journals) {
+  return journals.map((journal) => journal.date);
+}
+
+function assertJournalsDated(journals, expected) {
+  assert.equal(journals.length, 2);
+
+  for (const journal of journals) {
+    assert.equal(
+      journal.date,
+      expected,
+      `journal should be dated ${expected}, got ${journal.date}`,
+    );
+  }
+}
+
+test('a sale payment journal is dated from payment_date, not posting time', async () => {
+  state.sales.set('1001', activeConfirmedSale({ total_amount: 1000 }));
+
+  await paymentPosting.postSalePaymentOnConnection(connection, {
+    orgId: 42,
+    userId: 7,
+    requestContext: {},
+    sale: state.sales.get('1001'),
+    saleId: '1001',
+    data: {
+      account_id: 'CASH',
+      amount: 1000,
+      currency: 'AFN',
+      payment_date: '2026-03-04',
+    },
+  });
+
+  assertJournalsDated(activeSaleJournals(), '2026-03-04');
+
+  /* the payment row and its journals agree on the accounting date */
+  assert.equal(state.salePayments[0].payment_date, '2026-03-04');
+});
+
+test('a purchase payment journal is dated from payment_date, not posting time', async () => {
+  state.purchases.set('2001', activeConfirmedPurchase({ total_amount: 800 }));
+
+  await paymentPosting.postPurchasePaymentOnConnection(connection, {
+    orgId: 42,
+    userId: 7,
+    requestContext: {},
+    purchase: state.purchases.get('2001'),
+    purchaseId: '2001',
+    data: {
+      account_id: 'BANK',
+      amount: 800,
+      currency: 'AFN',
+      payment_date: '2026-11-19',
+    },
+  });
+
+  assertJournalsDated(activePurchaseJournals(), '2026-11-19');
+  assert.equal(state.purchasePayments[0].payment_date, '2026-11-19');
+});
+
+test('a December payment entered after year end stays in December', async () => {
+  /*
+   * The scenario this protects: the book closes on 31 Dec, the payment is
+   * keyed in a few days later, and the user expects it to belong to the
+   * December they are paying off — not to the new year.
+   */
+  state.sales.set('1001', activeConfirmedSale({ total_amount: 1000 }));
+
+  await paymentPosting.postSalePaymentOnConnection(connection, {
+    orgId: 42,
+    userId: 7,
+    requestContext: {},
+    sale: state.sales.get('1001'),
+    saleId: '1001',
+    data: {
+      account_id: 'CASH',
+      amount: 1000,
+      currency: 'AFN',
+      payment_date: '2026-12-31',
+    },
+  });
+
+  const journals = activeSaleJournals();
+
+  assertJournalsDated(journals, '2026-12-31');
+
+  /*
+   * The fiscal-year window is [start, end] inclusive via a half-open
+   * comparison, so 31 Dec belongs to the year that ends that day and never
+   * bleeds into the next one.
+   */
+  const inFy2026 =
+    journals[0].date >= '2026-01-01' && journals[0].date <= '2026-12-31';
+  const inFy2027 =
+    journals[0].date >= '2027-01-01' && journals[0].date <= '2027-12-31';
+
+  assert.equal(inFy2026, true);
+  assert.equal(inFy2027, false);
+});
+
+test('posting time never leaks into the journal date', async () => {
+  state.sales.set('1001', activeConfirmedSale({ total_amount: 1000 }));
+
+  const before = new Date();
+
+  await paymentPosting.postSalePaymentOnConnection(connection, {
+    orgId: 42,
+    userId: 7,
+    requestContext: {},
+    sale: state.sales.get('1001'),
+    saleId: '1001',
+    data: {
+      account_id: 'CASH',
+      amount: 500,
+      currency: 'AFN',
+      payment_date: '2025-01-15',
+    },
+  });
+
+  const journals = activeSaleJournals();
+
+  assertJournalsDated(journals, '2025-01-15');
+
+  /* the journal is dated well before the posting ran */
+  for (const journal of journals) {
+    assert.ok(
+      new Date(journal.date) < before,
+      'the journal must not carry the posting timestamp',
+    );
+  }
+});
+
+test('a payment with no date falls back to the local calendar day', async () => {
+  state.sales.set('1001', activeConfirmedSale({ total_amount: 1000 }));
+
+  await paymentPosting.postSalePaymentOnConnection(connection, {
+    orgId: 42,
+    userId: 7,
+    requestContext: {},
+    sale: state.sales.get('1001'),
+    saleId: '1001',
+    data: { account_id: 'CASH', amount: 1000, currency: 'AFN' },
+  });
+
+  const expected = localDateOnly(new Date());
+
+  assertJournalsDated(activeSaleJournals(), expected);
+});
+
+test('the generic sale-payment endpoint dates the journal from payment_date', async () => {
+  state.sales.set('1001', activeConfirmedSale({ total_amount: 1000 }));
+
+  await salePaymentService.createPayment({
+    user: USER,
+    data: {
+      sale_id: '1001',
+      account_id: 'CASH',
+      amount: 1000,
+      currency: 'AFN',
+      payment_date: '2026-02-09',
+    },
+    requestContext: {},
+  });
+
+  assertJournalsDated(activeSaleJournals(), '2026-02-09');
+});
+
+test('the generic purchase-payment endpoint dates the journal from payment_date', async () => {
+  state.purchases.set('2001', activeConfirmedPurchase({ total_amount: 800 }));
+
+  await purchasePaymentService.createPayment({
+    user: USER,
+    data: {
+      purchase_id: '2001',
+      account_id: 'BANK',
+      amount: 800,
+      currency: 'AFN',
+      payment_date: '2026-08-21',
+    },
+    requestContext: {},
+  });
+
+  assertJournalsDated(activePurchaseJournals(), '2026-08-21');
+});
+
+test('editing payment_date reposts the journals with the corrected date', async () => {
+  state.sales.set('1001', activeConfirmedSale({ total_amount: 1000 }));
+
+  const created = await salePaymentService.createPayment({
+    user: USER,
+    data: {
+      sale_id: '1001',
+      account_id: 'CASH',
+      amount: 400,
+      currency: 'AFN',
+      payment_date: '2026-01-05',
+    },
+    requestContext: {},
+  });
+
+  assertJournalsDated(activeSaleJournals(), '2026-01-05');
+
+  await salePaymentService.updatePayment({
+    user: USER,
+    paymentId: created.id,
+    data: { payment_date: '2025-12-31' },
+    requestContext: {},
+  });
+
+  /*
+   * The reversal is a soft delete of the original journals, so exactly two
+   * active journals remain — reposted with the corrected accounting date.
+   */
+  const active = activeSaleJournals();
+
+  assertJournalsDated(active, '2025-12-31');
+  assert.equal(
+    state.journals.filter((journal) => Number(journal.status) === 0).length,
+    2,
+  );
+});
+
+test('a reversal does not invent a today-dated journal', async () => {
+  state.sales.set('1001', activeConfirmedSale({ total_amount: 1000 }));
+
+  const created = await salePaymentService.createPayment({
+    user: USER,
+    data: {
+      sale_id: '1001',
+      account_id: 'CASH',
+      amount: 400,
+      currency: 'AFN',
+      payment_date: '2025-12-31',
+    },
+    requestContext: {},
+  });
+
+  await salePaymentService.deletePayment({
+    user: USER,
+    paymentId: created.id,
+    requestContext: {},
+  });
+
+  /* no new journal at all — the original two are simply reversed */
+  assert.equal(state.journals.length, 2);
+  assert.equal(activeSaleJournals().length, 0);
+  assert.deepEqual(
+    journalDates(state.journals).sort(),
+    ['2025-12-31', '2025-12-31'],
+  );
+});
+
+test('editing a payment without a date preserves the stored date', async () => {
+  /*
+   * Step 3.6. An edit that does not speak about the accounting date must not
+   * move it: the payment keeps the day it was posted on, and the reposted
+   * journal keeps that day too.
+   */
+  state.sales.set('1001', activeConfirmedSale({ total_amount: 1000 }));
+
+  const created = await salePaymentService.createPayment({
+    user: USER,
+    data: {
+      sale_id: '1001',
+      account_id: 'CASH',
+      amount: 400,
+      currency: 'AFN',
+      payment_date: '2026-12-31',
+    },
+    requestContext: {},
+  });
+
+  await salePaymentService.updatePayment({
+    user: USER,
+    paymentId: created.id,
+    data: { amount: 250 },
+    requestContext: {},
+  });
+
+  assert.equal(state.salePayments[0].payment_date, '2026-12-31');
+  assert.equal(state.salePayments[0].amount, 250);
+  assertJournalsDated(activeSaleJournals(), '2026-12-31');
+});
+
+test('editing a payment with an empty date does not wipe the stored date', async () => {
+  state.purchases.set('2001', activeConfirmedPurchase({ total_amount: 800 }));
+
+  const created = await purchasePaymentService.createPayment({
+    user: USER,
+    data: {
+      purchase_id: '2001',
+      account_id: 'BANK',
+      amount: 300,
+      currency: 'AFN',
+      payment_date: '2026-06-15',
+    },
+    requestContext: {},
+  });
+
+  await purchasePaymentService.updatePayment({
+    user: USER,
+    paymentId: created.id,
+    data: { amount: 350 },
+    requestContext: {},
+  });
+
+  assert.equal(state.purchasePayments[0].payment_date, '2026-06-15');
+  assertJournalsDated(activePurchaseJournals(), '2026-06-15');
+});
+
+test('a payment date chosen for the previous year survives the round trip', async () => {
+  /*
+   * The user pays a December bill in January. The payment must stay in
+   * December — payment row, journals, and therefore fiscal year.
+   */
+  state.sales.set('1001', activeConfirmedSale({ total_amount: 1000 }));
+
+  const payment = await salePaymentService.createPayment({
+    user: USER,
+    data: {
+      sale_id: '1001',
+      account_id: 'CASH',
+      amount: 1000,
+      currency: 'AFN',
+      payment_date: '2026-12-31',
+    },
+    requestContext: {},
+  });
+
+  assert.equal(payment.payment_date, '2026-12-31');
+  assertJournalsDated(activeSaleJournals(), '2026-12-31');
+
+  const journalDates = activeSaleJournals().map((journal) => journal.date);
+  const inFy2026 = journalDates.every(
+    (date) => date >= '2026-01-01' && date <= '2026-12-31',
+  );
+  const inFy2027 = journalDates.some(
+    (date) => date >= '2027-01-01' && date <= '2027-12-31',
+  );
+
+  assert.equal(inFy2026, true);
+  assert.equal(inFy2027, false);
+});
+
+test('a journal-driven shadow payment keeps the manual journal date', async () => {
+  state.sales.set('1001', activeConfirmedSale({ total_amount: 1000 }));
+
+  const journal = {
+    id: 'J-1',
+    org_id: 42,
+    reference_type: 'sale',
+    reference_id: '1001',
+    date: '2026-12-31',
+    currency: 'AFN',
+    first_entry_account: 'CASH',
+    first_entry_debit: 0,
+    first_entry_credit: 1000,
+    second_entry_account: 'ACC-RECV',
+    second_entry_debit: 1000,
+    second_entry_credit: 0,
+  };
+
+  const payment = await paymentPosting.recordJournalBillPayment(
+    connection,
+    { orgId: 42, userId: 7, journal },
+  );
+
+  assert.equal(payment.payment_date, '2026-12-31');
+
+  /* the manual journal already IS the accounting entry — no extra journals */
+  assert.equal(state.journals.length, 0);
 });

@@ -14,7 +14,7 @@ import { apartmentApi } from '../../api/apartmentApi.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
-  import { showDate, setDatePickers } from '../../calendar.js';
+  import { showDate, setDatePickers, getKabulDate } from '../../calendar.js';
   let accountModalRef;
 
   import { calculateRemainingAndBenefit } from './InventoryRecordsHelper.js';
@@ -376,7 +376,8 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
           account_id: second_entry_account,
           amount: Number(paymentAmount),
           currency: paymentCurrency,
-          payment_date: new Date().toISOString(),
+          /* the business accounting day, not a UTC instant */
+          payment_date: getKabulDate(),
           description: paymentDescription,
           status: 1,
         });

@@ -8,6 +8,7 @@
   import { isSystemAccount } from '../../lib/systemAccounts.js';
   import AccountGroupModal from './AccountGroupModal.svelte';
   import FilterSelect from '../../components/common/FilterSelect.svelte';
+  import AppDatePicker from '../../components/common/AppDatePicker.svelte';
 
   import WhatsappModal from '../WhatsappModal.svelte';
 import { currencyApi } from '../../api/currencyApi.js';
@@ -162,6 +163,13 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
   }
 
   let initialBalanceType = 'Debit'; // or "credit"
+
+  /*
+   * The accounting date of the initial-balance journals. Empty keeps the
+   * previous behaviour (the server's current day), so nothing changes for
+   * anyone who leaves it blank.
+   */
+  let initialBalanceDate = '';
 
   let imageBase64 = null;
   let modalImageUrl = null;
@@ -438,6 +446,7 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
           ...payload,
           balance: parseFloat(balance) || 0,
           initial_balance_type: initialBalanceType,
+          effective_date: initialBalanceDate || undefined,
           additional_initial_balances: additionalInitialBalances.map((additional) => ({
             balance: parseFloat(additional.balance) || 0,
             type: additional.type,
@@ -816,6 +825,14 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
                     <i class="bi bi-plus-lg"></i>
                   </button>
                 </div>
+                <p class="account-modal__balance-hint">
+                  {t('Leave the date empty to use today.')}
+                </p>
+                <AppDatePicker
+                  label={t('Effective date')}
+                  value={initialBalanceDate}
+                  on:change={(event) => (initialBalanceDate = event.detail)}
+                />
               </div>
 
               {#each additionalInitialBalances as additional, index (index)}
@@ -1373,6 +1390,12 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
 
   .account-modal__balance-strip--additional {
     grid-template-columns: auto minmax(9rem, 1fr) 6.5rem;
+  }
+
+  .account-modal__balance-hint {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    font-size: 0.68rem;
   }
 
   .account-modal__balance-toggle {

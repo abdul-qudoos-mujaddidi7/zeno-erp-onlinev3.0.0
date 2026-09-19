@@ -24,8 +24,11 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 import { currencyApi } from '../../api/currencyApi.js';
 import { accountApi } from '../../api/accountApi.js';
 import { productApi } from '../../api/productApi.js';
-import { journalApi } from '../../api/journalApi.js';
-import { accountTypeApi } from '../../api/accountTypeApi.js';
+import { journalApi } from '../../api/journalApi.js';  import { accountTypeApi } from '../../api/accountTypeApi.js';
+  import {
+    todayAccountingDate,
+    accountingDateOfStoredValue,
+  } from '../../utils/accountingDate.js';
 import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
   let currencies = [];
   let defaultCurrency = 'AFN';
@@ -169,7 +172,8 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
       account_id: second_entry_account,
       amount: paymentType == 'Receive' ? Number(amount) : Number(amount) * -1,
       currency: currency,
-      payment_date: new Date().toISOString(),
+      /* the business accounting day, not a UTC instant */
+      payment_date: todayAccountingDate(),
       description: description,
       status: 1,
     });
@@ -231,7 +235,7 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
             <tbody>
               {#each payments as p}
                 <tr>
-                  <td>{p.payment_date.slice(0, 10)}</td>
+                  <td>{accountingDateOfStoredValue(p.payment_date)}</td>
                   <td>{p.description}</td>
                   <td class="text-end"><span dir="ltr">{p.amount}</span> {t(p.currency)}</td>
                   <td class="text-center">{getAccountName(p.account_id)}</td>

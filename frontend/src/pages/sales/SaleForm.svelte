@@ -1229,7 +1229,8 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               account_id: second_entry_account,
               amount: nextPaymentAmount,
               currency: paymentCurrency,
-              payment_date: new Date().toISOString(),
+              /* the business accounting day, not a UTC instant */
+              payment_date: getKabulDate(),
               description: buildFinalPaymentDescription(),
               status: 1,
             }
