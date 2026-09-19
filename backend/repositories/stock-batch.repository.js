@@ -629,17 +629,30 @@ async function findConsumptions(
     status = 1,
   },
 ) {
+  /*
+   * Filters are optional so a document can be located either by its
+   * explicit operation key (transfer/waste/purchase_return) OR by the
+   * sale it belongs to. Sale consumptions written before this fix have a
+   * NULL operation_id, so sale-scoped lookups MUST work via sale_id to
+   * keep historical sales reversible.
+   */
   const conditions = [
     'org_id = ?',
-    'operation_type = ?',
-    'operation_id = ?',
   ];
 
   const values = [
     orgId,
-    operationType,
-    operationId,
   ];
+
+  if (operationType) {
+    conditions.push('operation_type = ?');
+    values.push(operationType);
+  }
+
+  if (operationId !== undefined && operationId !== null) {
+    conditions.push('operation_id = ?');
+    values.push(operationId);
+  }
 
   if (saleId) {
     conditions.push('sale_id = ?');

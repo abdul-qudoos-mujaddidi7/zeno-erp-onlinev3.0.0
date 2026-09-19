@@ -6,12 +6,17 @@ const AppError =
 const paymentRepository =
   require('../repositories/purchase-payment.repository');
 
+const purchaseRepository =
+  require('../repositories/purchase.repository');
+
 const activityRepository =
   require('../repositories/activity.repository');
 
-const {
-  generateLocalId,
-} = require('../utils/generateLocalId');
+const paymentPosting =
+  require('./payment-posting.service');
+
+const accountService =
+  require('./account.service');
 
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
@@ -93,6 +98,12 @@ async function getPayment({
   return payment;
 }
 
+/*
+ * The generic endpoint now shares the authoritative purchase-payment
+ * algorithm: it posts the payment row, its journals, and recomputes the
+ * purchase's remaining inside one transaction. A payment must reference
+ * a purchase — a payment row with no bill cannot be reconciled.
+ */
 async function createPayment({
   user,
   data,
@@ -103,53 +114,56 @@ async function createPayment({
     userId,
   } = getAuthenticatedIdentity(user);
 
+  const purchaseId = data.purchase_id;
+
+  if (!purchaseId) {
+    throw new AppError(
+      'purchase_id is required to post a purchase payment.',
+      400,
+      'PURCHASE_ID_REQUIRED',
+    );
+  }
+
   const connection =
     await db.getConnection();
 
   try {
     await connection.beginTransaction();
 
-    const localId = generateLocalId();
-
-    const payment =
-      await paymentRepository.create(
+    const purchase =
+      await purchaseRepository.findByLocalId(
         connection,
         {
           orgId,
-          localId,
+          localId: purchaseId,
+          forUpdate: true,
+        },
+      );
+
+    if (!purchase) {
+      throw new AppError(
+        'Purchase not found.',
+        404,
+        'PURCHASE_NOT_FOUND',
+      );
+    }
+
+    const payment =
+      await paymentPosting.postPurchasePaymentOnConnection(
+        connection,
+        {
+          orgId,
           userId,
+          requestContext,
+          purchase,
+          purchaseId,
           data,
         },
       );
 
-    await activityRepository.create(
-      connection,
-      {
-        orgId,
-        userId,
-
-        action: 'create',
-        tableName: 'purchase_payments',
-        entityId: payment.id,
-
-        oldValues: null,
-        newValues: payment,
-
-        description:
-          'Created purchase payment',
-
-        ipAddress:
-          requestContext.ipAddress,
-
-        sessionId:
-          requestContext.sessionId,
-
-        deviceInfo:
-          requestContext.deviceInfo,
-      },
-    );
-
     await connection.commit();
+
+    accountService.invalidateAccountAggregates(orgId);
 
     return payment;
   } catch (error) {
@@ -160,6 +174,12 @@ async function createPayment({
   }
 }
 
+/*
+ * Updating a payment reverses its existing journals, updates the row in
+ * place, re-posts the journals against the (possibly new) purchase, and
+ * refreshes the remaining on both the old and new bill. The payment row
+ * and its journals can never drift apart.
+ */
 async function updatePayment({
   user,
   paymentId,
@@ -195,14 +215,47 @@ async function updatePayment({
       );
     }
 
-    const updatedPayment =
-      await paymentRepository.update(
+    if (Number(oldPayment.status) === 0) {
+      throw new AppError(
+        'PURCHASE_PAYMENT is already deleted.',
+        409,
+        'PURCHASE_PAYMENT_ALREADY_DELETED',
+      );
+    }
+
+    let newBillId = oldPayment.purchase_id;
+
+    if (data.purchase_id) {
+      const purchase = await purchaseRepository.findByLocalId(
         connection,
         {
           orgId,
-          localId: paymentId,
+          localId: data.purchase_id,
+        },
+      );
+
+      if (!purchase) {
+        throw new AppError(
+          'Purchase not found.',
+          404,
+          'PURCHASE_NOT_FOUND',
+        );
+      }
+
+      newBillId = data.purchase_id;
+    }
+
+    const updatedPayment =
+      await paymentPosting.updateBillPaymentOnConnection(
+        connection,
+        {
+          orgId,
           userId,
+          requestContext,
+          oldPayment,
+          isSale: false,
           data,
+          newBillId,
         },
       );
 
@@ -223,17 +276,19 @@ async function updatePayment({
           'Updated purchase payment',
 
         ipAddress:
-          requestContext.ipAddress,
+          requestContext?.ipAddress,
 
         sessionId:
-          requestContext.sessionId,
+          requestContext?.sessionId,
 
         deviceInfo:
-          requestContext.deviceInfo,
+          requestContext?.deviceInfo,
       },
     );
 
     await connection.commit();
+
+    accountService.invalidateAccountAggregates(orgId);
 
     return updatedPayment;
   } catch (error) {
@@ -244,6 +299,11 @@ async function updatePayment({
   }
 }
 
+/*
+ * Deletes a payment through the authoritative service so its journals
+ * are reversed and the parent purchase's remaining is refreshed
+ * atomically.
+ */
 async function deletePayment({
   user,
   paymentId,
@@ -287,12 +347,13 @@ async function deletePayment({
     }
 
     const deletedPayment =
-      await paymentRepository.softDelete(
+      await paymentPosting.softDeleteBillPaymentOnConnection(
         connection,
         {
           orgId,
-          localId: paymentId,
           userId,
+          payment: oldPayment,
+          isSale: false,
         },
       );
 
@@ -313,17 +374,19 @@ async function deletePayment({
           'Deleted purchase payment',
 
         ipAddress:
-          requestContext.ipAddress,
+          requestContext?.ipAddress,
 
         sessionId:
-          requestContext.sessionId,
+          requestContext?.sessionId,
 
         deviceInfo:
-          requestContext.deviceInfo,
+          requestContext?.deviceInfo,
       },
     );
 
     await connection.commit();
+
+    accountService.invalidateAccountAggregates(orgId);
 
     return deletedPayment;
   } catch (error) {

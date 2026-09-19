@@ -12,12 +12,6 @@ const salePaymentRepository =
 const purchasePaymentRepository =
   require('../repositories/purchase-payment.repository');
 
-const saleRepository =
-  require('../repositories/sale.repository');
-
-const purchaseRepository =
-  require('../repositories/purchase.repository');
-
 const activityRepository =
   require('../repositories/activity.repository');
 
@@ -29,12 +23,11 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
-const {
-  convertCurrencyAmount,
-} = require('../utils/currency');
-
 const accountService =
   require('./account.service');
+
+const paymentPosting =
+  require('./payment-posting.service');
 
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
@@ -68,392 +61,14 @@ function getAuthenticatedIdentity(user) {
   };
 }
 
-function isConfirmedBill(billStatus) {
-  return String(billStatus || '') === 'confirmed';
-}
-
-function isBillReference(referenceType) {
-  return referenceType === 'sale' || referenceType === 'purchase';
-}
-
 /*
- * Journals entered against a bill (reference_type 'sale' / 'purchase')
- * mark that bill as paid. The payment amount and direction follow the
- * journal's entries:
- *
- * - Sale bill (customer paid us): the customer is credited on the first
- *   entry, so the payment amount is positive (Receive).
- * - Purchase bill (we paid the supplier): the supplier is debited on the
- *   first entry, so the payment amount is positive (Payment).
- *
- * A reverse entry (first_entry_debit on a sale bill, first_entry_credit
- * on a purchase bill) produces a negative amount, mirroring the refund
- * conventions used by the sale/purchase payment forms.
+ * Journal-driven bill payments (a journal with reference_type 'sale' /
+ * 'purchase') are handled entirely by the authoritative
+ * payment-posting service, so there is exactly one remaining formula
+ * and one payment-row path in the codebase. The journal itself remains
+ * the accounting entry for this flow; payment-posting only creates the
+ * matching payment row and refreshes the bill's remaining.
  */
-function billPaymentAmount(journal) {
-  if (journal.reference_type === 'sale') {
-    return (
-      Number(journal.first_entry_credit || 0) -
-      Number(journal.first_entry_debit || 0)
-    );
-  }
-
-  if (journal.reference_type === 'purchase') {
-    return (
-      Number(journal.first_entry_debit || 0) -
-      Number(journal.first_entry_credit || 0)
-    );
-  }
-
-  return 0;
-}
-
-function journalPaymentTag(journalId) {
-  return `journal:${journalId}`;
-}
-
-function billDisplayNumber(bill, isSale) {
-  return isSale
-    ? bill.invoice_number || bill.bill_number || `#${bill.id}`
-    : bill.bill_number || bill.invoice_number || `#${bill.id}`;
-}
-
-async function findJournalBillPayment(
-  executor,
-  {
-    orgId,
-    journal,
-  },
-) {
-  if (!isBillReference(journal.reference_type)) {
-    return null;
-  }
-
-  const isSale = journal.reference_type === 'sale';
-  const repo = isSale ? saleRepository : purchaseRepository;
-
-  const payments = isSale
-    ? await repo.findPaymentsBySale(
-        executor,
-        {
-          orgId,
-          saleId: journal.reference_id,
-          includeDeleted: true,
-        },
-      )
-    : await repo.findPaymentsByPurchase(
-        executor,
-        {
-          orgId,
-          purchaseId: journal.reference_id,
-          includeDeleted: true,
-        },
-      );
-
-  const tag = journalPaymentTag(journal.id);
-  const matches = payments.filter((payment) =>
-    (payment.description || '').includes(tag),
-  );
-
-  /*
-   * Prefer the active payment — after an edit the journal can have a
-   * soft-deleted payment and a fresh one carrying the same tag.
-   */
-  return (
-    matches.find((payment) => Number(payment.status) === 1) ||
-    matches[0] ||
-    null
-  );
-}
-
-/*
- * Keeps the bill's stored remaining column in sync after a journal
- * payment is created or removed, so the sales/purchases list shows
- * the paid state immediately. Uses the same formula as the frontend
- * recalc (total - payments - returns).
- */
-async function recomputeBillRemaining(
-  connection,
-  {
-    orgId,
-    userId,
-    bill,
-    isSale,
-  },
-) {
-  const repo = isSale ? saleRepository : purchaseRepository;
-
-  const [payments, returns] = isSale
-    ? await Promise.all([
-        repo.findPaymentsBySale(
-          connection,
-          {
-            orgId,
-            saleId: bill.id,
-            includeDeleted: true,
-          },
-        ),
-        repo.findReturnsBySale(
-          connection,
-          {
-            orgId,
-            saleId: bill.id,
-            includeDeleted: true,
-          },
-        ),
-      ])
-    : await Promise.all([
-        repo.findPaymentsByPurchase(
-          connection,
-          {
-            orgId,
-            purchaseId: bill.id,
-            includeDeleted: true,
-          },
-        ),
-        repo.findReturnsByPurchase(
-          connection,
-          {
-            orgId,
-            purchaseId: bill.id,
-            includeDeleted: true,
-          },
-        ),
-      ]);
-
-  const totalPayments = payments
-    .filter((payment) => Number(payment.status) === 1)
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-
-  const totalReturns = returns
-    .filter((saleReturn) => Number(saleReturn.status) === 1)
-    .reduce(
-      (sum, saleReturn) => sum + Number(saleReturn.total_amount || 0),
-      0,
-    );
-
-  const remaining =
-    Number(bill.total_amount || 0) - totalPayments - totalReturns;
-
-  await repo.update(
-    connection,
-    {
-      orgId,
-      localId: bill.id,
-      userId,
-      data: { remaining },
-    },
-  );
-}
-
-/*
- * Creates the sale_payment / purchase_payment row that marks a bill as
- * paid when a journal is saved against it. The payment description
- * carries a journal: tag so later updates/deletes of the journal can
- * find and keep that payment in sync.
- */
-async function createBillPayment(
-  connection,
-  {
-    orgId,
-    userId,
-    journal,
-  },
-) {
-  if (!isBillReference(journal.reference_type)) {
-    return null;
-  }
-
-  const amount = billPaymentAmount(journal);
-  if (!amount || !journal.reference_id) {
-    return null;
-  }
-
-  const isSale = journal.reference_type === 'sale';
-  const repo = isSale ? saleRepository : purchaseRepository;
-
-  const bill = await repo.findByLocalId(
-    connection,
-    {
-      orgId,
-      localId: journal.reference_id,
-    },
-  );
-
-  if (!bill || Number(bill.status) === 0) {
-    return null;
-  }
-
-  const confirmed = isSale
-    ? isConfirmedBill(bill.invoice_status)
-    : isConfirmedBill(bill.bill_status);
-
-  if (!confirmed) {
-    return null;
-  }
-
-  /*
-   * The bill is always paid in the bill's own currency. If the journal
-   * was posted in a different currency, convert the payment amount so
-   * the bill's remaining reduces correctly.
-   */
-  let paymentAmount = amount;
-  let paymentCurrency = journal.currency || bill.currency || null;
-
-  if (
-    paymentCurrency &&
-    bill.currency &&
-    paymentCurrency !== bill.currency
-  ) {
-    paymentAmount =
-      await convertCurrencyAmount(
-        connection,
-        {
-          orgId,
-          amount,
-          fromCurrency: paymentCurrency,
-          toCurrency: bill.currency,
-        },
-      );
-    paymentCurrency = bill.currency;
-  }
-
-  const paymentLocalId = generateLocalId();
-
-  const payment = await repo.createPayment(
-    connection,
-    {
-      orgId,
-      localId: paymentLocalId,
-      userId,
-      data: {
-        ...(isSale
-          ? { sale_id: bill.id }
-          : { purchase_id: bill.id }),
-        account_id:
-          journal.second_entry_account || journal.first_entry_account,
-        amount: paymentAmount,
-        currency: paymentCurrency,
-        payment_date: journal.date || new Date().toISOString(),
-        description:
-          `Payment via ${journalPaymentTag(journal.id)} for ${isSale ? 'Sale' : 'Purchase'} #${billDisplayNumber(bill, isSale)}`,
-        status: 1,
-      },
-    },
-  );
-
-  await recomputeBillRemaining(
-    connection,
-    {
-      orgId,
-      userId,
-      bill,
-      isSale,
-    },
-  );
-
-  return payment;
-}
-
-/*
- * Removes the payment a journal previously created against a bill
- * (journal update that dropped the reference, or journal delete), and
- * refreshes the bill's remaining.
- */
-async function removeBillPayment(
-  connection,
-  {
-    orgId,
-    userId,
-    journal,
-  },
-) {
-  if (!isBillReference(journal.reference_type) || !journal.reference_id) {
-    return null;
-  }
-
-  const isSale = journal.reference_type === 'sale';
-  const repo = isSale ? saleRepository : purchaseRepository;
-
-  const bill = await repo.findByLocalId(
-    connection,
-    {
-      orgId,
-      localId: journal.reference_id,
-    },
-  );
-
-  if (!bill) {
-    return null;
-  }
-
-  const existing = await findJournalBillPayment(
-    connection,
-    {
-      orgId,
-      journal,
-    },
-  );
-
-  if (existing) {
-    await repo.softDeletePayment(
-      connection,
-      {
-        orgId,
-        localId: existing.id,
-        userId,
-      },
-    );
-
-    await recomputeBillRemaining(
-      connection,
-      {
-        orgId,
-        userId,
-        bill,
-        isSale,
-      },
-    );
-  }
-
-  return existing;
-}
-
-/*
- * Keeps a journal's bill payment in sync after the journal is edited:
- * recreates the payment with the new amount/date, or removes it when
- * the reference was dropped or the payment direction is gone.
- */
-async function syncBillPayment(
-  connection,
-  {
-    orgId,
-    userId,
-    journal,
-  },
-) {
-  if (!isBillReference(journal.reference_type) || !journal.reference_id) {
-    return null;
-  }
-
-  await removeBillPayment(
-    connection,
-    {
-      orgId,
-      userId,
-      journal,
-    },
-  );
-
-  return createBillPayment(
-    connection,
-    {
-      orgId,
-      userId,
-      journal,
-    },
-  );
-}
 
 async function listJournals({
   user,
@@ -640,7 +255,7 @@ async function createJournal({
      * A journal entered against a sale/purchase bill marks the bill as
      * paid: create the matching payment row in the same transaction.
      */
-    await createBillPayment(
+    await paymentPosting.recordJournalBillPayment(
       connection,
       {
         orgId,
@@ -746,8 +361,12 @@ async function updateJournal({
       oldJournal.reference_type !== updatedJournal.reference_type ||
       Number(oldJournal.reference_id) !== Number(updatedJournal.reference_id);
 
-    if (referenceChanged && isBillReference(oldJournal.reference_type)) {
-      await removeBillPayment(
+    if (
+      referenceChanged &&
+      (oldJournal.reference_type === 'sale' ||
+        oldJournal.reference_type === 'purchase')
+    ) {
+      await paymentPosting.removeJournalBillPayment(
         connection,
         {
           orgId,
@@ -757,7 +376,7 @@ async function updateJournal({
       );
     }
 
-    await syncBillPayment(
+    await paymentPosting.syncJournalBillPayment(
       connection,
       {
         orgId,
@@ -862,7 +481,7 @@ async function deleteJournal({
      * Deleting a journal that paid a bill reverts the bill to unpaid:
      * remove the payment the journal created.
      */
-    await removeBillPayment(
+    await paymentPosting.removeJournalBillPayment(
       connection,
       {
         orgId,

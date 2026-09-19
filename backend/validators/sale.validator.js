@@ -98,6 +98,7 @@ const saleBodySchema = z.object({
       currency: nullableString(50),
       payment_date: nullableString(50),
       description: nullableString(65535),
+      request_id: nullableString(100),
       status: z
         .coerce
         .number()
@@ -117,6 +118,7 @@ const paymentBodySchema = z.object({
   currency: nullableString(50),
   payment_date: nullableString(50),
   description: nullableString(65535),
+  request_id: nullableString(100),
   status: z
     .coerce
     .number()

@@ -303,6 +303,10 @@ async function consumeBatches(
 /*
  * Sale confirm -> FIFO/LIFO consume open layers, writing one
  * batch_consumptions row per layer touched.
+ *
+ * operation_id is keyed to the sale id so the consumptions can be found
+ * again by operation, and sale_id is written as well so restores still
+ * work for rows created before operation_id was populated.
  */
 async function consumeSaleBatches(
   connection,
@@ -313,6 +317,7 @@ async function consumeSaleBatches(
     {
       ...params,
       operationType: 'sale',
+      operationId: params.operationId ?? params.saleId,
     },
   );
 }
@@ -390,6 +395,7 @@ async function restoreConsumptions(
     userId,
     operationType,
     operationId,
+    saleId,
   },
 ) {
   const consumptions =
@@ -399,6 +405,7 @@ async function restoreConsumptions(
         orgId,
         operationType,
         operationId,
+        saleId,
       },
     );
 
@@ -454,13 +461,19 @@ async function restoreSaleBatches(
     return;
   }
 
+  /*
+   * Locate the sale's consumptions by sale_id, not operation_id, so the
+   * restoration also works for historical rows whose operation_id was
+   * never populated. The original consumption rows are the source of
+   * truth: each batch gets back exactly what it supplied.
+   */
   return restoreConsumptions(
     connection,
     {
       orgId,
       userId,
       operationType: 'sale',
-      operationId: saleId,
+      saleId,
     },
   );
 }
@@ -701,13 +714,18 @@ async function saleReturnBatches(
 
     const productId = Number(item.product_id);
 
+    /*
+     * The original sale layers are looked up by sale_id (works for both
+     * new and historical rows). Already-returned quantities are looked up
+     * by sale_id too, so a second partial return of the same sale does
+     * not restore more than the sale consumed.
+     */
     const consumptions =
       await stockBatchRepository.findConsumptions(
         connection,
         {
           orgId,
           operationType: 'sale',
-          operationId: saleId,
           saleId,
           productId,
         },
@@ -721,7 +739,6 @@ async function saleReturnBatches(
         {
           orgId,
           operationType: 'sale_return',
-          operationId: returnId,
           saleId,
           productId,
         },

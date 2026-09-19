@@ -30,12 +30,11 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
-const {
-  convertCurrencyAmount,
-} = require('../utils/currency');
-
 const accountService =
   require('./account.service');
+
+const paymentPosting =
+  require('./payment-posting.service');
 
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
@@ -1191,6 +1190,19 @@ async function deletePurchase({
         continue;
       }
 
+      /*
+       * Undo the return's own stock/batch deduction first, so deleting
+       * the purchase leaves the pre-purchase stock level intact.
+       */
+      await revertPurchaseReturnStockOnConnection(
+        connection,
+        {
+          orgId,
+          userId,
+          purchaseReturn,
+        },
+      );
+
       await purchaseRepository.softDeleteReturn(
         connection,
         {
@@ -1302,188 +1314,23 @@ async function createPayment({
       );
     }
 
-    const paymentLocalId = generateLocalId();
-
+    /*
+     * Delegates to the single authoritative payment posting service so
+     * the purchase screen, the journal screen, and the generic
+     * purchase-payment endpoint all share one algorithm.
+     */
     const payment =
-      await purchaseRepository.createPayment(
-        connection,
-        {
-          orgId,
-          localId: paymentLocalId,
-          userId,
-          data: {
-            ...data,
-            purchase_id: purchaseId,
-          },
-        },
-      );
-
-    /*
-     * Account process: a purchase payment posts two entries
-     * (PURCHASE -> PAYABLE and supplier -> treasury/cash)
-     * inside the same transaction as the payment.
-     */
-    const payableAcct =
-      await purchaseRepository.findAccountByCode(
-        connection,
-        {
-          orgId,
-          code: 'PAYABLE',
-        },
-      );
-
-    const purchaseAcct =
-      await purchaseRepository.findAccountByCode(
-        connection,
-        {
-          orgId,
-          code: 'PURCHASE',
-        },
-      );
-
-    if (!payableAcct) {
-      throw new AppError(
-        'PAYABLE account not found.',
-        500,
-        'PAYABLE_ACCOUNT_NOT_FOUND',
-      );
-    }
-
-    if (!purchaseAcct) {
-      throw new AppError(
-        'PURCHASE account not found.',
-        500,
-        'PURCHASE_ACCOUNT_NOT_FOUND',
-      );
-    }
-
-    const paymentDescription =
-      data.description || 'Payment for Purchase Invoice';
-
-    /*
-     * The amount is positive for a Payment and negative for a
-     * Receive (the form sends a signed amount), mirroring the
-     * old Dexie journals exactly.
-     */
-    const signedAmount = Number(payment.amount || 0);
-    const isReceive = signedAmount < 0;
-    const absAmount = Math.abs(signedAmount);
-
-    const purchaseDebit = isReceive ? 0 : absAmount;
-    const purchaseCredit = isReceive ? absAmount : 0;
-    const payableDebit = isReceive ? absAmount : 0;
-    const payableCredit = isReceive ? 0 : absAmount;
-
-    /*
-     * When the payment currency differs from the purchase currency, the
-     * payment is converted to the purchase's currency before posting, so
-     * the supplier's balance only ever moves in the purchase's currency
-     * and no balance is created in the paid currency.
-     */
-    const purchaseCurrency = purchase.currency || payment.currency || null;
-    const isCrossCurrency =
-      payment.currency &&
-      purchaseCurrency &&
-      payment.currency !== purchaseCurrency &&
-      absAmount > 0;
-
-    let journalCurrency = payment.currency || null;
-    let journalAmount = absAmount;
-
-    if (isCrossCurrency) {
-      journalCurrency = purchaseCurrency;
-      journalAmount =
-        await convertCurrencyAmount(
-          connection,
-          {
-            orgId,
-            amount: absAmount,
-            fromCurrency: payment.currency,
-            toCurrency: purchaseCurrency,
-          },
-        );
-    }
-
-    if (Number(journalAmount) > 0) {
-      // PURCHASE -> PAYABLE
-      await createJournalEntry(
+      await paymentPosting.postPurchasePaymentOnConnection(
         connection,
         {
           orgId,
           userId,
           requestContext,
-          data: {
-            date: new Date().toISOString(),
-            reference_id: payment.id,
-            reference_type: 'purchase_payment',
-            description: paymentDescription,
-            currency: journalCurrency,
-            first_entry_account: purchaseAcct.id,
-            first_entry_debit: purchaseDebit ? journalAmount : 0,
-            first_entry_credit: purchaseCredit ? journalAmount : 0,
-            second_entry_account: payableAcct.id,
-            second_entry_debit: payableDebit ? journalAmount : 0,
-            second_entry_credit: payableCredit ? journalAmount : 0,
-            status: 1,
-          },
-          description:
-            `Created purchase/payable journal for payment ${payment.id}`,
+          purchase,
+          purchaseId,
+          data,
         },
       );
-
-      // supplier -> treasury/cash (the account chosen on the form)
-      await createJournalEntry(
-        connection,
-        {
-          orgId,
-          userId,
-          requestContext,
-          data: {
-            date: new Date().toISOString(),
-            reference_id: payment.id,
-            reference_type: 'purchase_payment',
-            description: paymentDescription,
-            currency: journalCurrency,
-            first_entry_account: purchase.account_id,
-            first_entry_debit: purchaseDebit ? journalAmount : 0,
-            first_entry_credit: purchaseCredit ? journalAmount : 0,
-            second_entry_account: data.account_id,
-            second_entry_debit: payableDebit ? journalAmount : 0,
-            second_entry_credit: payableCredit ? journalAmount : 0,
-            status: 1,
-          },
-          description:
-            `Created supplier/treasury journal for payment ${payment.id}`,
-        },
-      );
-    }
-
-    await activityRepository.create(
-      connection,
-      {
-        orgId,
-        userId,
-
-        action: 'create',
-        tableName: 'purchase_payments',
-        entityId: payment.id,
-
-        oldValues: null,
-        newValues: payment,
-
-        description:
-          `Added payment of ${payment.amount} ${payment.currency} for purchase #${purchaseId}`,
-
-        ipAddress:
-          requestContext.ipAddress,
-
-        sessionId:
-          requestContext.sessionId,
-
-        deviceInfo:
-          requestContext.deviceInfo,
-      },
-    );
 
     await connection.commit();
 
@@ -1540,29 +1387,20 @@ async function deletePayment({
       );
     }
 
+    /*
+     * Soft-deletes the payment, reverses its journals, and refreshes the
+     * purchase's remaining through the single authoritative payment service.
+     */
     const deletedPayment =
-      await purchaseRepository.softDeletePayment(
+      await paymentPosting.softDeleteBillPaymentOnConnection(
         connection,
         {
           orgId,
-          localId: paymentId,
           userId,
+          payment: oldPayment,
+          isSale: false,
         },
       );
-
-    /*
-     * Account process: soft-delete the payment journals so
-     * the supplier/treasury balances revert.
-     */
-    await journalRepository.softDeleteByReference(
-      connection,
-      {
-        orgId,
-        referenceId: paymentId,
-        referenceType: 'purchase_payment',
-        userId,
-      },
-    );
 
     await activityRepository.create(
       connection,
@@ -1831,6 +1669,93 @@ async function createReturn({
   }
 }
 
+/*
+ * Reverses the inventory effect of a single purchase return: adds the
+ * returned quantity back to product + warehouse stock, records the
+ * compensating movement, and restores exactly the batch layers the
+ * return had reduced. Shared by return deletion and by purchase delete
+ * so a purchase that has returns never leaves stock understated.
+ */
+async function revertPurchaseReturnStockOnConnection(
+  connection,
+  {
+    orgId,
+    userId,
+    purchaseReturn,
+  },
+) {
+  const returnItems =
+    await purchaseRepository.findReturnItemsByReturn(
+      connection,
+      {
+        orgId,
+        returnId: purchaseReturn.id,
+        includeDeleted: true,
+      },
+    );
+
+  for (const item of returnItems) {
+    if (Number(item.status) === 0) {
+      continue;
+    }
+
+    await purchaseRepository.adjustProductQuantity(
+      connection,
+      {
+        orgId,
+        productId: item.product_id,
+        delta: Number(item.quantity || 0),
+      },
+    );
+
+    await warehouseProductRepository.adjustQuantity(
+      connection,
+      {
+        orgId,
+        userId,
+        warehouseId: purchaseReturn.warehouse_id,
+        productId: item.product_id,
+        productUnitId: item.product_unit_id,
+        delta: Number(item.quantity || 0),
+      },
+    );
+
+    await stockTransactionRepository.recordMovement(
+      connection,
+      {
+        orgId,
+        userId,
+        data: {
+          warehouse_id: purchaseReturn.warehouse_id,
+          product_id: item.product_id,
+          product_unit_id: item.product_unit_id,
+          reference_id: purchaseReturn.id,
+          reference_type: 'purchase_return',
+          transaction_type: 'purchase_return_revert',
+          quantity: Number(item.quantity || 0),
+          unit_cost: Number(item.unit_price || 0),
+          total_cost: Number(item.subtotal || 0),
+          currency: item.currency || null,
+          peer_price: Number(item.sell_price || 0),
+          peer_currency: item.sell_currency || null,
+          date: new Date(),
+          description: `Reversed purchase return #${purchaseReturn.id}, stock restored`,
+          status: 1,
+        },
+      },
+    );
+  }
+
+  await batchLedger.revertPurchaseReturnBatches(
+    connection,
+    {
+      orgId,
+      userId,
+      returnId: purchaseReturn.id,
+    },
+  );
+}
+
 async function deleteReturn({
   user,
   returnId,
@@ -1883,67 +1808,12 @@ async function deleteReturn({
         },
       );
 
-    /*
-     * Restore the quantity the return removed.
-     */
-    for (const item of oldItems) {
-      if (Number(item.status) === 0) {
-        continue;
-      }
-
-      await purchaseRepository.adjustProductQuantity(
-        connection,
-        {
-          orgId,
-          productId: item.product_id,
-          delta: Number(item.quantity || 0),
-        },
-      );
-
-      await warehouseProductRepository.adjustQuantity(
-        connection,
-        {
-          orgId,
-          userId,
-          warehouseId: oldReturn.warehouse_id,
-          productId: item.product_id,
-          productUnitId: item.product_unit_id,
-          delta: Number(item.quantity || 0),
-        },
-      );
-
-      await stockTransactionRepository.recordMovement(
-        connection,
-        {
-          orgId,
-          userId,
-          data: {
-            warehouse_id: oldReturn.warehouse_id,
-            product_id: item.product_id,
-            product_unit_id: item.product_unit_id,
-            reference_id: returnId,
-            reference_type: 'purchase_return',
-            transaction_type: 'purchase_return_revert',
-            quantity: Number(item.quantity || 0),
-            unit_cost: Number(item.unit_price || 0),
-            total_cost: Number(item.subtotal || 0),
-            currency: item.currency || null,
-            peer_price: Number(item.sell_price || 0),
-            peer_currency: item.sell_currency || null,
-            date: new Date(),
-            description: `Deleted purchase return #${returnId}, stock restored`,
-            status: 1,
-          },
-        },
-      );
-    }
-
-    await batchLedger.revertPurchaseReturnBatches(
+    await revertPurchaseReturnStockOnConnection(
       connection,
       {
         orgId,
         userId,
-        returnId,
+        purchaseReturn: oldReturn,
       },
     );
 

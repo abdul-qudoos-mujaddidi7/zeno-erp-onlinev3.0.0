@@ -159,6 +159,9 @@ const meterReadingRoutes =
 const stockAdjustmentRoutes =
   require('./stock-adjustment.routes');
 
+const reconciliationRoutes =
+  require('./reconciliation.routes');
+
 const router = express.Router();
 
 /*
@@ -429,6 +432,11 @@ router.use(
 router.use(
   '/stock-adjustments',
   stockAdjustmentRoutes,
+);
+
+router.use(
+  '/reconciliation',
+  reconciliationRoutes,
 );
 
 module.exports = router;

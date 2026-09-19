@@ -45,6 +45,18 @@ const paymentBodyShape = {
     .nullable()
     .optional(),
 
+  /*
+   * Optional client-supplied stable identifier. When the same value is
+   * supplied twice the authoritative payment service returns the payment
+   * that already carries it instead of posting a duplicate.
+   */
+  request_id: z
+    .string()
+    .trim()
+    .max(100)
+    .nullable()
+    .optional(),
+
   status: z
     .coerce
     .number()
