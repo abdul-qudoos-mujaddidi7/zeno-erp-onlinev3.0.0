@@ -31,6 +31,18 @@
   let summary = null;
   let summaryLoading = false;
 
+  /*
+   * Closing is one backend-authoritative request. This page never posts a
+   * journal, never touches stock and never orchestrates the close: it shows
+   * what the backend computed and sends a single POST.
+   */
+  let closeTarget = null;
+  let closePreview = null;
+  let closePreviewLoading = false;
+  let closing = false;
+  let closeError = '';
+  let closeReadOnly = false;
+
   function money(map) {
     if (!map || typeof map !== 'object') return '0';
 
@@ -50,6 +62,86 @@
 
   function isOpen(year) {
     return String(year?.fiscal_status || '').toLowerCase() === 'open';
+  }
+
+  function currencyText(currency) {
+    return currency || t('unspecified currency');
+  }
+
+  function signedMoney(value) {
+    const amount = Number(value || 0);
+
+    return `${amount > 0 ? '+' : amount < 0 ? '-' : ''}${number(Math.abs(amount))}`;
+  }
+
+  async function loadClosePreview(year, { readOnly }) {
+    closeTarget = year;
+    closeReadOnly = readOnly;
+    closePreview = null;
+    closeError = '';
+    closePreviewLoading = true;
+
+    try {
+      const response = await fiscalYearApi.getClosePreview(year.id);
+      closePreview = response?.data || null;
+    } catch (cause) {
+      closeError = cause.message || t('Could not load the close preview.');
+    } finally {
+      closePreviewLoading = false;
+    }
+  }
+
+  function openClose(year) {
+    return loadClosePreview(year, { readOnly: false });
+  }
+
+  function openCloseResult(year) {
+    return loadClosePreview(year, { readOnly: true });
+  }
+
+  function dismissClose() {
+    closeTarget = null;
+    closePreview = null;
+    closeError = '';
+    closeReadOnly = false;
+  }
+
+  async function confirmClose() {
+    if (!closeTarget || closing) return;
+
+    const targetId = closeTarget.id;
+
+    closing = true;
+    closeError = '';
+
+    try {
+      const response = await fiscalYearApi.close(targetId);
+      const result = response?.data || null;
+      const lines = (result?.profit_loss || [])
+        .filter((entry) => Number(entry.profit_loss) !== 0)
+        .map((entry) => `${signedMoney(entry.profit_loss)} ${currencyText(entry.currency)}`)
+        .join(' · ');
+
+      toast.success(
+        t('Fiscal year closed'),
+        lines || t('No profit and loss activity in this fiscal year.'),
+      );
+
+      dismissClose();
+      await load();
+
+      if (selectedYear?.id === targetId) {
+        selectedYear = years.find((year) => year.id === targetId) || selectedYear;
+      }
+    } catch (cause) {
+      /*
+       * The backend rolled the whole close back, so the year is still open
+       * and the message can be shown in place.
+       */
+      closeError = cause.message || t('Could not close the fiscal year.');
+    } finally {
+      closing = false;
+    }
   }
 
   /*
@@ -277,6 +369,11 @@
                 <StatusBadge tone={isOpen(year) ? 'positive' : 'neutral'}>
                   {isOpen(year) ? t('Open') : t('Closed')}
                 </StatusBadge>
+                {#if !isOpen(year) && year.closed_at}
+                  <small class="fiscal-note">
+                    {@html showDate(String(year.closed_at).slice(0, 10))}
+                  </small>
+                {/if}
               </td>
               <td class="fiscal-actions-col">
                 <div class="fiscal-row-actions">
@@ -298,6 +395,27 @@
                     title={isOpen(year) ? t('Edit') : t('A closed fiscal year cannot be edited.')}
                     on:click={() => openEdit(year)}
                   />
+                  {#if isOpen(year)}
+                    <ActionButton
+                      label={t('Close fiscal year')}
+                      icon="bi-lock"
+                      variant="icon"
+                      tone="danger"
+                      compact
+                      title={t('Close fiscal year (accounting action, no undo yet)')}
+                      on:click={() => openClose(year)}
+                    />
+                  {:else}
+                    <ActionButton
+                      label={t('Close result')}
+                      icon="bi-clipboard-data"
+                      variant="icon"
+                      tone="muted"
+                      compact
+                      title={t('Show the closing result of this fiscal year')}
+                      on:click={() => openCloseResult(year)}
+                    />
+                  {/if}
                 </div>
               </td>
             </tr>
@@ -316,7 +434,7 @@
             </span>
           </h3>
           <p class="fiscal-hint">
-            {t('Read-time classification by accounting date. Nothing is reset and no closing entry is created.')}
+            {t('Read-time classification by accounting date. Nothing is reset; closing posts one balanced journal per currency.')}
           </p>
         </header>
 
@@ -387,6 +505,129 @@
           loading={saving}
           on:click={save}
         />
+      </div>
+    </svelte:fragment>
+  </AppModal>
+{/if}
+
+{#if closeTarget}
+  <AppModal
+    title={closeReadOnly ? t('Close result') : t('Close fiscal year')}
+    icon={closeReadOnly ? 'bi-clipboard-data' : 'bi-lock'}
+    variant={closeReadOnly ? 'info' : 'danger'}
+    size="md"
+    loading={closing}
+    on:close={dismissClose}>
+    <div class="fiscal-close">
+      <p class="fiscal-close-range">
+        <strong>{closeTarget.name}</strong>
+        <span class="fiscal-range">{closeTarget.start_date} → {closeTarget.end_date}</span>
+      </p>
+
+      {#if !closeReadOnly}
+        <div class="fiscal-warning" role="alert">
+          {t('Closing is an accounting action. It posts one balanced closing journal per currency that moves this year\'s profit or loss into Retained Earnings, then locks the year. There is no undo in this version.')}
+        </div>
+      {/if}
+
+      {#if closePreviewLoading}
+        <EmptyState loading={true} message={t('Loading')} />
+      {:else if closePreview}
+        <div class="fiscal-close-meta">
+          <span>
+            {t('Closing journal date')}:
+            <strong>{closePreview.closing_journal_date}</strong>
+          </span>
+          <span>
+            {t('Retained earnings account')}:
+            <strong>
+              {closePreview.retained_account
+                ? `${closePreview.retained_account.code} - ${closePreview.retained_account.name}`
+                : t('will be created on close')}
+            </strong>
+          </span>
+        </div>
+
+        {#if !closePreview.profit_loss.length}
+          <EmptyState
+            icon="bi-inboxes"
+            message={t('No profit and loss activity in this fiscal year. The year can be closed without creating any journal.')} />
+        {:else}
+          {#each closePreview.profit_loss as entry (entry.currency || 'none')}
+            <section class="fiscal-close-currency">
+              <header>
+                <strong>{currencyText(entry.currency)}</strong>
+                <StatusBadge tone={entry.result === 'loss' ? 'negative' : entry.result === 'profit' ? 'positive' : 'neutral'}>
+                  {entry.result === 'loss'
+                    ? `${t('Loss')} ${number(Math.abs(Number(entry.profit_loss)))}`
+                    : entry.result === 'profit'
+                      ? `${t('Profit')} ${number(entry.profit_loss)}`
+                      : t('No result')}
+                </StatusBadge>
+              </header>
+
+              {#each closePreview.currencies.filter((bucket) => (bucket.currency || null) === (entry.currency || null)) as bucket (entry.currency || 'none')}
+                <DataTable minWidth="420px" layout="auto" ariaLabel={t('Closing accounts')}>
+                  <thead>
+                    <tr>
+                      <th>{t('Account')}</th>
+                      <th>{t('Net')}</th>
+                      <th>{t('Closing entry')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each bucket.accounts as account (account.account_local_id)}
+                      <tr>
+                        <td>{account.name || account.code}</td>
+                        <td>{signedMoney(account.net)}</td>
+                        <td>
+                          {#if account.position === 'credit'}
+                            {t('Debit account / Credit Retained Earnings')}
+                          {:else}
+                            {t('Credit account / Debit Retained Earnings')}
+                          {/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </DataTable>
+              {/each}
+            </section>
+          {/each}
+
+          <p class="fiscal-hint">
+            {closePreview.proposed_journal_count} {t('balanced closing journal(s) will be posted, dated with the fiscal year end date.')}
+          </p>
+        {/if}
+
+        {#if closePreview.already_closed && closeReadOnly}
+          <ul class="fiscal-notes">
+            <li>{t('This fiscal year is already closed. The figures above are the closing result, excluding the closing journals themselves.')}</li>
+          </ul>
+        {/if}
+      {/if}
+
+      {#if closeError}
+        <div class="fiscal-alert" role="alert">{closeError}</div>
+      {/if}
+    </div>
+
+    <svelte:fragment slot="footer">
+      <div class="fiscal-form-actions">
+        <ActionButton
+          label={closeReadOnly ? t('Close') : t('Cancel')}
+          variant="ghost"
+          on:click={dismissClose}
+        />
+        {#if !closeReadOnly}
+          <ActionButton
+            label={t('Close fiscal year')}
+            icon="bi-lock"
+            loading={closing}
+            disabled={closePreviewLoading || !!closeError}
+            on:click={confirmClose}
+          />
+        {/if}
       </div>
     </svelte:fragment>
   </AppModal>
@@ -509,5 +750,55 @@
     display: flex;
     gap: 0.5rem;
     justify-content: flex-end;
+  }
+
+  .fiscal-close {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+
+  .fiscal-close-range {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    margin: 0;
+    font-size: 0.85rem;
+  }
+
+  .fiscal-warning {
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #f0d6a8;
+    border-radius: 0.5rem;
+    background: #fff8ec;
+    color: #8a5a12;
+    font-size: 0.76rem;
+    font-weight: 600;
+  }
+
+  .fiscal-close-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    color: #475569;
+    font-size: 0.75rem;
+  }
+
+  .fiscal-close-currency {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.6rem;
+    border: 1px solid #e1e7ef;
+    border-radius: 0.55rem;
+    background: #fff;
+  }
+
+  .fiscal-close-currency header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    font-size: 0.82rem;
   }
 </style>

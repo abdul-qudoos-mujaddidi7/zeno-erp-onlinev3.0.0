@@ -1,6 +1,9 @@
 const fiscalYearService =
   require('../services/fiscal-year.service');
 
+const fiscalYearCloseService =
+  require('../services/fiscal-year-close.service');
+
 const {
   getRequestContext,
 } = require('../utils/requestContext');
@@ -75,6 +78,47 @@ async function summary(req, res) {
   });
 }
 
+/*
+ * Read-only: reports what a close would post, without writing anything.
+ * The close itself recomputes inside its transaction and ignores this.
+ */
+async function closePreview(req, res) {
+  const report =
+    await fiscalYearCloseService.previewFiscalYearClose(
+      {
+        user: req.user,
+        fiscalYearId: req.validated.params.id,
+      },
+    );
+
+  res.status(200).json({
+    success: true,
+    data: report,
+  });
+}
+
+/*
+ * The only way a fiscal year can be closed: one backend-authoritative
+ * transaction that posts the closing journals and flips the status together.
+ * There is deliberately no reopen/delete counterpart in this step.
+ */
+async function close(req, res) {
+  const result =
+    await fiscalYearCloseService.closeFiscalYear({
+      user: req.user,
+      fiscalYearId: req.validated.params.id,
+      requestContext:
+        getRequestContext(req),
+    });
+
+  res.status(200).json({
+    success: true,
+    message:
+      'Fiscal year closed successfully.',
+    data: result,
+  });
+}
+
 async function create(req, res) {
   const fiscalYear =
     await fiscalYearService.createFiscalYear({
@@ -116,6 +160,8 @@ module.exports = {
   resolve,
   getCurrent,
   summary,
+  closePreview,
+  close,
   create,
   update,
 };

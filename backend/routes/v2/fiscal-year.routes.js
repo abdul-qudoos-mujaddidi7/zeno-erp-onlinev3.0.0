@@ -23,11 +23,13 @@ const router = express.Router();
  * Fiscal years are always tenant-scoped through the authenticated token's
  * org_id, so one organization can never see or edit another's years.
  *
- * There is intentionally NO close endpoint yet: closing a year is a later,
- * explicitly approved step that must post real accounting entries.
+ * /resolve, /current, /:id/summary and /:id/close-preview are registered
+ * before /:id so those literal paths can never be parsed as a numeric id.
  *
- * /resolve, /current and /:id/summary are registered before /:id so those
- * literal paths can never be parsed as a numeric id.
+ * Step 4 added exactly two endpoints: a read-only close PREVIEW and the
+ * close itself. There is intentionally NO reopen, no edit and no delete of a
+ * close: closing is append-only until a separate, explicitly approved reopen
+ * workflow exists.
  */
 router.get(
   '/',
@@ -70,6 +72,16 @@ router.get(
 );
 
 router.get(
+  '/:id/close-preview',
+  validate({
+    params: fiscalYearIdParamsSchema,
+  }),
+  asyncHandler(
+    fiscalYearController.closePreview,
+  ),
+);
+
+router.get(
   '/:id',
   validate({
     params: fiscalYearIdParamsSchema,
@@ -97,6 +109,21 @@ router.put(
   }),
   asyncHandler(
     fiscalYearController.update,
+  ),
+);
+
+/*
+ * Closing needs no request body: the fiscal year comes from the path and the
+ * organization and user come from the token, so a client can never choose
+ * which organization is being closed.
+ */
+router.post(
+  '/:id/close',
+  validate({
+    params: fiscalYearIdParamsSchema,
+  }),
+  asyncHandler(
+    fiscalYearController.close,
   ),
 );
 

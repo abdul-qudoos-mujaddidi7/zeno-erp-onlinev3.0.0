@@ -631,6 +631,11 @@ async function sumOpeningBalanceJournals(
 
 module.exports = {
   FISCAL_YEAR_COLUMNS,
+  /*
+   * Exported so the Step 4 closing engine can reuse the exact same
+   * accounting-date window semantics instead of restating them.
+   */
+  windowSql,
   findAll,
   findByLocalId,
   findOverlapping,

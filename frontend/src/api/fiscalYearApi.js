@@ -34,6 +34,15 @@ export const fiscalYearApi = {
 
   getSummary: (id) => api.get(`${BASE_URL}/${id}/summary`, { cache: false }),
 
+  // Read-only: what a close would post. Writes nothing, not even the
+  // retained-earnings account.
+  getClosePreview: (id) =>
+    api.get(`${BASE_URL}/${id}/close-preview`, { cache: false }),
+
+  // The only authoritative way to close a year: one backend transaction.
+  // There is deliberately no reopen/unclose counterpart.
+  close: (id) => api.post(`${BASE_URL}/${id}/close`),
+
   create: (data) => api.post(BASE_URL, data),
 
   update: (id, data) => api.put(`${BASE_URL}/${id}`, data),

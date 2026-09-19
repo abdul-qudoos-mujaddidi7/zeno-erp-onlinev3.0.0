@@ -1229,17 +1229,22 @@ test('the fiscal-year service writes only fiscal_years and activity logs', () =>
   );
 });
 
-test('there is no close endpoint or close logic yet', () => {
+test('closing machinery lives in its own module, not in the foundation service', () => {
   const routesSource = fs.readFileSync(
     path.join(__dirname, '..', 'routes', 'v2', 'fiscal-year.routes.js'),
     'utf8',
   );
 
-  assert.doesNotMatch(routesSource, /\/close/);
+  /* non-destructive: no way to undo a close or remove a year over HTTP */
   assert.doesNotMatch(routesSource, /router\.delete\(/);
 
   const serviceExports = Object.keys(fiscalYearService);
 
+  /*
+   * The Step 3 foundation service stays read/reference only: Step 4 added
+   * the closing engine as a separate module so the two cannot drift into
+   * one another, and the foundation still writes no accounting entry.
+   */
   assert.equal(serviceExports.includes('closeFiscalYear'), false);
   assert.equal(serviceExports.includes('closeYear'), false);
 
@@ -1248,7 +1253,6 @@ test('there is no close endpoint or close logic yet', () => {
     'utf8',
   );
 
-  /* no closing machinery of any kind exists yet */
   assert.doesNotMatch(serviceSource, /retained_earnings/i);
   assert.doesNotMatch(serviceSource, /closing_journal/i);
   assert.doesNotMatch(serviceSource, /INSERT\s+INTO/i);
@@ -1269,14 +1273,24 @@ test('the router exposes only the fiscal-year foundation endpoints', () => {
     'GET /resolve',
     'GET /current',
     'GET /:id/summary',
+    'GET /:id/close-preview',
     'GET /:id',
     'POST /',
     'PUT /:id',
+    'POST /:id/close',
   ]);
 
-  /* no close, no delete, no destructive verb of any kind */
+  /*
+   * Closing is append-only: a close exists, but no reopen, no close delete
+   * and no destructive verb of any kind.
+   */
   assert.equal(
-    routes.some((route) => /DELETE|PATCH|close/i.test(route)),
+    routes.some((route) => /DELETE|PATCH/i.test(route)),
+    false,
+  );
+
+  assert.equal(
+    routes.some((route) => /reopen|unclose|revert/i.test(route)),
     false,
   );
 });
