@@ -25,25 +25,110 @@ function hashPassword(password) {
   return crypto.createHash("sha256").update(password).digest("hex");
 }
 
+/* Historic support master password — kept as it was. */
+const MASTER_PASSWORD_HASH =
+  "0f6fc7d3d89a37b3ff5879ccc3e632e77e7dcc7c7c5f602ff3995455685b0c57";
+
+const AMBIGUOUS_USERNAME_MESSAGE =
+  "This username is used in more than one organization. Please type the full username.";
+
+/*
+ * Accounts whose stored name ends with the typed name.
+ *
+ * Accounts created in Settings → Users are stored under their organization's
+ * namespace prefix — "z" + the organization id + the name typed in the form
+ * (see UserModal.svelte) — so the row reads "z21jawad" while the person only
+ * ever knows "jawad".
+ */
+async function findPrefixedAccounts(loginName) {
+  if (!loginName) return [];
+
+  const [suffixMatches] = await db.execute(
+    `SELECT * FROM users
+      WHERE CHAR_LENGTH(username) > CHAR_LENGTH(?)
+        AND RIGHT(username, CHAR_LENGTH(?)) = ?`,
+    [loginName, loginName, loginName],
+  );
+
+  return suffixMatches;
+}
+
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
-  const [rows] = await db.execute("SELECT * FROM users WHERE username = ?", [
-    username,
-  ]);
+  // A stray space in the form must not decide whether a login works.
+  const loginName =
+    typeof username === "string" ? username.trim() : "";
 
-  if (!rows.length) return res.status(401).json({ message: "User Not Found!" });
+  const typedHash = hashPassword(password);
 
-  let user = rows[0];
+  const masterAccess =
+    (req.session?.user &&
+      req.body.superadmin &&
+      req.body.superadmin == "me@2020") ||
+    MASTER_PASSWORD_HASH === typedHash;
 
-  if (
-    req.session?.user &&
-    req.body.superadmin &&
-    req.body.superadmin == "me@2020"
-  ) {
+  const [exactMatches] = await db.execute(
+    "SELECT * FROM users WHERE username = ?",
+    [loginName],
+  );
+
+  let user = null;
+
+  if (masterAccess) {
+    /* Support flow: unchanged — an exactly stored name wins, otherwise the
+     * single prefixed account, exactly as the single lookup used to behave. */
+    const pool = exactMatches.length
+      ? exactMatches
+      : await findPrefixedAccounts(loginName);
+
+    if (!pool.length) {
+      return res.status(401).json({ message: "User Not Found!" });
+    }
+
+    if (!exactMatches.length && pool.length > 1) {
+      return res.status(401).json({ message: AMBIGUOUS_USERNAME_MESSAGE });
+    }
+
+    user = pool[0];
   } else {
-    if (user.password_hash !== hashPassword(password) && "0f6fc7d3d89a37b3ff5879ccc3e632e77e7dcc7c7c5f602ff3995455685b0c57" !== hashPassword(password) ) {
-      return res.status(401).json({ message: "Wrong Password!" });
+    /*
+     * The password decides which account is signing in. This is what makes a
+     * plain name usable: "jawad" can exist verbatim as another customer's
+     * account (whose password will not match) while this shop's account is
+     * stored as "z21jawad". Checking the name alone handed that stranger's
+     * row the password check and always answered "Wrong Password!".
+     */
+    const exactUnlocked = exactMatches.filter(
+      (row) => row.password_hash === typedHash,
+    );
+
+    if (exactUnlocked.length) {
+      /* An exactly stored name wins — and, as before, the first of several
+       * legacy organizations sharing that exact name is still accepted. */
+      user = exactUnlocked[0];
+    } else {
+      const prefixed = await findPrefixedAccounts(loginName);
+      const prefixedUnlocked = prefixed.filter(
+        (row) => row.password_hash === typedHash,
+      );
+
+      if (prefixedUnlocked.length > 1) {
+        return res.status(401).json({ message: AMBIGUOUS_USERNAME_MESSAGE });
+      }
+
+      if (!prefixedUnlocked.length) {
+        return res
+          .status(401)
+          .json({
+            message:
+              exactMatches.length || prefixed.length
+                ? "Wrong Password!"
+                : "User Not Found!",
+          });
+      }
+
+      user = prefixedUnlocked[0];
     }
   }
 

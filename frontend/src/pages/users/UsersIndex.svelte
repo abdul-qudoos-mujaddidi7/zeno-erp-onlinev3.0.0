@@ -83,20 +83,30 @@ import { userImageApi } from '../../api/userImageApi.js';
       totalItems = meta.total;
       totalPages = meta.totalPages || Math.ceil(totalItems / itemsPerPage) || 0;
 
-      // Images: one unpaginated fetch is OK for small orgs (backend has no user_ids filter)
-      const images =
-        (await userImageApi.getAll({ status: 1 }))?.data || [];
-      if (requestId !== loadRequestId) return;
+      /*
+       * Images: one unpaginated fetch is OK for small orgs (backend has no
+       * user_ids filter). It must never be able to take the list down with it —
+       * a failure here used to fall through to the catch below, which blanks
+       * every row and hides the pagination footer, so the page looked as if the
+       * users had disappeared. A missing avatar is cosmetic; the rows are not.
+       */
+      try {
+        const images =
+          (await userImageApi.getAll({ status: 1 }))?.data || [];
+        if (requestId !== loadRequestId) return;
 
-      const imageByUserId = new Map(
-        images.map((img) => [Number(img.user_id), img]),
-      );
+        const imageByUserId = new Map(
+          images.map((img) => [Number(img.user_id), img]),
+        );
 
-      for (const user of users) {
-        const image = imageByUserId.get(Number(user.id));
-        user.imageUrl = resolveMediaUrl(image?.image, null);
+        for (const user of users) {
+          const image = imageByUserId.get(Number(user.id));
+          user.imageUrl = resolveMediaUrl(image?.image, null);
+        }
+        users = [...users];
+      } catch (imageError) {
+        console.error('Failed to load user images:', imageError);
       }
-      users = [...users];
     } catch (error) {
       console.error('Failed to load users:', error);
       if (requestId === loadRequestId) {
