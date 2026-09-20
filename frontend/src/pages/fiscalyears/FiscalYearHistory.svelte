@@ -34,6 +34,7 @@
   import { accountApi } from '../../api/accountApi.js';
 
   import { t } from '../../i18n/i18n';
+  import { translateFiscalNote } from '../../utils/fiscalNotes.js';
   import { showDate } from '../../calendar.js';
 
   export let year = null;
@@ -308,7 +309,7 @@
 
         <ul class="fy-history__notes">
           {#each summary.notes as note}
-            <li>{note}</li>
+            <li>{translateFiscalNote(note)}</li>
           {/each}
         </ul>
       {:else}

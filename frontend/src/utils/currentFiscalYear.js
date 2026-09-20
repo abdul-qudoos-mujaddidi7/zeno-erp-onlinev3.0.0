@@ -1,24 +1,36 @@
 /*
- * Current fiscal year (Step 5).
+ * Working fiscal year (Step 5).
  *
  * The operational screens (sales, purchases, journals, payments, account
- * statements) default to the CURRENT fiscal year's date range, so the moment a
+ * statements) default to the WORKING fiscal year's date range, so the moment a
  * year is closed its documents stop appearing in the normal working screens.
  * Nothing is deleted or flagged: the rows simply fall outside the default
  * range, and the fiscal-year history can still scope a list to any year's
  * [start_date, end_date].
  *
- * Backward compatibility: when an organization has NO fiscal year configured
- * for today, `currentFiscalYearRange()` returns null and every screen keeps its
+ * "Working" is the year containing today WHILE IT IS OPEN. A year closed before
+ * its end date leaves today inside a CLOSED year, and scoping the screens to it
+ * would keep showing exactly the documents the close archived; in that case the
+ * working year is the nearest OPEN one (see fiscalYearSelection.js).
+ *
+ * Backward compatibility: when an organization has NO open fiscal year to work
+ * in, `currentFiscalYearRange()` returns null and every screen keeps its
  * previous behaviour (either no date filter at all, or its own default). The
  * date filters themselves are never removed — a user can always widen or
- * replace the range by hand.
+ * replace the range by hand, and the fiscal-year history still exposes every
+ * closed year's documents.
  *
  * The lookup is cached for the session and de-duplicated while in flight, so
- * opening five list screens costs one request.
+ * opening five list screens costs one request (two after an early close, when
+ * the year list has to be consulted).
  */
 
 import { fiscalYearApi } from '../api/fiscalYearApi.js';
+import { todayAccountingDate } from './accountingDate.js';
+import {
+  isOpenFiscalYear,
+  selectWorkingFiscalYear,
+} from './fiscalYearSelection.js';
 
 let cache = {
   loaded: false,
@@ -48,27 +60,49 @@ export async function loadCurrentFiscalYear({ force = false, date } = {}) {
   }
 
   inflight = (async () => {
+    let covering = null;
+
     try {
       const response = await fiscalYearApi.getCurrent(date);
-      const fiscalYear = response?.data || null;
 
-      cache = { loaded: true, fiscalYear };
-
-      return fiscalYear;
+      covering = response?.data || null;
     } catch (error) {
       /*
        * 404 FISCAL_YEAR_NOT_FOUND means "not configured", which must leave the
        * screens exactly as they were before this step. Any other failure is
-       * also treated as "no scoping" so a temporary server problem can never
-       * make an operational screen look empty.
+       * also treated as "not configured" so a temporary server problem can
+       * never make an operational screen look empty.
        */
-      cache = { loaded: true, fiscalYear: null };
+      covering = null;
 
       if (import.meta.env?.DEV && error?.status !== 404) {
         console.warn('Current fiscal year lookup failed:', error?.message);
       }
+    }
 
-      return null;
+    try {
+      /*
+       * The year covering today only wins while it is OPEN. After an early
+       * close, today sits inside a CLOSED year, and scoping the working screens
+       * to it would keep showing the documents the close just archived.
+       */
+      let working = covering;
+
+      if (!isOpenFiscalYear(covering)) {
+        const listResponse = await fiscalYearApi
+          .getAll()
+          .catch(() => null);
+
+        working = selectWorkingFiscalYear({
+          covering,
+          years: listResponse?.data || [],
+          today: date || todayAccountingDate(),
+        });
+      }
+
+      cache = { loaded: true, fiscalYear: working || null };
+
+      return cache.fiscalYear;
     } finally {
       inflight = null;
     }

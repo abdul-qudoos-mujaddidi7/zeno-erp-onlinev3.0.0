@@ -4,6 +4,7 @@
   import { accountApi } from '../../api/accountApi.js';
   import { accountTypeApi } from '../../api/accountTypeApi.js';
   import { accountImageApi } from '../../api/accountImageApi.js';
+  import { fiscalYearApi } from '../../api/fiscalYearApi.js';
   import { t, lang, translate_org_type, shortID } from '../../i18n/i18n';
   import { push } from 'svelte-spa-router';
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../lib/pagination.js';
@@ -13,6 +14,11 @@
   import { showDate, setDatePickers } from '../../calendar.js';
   import { toast } from '../../ToastUI/toast.js';
   import { applyCurrentFiscalYearRange } from '../../utils/currentFiscalYear.js';
+  import { isWorkingFiscalYearRange } from '../../utils/fiscalYearSelection.js';
+  import {
+    toDateOnly,
+    toOpeningBalanceRows,
+  } from '../../utils/openingBalanceRows.js';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
@@ -48,6 +54,174 @@
   let accountBalances = {};
   let accountCreditDebit = {};
 
+  /*
+   * Lifetime figures (all years) and the fiscal-year scoped ones.
+   *
+   * When the screen is showing a fiscal year, the displayed balance must be
+   * `opening balance of that year + that year's movement`. Using the lifetime
+   * balance instead would mix closed years into the running balance and the
+   * summary cards, and the opening row would be missing entirely.
+   */
+  let lifetimeBalances = {};
+  let lifetimeCreditDebit = {};
+  let workingFiscalYear = null;
+  let fiscalYearBalances = null;
+  let fiscalYearCreditDebit = null;
+  let openingBalanceRows = [];
+
+  /** True when the visible date range is exactly the working fiscal year. */
+  function fiscalYearInScope() {
+    return isWorkingFiscalYearRange(workingFiscalYear, startDate, endDate);
+  }
+
+  /*
+   * Picks the source of the summary cards and of the running-balance seed: the
+   * working fiscal year's opening + movement while its range is shown, the
+   * lifetime ledger otherwise. Called whenever the range changes.
+   */
+  function applyBalanceScope() {
+    const scoped = fiscalYearInScope() && fiscalYearBalances !== null;
+
+    accountBalances = scoped ? fiscalYearBalances : lifetimeBalances;
+    accountCreditDebit = scoped
+      ? fiscalYearCreditDebit || {}
+      : lifetimeCreditDebit;
+    computedBalance = buildCanonicalSummary();
+  }
+
+  /**
+   * Turns `fiscal_years/:id/accounts/:accountId/statement` lines into the
+   * per-currency shapes this page already uses.
+   */
+  function scopeFromStatement(statement) {
+    const balances = {};
+    const creditDebit = {};
+
+    for (const line of statement?.lines || []) {
+      const key = line.currency || account?.currency || 'DEFAULT';
+
+      balances[key] = Number(line.closing_balance) || 0;
+      creditDebit[key] = {
+        credit: Number(line.credit) || 0,
+        debit: Number(line.debit) || 0,
+      };
+    }
+
+    return { balances, creditDebit };
+  }
+
+  /*
+   * The opening balance row(s) of the working fiscal year, shown as the first
+   * line of the statement. These are snapshots the close wrote, not journals,
+   * so the row is synthetic: it carries no journal id and no actions.
+   */
+  function openingRowsForStatement() {
+    return openingBalanceRows.map((row, index) => ({
+      id: `opening-balance-${index}`,
+      is_opening_balance: true,
+      date: row.date,
+      currency: row.currency || account?.currency || 'DEFAULT',
+      description: row.description,
+      debit: Number(row.debit) || 0,
+      credit: Number(row.credit) || 0,
+      running: {
+        [row.currency || account?.currency || 'DEFAULT']:
+          Number(row.balance) || 0,
+      },
+    }));
+  }
+
+  /*
+   * The opening balance row of the fiscal year the visible range STARTS on.
+   *
+   * Right after a year is closed, the year the close just opened has no
+   * journals at all, so this single row is the only thing this screen can show
+   * — and it is the row an operator looks for ("what did this account start
+   * with?"). It must therefore never depend on the year's statement being
+   * readable, and it must not require the visible year to be the *working* year:
+   * any year range the user selects shows that year's opening line.
+   *
+   * The data is the stored opening balance itself (the record the close writes),
+   * read straight from the roll-forward endpoint. The row belongs to the top of
+   * a range when the range begins on the year's first day.
+   */
+  async function loadOpeningRowsForRange(accountIdValue) {
+    openingBalanceRows = [];
+
+    if (!accountIdValue || !startDate) return;
+
+    try {
+      const years = await loadFiscalYears();
+      const from = toDateOnly(startDate);
+      const year = years.find((item) => toDateOnly(item.start_date) === from);
+
+      if (!year) return;
+
+      const received = await openingBalancesOf(year.id ?? year.local_id);
+
+      /*
+       * `ensureAccount` makes the row appear for THIS account even when the
+       * close carried no balance for it: an account that starts the year at zero
+       * still starts the year at zero, and the screen says so instead of showing
+       * nothing. Only when the year really was carried forward.
+       */
+      openingBalanceRows = toOpeningBalanceRows({
+        fiscalYear: year,
+        rows: received.filter(
+          (row) => String(row.account_id) === String(accountIdValue),
+        ),
+        ensureAccount: {
+          id: accountIdValue,
+          name: account?.name ?? null,
+          currency: account?.currency ?? null,
+        },
+      });
+    } catch (error) {
+      openingBalanceRows = [];
+
+      if (import.meta.env?.DEV) {
+        console.warn('Opening balance lookup failed:', error?.message);
+      }
+    }
+  }
+
+  /*
+   * The fiscal-year list is fetched once per session; the opening balances are
+   * fetched fresh every time, because a close or a reopen changes them and a
+   * stale row would be an accounting statement that is no longer true.
+   */
+  let fiscalYearsCache = null;
+
+  async function loadFiscalYears() {
+    if (fiscalYearsCache) return fiscalYearsCache;
+
+    try {
+      const response = await fiscalYearApi.getAll();
+
+      fiscalYearsCache = response?.data || [];
+    } catch (error) {
+      fiscalYearsCache = [];
+    }
+
+    return fiscalYearsCache;
+  }
+
+  async function openingBalancesOf(fiscalYearId) {
+    if (!fiscalYearId) return [];
+
+    try {
+      const response = await fiscalYearApi.getOpeningBalances(fiscalYearId);
+
+      return response?.data?.received || [];
+    } catch (error) {
+      if (import.meta.env?.DEV) {
+        console.warn('Opening balance lookup failed:', error?.message);
+      }
+
+      return [];
+    }
+  }
+
   function buildCanonicalSummary() {
     const summary = {};
     const currencies = new Set([
@@ -78,6 +252,13 @@
     else if (inputName === 'endDate') endDate = value;
     page = 1;
     lastPageKey = `1|${pageSize}`;
+
+    /*
+     * A hand-edited range is no longer the fiscal year, so the opening row and
+     * the year-scoped balance stop applying (they belong to the year's range).
+     */
+    applyBalanceScope();
+
     if (account?.id) loadJournals(account.id);
   }
 
@@ -274,12 +455,14 @@
           .catch(() => null),
       ]);
 
-      accountBalances =
+      lifetimeBalances =
         balancesRes?.data?.[key] || balancesRes?.data?.[accountId] || {};
-      accountCreditDebit =
+      lifetimeCreditDebit =
         creditDebitRes?.data?.[key] ||
         creditDebitRes?.data?.[accountId] ||
         {};
+      accountBalances = lifetimeBalances;
+      accountCreditDebit = lifetimeCreditDebit;
       computedBalance = buildCanonicalSummary();
 
       accountType = account.account_type_id
@@ -306,9 +489,15 @@
        * year's journals stop appearing here, while the custom date range and
        * the fiscal-year history can still show them.
        */
-      const fyRange = await applyCurrentFiscalYearRange(({ from, to }) => {
-        startDate = from;
-        endDate = to;
+      workingFiscalYear = null;
+      fiscalYearBalances = null;
+      fiscalYearCreditDebit = null;
+      openingBalanceRows = [];
+
+      const fyRange = await applyCurrentFiscalYearRange((range) => {
+        workingFiscalYear = range;
+        startDate = range.from;
+        endDate = range.to;
       });
 
       if (!fyRange) {
@@ -317,7 +506,39 @@
         start.setDate(end.getDate() - 365);
         startDate = start.toISOString().slice(0, 10);
         endDate = end.toISOString().slice(0, 10);
+      } else {
+        /*
+         * The year's own statement supplies two things the lifetime ledger
+         * cannot: the opening balance the close carried into this year, and the
+         * year-scoped movement totals. Failure is not fatal — the screen falls
+         * back to the lifetime figures rather than showing nothing.
+         */
+        const statement = await fiscalYearApi
+          .getAccountStatement(fyRange.id, accountId)
+          .then((response) => response?.data || null)
+          .catch((error) => {
+            console.warn('Fiscal-year statement lookup failed:', error?.message);
+
+            return null;
+          });
+
+        if (statement) {
+          const scope = scopeFromStatement(statement);
+
+          fiscalYearBalances = scope.balances;
+          fiscalYearCreditDebit = scope.creditDebit;
+        }
       }
+
+      /*
+       * Resolved AFTER the range was applied: the opening row belongs to the
+       * fiscal year the visible range starts on, whatever that year is.
+       */
+      await loadOpeningRowsForRange(accountId);
+
+      /* the cards and the running-balance seed follow the visible range */
+      applyBalanceScope();
+
       q = '';
       page = 1;
       lastPageKey = `${page}|${pageSize}`;
@@ -371,7 +592,17 @@
       const rows = journalResponse?.data || [];
       await ensurePeerAccounts(rows);
 
-      processed = buildProcessedRows(accountId, rows);
+      /*
+       * The opening row is shown whenever the visible range starts on a fiscal
+       * year's first day — it is the top line of that year's statement, so it is
+       * not tied to the "working" year any more.
+       */
+      const openingRows = openingRowsForStatement();
+
+      processed = [
+        ...(page === 1 ? openingRows : []),
+        ...buildProcessedRows(accountId, rows),
+      ];
       journals = processed;
       paginated = processed;
 
@@ -463,7 +694,12 @@
     if (event.detail.key === 'endDate') endDate = event.detail.value;
     page = 1;
     lastPageKey = `1|${pageSize}`;
-    if (account?.id) await loadJournals(account.id);
+    applyBalanceScope();
+
+    if (account?.id) {
+      await loadOpeningRowsForRange(account.id);
+      await loadJournals(account.id);
+    }
   }
 
   async function resetReportFilters() {
@@ -474,8 +710,13 @@
     startDate = start.toISOString().slice(0, 10);
     endDate = end.toISOString().slice(0, 10);
     page = 1;
+    applyBalanceScope();
     lastPageKey = `1|${pageSize}`;
-    if (account?.id) await loadJournals(account.id);
+
+    if (account?.id) {
+      await loadOpeningRowsForRange(account.id);
+      await loadJournals(account.id);
+    }
   }
 
   function getPageNumbers(current, total) {
@@ -564,6 +805,12 @@
 
   function getReportActions(journal) {
     const actions = [];
+
+    /* an opening-balance snapshot is not a journal: nothing to view or edit */
+    if (journal.is_opening_balance) {
+      return actions;
+    }
+
     if (journal.reference_type !== 'account' && journal.reference_id) {
       const saleId =
         journal.reference_sale_id ||
@@ -854,10 +1101,12 @@
         </tr>
       </svelte:fragment>
           {#each paginated as j}
-            <tr>
+            <tr class={j.is_opening_balance ? 'opening-balance-row' : ''}>
               <td style="min-width:140px">{@html showDate(j.date)}</td>
               <td>
-                {#if j.first_entry_account == PAYABLE_ID || j.first_entry_account == RECEIVABLE_ID}
+                {#if j.is_opening_balance}
+                  <span class="badge badge-secondary">{t('Opening balance')}</span>
+                {:else if j.first_entry_account == PAYABLE_ID || j.first_entry_account == RECEIVABLE_ID}
                   <span class="badge badge-success">
                     {getAccountName(j.second_entry_account)}
                   </span>
@@ -881,7 +1130,11 @@
                       : getAccountName(j.first_entry_account)}</span>
                 {/if}
               </td><td>
-                {#if j.reference_type != 'account' && j.reference_id}
+                {#if j.is_opening_balance}
+                  <span class="badge badge-info me-1">
+                    {workingFiscalYear?.name || t('Fiscal year')}
+                  </span>
+                {:else if j.reference_type != 'account' && j.reference_id}
                   {#if j.reference_type === 'stock_transfer'}
                     <span
                       class="badge badge-success me-1"
@@ -1151,6 +1404,19 @@
   }
 
   .debit-value{color:#dc3545}.credit-value{color:#11875d}
+
+  /*
+   * The opening balance line: a snapshot carried in by the fiscal-year close,
+   * not a journal, so it is visually distinct from the year's transactions.
+   */
+  .opening-balance-row :global(td) {
+    background: #f1f5f9;
+  }
+
+  .opening-balance-row :global(td.amount-inline),
+  .opening-balance-row :global(.amount-inline) {
+    font-weight: 750;
+  }
 
   @media (max-width: 700px) {
     .account-report-summary { grid-template-columns: 1fr !important; }

@@ -12,8 +12,12 @@
   import AppDatePicker from '../components/common/AppDatePicker.svelte';
   import FiscalYearHistory from './fiscalyears/FiscalYearHistory.svelte';
   import { t } from '../i18n/i18n';
+  import { translateFiscalNote } from '../utils/fiscalNotes.js';
   import { showDate } from '../calendar.js';
-  import { resetCurrentFiscalYearCache } from '../utils/currentFiscalYear.js';
+  import {
+    loadCurrentFiscalYear,
+    resetCurrentFiscalYearCache,
+  } from '../utils/currentFiscalYear.js';
   import { todayAccountingDate } from '../utils/accountingDate.js';
 
   const number = (value) =>
@@ -331,8 +335,13 @@
       years = response?.data || [];
 
       try {
-        const current = await fiscalYearApi.getCurrent();
-        currentYear = current?.data || null;
+        /*
+         * The WORKING year (the one the operational screens are scoped to),
+         * not blindly the year containing today: after an early close those two
+         * differ, and labelling the closed year "Current" would contradict
+         * every list screen.
+         */
+        currentYear = await loadCurrentFiscalYear({ force: true });
       } catch (_) {
         currentYear = null;
       }
@@ -618,7 +627,7 @@
 
           <ul class="fiscal-notes">
             {#each summary.notes as note}
-              <li>{note}</li>
+              <li>{translateFiscalNote(note)}</li>
             {/each}
           </ul>
         {:else}

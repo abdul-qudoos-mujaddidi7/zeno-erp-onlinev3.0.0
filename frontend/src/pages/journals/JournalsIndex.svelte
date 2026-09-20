@@ -21,6 +21,11 @@
   import TableActions from '../../components/common/TableActions.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';  import { currencyApi } from '../../api/currencyApi.js';
 import { journalApi } from '../../api/journalApi.js';
+import { fiscalYearApi } from '../../api/fiscalYearApi.js';
+import {
+  applyCurrentFiscalYearRange,
+  fiscalYearRangeOf,
+} from '../../utils/currentFiscalYear.js';
 import { accountApi } from '../../api/accountApi.js';
 import { accountTypeApi } from '../../api/accountTypeApi.js';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../../lib/pagination.js';
@@ -52,9 +57,24 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   let modalRef;
 
   let currency = '';
- 
 
-
+  /*
+   * Fiscal-year scoping.
+   *
+   * The journal list works inside ONE fiscal year at a time: it opens on the
+   * working fiscal year's range (so a closed year's journals leave the normal
+   * view the moment the year is closed) and the toolbar's fiscal-year selector
+   * switches to any other year — including a closed one, whose history stays
+   * fully readable — or back to "All" for the unscoped lifetime view.
+   *
+   * Backward compatibility: an organization with no fiscal years configured
+   * keeps exactly the previous behaviour (no date filter at all).
+   */
+  let fiscalYears = [];
+  let filterFiscalYear = 'all';
+  let workingFiscalYear = null;
+  let startDate = '';
+  let endDate = '';
 
   async function loadAccounts() {
     if (account_id) {
@@ -112,6 +132,20 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     if (defaultCurr) currency = defaultCurr.code;
   }
 
+  async function loadFiscalYears() {
+    try {
+      const response = await fiscalYearApi.getAll();
+
+      fiscalYears = response?.data || [];
+    } catch (error) {
+      fiscalYears = [];
+
+      if (import.meta.env?.DEV) {
+        console.warn('Fiscal year lookup failed:', error?.message);
+      }
+    }
+  }
+
   async function loadJournals() {
     const requestId = ++loadRequestId;
     lastPageKey = `${currentPage}|${itemsPerPage}`;
@@ -121,6 +155,8 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
       await journalApi.getAll({
         status: 1,
         search: searchTerm.trim(),
+        date_from: startDate || undefined,
+        date_to: endDate || undefined,
         /*
          * When viewing a specific account, do NOT exclude system
          * PAYABLE/RECEIVABLE counterparts — customer/supplier journals
@@ -163,7 +199,24 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   onMount(async () => {
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     bootstrapped = true;
-    await Promise.all([loadAccounts(), loadCurrencies(), loadJournals()]);
+
+    /*
+     * Default the list to the working fiscal year BEFORE the first request, and
+     * show that year as the selected value of the fiscal-year filter so the
+     * scope on screen always matches the scope applied to the query.
+     */
+    workingFiscalYear = await applyCurrentFiscalYearRange(({ from, to }) => {
+      startDate = from;
+      endDate = to;
+    });
+
+    await Promise.all([loadAccounts(), loadCurrencies(), loadFiscalYears()]);
+
+    if (workingFiscalYear?.id) {
+      filterFiscalYear = workingFiscalYear.id;
+    }
+
+    await loadJournals();
   });
   // --- Table State (mirrors ProductsIndex design) ---
   let searchTerm = '';
@@ -443,6 +496,16 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
 
   $: journalToolbarFilters = [
     {
+      key: 'fiscal_year', label: t('Fiscal Year'), value: filterFiscalYear,
+      options: [
+        { value: 'all', label: t('All') },
+        ...fiscalYears.map((year) => ({
+          value: year.id ?? year.local_id,
+          label: `${year.name} (${year.start_date} → ${year.end_date})`,
+        })),
+      ],
+    },
+    {
       key: 'account', label: t('Account'), value: filterAccount, visible: !account_id,
       options: [{ value: 'all', label: t('All') }, ...accounts.map((account) => ({ value: account.id, label: getAccountName(account.id) }))],
     },
@@ -452,9 +515,31 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     },
   ];
 
+  /*
+   * A selected fiscal year becomes a date range on the query. `All` removes the
+   * range again — that is the only state in which the list is not scoped to a
+   * year.
+   */
+  function applyFiscalYearFilter(value) {
+    filterFiscalYear = value;
+
+    const year =
+      value === 'all'
+        ? null
+        : fiscalYears.find(
+            (item) => String(item.id ?? item.local_id) === String(value),
+          );
+
+    const range = year ? fiscalYearRangeOf(year) : null;
+
+    startDate = range?.from || '';
+    endDate = range?.to || '';
+  }
+
   function handleJournalFilterChange(event) {
     if (event.detail.key === 'account') filterAccount = event.detail.value;
     if (event.detail.key === 'reference') reference_type = event.detail.value === 'all' ? null : event.detail.value;
+    if (event.detail.key === 'fiscal_year') applyFiscalYearFilter(event.detail.value);
     currentPage = 1;
     loadJournals();
   }
@@ -463,7 +548,12 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     searchTerm = '';
     filterAccount = 'all';
     reference_type = null;
+
+    /* Clearing goes back to the working year, not to every year at once. */
+    applyFiscalYearFilter(workingFiscalYear?.id ?? 'all');
+
     currentPage = 1;
+    loadJournals();
   }
 </script>
 
