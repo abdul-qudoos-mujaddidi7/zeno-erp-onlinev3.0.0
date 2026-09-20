@@ -18,6 +18,16 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   
   import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   import { calculateDiscountAmount } from './SalesHelper.js';
+  import {
+    billChange,
+    formatContactPhone,
+    formatCount,
+    formatMoney,
+    formatQty,
+    itemCounts,
+    itemsSubtotal,
+    lineAmount,
+  } from './saleReceiptLayout.js';
 
   import { showDate } from '../../calendar.js';
 import { currencyApi } from '../../api/currencyApi.js';
@@ -29,6 +39,24 @@ import { currencyApi } from '../../api/currencyApi.js';
   export let units = [];
   export let currencies = [];
   $: settings = $settings_all || [];
+
+  /*
+   * Contact block printed above the footer rule. Every line is optional — the
+   * sign-off, the phones, the e-mail and the web/social handles appear once
+   * the company fills them in under Settings → Company Profile.
+   */
+  $: companyPhone = settings.find((s) => s.key === 'company_phone')?.value || '';
+  $: companyPhone2 = settings.find((s) => s.key === 'company_phone2')?.value || '';
+  $: companyEmail = settings.find((s) => s.key === 'company_email')?.value || '';
+  $: companyWebsite = settings.find((s) => s.key === 'company_website')?.value || '';
+  $: companyFacebook = settings.find((s) => s.key === 'company_facebook')?.value || '';
+
+  /*
+   * The reference slip prints the person who served the customer next to the
+   * invoice number. Here that slot carries the customer instead, with the same
+   * fallbacks the receipt always used.
+   */
+  $: customerName = getAccountName(customer) || sale?.description || 'Walk-in';
   let generics = [];
   let addressEl;
   let WhatsappModalRef = null;
@@ -209,6 +237,11 @@ import { currencyApi } from '../../api/currencyApi.js';
     const content = document.getElementById('receipt-content').innerHTML;
     const styles = `
         <style>
+          /*
+           * One size and one weight for the whole slip: items, totals,
+           * payments and footer all print like the item-table header. Only the
+           * company name keeps a size of its own.
+           */
           .receipt {
             width: 74mm;
             padding: 8px 4px;
@@ -216,7 +249,10 @@ import { currencyApi } from '../../api/currencyApi.js';
             overflow: hidden;
             word-wrap: break-word;
             word-break: break-word;
+            font-size: 10pt;
+            font-weight: 700;
           }
+          .brand { font-size: 16px; }
 
           table {
   table-layout: fixed;
@@ -227,7 +263,6 @@ td, th {
   word-break: break-word;
 }
          .underbrand {
-    font-size: 12px;
     font-weight: 700;
 
     white-space: nowrap; /* ❗ FORCE ONE LINE */
@@ -251,22 +286,17 @@ td, th {
 
   th:nth-child(1),
   td:nth-child(1) {
-    width: 34%; /* product */
+    width: 40%; /* quantity */
   }
 
   th:nth-child(2),
   td:nth-child(2) {
-    width: 20%; /* qty */
+    width: 30%; /* price */
   }
 
   th:nth-child(3),
   td:nth-child(3) {
-    width: 20%; /* price */
-  }
-
-  th:nth-child(4),
-  td:nth-child(4) {
-    width: 26%; /* subtotal */
+    width: 30%; /* amount */
   }
 
   .product-name {
@@ -293,6 +323,69 @@ td, th {
     line-height: 1.2;
   }
 
+  /*
+   * The two count lines carry the same weight as the Price / Amount column
+   * headers, so the whole item block reads as one table instead of a heavy
+   * heading over a light header.
+   */
+  .items-count {
+    margin-top: 6px;
+    font-weight: 700;
+  }
+
+  /*
+   * Item block: the product name on its own line, then quantity / price /
+   * amount underneath. No rule between the lines of one item — only the
+   * header, the Subtotal row and the NET Total row carry a line.
+   */
+  .items-table .item-name-row td {
+    border: none !important;
+    padding-top: 5px !important;
+    padding-bottom: 0 !important;
+  }
+
+  .items-table .item-value-row td {
+    border: none !important;
+    padding-top: 0 !important;
+  }
+
+  .items-table .detail-row td {
+    border: none !important;
+  }
+
+  .items-table .subtotal-row td {
+    border-top: 1px solid #000 !important;
+  }
+
+  .items-table .nettotal-row td {
+    border-top: 2px solid #000 !important;
+    border-bottom: 2px solid #000 !important;
+  }
+
+  /*
+   * Logical alignment: the quantity sits at the start of the row, the money
+   * columns at the end, so the receipt mirrors correctly in Dari/Pashto.
+   */
+  .start {
+    text-align: start;
+  }
+
+  .end {
+    text-align: end;
+  }
+
+  .payments-block,
+  .totals {
+    margin-top: 6px;
+  }
+
+  .pay-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 4px;
+  }
+
 
 .nowrap {
   white-space: nowrap;
@@ -302,7 +395,6 @@ td, th {
     overflow-wrap: anywhere;
   }
     .underbrand {
-    font-size: 12px;
     font-weight: 700;
 
     display: -webkit-box;
@@ -314,23 +406,36 @@ td, th {
   }
 body { margin: 0; }
        
-table {border-bottom: 2px solid #000 !important}
+table { table-layout: fixed; width: 100%; }
 td {
-    border-bottom: 1px solid #000 !important;
-    font-size: 9pt;
-    padding: 4px 4px !important;
+    padding: 3px 4px !important;
+    border: none !important;
   }
+  small {
+    font-size: inherit;
+  }
+
+  /*
+   * Headers are explicitly bold instead of inheriting the table-header weight:
+   * on paper this stylesheet is written before the linked theme, so an
+   * inherited weight would flip between the preview and the printed slip. The
+   * size comes from the slip and stays overridable (no !important) so a long
+   * count header can be shrunk to stay on one line.
+   */
   th {
+    font-weight: 700 !important;
+    padding: 3px 4px !important;
     border-bottom: 2px solid #000 !important;
-    border-top: 2px solid #000 !important;
-    font-size: 11pt !important;
   }
           @page { size: 74mm auto; margin: 0; }
 
-.underbrand { font-size: 12px; }
 .center { text-align: center; }
-.small { font-size: 11px; }
 .divider { border-top: 1px solid #000; margin: 6px 0; }
+.head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+.head-row .head-customer { text-align: end; overflow-wrap: anywhere; }
+.receipt-footer { text-align: start; line-height: 1.5; margin-top: 2px; }
+.receipt-footer .footer-line { white-space: normal; overflow-wrap: anywhere; }
+.receipt-footer .footer-signoff { text-align: center; margin-bottom: 2px; }
 
 * {color:#000000 !important;}
         </style>
@@ -385,10 +490,40 @@ td {
     el.style.fontSize = best + 'px';
   }
 
+  /*
+   * The slip prints in one size, so an element that fits must keep the size it
+   * inherits: fitText always *sets* a size, which would make a short value
+   * smaller than the text around it. This clears any earlier inline size,
+   * measures, and only shrinks what genuinely overflows its box.
+   */
+  function fitTextWithin(el, minFont = 6) {
+    if (!el || el.clientWidth <= 0) return;
+
+    el.style.fontSize = '';
+    el.style.whiteSpace = 'nowrap';
+    el.style.overflowWrap = 'normal';
+    el.style.wordBreak = 'normal';
+
+    if (el.scrollWidth <= el.clientWidth + 0.5) return;
+
+    const natural = parseFloat(getComputedStyle(el).fontSize) || 12;
+
+    fitText(el, natural, minFont);
+  }
+
   function fitReceiptText() {
-    fitText(addressEl);
+    fitTextWithin(addressEl);
     document.querySelectorAll('#receipt-content .fit-amount').forEach((el) => {
-      fitText(el, 11, 5);
+      fitTextWithin(el, 5);
+    });
+
+    /*
+     * "Items Qty Count [1]" is wider than the quantity column of a 74mm slip,
+     * so this one label shrinks to stay on a single line instead of wrapping
+     * its count onto a second line, in any language.
+     */
+    document.querySelectorAll('#receipt-content th.fit-cell').forEach((el) => {
+      fitTextWithin(el, 7);
     });
   }
 
@@ -480,6 +615,11 @@ td {
       : Number(total - paidInSaleCurrency);
 
 
+  /* Printed header counts and the Subtotal / NET Total / Change rows. */
+  $: counts = itemCounts(items);
+  $: itemsSum = itemsSubtotal(items);
+  $: change = billChange(total, paidInSaleCurrency);
+
   let showAccountBalance = '-';
 
   let balance = {};
@@ -533,172 +673,217 @@ td {
                   {settings.find((s) => s.key === 'company_address')?.value || 'Company Address'}
                 </div>
               {/if}
-              {#if settings.find((s) => s.key === 'company_phone')?.value}
-                <div class="underbrand fw-bold">
-                  {settings.find((s) => s.key === 'company_phone')?.value || 'Company Phone'}
-                  {#if settings.find((s) => s.key === 'company_phone2')?.value}
-                    - {settings.find((s) => s.key === 'company_phone2')?.value || 'Company Phone 2'}
-                  {/if}
-                </div>
-              {/if}
-
-              {#if settings.find((s) => s.key === 'company_email')?.value}
-                <div class="underbrand fw-bold">
-                  {settings.find((s) => s.key === 'company_email')?.value || 'Company Email'}
-                </div>
-              {/if}
+              <!--
+                The phones and the e-mail are printed once, in the footer
+                contact block — not here as well.
+              -->
               <!-- <div class="muted">123 Business St, City</div>
               <div class="muted">Tel: 000-000-000</div> -->
             </div>
             <div class="divider"></div>
 
-            <div class="mb-2">
-              {t('Date')}:
-              <span class="fw-bold"
-                >{@html sale?.invoice_date ? showDate(sale?.invoice_date.slice(0, 10), 'receipt') : ''}</span>
-              <small class="float-end"> <span class="fw-bold">{sale?.invoice_date.slice(0, 10)}</span></small>
+            <!--
+              Header of the reference slip: the invoice number and the customer
+              share the first line, the date (and the account number of a named
+              customer) sit under them.
+            -->
+            <div class="head-row">
+              <span class="nowrap">
+                <small
+                  >{t('Invoice #')}: <span class="fw-bold">{sale?.invoice_number}</span></small
+                >
+              </span>
+              <span class="head-customer">
+                <small
+                  >{t('Customer')}: <span class="fw-bold">{customerName}</span></small
+                >
+              </span>
             </div>
 
-            <div class="float-end">
-              <small>{t('Invoice #')}: <span class="fw-bold">{sale?.invoice_number}</span></small>
-            </div>
-            {#if customer?.id > 100000}
-              <div class="">
-                <small>
-                  {t('Number')}
-                  {t('Account')}: <span class="fw-bold">{shortID(customer?.id) || '-'}</span>
-                </small>
-              </div>
-            {/if}
-            <div>
-              <small
-                >{t('Customer')}:
-                <span class="fw-bold">{getAccountName(customer) || sale?.description || 'Walk-in'}</span></small>
+            <div class="head-row">
+              <span>
+                <small
+                  >{t('Date')}:
+                  <span class="fw-bold"
+                    >{@html sale?.invoice_date
+                      ? showDate(sale?.invoice_date.slice(0, 10), 'receipt')
+                      : ''}</span
+                  ></small
+                >
+                <small class="fw-bold">{sale?.invoice_date?.slice(0, 10)}</small>
+              </span>
+              {#if customer?.id > 100000}
+                <span class="nowrap">
+                  <small>
+                    {t('Number')}
+                    {t('Account')}: <span class="fw-bold">{shortID(customer?.id) || '-'}</span>
+                  </small>
+                </span>
+              {/if}
             </div>
 
-            <table border="0" cellpadding="3" cellspacing="0" class="w-100 mt-2">
-              <thead> </thead>
-              <tbody>
-                <tr class="">
-                  <th>{t('Product')}</th>
-                  <th class="center">{t('Qty')}</th>
-                  <th class="center">{t('Price')}</th>
-                  <th class="center">{t('Subtotal')}</th>
+            <div class="items-count">{t('Items Count')} [{formatCount(counts.itemsCount)}]</div>
+
+            <table border="0" cellpadding="3" cellspacing="0" class="w-100 items-table">
+              <thead>
+                <tr>
+                  <th class="start fit-cell">
+                    {t('Items Qty Count')} [{formatCount(counts.itemsQtyCount)}]
+                  </th>
+                  <th class="end">{t('Price')}</th>
+                  <th class="end">{t('Amount')}</th>
                 </tr>
+              </thead>
+              <tbody>
                 {#each items as it}
-                  <tr class="">
-                    <td class="product-name fw-bold">
+                  <tr class="item-name-row">
+                    <td colspan="3" class="product-name fw-bold">
                       <div>{it.product_name}</div>
                       {#if it.generic_name}
-                        <div class="small text-muted mt-1">{it.generic_name}</div>
+                        <div class="small">{it.generic_name}</div>
                       {/if}
                     </td>
-
-                    <td class="center fw-bold">
+                  </tr>
+                  <tr class="item-value-row">
+                    <td class="start fw-bold">
                       <span class="fit-amount">
-                        {Number(it.quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                        {it.unit_name}
+                        {formatQty(it.quantity)}{#if it.unit_name}&nbsp;{it.unit_name}{/if}
                       </span>
                     </td>
-                    <td class="center fw-bold">
-                      <span class="fit-amount">
-                        {Number(it.unit_price).toLocaleString(undefined, {
-                          maximumFractionDigits: 3,
-                        })}&nbsp;{it.currency_symbol}
-                      </span>
+                    <td class="end fw-bold">
+                      <span class="fit-amount">{formatMoney(it.unit_price)}</span>
                     </td>
-                    <td class="center fw-bold">
-                      <span class="fit-amount">
-                        {Number(it.subtotal).toLocaleString(undefined, {
-                          maximumFractionDigits: 3,
-                        })}&nbsp;{it.currency_symbol}
-                      </span>
+                    <td class="end fw-bold">
+                      <span class="fit-amount">{formatMoney(lineAmount(it))}</span>
                     </td>
                   </tr>
                 {/each}
+
+                <!--
+                  The money rows give the amount two of the three columns, so a
+                  long total (with its currency) prints at the same size as the
+                  rest of the slip instead of being shrunk to fit one column.
+                -->
+                <tr class="subtotal-row">
+                  <td class="start fw-bold">{t('Subtotal')}:</td>
+                  <td colspan="2" class="end fw-bold">
+                    <span class="fit-amount">{formatMoney(itemsSum)}</span>
+                  </td>
+                </tr>
+
+                {#if sale?.discount_amount}
+                  <tr class="detail-row">
+                    <td class="start">
+                      {t('Discount')}{sale?.discount_type == 'percent'
+                        ? ` (${formatMoney(sale?.discount_amount, 0, 3)}%)`
+                        : ''}:
+                    </td>
+                    <td colspan="2" class="end">
+                      <span class="fit-amount">{formatMoney(calculateDiscountAmount(sale))}</span>
+                    </td>
+                  </tr>
+                {/if}
+
+                {#if sale?.expense_amount}
+                  <tr class="detail-row">
+                    <td class="start">{t('Expenses')}:</td>
+                    <td colspan="2" class="end">
+                      <span class="fit-amount">{formatMoney(sale?.expense_amount)}</span>
+                    </td>
+                  </tr>
+                {/if}
+
+                <tr class="nettotal-row">
+                  <td class="start fw-bold">{t('NET Total')}:</td>
+                  <td colspan="2" class="end fw-bold">
+                    <span class="fit-amount">{formatMoney(total)}&nbsp;{t(sale?.currency) || ''}</span>
+                  </td>
+                </tr>
               </tbody>
             </table>
 
-            <div class="totals small mt-3">
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                <div class="fw-bold">{t('Subtotal')}{t("-of-")}{t('Bill')}</div>
-                <div class="right fw-bold">
-                  {items
-                    .reduce((s, i) => s + (Number(i.subtotal) || 0), 0)
-                    .toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                  {t(sale?.currency) || ''}
-                </div>
-              </div>
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                <div class="fw-bold">{t('Discount')} {sale?.discount_type=='percent' ? `(${Number(sale?.discount_amount).toLocaleString(undefined, { maximumFractionDigits: 3 })}%)` : ''}</div>
-                <div class="right fw-bold">
-                 
-                  {sale?.discount_amount
-                    ? calculateDiscountAmount(sale).toLocaleString(undefined, { maximumFractionDigits: 3 })
-                    : 0}
-                  
-                  {t(sale?.currency) || ''}
-                </div>
-              </div>
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                <div class="fw-bold">{t('Expenses')}</div>
-                <div class="right fw-bold">
-                  {sale?.expense_amount
-                    ? Number(sale?.expense_amount).toLocaleString(undefined, { maximumFractionDigits: 3 })
-                    : 0}
-                  {t(sale?.currency) || ''}
-                </div>
-              </div>
-              
-              
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                <div class="fw-bold">{t('Payable')}</div>
-                <div class="right fw-bold">
-                  {sale?.total_amount
-                    ? Number(sale?.total_amount).toLocaleString(undefined, { maximumFractionDigits: 3 })
-                    : 0}
-                  {t(sale?.currency) || ''}
-                </div>
-              </div>
-              <div class="fw-bold" style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                <div class="fw-bold">{t('Bill Received')}</div>
-                <div class="right fw-bold">
-                  {Number(paid || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                  {t(paidCurrency) || ''}
-                </div>
+            <div class="payments-block small">
+              <div class="pay-row fw-bold">
+                <span>{t('Bill Received')}:</span>
+                <span class="nowrap">(&nbsp;{formatMoney(paid)}&nbsp;{t(paidCurrency) || ''}&nbsp;)</span>
               </div>
 
-              {#if customer?.code != 'WALKIN'}
-              
-              <div style="display:flex;justify-content:space-between;margin-top:4px;">
-                <div class="fw-bold">{t('Old Balance')}</div>
-                <div class="right fw-bold">
-                  <span dir="ltr"
-                    >{balance[sale?.currency] !== undefined && balance[sale?.currency] !== null
-                      ? Number(balance[sale?.currency] + due || 0).toLocaleString(undefined, {
-                          maximumFractionDigits: 3,
-                        })
-                      : '---'}</span>
-                  {t(sale?.currency) || ''}
+              {#if change > 0}
+                <div class="pay-row fw-bold">
+                  <span>{t('Change')}:</span>
+                  <span class="nowrap">(&nbsp;{formatMoney(change)}&nbsp;{t(sale?.currency) || ''}&nbsp;)</span>
                 </div>
-              </div>
-                <div class="divider"></div>
+              {/if}
 
-                <div style="display:flex;justify-content:space-between;margin-top:4px;">
-                  <div class="fw-bold">{t('Now Balance')}</div>
-                  <div class="right fw-bold">
-                    {@html showAccountBalance}
-                  </div>
+              {#if Number(due) > 0}
+                <div class="pay-row fw-bold">
+                  <span>{t('Bill Due')}:</span>
+                  <span class="nowrap">(&nbsp;{formatMoney(due)}&nbsp;{t(sale?.currency) || ''}&nbsp;)</span>
                 </div>
               {/if}
             </div>
 
-            <div class="divider"></div>
-            <div class="center small">
-              {t('Powered by ZenoERP • Thank you!')}
-            </div>
+            {#if customer?.code != 'WALKIN'}
+              <div class="divider"></div>
 
-            <div class="center small">www.zenoerp.com</div>
+              <div class="totals small">
+                <div class="pay-row fw-bold">
+                  <span>{t('Old Balance')}</span>
+                  <span class="fw-bold">
+                    <span dir="ltr"
+                      >{balance[sale?.currency] !== undefined && balance[sale?.currency] !== null
+                        ? Number(balance[sale?.currency] + due || 0).toLocaleString(undefined, {
+                            maximumFractionDigits: 3,
+                          })
+                        : '---'}</span
+                    >
+                    {t(sale?.currency) || ''}
+                  </span>
+                </div>
+
+                <div class="pay-row fw-bold">
+                  <span>{t('Now Balance')}</span>
+                  <span class="fw-bold">
+                    {@html showAccountBalance}
+                  </span>
+                </div>
+              </div>
+            {/if}
+
+            <div class="divider"></div>
+
+            <!--
+              Contact block of the reference receipt: the sign-off first, then
+              the company's own lines (phones, e-mail, web, social) and the
+              ZenoERP credit last. Each line is skipped when unset.
+            -->
+            <div class="receipt-footer small">
+              <div class="footer-line footer-signoff">
+                {t('Thank You For Your Shopping!')}
+              </div>
+              {#if companyPhone}
+                <div class="footer-line">
+                  <span dir="ltr">{formatContactPhone(companyPhone)}</span>
+                </div>
+              {/if}
+              {#if companyPhone2}
+                <div class="footer-line">
+                  <span dir="ltr">{formatContactPhone(companyPhone2)}</span>
+                </div>
+              {/if}
+              {#if companyEmail}
+                <div class="footer-line"><span dir="ltr">{companyEmail}</span></div>
+              {/if}
+              {#if companyWebsite}
+                <div class="footer-line"><span dir="ltr">{companyWebsite}</span></div>
+              {/if}
+              {#if companyFacebook}
+                <div class="footer-line"><span dir="ltr">{companyFacebook}</span></div>
+              {/if}
+              <div class="footer-line">
+                {t('Powered by ZenoERP')} - <span dir="ltr">www.zenoerp.com</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -724,17 +909,28 @@ td {
 
 <style>
   table {
-    border-bottom: 2px solid #000 !important;
+    table-layout: fixed;
+    width: 100%;
   }
   td {
-    border-bottom: 1px solid #000 !important;
-    font-size: 9pt;
-    padding: 4px 4px !important;
+    padding: 3px 4px !important;
+    border: none !important;
   }
+  small {
+    font-size: inherit;
+  }
+
+  /*
+   * Headers are explicitly bold instead of inheriting the table-header weight:
+   * on paper this stylesheet is written before the linked theme, so an
+   * inherited weight would flip between the preview and the printed slip. The
+   * size comes from the slip and stays overridable (no !important) so a long
+   * count header can be shrunk to stay on one line.
+   */
   th {
+    font-weight: 700 !important;
+    padding: 3px 4px !important;
     border-bottom: 2px solid #000 !important;
-    border-top: 2px solid #000 !important;
-    font-size: 11pt !important;
   }
 
   table {
@@ -744,22 +940,17 @@ td {
 
   th:nth-child(1),
   td:nth-child(1) {
-    width: 34%; /* product */
+    width: 40%; /* quantity */
   }
 
   th:nth-child(2),
   td:nth-child(2) {
-    width: 20%; /* qty */
+    width: 30%; /* price */
   }
 
   th:nth-child(3),
   td:nth-child(3) {
-    width: 20%; /* price */
-  }
-
-  th:nth-child(4),
-  td:nth-child(4) {
-    width: 26%; /* subtotal */
+    width: 30%; /* amount */
   }
 
   .product-name {
@@ -786,6 +977,69 @@ td {
     line-height: 1.2;
   }
 
+  /*
+   * The two count lines carry the same weight as the Price / Amount column
+   * headers, so the whole item block reads as one table instead of a heavy
+   * heading over a light header.
+   */
+  .items-count {
+    margin-top: 6px;
+    font-weight: 700;
+  }
+
+  /*
+   * Item block: the product name on its own line, then quantity / price /
+   * amount underneath. No rule between the lines of one item — only the
+   * header, the Subtotal row and the NET Total row carry a line.
+   */
+  .items-table .item-name-row td {
+    border: none !important;
+    padding-top: 5px !important;
+    padding-bottom: 0 !important;
+  }
+
+  .items-table .item-value-row td {
+    border: none !important;
+    padding-top: 0 !important;
+  }
+
+  .items-table .detail-row td {
+    border: none !important;
+  }
+
+  .items-table .subtotal-row td {
+    border-top: 1px solid #000 !important;
+  }
+
+  .items-table .nettotal-row td {
+    border-top: 2px solid #000 !important;
+    border-bottom: 2px solid #000 !important;
+  }
+
+  /*
+   * Logical alignment: the quantity sits at the start of the row, the money
+   * columns at the end, so the receipt mirrors correctly in Dari/Pashto.
+   */
+  .start {
+    text-align: start;
+  }
+
+  .end {
+    text-align: end;
+  }
+
+  .payments-block,
+  .totals {
+    margin-top: 6px;
+  }
+
+  .pay-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 4px;
+  }
+
   .brand {
     font-size: 16px;
     font-weight: 700;
@@ -806,6 +1060,12 @@ td {
     padding: 0 4px;
   }
 
+  /*
+   * One size and one weight for the whole slip — items, totals, payments and
+   * footer all print like the item-table header, so nothing reads smaller or
+   * faded next to the rest. Each element keeps the inherited size unless its
+   * own text genuinely does not fit (see fitTextWithin).
+   */
   .receipt {
     width: 74mm;
     padding: 8px 4px;
@@ -815,6 +1075,8 @@ td {
     word-break: break-word;
     margin: 0 auto;
     background: #fff;
+    font-size: 10pt;
+    font-weight: 700;
   }
   * {
     box-sizing: border-box;
@@ -843,7 +1105,6 @@ td {
     overflow-wrap: break-word;
   } */
   .underbrand {
-    font-size: 12px;
     font-weight: 700;
 
     white-space: nowrap; /* ❗ FORCE ONE LINE */
@@ -856,6 +1117,41 @@ td {
   }
   .center {
     text-align: center;
+  }
+  /*
+   * Footer contact block: starts at the reading edge (right in Dari/Pashto)
+   * and wraps a long e-mail / web address instead of running off the paper.
+   */
+  /*
+   * Receipt head: two ends of one line — the invoice number on the reading
+   * edge, the customer opposite it — so the slip keeps the reference layout
+   * and still mirrors in Dari/Pashto.
+   */
+  .head-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .head-row .head-customer {
+    text-align: end;
+    overflow-wrap: anywhere;
+  }
+
+  .receipt-footer {
+    text-align: start;
+    line-height: 1.5;
+    margin-top: 2px;
+  }
+  .receipt-footer .footer-line {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* The sign-off is the one centered line of the slip. */
+  .receipt-footer .footer-signoff {
+    text-align: center;
+    margin-bottom: 2px;
   }
   .divider {
     border-top: 1px solid #000;

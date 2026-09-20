@@ -233,6 +233,22 @@ import { settingsApi } from '../../api/settingsApi.js';
         key: 'company_phone2',
         value: '',
       },
+      /*
+       * Printed on the sale receipt footer together with the phones and the
+       * e-mail, so the customer keeps the shop's web/social handles.
+       */
+      {
+        category: 'Company Profile',
+        type: 'string',
+        key: 'company_website',
+        value: '',
+      },
+      {
+        category: 'Company Profile',
+        type: 'string',
+        key: 'company_facebook',
+        value: '',
+      },
       {
         category: 'Company Profile',
         type: 'textarea',
