@@ -25,6 +25,9 @@ const {
   generateLocalId,
 } = require('../utils/generateLocalId');
 
+const fiscalPostingGuard =
+  require('./fiscal-posting-guard.service');
+
 const {
   resolvePagination,
 } = require('../utils/pagination');
@@ -208,6 +211,19 @@ async function createTransferJournal(
   if (!paymentAmount || Number(paymentAmount) <= 0) {
     return;
   }
+
+  /*
+   * Step 4.5: the transfer's expense journal is dated with the transfer date,
+   * so that is the date that must not fall inside a closed fiscal year.
+   */
+  await fiscalPostingGuard.assertAccountingDateOpen(
+    connection,
+    {
+      orgId,
+      date: transferDate || new Date(),
+      operation: 'stock_transfer.journal',
+    },
+  );
 
   const expensesAccount =
     await stockTransferRepository.findAccountByCode(

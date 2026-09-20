@@ -47,6 +47,9 @@ const accountService =
 const paymentPosting =
   require('./payment-posting.service');
 
+const fiscalPostingGuard =
+  require('./fiscal-posting-guard.service');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -262,6 +265,21 @@ async function createJournalEntry(
     description,
   },
 ) {
+  /*
+   * Step 4.5 second line of defence: the document entry points are already
+   * guarded, so this only catches a journal that is dated from something
+   * other than the invoice (for example a journal dated today). The whole
+   * transaction unwinds when it rejects.
+   */
+  await fiscalPostingGuard.assertAccountingDateOpen(
+    connection,
+    {
+      orgId,
+      date: data.date,
+      operation: 'sale.journal',
+    },
+  );
+
   const localId = generateLocalId();
 
   const journal =
@@ -529,6 +547,21 @@ async function createSale({
 
   try {
     await connection.beginTransaction();
+
+    /*
+     * Step 4.5: an invoice dated inside a CLOSED fiscal year may not be
+     * created. Checked before any document, stock or journal write, so a
+     * rejection leaves no trace. A date with no configured fiscal year is
+     * still accepted.
+     */
+    await fiscalPostingGuard.assertAccountingDateOpen(
+      connection,
+      {
+        orgId,
+        date: data.invoice_date,
+        operation: 'sale.create',
+      },
+    );
 
     const localId = generateLocalId();
 
@@ -848,6 +881,21 @@ async function updateSale({
       );
     }
 
+    /*
+     * Step 4.5: both the stored invoice date and the incoming one are
+     * checked. A closed year may not be edited, and that includes moving the
+     * invoice OUT of it: the published result would stop matching its own
+     * journals.
+     */
+    await fiscalPostingGuard.assertAccountingDatesOpen(
+      connection,
+      {
+        orgId,
+        dates: [oldSale.invoice_date, data.invoice_date],
+        operation: 'sale.update',
+      },
+    );
+
     const oldItems =
       await saleRepository.findItemsBySale(
         connection,
@@ -982,6 +1030,22 @@ async function updateSale({
           },
         );
 
+      /*
+       * Step 4.5: each payment is its own accounting event, so its own date
+       * is checked before it is reversed. This stops a closed-year payment
+       * from being erased through an open-year sale edit.
+       */
+      await fiscalPostingGuard.assertAccountingDatesOpen(
+        connection,
+        {
+          orgId,
+          dates: payments.map(
+            (payment) => payment.payment_date,
+          ),
+          operation: 'sale.update (payment reversal)',
+        },
+      );
+
       for (const payment of payments) {
         if (Number(payment.status) === 0) {
           continue;
@@ -1015,6 +1079,18 @@ async function updateSale({
             saleId,
           },
         );
+
+      /* Same rule for the returns this edit is about to reverse. */
+      await fiscalPostingGuard.assertAccountingDatesOpen(
+        connection,
+        {
+          orgId,
+          dates: returns.map(
+            (saleReturn) => saleReturn.return_date,
+          ),
+          operation: 'sale.update (return reversal)',
+        },
+      );
 
       for (const saleReturn of returns) {
         if (Number(saleReturn.status) === 0) {
@@ -1506,6 +1582,20 @@ async function deleteSale({
       );
     }
 
+    /*
+     * Step 4.5: deleting a closed-year invoice would erase that year's
+     * revenue and stock movement. The ORIGINAL invoice date decides, never
+     * today's date, so a closed year cannot be emptied from the outside.
+     */
+    await fiscalPostingGuard.assertAccountingDateOpen(
+      connection,
+      {
+        orgId,
+        date: oldSale.invoice_date,
+        operation: 'sale.delete',
+      },
+    );
+
     const oldItems =
       await saleRepository.findItemsBySale(
         connection,
@@ -1636,6 +1726,21 @@ async function deleteSale({
         },
       );
 
+    /*
+     * Step 4.5: deleting a sale reverses its payments, and a payment dated in
+     * a closed year must not be erased as a side effect.
+     */
+    await fiscalPostingGuard.assertAccountingDatesOpen(
+      connection,
+      {
+        orgId,
+        dates: payments.map(
+          (payment) => payment.payment_date,
+        ),
+        operation: 'sale.delete (payment reversal)',
+      },
+    );
+
     for (const payment of payments) {
       if (Number(payment.status) === 1) {
         await saleRepository.softDeletePayment(
@@ -1672,6 +1777,18 @@ async function deleteSale({
           includeDeleted: true,
         },
       );
+
+    /* And its returns, for the same reason. */
+    await fiscalPostingGuard.assertAccountingDatesOpen(
+      connection,
+      {
+        orgId,
+        dates: returns.map(
+          (saleReturn) => saleReturn.return_date,
+        ),
+        operation: 'sale.delete (return reversal)',
+      },
+    );
 
     for (const saleReturn of returns) {
       if (Number(saleReturn.status) === 0) {
@@ -1987,6 +2104,20 @@ async function createReturn({
         'SALE_NOT_FOUND',
       );
     }
+
+    /*
+     * A return is its own accounting event: only the return's own date is
+     * checked here. Returning goods in an open year against an invoice from
+     * a closed year is legitimate business and stays allowed.
+     */
+    await fiscalPostingGuard.assertAccountingDateOpen(
+      connection,
+      {
+        orgId,
+        date: data.return_date,
+        operation: 'sale_return.create',
+      },
+    );
 
     const returnLocalId = generateLocalId();
 
@@ -2338,6 +2469,19 @@ async function deleteReturn({
         'SALE_RETURN_ALREADY_DELETED',
       );
     }
+
+    /*
+     * Step 4.5: reversing a return that belongs to a closed year would change
+     * that year's result, so the return's own date decides.
+     */
+    await fiscalPostingGuard.assertAccountingDateOpen(
+      connection,
+      {
+        orgId,
+        date: oldReturn.return_date,
+        operation: 'sale_return.delete',
+      },
+    );
 
     const oldItems =
       await saleRepository.findReturnItemsByReturn(

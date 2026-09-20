@@ -25,6 +25,9 @@ const {
   generateLocalId,
 } = require('../utils/generateLocalId');
 
+const fiscalPostingGuard =
+  require('./fiscal-posting-guard.service');
+
 const {
   resolvePagination,
 } = require('../utils/pagination');
@@ -185,6 +188,21 @@ async function createExchangeJournals(
     exchangeId,
   },
 ) {
+  /*
+   * Step 4.5: all exchange journals (first, second and benefit) carry
+   * `data.date`, so one guard covers the create and the reverse/repost paths
+   * that share this helper. A closed year therefore cannot be changed by an
+   * exchange, and an exchange cannot be moved into one.
+   */
+  await fiscalPostingGuard.assertAccountingDateOpen(
+    connection,
+    {
+      orgId,
+      date: data.date,
+      operation: 'exchange.journal',
+    },
+  );
+
   let exchangeAccount =
     await accountRepository.findByCode(
       connection,

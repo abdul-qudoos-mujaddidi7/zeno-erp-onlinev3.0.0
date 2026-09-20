@@ -39,6 +39,9 @@ const fiscalYearRepository =
 const fiscalYearCloseRepository =
   require('../repositories/fiscal-year-close.repository');
 
+const fiscalYearOpeningRepository =
+  require('../repositories/fiscal-year-opening.repository');
+
 const accountRepository =
   require('../repositories/account.repository');
 
@@ -50,6 +53,16 @@ const activityRepository =
 
 const accountService =
   require('./account.service');
+
+/*
+ * Only the naming rule is borrowed, so a year the close creates automatically
+ * is named exactly like a year created by hand (`FY 2026` /
+ * `FY 2026-2027`). fiscal-year.service does not import this module, so there
+ * is no cycle; the close engine still owns the transaction.
+ */
+const {
+  defaultYearName,
+} = require('./fiscal-year.service');
 
 const {
   generateLocalId,
@@ -63,8 +76,45 @@ const {
 const CLOSING_REFERENCE_TYPE =
   'fiscal_year_close';
 
+/*
+ * Where an opening-balance snapshot came from. Closing is the only producer in
+ * this step; the column exists so a future, explicitly approved manual
+ * opening-balance feature cannot collide with the close's unique key.
+ */
+const OPENING_BALANCE_SOURCE =
+  'fiscal_year_close';
+
 const OPEN_STATUS = 'open';
 const CLOSED_STATUS = 'closed';
+
+/*
+ * Business errors of the roll-forward. The receiving year is never invented:
+ * when the next year is missing or is not open, the CLOSE ITSELF is refused,
+ * because a year may not be marked CLOSED while the balances it must carry
+ * forward have nowhere to go.
+ */
+const NEXT_FISCAL_YEAR_REQUIRED =
+  'NEXT_FISCAL_YEAR_REQUIRED';
+
+const NEXT_FISCAL_YEAR_NOT_OPEN =
+  'NEXT_FISCAL_YEAR_NOT_OPEN';
+
+/*
+ * The day after the closed year ends is already inside ANOTHER fiscal year, so
+ * no receiving year can be created for the roll-forward without producing
+ * overlapping fiscal years. Configuration problem, reported instead of fixed.
+ */
+const NEXT_FISCAL_YEAR_CONFLICT =
+  'NEXT_FISCAL_YEAR_CONFLICT';
+
+const RECEIVING_FISCAL_YEAR_CLOSED =
+  'RECEIVING_FISCAL_YEAR_CLOSED';
+
+const FISCAL_YEAR_NOT_CLOSED =
+  'FISCAL_YEAR_NOT_CLOSED';
+
+const OPENING_BALANCES_ALREADY_EXIST =
+  'FISCAL_YEAR_OPENING_BALANCES_EXIST';
 
 const AMOUNT_DECIMALS = 6;
 
@@ -184,6 +234,421 @@ function currencyKey(currency) {
 
 function currencyLabel(currency) {
   return currency === null ? 'unspecified' : currency;
+}
+
+/*
+ * Calendar-day arithmetic on YYYY-MM-DD strings. Done in UTC so a server in
+ * any timezone can never move the boundary: the next fiscal year starts the
+ * day AFTER the closed year ends, which is the rule the business stated.
+ */
+function addDays(dateOnly, days) {
+  const date = new Date(`${dateOnly}T00:00:00Z`);
+
+  date.setUTCDate(date.getUTCDate() + days);
+
+  return date.toISOString().slice(0, 10);
+}
+
+/*
+ * Adds whole calendar years to a YYYY-MM-DD string, keeping the month and day.
+ * A leap-day source is clamped to the last day of the target month
+ * (2028-02-29 + 1 year = 2029-02-28), the same way MySQL's DATE_ADD does, so
+ * the helper and a SQL-side calculation can never disagree.
+ */
+function addYears(dateOnly, years) {
+  const year = Number(dateOnly.slice(0, 4)) + years;
+  const month = Number(dateOnly.slice(5, 7));
+  const day = Number(dateOnly.slice(8, 10));
+  const lastDayOfMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(
+    Math.min(day, lastDayOfMonth),
+  ).padStart(2, '0')}`;
+}
+
+/*
+ * The fiscal year that FOLLOWS a closed year, derived from the date the closed
+ * year ends (the rule the business asked for):
+ *
+ *   next.start_date = closed.end_date + 1 day
+ *   next.end_date   = closed.end_date + 1 calendar year
+ *
+ * Deriving the end date one calendar year forward (instead of copying the
+ * closed year's length in days) keeps the year boundaries stable: a 371-day
+ * year does not push every later year forward, and a January-December books
+ * year stays January-December forever.
+ */
+function nextFiscalYearRange(endDate) {
+  return {
+    start_date: addDays(endDate, 1),
+    end_date: addYears(endDate, 1),
+  };
+}
+
+function proposedNextFiscalYear(range) {
+  return {
+    id: null,
+    local_id: null,
+    name: defaultYearName(range.start_date, range.end_date),
+    start_date: range.start_date,
+    end_date: range.end_date,
+    fiscal_status: OPEN_STATUS,
+    status: 1,
+    created: false,
+  };
+}
+
+function normalizeAccount(row) {
+  return {
+    account_id: row.account_id,
+    account_code:
+      row.account_code === null || row.account_code === undefined
+        ? null
+        : String(row.account_code),
+    account_name: row.account_name ?? null,
+    account_type_id: row.account_type_id ?? null,
+    currency: fiscalYearOpeningRepository.toApiCurrency(row.currency),
+    entries: Number(row.entries) || 0,
+    debit: toAmount(row.debit),
+    credit: toAmount(row.credit),
+    /*
+     * Signed exactly like account.repository.findBalances: credit - debit.
+     * Positive is a credit balance (cash after a receipt, a payable, owner
+     * capital); negative is a debit balance (a receivable).
+     */
+    opening_balance: toAmount(toAmount(row.credit) - toAmount(row.debit)),
+  };
+}
+
+/*
+ * The opening balances a close will push into the receiving year.
+ *
+ * Selection rules (Step 5 brief):
+ *   * balance-sheet accounts only — the four P&L system codes are excluded by
+ *     CODE, never by account_type_id (which is per organization and was proven
+ *     unreliable), because Step 4 has already closed them to zero through
+ *     RETAINED;
+ *   * a zero balance produces no row at all (no meaningless snapshots);
+ *   * each currency is carried separately — AFN + USD are never summed.
+ *
+ * The P&L exclusion is applied here as well as in SQL on purpose: the service
+ * must not depend on a caller having passed the right `excludedCodes`.
+ */
+function buildOpeningBalancePlan({
+  fiscalYear,
+  receivingFiscalYear,
+  rows,
+}) {
+  const pnlCodes = new Set(
+    PNL_ACCOUNT_CODES.map((code) => String(code).toUpperCase()),
+  );
+
+  const balances = [];
+
+  for (const row of rows || []) {
+    const code = String(row.account_code || '').trim().toUpperCase();
+
+    if (pnlCodes.has(code)) {
+      continue;
+    }
+
+    const balance = normalizeAccount(row);
+
+    if (balance.opening_balance === 0) {
+      continue;
+    }
+
+    balances.push({
+      ...balance,
+      balance_side: balance.opening_balance > 0 ? 'credit' : 'debit',
+      fiscal_year_id: receivingFiscalYear?.id ?? null,
+      source_fiscal_year_id: fiscalYear.id,
+      source_fiscal_year_name: fiscalYear.name,
+      receiving_fiscal_year_name: receivingFiscalYear?.name ?? null,
+      source: OPENING_BALANCE_SOURCE,
+    });
+  }
+
+  balances.sort((left, right) => {
+    const leftCode = String(left.account_code || '');
+    const rightCode = String(right.account_code || '');
+
+    if (leftCode !== rightCode) {
+      return leftCode < rightCode ? -1 : 1;
+    }
+
+    if (String(left.account_id) !== String(right.account_id)) {
+      return String(left.account_id) < String(right.account_id) ? -1 : 1;
+    }
+
+    return left.currency < right.currency
+      ? -1
+      : left.currency > right.currency
+        ? 1
+        : 0;
+  });
+
+  const byCurrency = new Map();
+
+  for (const balance of balances) {
+    const key = fiscalYearOpeningRepository.normalizeCurrency(balance.currency);
+    const bucket = byCurrency.get(key) || {
+      currency: balance.currency,
+      total: 0,
+      accounts: 0,
+    };
+
+    bucket.total = toAmount(bucket.total + balance.opening_balance);
+    bucket.accounts += 1;
+
+    byCurrency.set(key, bucket);
+  }
+
+  return {
+    balances,
+    count: balances.length,
+    by_currency: [...byCurrency.values()],
+  };
+}
+
+/*
+ * The receiving fiscal year: it must START the day after the closed year ends
+ * and it must still be OPEN.
+ *
+ * Looks for that year by exact start date rather than "the next year that
+ * begins after X", because a gap between two configured years has to be
+ * visible instead of silently rolling balances somewhere unexpected.
+ */
+async function findReceivingFiscalYear(
+  executor,
+  {
+    orgId,
+    fiscalYear,
+    forUpdate = false,
+  },
+) {
+  const startDate = addDays(fiscalYear.end_date, 1);
+
+  const row =
+    await fiscalYearRepository.findByStartDate(
+      executor,
+      {
+        orgId,
+        startDate,
+        forUpdate,
+      },
+    );
+
+  if (!row || Number(row.status) === 0) {
+    return {
+      start_date: startDate,
+      fiscal_year: null,
+      status: 'missing',
+    };
+  }
+
+  const receiving = normalizeYear(row);
+
+  return {
+    start_date: startDate,
+    fiscal_year: receiving,
+    status: receiving.fiscal_status,
+  };
+}
+
+/*
+ * Resolves — and, when the close asks for it, CREATES — the year that receives
+ * the closing balances.
+ *
+ * The business rule is "the next fiscal year starts on the day this one ends,
+ * plus one", so a missing successor is no longer a dead end: the close creates
+ * it in the SAME transaction (rolling it back with everything else if the
+ * close fails) and rolls the balances into it. Nothing is invented beyond the
+ * one range that rule defines.
+ *
+ * Ordering inside the close transaction:
+ *   1. organizations row (taken by the caller)
+ *   2. every fiscal year of the organization, ordered by local_id
+ *      (only when a year may be created, so an overlapping year cannot be
+ *      configured concurrently)
+ *   3. the receiving year
+ *
+ * `create: false` (the read-only preview) resolves exactly the same way but
+ * only REPORTS what would happen.
+ */
+async function resolveReceivingFiscalYear(
+  executor,
+  {
+    orgId,
+    fiscalYear,
+    userId = null,
+    requestContext = null,
+    create = false,
+  },
+) {
+  const range = nextFiscalYearRange(fiscalYear.end_date);
+  const proposed = proposedNextFiscalYear(range);
+
+  /*
+   * Locking every fiscal year of the organization before a possible INSERT is
+   * what makes "no overlapping year" hold under concurrency: a manual
+   * fiscal-year creation for the same organization cannot slip in between the
+   * overlap check and the insert.
+   */
+  if (create) {
+    await fiscalYearRepository.lockOrganizationYears(
+      executor,
+      {
+        orgId,
+      },
+    );
+  }
+
+  const existing = await findReceivingFiscalYear(
+    executor,
+    {
+      orgId,
+      fiscalYear,
+      forUpdate: create,
+    },
+  );
+
+  if (existing.fiscal_year) {
+    return {
+      ...existing,
+      created: false,
+      will_create: false,
+      proposed,
+      conflict: null,
+    };
+  }
+
+  /*
+   * Never create a year that would overlap an existing one. A clash here means
+   * the day after the closed year is already inside another year — a
+   * configuration problem the operator has to resolve, not something to guess
+   * around.
+   */
+  const overlapping = await fiscalYearRepository.findOverlapping(
+    executor,
+    {
+      orgId,
+      startDate: range.start_date,
+      endDate: range.end_date,
+    },
+  );
+
+  if (overlapping.length > 0) {
+    return {
+      start_date: range.start_date,
+      fiscal_year: null,
+      status: 'conflict',
+      created: false,
+      will_create: false,
+      proposed,
+      conflict: normalizeYear(overlapping[0]),
+    };
+  }
+
+  if (!create) {
+    return {
+      start_date: range.start_date,
+      fiscal_year: null,
+      status: 'missing',
+      created: false,
+      will_create: true,
+      proposed,
+      conflict: null,
+    };
+  }
+
+  const localId = generateLocalId();
+
+  const row = await fiscalYearRepository.create(
+    executor,
+    {
+      orgId,
+      localId,
+      userId,
+      data: {
+        name: proposed.name,
+        start_date: range.start_date,
+        end_date: range.end_date,
+        note:
+          `Created automatically by the close of ${fiscalYear.name} ` +
+          `(${fiscalYear.start_date} to ${fiscalYear.end_date}).`,
+      },
+    },
+  );
+
+  const created = normalizeYear(row) || {
+    ...proposed,
+    id: localId,
+    local_id: localId,
+  };
+
+  return {
+    start_date: range.start_date,
+    fiscal_year: created,
+    status: created.fiscal_status,
+    created: true,
+    will_create: false,
+    proposed,
+    conflict: null,
+  };
+}
+
+function assertReceivingFiscalYear(
+  receiving,
+  fiscalYear,
+) {
+  if (receiving.conflict) {
+    throw new AppError(
+      `The day after ${fiscalYear.name} ends (${receiving.start_date}) already falls inside ${receiving.conflict.name}. Adjust the fiscal-year ranges so the next year can start on ${receiving.start_date}, then close this year.`,
+      409,
+      NEXT_FISCAL_YEAR_CONFLICT,
+      {
+        fiscal_year_id: fiscalYear.id,
+        fiscal_year_name: fiscalYear.name,
+        closed_end_date: fiscalYear.end_date,
+        required_next_start_date: receiving.start_date,
+        conflicting_fiscal_year_id: receiving.conflict.id,
+        conflicting_fiscal_year_name: receiving.conflict.name,
+        conflicting_fiscal_year_start_date:
+          receiving.conflict.start_date,
+        conflicting_fiscal_year_end_date:
+          receiving.conflict.end_date,
+      },
+    );
+  }
+
+  if (!receiving.fiscal_year) {
+    throw new AppError(
+      `Closing ${fiscalYear.name} requires the next fiscal year (starting ${receiving.start_date}). Create it first, then close this year.`,
+      409,
+      NEXT_FISCAL_YEAR_REQUIRED,
+      {
+        fiscal_year_id: fiscalYear.id,
+        fiscal_year_name: fiscalYear.name,
+        closed_end_date: fiscalYear.end_date,
+        required_next_start_date: receiving.start_date,
+      },
+    );
+  }
+
+  if (receiving.fiscal_year.fiscal_status !== OPEN_STATUS) {
+    throw new AppError(
+      `The next fiscal year ${receiving.fiscal_year.name} is closed. Reopen it before closing ${fiscalYear.name}, so its opening balances can be written.`,
+      409,
+      NEXT_FISCAL_YEAR_NOT_OPEN,
+      {
+        fiscal_year_id: fiscalYear.id,
+        next_fiscal_year_id: receiving.fiscal_year.id,
+        next_fiscal_year_status:
+          receiving.fiscal_year.fiscal_status,
+      },
+    );
+  }
 }
 
 function findRetainedAccount(executor, { orgId }) {
@@ -461,6 +926,33 @@ function journalSummary(journal) {
   };
 }
 
+function openingBalanceSummary(row) {
+  if (!row) return null;
+
+  const amount = toAmount(row.opening_balance);
+
+  return {
+    id: row.local_id,
+    local_id: row.local_id,
+    fiscal_year_id: row.fiscal_year_id,
+    source_fiscal_year_id: row.source_fiscal_year_id ?? null,
+    account_id: row.account_id,
+    account_code: row.account_code ?? null,
+    account_name: row.account_name ?? null,
+    account_type_id: row.account_type_id ?? null,
+    currency:
+      row.currency === undefined || row.currency === null
+        ? null
+        : fiscalYearOpeningRepository.toApiCurrency(row.currency),
+    opening_balance: amount,
+    balance_side:
+      row.balance_side ||
+      (amount > 0 ? 'credit' : amount < 0 ? 'debit' : 'credit'),
+    source: row.source ?? OPENING_BALANCE_SOURCE,
+    status: Number(row.status ?? 1),
+  };
+}
+
 function summarizeRetainedAccount(account, extras = {}) {
   if (!account) {
     return null;
@@ -570,6 +1062,105 @@ async function previewFiscalYearClose({
     fiscalYear.fiscal_status === CLOSED_STATUS ||
     closingJournals.length > 0;
 
+  /*
+   * Roll-forward preview. Read-only: the same two questions the close asks
+   * (which year receives the balances, and what those balances are) are
+   * answered here so the UI can warn BEFORE the user commits.
+   */
+  const receiving = await resolveReceivingFiscalYear(
+    db,
+    {
+      orgId,
+      fiscalYear,
+      create: false,
+    },
+  );
+
+  /*
+   * A read-only preview never writes, so a missing successor year is reported
+   * as "will be created" instead of being created. The dates and the name shown
+   * here are exactly the ones the close will use.
+   */
+  const willCreateNextFiscalYear =
+    receiving.will_create && !alreadyClosed;
+
+  const [balanceRows, existingOpenings] = await Promise.all([
+    fiscalYearOpeningRepository.findPeriodEndAccountBalances(
+      db,
+      {
+        orgId,
+        endDate: fiscalYear.end_date,
+        excludedCodes: PNL_ACCOUNT_CODES,
+      },
+    ),
+    receiving.fiscal_year
+      ? fiscalYearOpeningRepository.findAll(db, {
+          orgId,
+          fiscalYearId: receiving.fiscal_year.id,
+          source: OPENING_BALANCE_SOURCE,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  /*
+   * The preview reads the ledger BEFORE the closing journals exist, so the
+   * year's result has not reached RETAINED yet. Merging the closing plan's
+   * net result into RETAINED is what makes the preview equal the state the
+   * close will actually produce. For an already closed year the closing
+   * journals are already in the ledger, so nothing is merged (that would
+   * double count the profit).
+   */
+  const previewRows = [...balanceRows];
+
+  if (!alreadyClosed) {
+    const retainedBalance = toAmount(
+      plan.profit_loss.reduce(
+        (total, bucket) => total + toAmount(bucket.profit_loss),
+        0,
+      ),
+    );
+
+    if (retainedBalance !== 0) {
+      previewRows.push({
+        /*
+         * On a very first close RETAINED does not exist yet — it is created
+         * INSIDE the close transaction — so the account id is unknown here.
+         * The row is still reported (by code) so the preview equals what the
+         * close will write; `retained_account_provisioned` says which case
+         * this is.
+         */
+        account_id: retainedAccount?.local_id ?? null,
+        account_code: RETAINED_ACCOUNT_CODE,
+        account_name: retainedAccount?.name ?? 'Retained Earnings',
+        account_type_id: retainedAccount?.account_type_id ?? null,
+        currency: fiscalYearOpeningRepository.toApiCurrency(
+          retainedAccount?.currency,
+        ),
+        entries: 0,
+        credit: retainedBalance > 0 ? retainedBalance : 0,
+        debit: retainedBalance < 0 ? -retainedBalance : 0,
+      });
+    }
+  }
+
+  const openingPlan = buildOpeningBalancePlan({
+    fiscalYear,
+    receivingFiscalYear:
+      receiving.fiscal_year ??
+      (willCreateNextFiscalYear ? receiving.proposed : null),
+    rows: previewRows,
+  });
+
+  const nextFiscalYear = receiving.fiscal_year;
+
+  const rollForwardBlocker = receiving.conflict
+    ? NEXT_FISCAL_YEAR_CONFLICT
+    : nextFiscalYear && nextFiscalYear.fiscal_status !== OPEN_STATUS
+      ? NEXT_FISCAL_YEAR_NOT_OPEN
+      : existingOpenings.length > 0
+        ? OPENING_BALANCES_ALREADY_EXIST
+        : null;
+
   return {
     fiscal_year: fiscalYear,
     range: {
@@ -602,6 +1193,41 @@ async function previewFiscalYearClose({
     proposed_journal_count: plan.lines.length,
     existing_closing_journals:
       closingJournals.map(journalSummary),
+
+    /*
+     * Balance roll-forward preview. `roll_forward_ready` is false when the
+     * close would be refused, and `roll_forward_blocker` carries the exact
+     * business error code the close would throw, so the UI can explain it
+     * before the user clicks.
+     */
+    next_fiscal_year: nextFiscalYear,
+
+    /*
+     * A missing successor is NOT a blocker any more: the close creates it.
+     * The preview shows the exact year that will be created so the operator
+     * confirms the dates before committing an accounting action.
+     */
+    next_fiscal_year_will_be_created: willCreateNextFiscalYear,
+    proposed_next_fiscal_year: willCreateNextFiscalYear
+      ? receiving.proposed
+      : null,
+    receiving_fiscal_year_conflict: receiving.conflict,
+    required_next_start_date: receiving.start_date,
+    required_next_end_date: receiving.proposed?.end_date ?? null,
+    roll_forward_ready:
+      (Boolean(nextFiscalYear) || willCreateNextFiscalYear) &&
+      !rollForwardBlocker,
+    roll_forward_blocker: rollForwardBlocker,
+    balance_sheet_excluded_codes: PNL_ACCOUNT_CODES,
+    proposed_opening_balances: openingPlan.balances,
+    proposed_opening_balance_count: openingPlan.count,
+    proposed_opening_balances_by_currency:
+      openingPlan.by_currency,
+    existing_opening_balances:
+      existingOpenings.map((row) => openingBalanceSummary(row)),
+    retained_account_provisioned: Boolean(retainedActive),
+    opening_balance_note:
+      'Snapshots for the receiving year: the historical journals are kept, so no opening journal is posted (that would double-count every balance-sheet account).',
   };
 }
 
@@ -697,6 +1323,85 @@ async function closeFiscalYear({
       );
     }
 
+    /*
+     * The receiving year is resolved BEFORE anything is posted, so the whole
+     * close is refused up front when the balances would have nowhere to go.
+     * When it does not exist yet it is CREATED here, inside this transaction:
+     * the successor year of a closed year is not something the operator has to
+     * remember to configure first.
+     *
+     * Lock order stays organizations -> fiscal_years (closed year, then the
+     * organization's years, then the receiving year) -> journals/accounts/
+     * opening balances.
+     */
+    const receiving = await resolveReceivingFiscalYear(
+      connection,
+      {
+        orgId,
+        fiscalYear,
+        userId,
+        requestContext,
+        create: true,
+      },
+    );
+
+    assertReceivingFiscalYear(receiving, fiscalYear);
+
+    if (receiving.created) {
+      await activityRepository.create(
+        connection,
+        {
+          orgId,
+          userId,
+
+          action: 'create',
+          tableName: 'fiscal_years',
+          entityId: receiving.fiscal_year.id,
+
+          oldValues: null,
+          newValues: receiving.fiscal_year,
+
+          description:
+            `Created fiscal year ${receiving.fiscal_year.name} ` +
+            `(${receiving.fiscal_year.start_date} to ` +
+            `${receiving.fiscal_year.end_date}) automatically as the ` +
+            `successor of ${fiscalYear.name}`,
+
+          ipAddress: requestContext?.ipAddress,
+          sessionId: requestContext?.sessionId,
+          deviceInfo: requestContext?.deviceInfo,
+        },
+      );
+    }
+
+    const existingOpenings =
+      await fiscalYearOpeningRepository.findAll(
+        connection,
+        {
+          orgId,
+          fiscalYearId: receiving.fiscal_year.id,
+          source: OPENING_BALANCE_SOURCE,
+          forUpdate: true,
+        },
+      );
+
+    /*
+     * Defensive: a receiving year that is OPEN and was never closed has no
+     * active opening balances, so this can only fire if rows were written by
+     * another path. Reported instead of silently overwriting them.
+     */
+    if (existingOpenings.length > 0) {
+      throw new AppError(
+        `${receiving.fiscal_year.name} already has active opening balances. Reopen the year that produced them before closing ${fiscalYear.name}.`,
+        409,
+        OPENING_BALANCES_ALREADY_EXIST,
+        {
+          fiscal_year_id: receiving.fiscal_year.id,
+          opening_balances: existingOpenings.length,
+        },
+      );
+    }
+
     const retained = await ensureRetainedAccount(
       connection,
       {
@@ -784,6 +1489,97 @@ async function closeFiscalYear({
       journalsByCurrency.set(key, list);
 
       createdJournals.push(journal);
+    }
+
+    /*
+     * Balance-sheet roll-forward.
+     *
+     * Read AFTER the closing journals were inserted, inside this transaction:
+     * the closing entry dated on end_date is part of the year's closing
+     * balances, which is exactly how RETAINED receives the year's profit and
+     * how the P&L accounts arrive at zero by the end date.
+     *
+     * The balance is "everything up to and including end_date", not "this
+     * year's movement". That is what makes the roll-forward consistent: the
+     * receiving year's opening equals the source year's opening plus the
+     * source year's movement, so no year is double counted and no year is
+     * skipped.
+     */
+    const balanceRows =
+      await fiscalYearOpeningRepository.findPeriodEndAccountBalances(
+        connection,
+        {
+          orgId,
+          endDate: fiscalYear.end_date,
+          excludedCodes: PNL_ACCOUNT_CODES,
+        },
+      );
+
+    const openingPlan = buildOpeningBalancePlan({
+      fiscalYear,
+      receivingFiscalYear: receiving.fiscal_year,
+      rows: balanceRows,
+    });
+
+    const createdOpenings = [];
+
+    for (const balance of openingPlan.balances) {
+      const localId = generateLocalId();
+
+      const opening =
+        await fiscalYearOpeningRepository.create(
+          connection,
+          {
+            orgId,
+            localId,
+            userId,
+            data: {
+              fiscal_year_id: receiving.fiscal_year.id,
+              source_fiscal_year_id: fiscalYear.id,
+              account_id: balance.account_id,
+              currency: balance.currency,
+              opening_balance: balance.opening_balance,
+              balance_side: balance.balance_side,
+              source: OPENING_BALANCE_SOURCE,
+              note:
+                `Opening balance carried into ${receiving.fiscal_year.name} ` +
+                `from the close of ${fiscalYear.name} ` +
+                `(${fiscalYear.start_date} to ${fiscalYear.end_date}).`,
+            },
+          },
+        );
+
+      createdOpenings.push(opening);
+    }
+
+    if (createdOpenings.length > 0) {
+      await activityRepository.create(
+        connection,
+        {
+          orgId,
+          userId,
+
+          action: 'create',
+          tableName: 'fiscal_year_opening_balances',
+          entityId: receiving.fiscal_year.id,
+
+          oldValues: null,
+          newValues: {
+            source_fiscal_year_id: fiscalYear.id,
+            fiscal_year_id: receiving.fiscal_year.id,
+            count: createdOpenings.length,
+          },
+
+          description:
+            `Rolled ${createdOpenings.length} opening balance(s) from ` +
+            `${fiscalYear.name} into ${receiving.fiscal_year.name} ` +
+            `(starting ${receiving.start_date})`,
+
+          ipAddress: requestContext?.ipAddress,
+          sessionId: requestContext?.sessionId,
+          deviceInfo: requestContext?.deviceInfo,
+        },
+      );
     }
 
     const affectedRows =
@@ -883,7 +1679,332 @@ async function closeFiscalYear({
       closing_journals: createdJournals.map(journalSummary),
       closing_journals_created: createdJournals.length,
       zero_activity: plan.lines.length === 0,
+      /*
+       * Roll-forward result. Balance-sheet accounts only, per currency, as
+       * SNAPSHOTS for the receiving year — deliberately not journals, because
+       * the historical journals still exist and opening journals would
+       * double-count every one of these balances.
+       */
+      next_fiscal_year: receiving.fiscal_year,
+      /*
+       * True when the receiving year did not exist and this close created it
+       * (starting the day after this year ended). Reported so the operator can
+       * see that closing also configured the next fiscal year.
+       */
+      next_fiscal_year_created: receiving.created,
+      next_fiscal_year_range: {
+        start_date: receiving.fiscal_year.start_date,
+        end_date: receiving.fiscal_year.end_date,
+      },
+      opening_balances: createdOpenings.map((row) =>
+        openingBalanceSummary(row),
+      ),
+      opening_balances_created: createdOpenings.length,
+      opening_balances_by_currency: openingPlan.by_currency,
       next_year_opening_journals_created: 0,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+/*
+ * POST /fiscal-years/:id/reopen
+ *
+ * The exact inverse of a close, in ONE transaction, and the only supported way
+ * to undo one. Nothing is deleted and nothing is rewritten:
+ *
+ *   1. the closing journals are soft-deleted (status = 0) — the accounting
+ *      effect disappears while the rows stay queryable for audit;
+ *   2. the opening balances this close pushed into the receiving year are
+ *      deactivated (status = 0), because the source year no longer closed
+ *      them out;
+ *   3. the fiscal year goes back to OPEN with closed_at / closed_by cleared.
+ *
+ * Because the opening balances are deactivated rather than deleted, and the
+ * unique key ignores inactive rows, closing the year again writes a fresh
+ * generation of opening balances instead of colliding with the previous one.
+ *
+ * Guard: the RECEIVING year must not itself be closed. Its own close would
+ * have been computed on top of balances this reopen is about to withdraw, so
+ * the later year has to be reopened first — a fixed, predictable order instead
+ * of a half-consistent history.
+ */
+async function reopenFiscalYear({
+  user,
+  fiscalYearId,
+  reason = null,
+  requestContext,
+}) {
+  const {
+    orgId,
+    userId,
+  } = getAuthenticatedIdentity(user);
+
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    await fiscalYearCloseRepository.lockOrganization(
+      connection,
+      {
+        orgId,
+      },
+    );
+
+    const row =
+      await fiscalYearRepository.findByLocalId(
+        connection,
+        {
+          orgId,
+          localId: fiscalYearId,
+          forUpdate: true,
+        },
+      );
+
+    if (!row || Number(row.status) === 0) {
+      throw new AppError(
+        'Fiscal year not found.',
+        404,
+        'FISCAL_YEAR_NOT_FOUND',
+      );
+    }
+
+    const fiscalYear = normalizeYear(row);
+
+    if (fiscalYear.fiscal_status !== CLOSED_STATUS) {
+      throw new AppError(
+        'Fiscal year is not closed.',
+        409,
+        FISCAL_YEAR_NOT_CLOSED,
+        {
+          fiscal_year_id: fiscalYear.id,
+          fiscal_status: fiscalYear.fiscal_status,
+        },
+      );
+    }
+
+    const receiving = await findReceivingFiscalYear(
+      connection,
+      {
+        orgId,
+        fiscalYear,
+        forUpdate: true,
+      },
+    );
+
+    if (
+      receiving.fiscal_year &&
+      receiving.fiscal_year.fiscal_status !== OPEN_STATUS
+    ) {
+      throw new AppError(
+        `${receiving.fiscal_year.name} is closed and its opening balances came from ${fiscalYear.name}. Reopen ${receiving.fiscal_year.name} first.`,
+        409,
+        RECEIVING_FISCAL_YEAR_CLOSED,
+        {
+          fiscal_year_id: fiscalYear.id,
+          receiving_fiscal_year_id: receiving.fiscal_year.id,
+          receiving_fiscal_year_status:
+            receiving.fiscal_year.fiscal_status,
+        },
+      );
+    }
+
+    const closingJournals =
+      await fiscalYearCloseRepository.findClosingJournals(
+        connection,
+        {
+          orgId,
+          referenceType: CLOSING_REFERENCE_TYPE,
+          referenceId: fiscalYear.id,
+          forUpdate: true,
+        },
+      );
+
+    const deactivatedOpenings =
+      await fiscalYearOpeningRepository.deactivateBySourceYear(
+        connection,
+        {
+          orgId,
+          sourceFiscalYearId: fiscalYear.id,
+          userId,
+          note:
+            `Deactivated by reopening ${fiscalYear.name} on ` +
+            `${new Date().toISOString().slice(0, 10)}.`,
+        },
+      );
+
+    if (deactivatedOpenings > 0) {
+      await activityRepository.create(
+        connection,
+        {
+          orgId,
+          userId,
+
+          action: 'update',
+          tableName: 'fiscal_year_opening_balances',
+          entityId: receiving.fiscal_year?.id ?? null,
+
+          oldValues: {
+            status: 1,
+            count: deactivatedOpenings,
+          },
+          newValues: {
+            status: 0,
+            count: deactivatedOpenings,
+          },
+
+          description:
+            `Deactivated ${deactivatedOpenings} opening balance(s) rolled into ` +
+            `${receiving.fiscal_year?.name || receiving.start_date} by the close of ${fiscalYear.name}`,
+
+          ipAddress: requestContext?.ipAddress,
+          sessionId: requestContext?.sessionId,
+          deviceInfo: requestContext?.deviceInfo,
+        },
+      );
+    }
+
+    for (const journal of closingJournals) {
+      const reversed =
+        await journalRepository.softDelete(
+          connection,
+          {
+            orgId,
+            localId: journal.local_id,
+            userId,
+          },
+        );
+
+      await activityRepository.create(
+        connection,
+        {
+          orgId,
+          userId,
+
+          action: 'update',
+          tableName: 'journals',
+          entityId: journal.local_id,
+
+          oldValues: { status: 1 },
+          newValues: { status: 0 },
+
+          description:
+            `Reversed fiscal-year closing journal ${journal.local_id} ` +
+            `by reopening ${fiscalYear.name}`,
+
+          ipAddress: requestContext?.ipAddress,
+          sessionId: requestContext?.sessionId,
+          deviceInfo: requestContext?.deviceInfo,
+        },
+      );
+
+      /*
+       * `reversed` is the soft-deleted row returned by the repository. It is
+       * read here so a missing journal row fails the reopen instead of
+       * silently reporting a reversal that did not happen.
+       */
+      if (!reversed) {
+        throw new AppError(
+          'A closing journal of this fiscal year could not be reversed.',
+          409,
+          FISCAL_YEAR_NOT_CLOSED,
+          {
+            journal_id: journal.local_id,
+          },
+        );
+      }
+    }
+
+    const affectedRows =
+      await fiscalYearCloseRepository.markReopened(
+        connection,
+        {
+          orgId,
+          localId: fiscalYear.id,
+          userId,
+        },
+      );
+
+    if (affectedRows !== 1) {
+      throw new AppError(
+        'Fiscal year is not closed.',
+        409,
+        FISCAL_YEAR_NOT_CLOSED,
+        {
+          fiscal_year_id: fiscalYear.id,
+        },
+      );
+    }
+
+    await activityRepository.create(
+      connection,
+      {
+        orgId,
+        userId,
+
+        action: 'reopen',
+        tableName: 'fiscal_years',
+        entityId: fiscalYear.id,
+
+        oldValues: {
+          fiscal_status: CLOSED_STATUS,
+          closed_at: fiscalYear.closed_at ?? null,
+          closed_by: fiscalYear.closed_by ?? null,
+        },
+        newValues: {
+          fiscal_status: OPEN_STATUS,
+        },
+
+        description:
+          `Reopened fiscal year ${fiscalYear.name} ` +
+          `(${fiscalYear.start_date} to ${fiscalYear.end_date}), ` +
+          `reversing ${closingJournals.length} closing journal(s) and ` +
+          `deactivating ${deactivatedOpenings} opening balance(s)` +
+          (reason ? `: ${reason}` : ''),
+
+        ipAddress: requestContext?.ipAddress,
+        sessionId: requestContext?.sessionId,
+        deviceInfo: requestContext?.deviceInfo,
+      },
+    );
+
+    const reopenedRow =
+      await fiscalYearRepository.findByLocalId(
+        connection,
+        {
+          orgId,
+          localId: fiscalYear.id,
+        },
+      );
+
+    await connection.commit();
+
+    /*
+     * Reversing the closing journals changes account balances again, so the
+     * cached aggregates must be dropped exactly like any other journal write.
+     */
+    accountService.invalidateAccountAggregates(orgId);
+
+    const reopenedYear = normalizeYear(reopenedRow) || fiscalYear;
+
+    return {
+      fiscal_year: reopenedYear,
+      status: reopenedYear.fiscal_status,
+      closed_at: reopenedYear.closed_at ?? null,
+      closed_by: reopenedYear.closed_by ?? null,
+      reversed_closing_journals: closingJournals.map(
+        journalSummary,
+      ),
+      closing_journals_reversed: closingJournals.length,
+      opening_balances_deactivated: deactivatedOpenings,
+      receiving_fiscal_year: receiving.fiscal_year ?? null,
+      receiving_fiscal_year_start_date: receiving.start_date,
+      historical_data_preserved: true,
     };
   } catch (error) {
     await connection.rollback();
@@ -895,8 +2016,23 @@ async function closeFiscalYear({
 
 module.exports = {
   CLOSING_REFERENCE_TYPE,
+  OPENING_BALANCE_SOURCE,
+  NEXT_FISCAL_YEAR_REQUIRED,
+  NEXT_FISCAL_YEAR_NOT_OPEN,
+  NEXT_FISCAL_YEAR_CONFLICT,
+  RECEIVING_FISCAL_YEAR_CLOSED,
+  FISCAL_YEAR_NOT_CLOSED,
+  OPENING_BALANCES_ALREADY_EXIST,
   previewFiscalYearClose,
   closeFiscalYear,
+  reopenFiscalYear,
   ensureRetainedAccount,
   buildClosingPlan,
+  buildOpeningBalancePlan,
+  findReceivingFiscalYear,
+  resolveReceivingFiscalYear,
+  nextFiscalYearRange,
+  normalizeYear,
+  toDateOnly,
+  toAmount,
 };

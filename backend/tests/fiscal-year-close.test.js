@@ -36,6 +36,9 @@ const fiscalYearRepository =
 const fiscalYearCloseRepository =
   require('../repositories/fiscal-year-close.repository');
 
+const fiscalYearOpeningRepository =
+  require('../repositories/fiscal-year-opening.repository');
+
 const accountRepository =
   require('../repositories/account.repository');
 
@@ -237,6 +240,92 @@ function periodNet(code, { orgId = USER.org_id, currency = null, startDate, endD
   return round6(net);
 }
 
+/*
+ * The Step 5 roll-forward query, in memory: signed balance (credit - debit)
+ * per account + currency for EVERY journal up to and including the given end
+ * date, active accounts only, P&L codes excluded.
+ *
+ * One-sided on purpose (no lower bound): the closing balance of a year is
+ * "everything up to its end date", which is what makes FY2027's opening equal
+ * FY2026's opening plus FY2026's movement.
+ */
+function periodEndAccountBalances({ orgId, endDate, excludedCodes = [] }) {
+  const byId = new Map(
+    state.accounts.map((account) => [String(account.local_id), account]),
+  );
+  const excluded = new Set(
+    excludedCodes.map((code) => String(code).toUpperCase()),
+  );
+  const merged = new Map();
+
+  for (const journal of journalsForOrg(orgId)) {
+    if (Number(journal.status ?? 1) !== 1) continue;
+
+    const date = String(journal.date || journal.created_at || '').slice(0, 10);
+
+    if (!date) continue;
+    if (date > endDate) continue;
+
+    for (const side of ['first', 'second']) {
+      const account = byId.get(String(journal[`${side}_entry_account`]));
+
+      if (!account) continue;
+      if (Number(account.status ?? 1) !== 1) continue;
+
+      const code = String(account.code || '').toUpperCase();
+
+      if (excluded.has(code)) continue;
+
+      const currency = journal.currency || '';
+      const key = `${account.local_id}|${currency}`;
+
+      const row = merged.get(key) || {
+        account_id: account.local_id,
+        account_code: code,
+        account_name: account.name,
+        account_currency: account.currency ?? null,
+        account_type_id: account.account_type_id ?? null,
+        currency,
+        entries: 0,
+        debit: 0,
+        credit: 0,
+      };
+
+      row.entries += 1;
+      row.debit += Number(journal[`${side}_entry_debit`] || 0);
+      row.credit += Number(journal[`${side}_entry_credit`] || 0);
+
+      merged.set(key, row);
+    }
+  }
+
+  return [...merged.values()];
+}
+
+/* Signed opening balance of one account + currency in one receiving year. */
+function openingFor(
+  accountCode,
+  { orgId = USER.org_id, fiscalYearId, currency = null, sourceFiscalYearId } = {},
+) {
+  const account = accountByCode(accountCode, orgId);
+
+  const row = state.openings.find(
+    (opening) =>
+      Number(opening.org_id) === Number(orgId) &&
+      Number(opening.status) === 1 &&
+      String(opening.account_id) === String(account?.local_id) &&
+      (fiscalYearId === undefined ||
+        String(opening.fiscal_year_id) === String(fiscalYearId)) &&
+      (sourceFiscalYearId === undefined ||
+        String(opening.source_fiscal_year_id) === String(sourceFiscalYearId)) &&
+      (currency === null ||
+        fiscalYearOpeningRepository.normalizeCurrency(opening.currency) ===
+          fiscalYearOpeningRepository.normalizeCurrency(currency)),
+  );
+
+  return row ? round6(row.opening_balance) : null;
+}
+
 function journalDebitTotal(journal) {
   return round6(
     Number(journal.first_entry_debit || 0) +
@@ -300,6 +389,14 @@ function seedAccount({
   return account;
 }
 
+/*
+ * Seeds (or reuses) a fiscal year.
+ *
+ * Reuse keeps the fixture honest: `seedContext` already creates the fiscal-year
+ * CHAIN that a close requires (a year may only be closed when the next, still
+ * open year exists — Step 5), so a test that asks for FY 2027 explicitly gets
+ * that same row instead of a second year starting on the same date.
+ */
 function seedYear({
   orgId = USER.org_id,
   name = FY_2026.name,
@@ -307,6 +404,17 @@ function seedYear({
   end = FY_2026.end,
   status = 'open',
 } = {}) {
+  const existing = state.years.find(
+    (year) =>
+      Number(year.org_id) === Number(orgId) &&
+      String(year.start_date) === String(start) &&
+      String(year.fiscal_status) === String(status),
+  );
+
+  if (existing) {
+    return existing;
+  }
+
   const localId = nextLocalId();
 
   const year = {
@@ -419,7 +527,32 @@ function seedProfitableYear(orgId = USER.org_id, currency = 'AFN') {
   });
 }
 
-function seedContext({ orgId = USER.org_id, withInventory = true } = {}) {
+function seedContext({
+  orgId = USER.org_id,
+  withInventory = true,
+  withYears = true,
+} = {}) {
+  /*
+   * The fiscal-year chain a close needs (Step 5): closing FY 2026 rolls the
+   * balance-sheet balances into FY 2027, which must exist and be open. FY 2028
+   * exists for the same reason on the second hop.
+   */
+  if (withYears) {
+    seedYear({ orgId });
+    seedYear({
+      orgId,
+      name: FY_2027.name,
+      start: FY_2027.start,
+      end: FY_2027.end,
+    });
+    seedYear({
+      orgId,
+      name: 'FY 2028',
+      start: '2028-01-01',
+      end: '2028-12-31',
+    });
+  }
+
   for (const code of ['SALES', 'PURCHASE', 'EXPENSES', 'BENEFITS', 'TREASURY']) {
     seedAccount({ orgId, code });
   }
@@ -446,6 +579,7 @@ function installStubs() {
     years: [],
     accounts: [],
     journals: [],
+    openings: [],
     activities: [],
     invalidatedOrgs: [],
     calls: [],
@@ -471,6 +605,180 @@ function installStubs() {
   };
 
   fiscalYearRepository.findOverlapping = async () => [];
+
+  fiscalYearRepository.findByStartDate = async (conn, { orgId, startDate }) => {
+    state.calls.push(`findByStartDate:${startDate}`);
+
+    return (
+      state.years.find(
+        (year) =>
+          Number(year.org_id) === Number(orgId) &&
+          String(year.start_date) === String(startDate) &&
+          Number(year.status ?? 1) === 1,
+      ) || null
+    );
+  };
+
+  /*
+   * The close now CREATES the receiving fiscal year when it is missing, so the
+   * two repository calls that path needs are stubbed here as well.
+   */
+  fiscalYearRepository.lockOrganizationYears = async (conn, { orgId }) => {
+    state.calls.push('lockOrganizationYears');
+
+    return state.years.filter(
+      (year) => Number(year.org_id) === Number(orgId),
+    );
+  };
+
+  fiscalYearRepository.create = async (
+    conn,
+    {
+      orgId,
+      localId,
+      userId,
+      data,
+    },
+  ) => {
+    state.calls.push('createFiscalYear');
+
+    const year = {
+      id: localId,
+      local_id: localId,
+      org_id: orgId,
+      name: data.name,
+      start_date: data.start_date,
+      end_date: data.end_date,
+      fiscal_status: 'open',
+      closed_at: null,
+      closed_by: null,
+      note: data.note ?? null,
+      status: 1,
+      version: 1,
+      created_by: userId,
+      updated_by: userId,
+      created_at: '2027-01-05T09:30:00.000Z',
+      updated_at: '2027-01-05T09:30:00.000Z',
+    };
+
+    state.years.push(year);
+
+    return year;
+  };
+
+  /* ------------------- opening-balance roll-forward (Step 5) ------------------- */
+
+  state.failOpeningAt = null;
+
+  fiscalYearOpeningRepository.findPeriodEndAccountBalances = async (
+    conn,
+    { orgId, endDate, excludedCodes = [] },
+  ) => {
+    state.calls.push(`findPeriodEndAccountBalances:${endDate}`);
+
+    return periodEndAccountBalances({ orgId, endDate, excludedCodes });
+  };
+
+  fiscalYearOpeningRepository.findAll = async (
+    conn,
+    {
+      orgId,
+      fiscalYearId = null,
+      sourceFiscalYearId = null,
+      source = null,
+      includeInactive = false,
+    } = {},
+  ) => {
+    state.calls.push('findOpenings');
+
+    return state.openings.filter(
+      (row) =>
+        Number(row.org_id) === Number(orgId) &&
+        (fiscalYearId === null ||
+          String(row.fiscal_year_id) === String(fiscalYearId)) &&
+        (sourceFiscalYearId === null ||
+          String(row.source_fiscal_year_id) === String(sourceFiscalYearId)) &&
+        (source === null || row.source === source) &&
+        (includeInactive || Number(row.status) === 1),
+    );
+  };
+
+  fiscalYearOpeningRepository.create = async (conn, { orgId, localId, data }) => {
+    state.calls.push('createOpening');
+
+    if (state.failOpeningAt !== null) {
+      const attempts = state.calls.filter((call) => call === 'createOpening').length;
+
+      if (attempts === state.failOpeningAt) {
+        throw new Error('opening balance insert failed');
+      }
+    }
+
+    const currency = fiscalYearOpeningRepository.normalizeCurrency(data.currency);
+
+    /* the unique key of the real table, enforced in memory */
+    const clash = state.openings.find(
+      (row) =>
+        Number(row.org_id) === Number(orgId) &&
+        String(row.fiscal_year_id) === String(data.fiscal_year_id) &&
+        String(row.account_id) === String(data.account_id) &&
+        fiscalYearOpeningRepository.normalizeCurrency(row.currency) === currency &&
+        row.source === data.source &&
+        Number(row.status) === 1,
+    );
+
+    if (clash) {
+      const error = new Error('ER_DUP_ENTRY: duplicate opening balance');
+
+      error.code = 'ER_DUP_ENTRY';
+
+      throw error;
+    }
+
+    const account = state.accounts.find(
+      (row) => String(row.local_id) === String(data.account_id),
+    );
+
+    const opening = {
+      id: localId,
+      local_id: localId,
+      org_id: orgId,
+      status: 1,
+      version: 1,
+      account_code: account?.code ?? null,
+      account_name: account?.name ?? null,
+      account_type_id: account?.account_type_id ?? null,
+      created_at: '2027-01-10T09:30:00.000Z',
+      ...data,
+      currency,
+    };
+
+    state.openings.push(opening);
+
+    return opening;
+  };
+
+  fiscalYearOpeningRepository.deactivateBySourceYear = async (
+    conn,
+    { orgId, sourceFiscalYearId },
+  ) => {
+    state.calls.push('deactivateOpenings');
+
+    let affected = 0;
+
+    for (const row of state.openings) {
+      if (
+        Number(row.org_id) === Number(orgId) &&
+        String(row.source_fiscal_year_id) === String(sourceFiscalYearId) &&
+        Number(row.status) === 1
+      ) {
+        row.status = 0;
+        affected += 1;
+      }
+    }
+
+    return affected;
+  };
 
   /* --------------------------- close repository --------------------------- */
 
@@ -1590,9 +1898,17 @@ test('the router exposes a close preview and a close, and nothing destructive', 
   assert.ok(routes.includes('GET /:id/close-preview'));
   assert.ok(routes.includes('POST /:id/close'));
 
-  /* append-only: no reopen, no unclose, no delete of a close */
+  /*
+   * Step 5 added the archive reads and the reopen that undoes a close. No
+   * route can edit or delete a closing journal: reopen is the one, audited way
+   * back, and every removal is a soft delete inside it.
+   */
+  assert.ok(routes.includes('POST /:id/reopen'));
+  assert.ok(routes.includes('GET /:id/opening-balances'));
+  assert.ok(routes.includes('GET /:id/accounts/:accountId/statement'));
+
   assert.equal(
-    routes.some((route) => /reopen|unclose|revert|DELETE|PATCH/i.test(route)),
+    routes.some((route) => /unclose|revert|DELETE|PATCH/i.test(route)),
     false,
   );
 });
@@ -1786,7 +2102,7 @@ test('the close UI is a single confirmed request that orchestrates nothing', () 
   }
 });
 
-test('the frontend API exposes a close and a preview, and no reopen', () => {
+test('the frontend API exposes a close, a preview and the audited reopen', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '..', '..', 'frontend', 'src', 'api', 'fiscalYearApi.js'),
     'utf8',
@@ -1798,11 +2114,22 @@ test('the frontend API exposes a close and a preview, and no reopen', () => {
     /close: \(id\) => api\.post\(`\$\{BASE_URL\}\/\$\{id\}\/close`\)/,
   );
 
-  /* no reopen/unclose capability, ignoring prose comments */
+  /*
+   * Step 5: the archive reads and the reopen that undoes a close. There is
+   * still no "delete a close", no unclose alias and no revert: reopen is the
+   * one backend-authoritative way back.
+   */
+  assert.match(source, /getOpeningBalances:/);
+  assert.match(source, /getAccountStatement:/);
+  assert.match(
+    source,
+    /reopen: \(id, data\) => api\.post\(`\$\{BASE_URL\}\/\$\{id\}\/reopen`, data \|\| \{\}\)/,
+  );
+
   const codeOnly = source
     .split('\n')
     .filter((line) => !line.trim().startsWith('//'))
     .join('\n');
 
-  assert.equal(/reopen|unclose|revert/i.test(codeOnly), false);
+  assert.equal(/unclose|revert/i.test(codeOnly), false);
 });

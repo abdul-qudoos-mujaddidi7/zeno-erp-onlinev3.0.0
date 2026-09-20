@@ -168,7 +168,15 @@
     background: #ffffff;
     box-shadow: 0 20px 40px rgba(15, 23, 42, 0.14);
     overflow: hidden;
-    animation: confirmModalIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+
+    /*
+     * No `forwards`, for the same reason as AppModal: a retained transform
+     * from the enter animation would make this card the containing block for
+     * `position: fixed` descendants (the shared date picker renders its
+     * calendar that way), and the card's `overflow: hidden` would then clip
+     * the calendar popup out of view.
+     */
+    animation: confirmModalIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
     min-width: 0;
   }
 

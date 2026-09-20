@@ -27,6 +27,9 @@ const {
   accountingDate,
 } = require('../utils/accountingDate');
 
+const fiscalPostingGuard =
+  require('./fiscal-posting-guard.service');
+
 const accountTypeRepository =
   require('../repositories/account-type.repository');
 
@@ -389,6 +392,22 @@ async function createInitialBalanceJournals({
    * server's LOCAL calendar day rather than the UTC one.
    */
   const journalDate = accountingDate(effectiveDate);
+
+  /*
+   * Step 4.5: an opening balance is an accounting event whose date the user
+   * chooses, so it may not be dated inside a CLOSED fiscal year. When no
+   * effective_date is supplied the Step 3.5 fallback (today's local day) is
+   * what gets checked, preserving the previous behaviour for dates that have
+   * no configured fiscal year at all.
+   */
+  await fiscalPostingGuard.assertAccountingDateOpen(
+    connection,
+    {
+      orgId,
+      date: journalDate,
+      operation: 'account.opening_balance',
+    },
+  );
 
   async function createJournal(entry) {
     const journalLocalId = generateLocalId();

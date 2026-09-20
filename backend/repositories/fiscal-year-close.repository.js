@@ -359,10 +359,51 @@ async function markClosed(
   return result.affectedRows;
 }
 
+/*
+ * Flips CLOSED -> OPEN for exactly one fiscal year of one organization
+ * (Step 5 reopen).
+ *
+ * Mirrors `markClosed`: the `fiscal_status = 'closed'` predicate makes the
+ * transition itself the concurrency guard, so two simultaneous reopen
+ * requests can affect at most one row. `closed_at` / `closed_by` are cleared
+ * because the year is open again — they describe a state that no longer
+ * holds — while both values remain in the activity log written by the service.
+ *
+ * Returns the affected row count; 0 means "was not closed".
+ */
+async function markReopened(
+  connection,
+  {
+    orgId,
+    localId,
+    userId,
+  },
+) {
+  const [result] = await connection.execute(
+    `
+      UPDATE fiscal_years
+      SET
+        fiscal_status = 'open',
+        closed_at = NULL,
+        closed_by = NULL,
+        version = COALESCE(version, 0) + 1,
+        updated_by = ?,
+        updated_at = NOW(3)
+      WHERE org_id = ?
+        AND local_id = ?
+        AND fiscal_status = 'closed'
+    `,
+    [userId, orgId, localId],
+  );
+
+  return result.affectedRows;
+}
+
 module.exports = {
   lockOrganization,
   findClosingJournals,
   sumPeriodAccountActivity,
   findPreferredAccountTypeId,
   markClosed,
+  markReopened,
 };

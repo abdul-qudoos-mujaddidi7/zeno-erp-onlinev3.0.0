@@ -92,10 +92,88 @@ const updateFiscalYearSchema = z
     },
   );
 
+/*
+ * Reopening takes an optional human reason. Every field is optional, so an
+ * empty POST body (the documented way to call it) validates unchanged. The
+ * reason is free text on purpose: it is written to the activity log next to
+ * the reversal, not used to drive behaviour.
+ */
+const reopenFiscalYearSchema = z.preprocess(
+  (value) => (value === undefined || value === null ? {} : value),
+  z.object({
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional(),
+  }),
+);
+
+const fiscalYearOpeningBalancesQuerySchema = z.object({
+  include_inactive: z
+    .coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1)
+    .optional()
+    .default(0),
+
+  generated: z
+    .coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1)
+    .optional()
+    .default(1),
+});
+
+const fiscalYearAccountStatementParamsSchema = z.object({
+  id: z.string().regex(/^\d+$/, 'id must be a numeric string'),
+
+  accountId: z
+    .string()
+    .regex(/^\d+$/, 'accountId must be a numeric string'),
+});
+
+const fiscalYearAccountStatementQuerySchema = z.object({
+  currency: z
+    .string()
+    .trim()
+    .min(1)
+    .max(16)
+    .optional(),
+
+  page: z.coerce.number().int().min(1).optional(),
+
+  limit: z
+    .coerce
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional(),
+
+  offset: z.coerce.number().int().min(0).optional(),
+
+  skip_count: z
+    .coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1)
+    .optional(),
+});
+
 module.exports = {
   fiscalYearIdParamsSchema,
   fiscalYearListQuerySchema,
   fiscalYearResolveQuerySchema,
   createFiscalYearSchema,
   updateFiscalYearSchema,
+  reopenFiscalYearSchema,
+  fiscalYearOpeningBalancesQuerySchema,
+  fiscalYearAccountStatementParamsSchema,
+  fiscalYearAccountStatementQuerySchema,
 };

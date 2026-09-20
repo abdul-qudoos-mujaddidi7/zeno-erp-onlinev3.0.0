@@ -15,6 +15,10 @@ const {
   fiscalYearResolveQuerySchema,
   createFiscalYearSchema,
   updateFiscalYearSchema,
+  reopenFiscalYearSchema,
+  fiscalYearOpeningBalancesQuerySchema,
+  fiscalYearAccountStatementParamsSchema,
+  fiscalYearAccountStatementQuerySchema,
 } = require('../../validators/fiscal-year.validator');
 
 const router = express.Router();
@@ -23,13 +27,22 @@ const router = express.Router();
  * Fiscal years are always tenant-scoped through the authenticated token's
  * org_id, so one organization can never see or edit another's years.
  *
- * /resolve, /current, /:id/summary and /:id/close-preview are registered
- * before /:id so those literal paths can never be parsed as a numeric id.
+ * /resolve, /current, /:id/summary, /:id/close-preview and
+ * /:id/opening-balances are registered before /:id so those literal paths can
+ * never be parsed as a numeric id.
  *
- * Step 4 added exactly two endpoints: a read-only close PREVIEW and the
- * close itself. There is intentionally NO reopen, no edit and no delete of a
- * close: closing is append-only until a separate, explicitly approved reopen
- * workflow exists.
+ * Step 4 added the read-only close PREVIEW and the close itself.
+ *
+ * Step 5 adds the ARCHIVE / ROLL-FORWARD reads and the matching reopen:
+ *
+ *   GET  /:id/opening-balances                  audit the roll-forward
+ *   GET  /:id/accounts/:accountId/statement     opening + this year's movement
+ *   POST /:id/reopen                            reverse a close (one transaction)
+ *
+ * Archiving itself has NO endpoint on purpose: a closed year stays visible and
+ * is hidden from the current-year screens only by date range, so no historical
+ * row is ever flagged, moved or rewritten. There is still no edit or delete of
+ * a closing journal: reopen is the single, audited way back.
  */
 router.get(
   '/',
@@ -82,6 +95,28 @@ router.get(
 );
 
 router.get(
+  '/:id/opening-balances',
+  validate({
+    params: fiscalYearIdParamsSchema,
+    query: fiscalYearOpeningBalancesQuerySchema,
+  }),
+  asyncHandler(
+    fiscalYearController.openingBalances,
+  ),
+);
+
+router.get(
+  '/:id/accounts/:accountId/statement',
+  validate({
+    params: fiscalYearAccountStatementParamsSchema,
+    query: fiscalYearAccountStatementQuerySchema,
+  }),
+  asyncHandler(
+    fiscalYearController.accountStatement,
+  ),
+);
+
+router.get(
   '/:id',
   validate({
     params: fiscalYearIdParamsSchema,
@@ -124,6 +159,21 @@ router.post(
   }),
   asyncHandler(
     fiscalYearController.close,
+  ),
+);
+
+/*
+ * Reopen is the inverse of close and needs at most a human reason, so the body
+ * is optional and the organization/user always come from the token.
+ */
+router.post(
+  '/:id/reopen',
+  validate({
+    params: fiscalYearIdParamsSchema,
+    body: reopenFiscalYearSchema,
+  }),
+  asyncHandler(
+    fiscalYearController.reopen,
   ),
 );
 

@@ -872,6 +872,11 @@ async function getFiscalYearSummary({
 }
 
 module.exports = {
+  /*
+   * Exported so the close engine names the fiscal year it creates
+   * automatically with exactly the same rule as a year created by hand.
+   */
+  defaultYearName,
   listFiscalYears,
   getFiscalYear,
   getFiscalYearSummary,

@@ -44,6 +44,9 @@ const accountService =
 const paymentPosting =
   require('./payment-posting.service');
 
+const fiscalPostingGuard =
+  require('./fiscal-posting-guard.service');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -116,6 +119,21 @@ async function createJournalEntry(
     description,
   },
 ) {
+  /*
+   * Step 4.5 second line of defence: the document entry points are already
+   * guarded, so this only catches a journal dated from something other than
+   * the bill (for example a journal dated today). The whole transaction
+   * unwinds when it rejects.
+   */
+  await fiscalPostingGuard.assertAccountingDateOpen(
+    connection,
+    {
+      orgId,
+      date: data.date,
+      operation: 'purchase.journal',
+    },
+  );
+
   const localId = generateLocalId();
 
   const journal =
@@ -350,6 +368,20 @@ async function createPurchase({
 
   try {
     await connection.beginTransaction();
+
+    /*
+     * Step 4.5: a bill dated inside a CLOSED fiscal year may not be created.
+     * Checked before any document, stock or journal write. A date with no
+     * configured fiscal year is still accepted.
+     */
+    await fiscalPostingGuard.assertAccountingDateOpen(
+      connection,
+      {
+        orgId,
+        date: data.bill_date,
+        operation: 'purchase.create',
+      },
+    );
 
     const localId = generateLocalId();
 
@@ -635,6 +667,21 @@ async function revertPurchaseReturnsOnConnection(
       },
     );
 
+  /*
+   * Step 4.5: each return is its own accounting event, so its own date is
+   * checked before this reversal erases it.
+   */
+  await fiscalPostingGuard.assertAccountingDatesOpen(
+    connection,
+    {
+      orgId,
+      dates: returns.map(
+        (purchaseReturn) => purchaseReturn.return_date,
+      ),
+      operation: 'purchase reversal (return reversal)',
+    },
+  );
+
   for (const purchaseReturn of returns) {
     if (Number(purchaseReturn.status) === 0) {
       continue;
@@ -710,6 +757,18 @@ async function revertPurchasePaymentsOnConnection(
         includeDeleted: true,
       },
     );
+
+  /* Same rule for the payments this reversal is about to reverse. */
+  await fiscalPostingGuard.assertAccountingDatesOpen(
+    connection,
+    {
+      orgId,
+      dates: payments.map(
+        (payment) => payment.payment_date,
+      ),
+      operation: 'purchase reversal (payment reversal)',
+    },
+  );
 
   for (const payment of payments) {
     if (Number(payment.status) === 0) {
@@ -927,6 +986,20 @@ async function updatePurchase({
         'PURCHASE_NOT_FOUND',
       );
     }
+
+    /*
+     * Step 4.5: both the stored bill date and the incoming one are checked.
+     * This also covers the confirmed -> draft reversal, which re-reads and
+     * re-posts this bill's journals, payments and returns.
+     */
+    await fiscalPostingGuard.assertAccountingDatesOpen(
+      connection,
+      {
+        orgId,
+        dates: [oldPurchase.bill_date, data.bill_date],
+        operation: 'purchase.update',
+      },
+    );
 
     const oldItems =
       await purchaseRepository.findItemsByPurchase(
@@ -1415,6 +1488,19 @@ async function deletePurchase({
       );
     }
 
+    /*
+     * Step 4.5: deleting a closed-year bill would erase that year's cost and
+     * stock movement. The ORIGINAL bill date decides, never today's date.
+     */
+    await fiscalPostingGuard.assertAccountingDateOpen(
+      connection,
+      {
+        orgId,
+        date: oldPurchase.bill_date,
+        operation: 'purchase.delete',
+      },
+    );
+
     const oldItems =
       await purchaseRepository.findItemsByPurchase(
         connection,
@@ -1762,6 +1848,20 @@ async function createReturn({
         'PURCHASE_NOT_FOUND',
       );
     }
+
+    /*
+     * A return is its own accounting event: only the return's own date is
+     * checked here. Returning goods in an open year against a bill from a
+     * closed year stays allowed.
+     */
+    await fiscalPostingGuard.assertAccountingDateOpen(
+      connection,
+      {
+        orgId,
+        date: data.return_date,
+        operation: 'purchase_return.create',
+      },
+    );
 
     const returnLocalId = generateLocalId();
 
@@ -2117,6 +2217,19 @@ async function deleteReturn({
         'PURCHASE_RETURN_ALREADY_DELETED',
       );
     }
+
+    /*
+     * Step 4.5: reversing a return that belongs to a closed year would change
+     * that year's result, so the return's own date decides.
+     */
+    await fiscalPostingGuard.assertAccountingDateOpen(
+      connection,
+      {
+        orgId,
+        date: oldReturn.return_date,
+        operation: 'purchase_return.delete',
+      },
+    );
 
     const oldItems =
       await purchaseRepository.findReturnItemsByReturn(

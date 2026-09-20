@@ -39,9 +39,57 @@ export const fiscalYearApi = {
   getClosePreview: (id) =>
     api.get(`${BASE_URL}/${id}/close-preview`, { cache: false }),
 
-  // The only authoritative way to close a year: one backend transaction.
-  // There is deliberately no reopen/unclose counterpart.
+  // The only authoritative way to close a year: one backend transaction that
+  // also writes the next year's opening balances (or refuses, when the next
+  // year is missing).
   close: (id) => api.post(`${BASE_URL}/${id}/close`),
+
+  /*
+   * Reopen is the only supported way to undo a close: it reverses the closing
+   * journals, deactivates the opening balances this close generated and puts
+   * the year back to OPEN. Nothing is deleted, so the audit trail survives.
+   */
+  reopen: (id, data) => api.post(`${BASE_URL}/${id}/reopen`, data || {}),
+
+  // Roll-forward audit: the opening balances this year received and generated.
+  // Read-only; generated balances cannot be edited through the API.
+  getOpeningBalances: (id, filters = {}) => {
+    const params = new URLSearchParams();
+
+    ['include_inactive', 'generated'].forEach((key) => {
+      if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+        params.set(key, String(filters[key]));
+      }
+    });
+
+    const query = params.toString();
+
+    return api.get(
+      `${BASE_URL}/${id}/opening-balances${query ? `?${query}` : ''}`,
+      { cache: false },
+    );
+  },
+
+  /*
+   * One account's statement inside one fiscal year:
+   * opening balance + that year's journals = closing balance.
+   */
+  getAccountStatement: (id, accountId, filters = {}) => {
+    const params = new URLSearchParams();
+
+    ['currency', 'page', 'limit'].forEach((key) => {
+      if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+        params.set(key, String(filters[key]));
+      }
+    });
+
+    const query = params.toString();
+
+    return api.get(
+      `${BASE_URL}/${id}/accounts/${accountId}/statement${query ? `?${query}` : ''}`,
+      { cache: false },
+    );
+  },
 
   create: (data) => api.post(BASE_URL, data),
 

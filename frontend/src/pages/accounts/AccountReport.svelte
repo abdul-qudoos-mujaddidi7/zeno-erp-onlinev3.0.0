@@ -12,6 +12,7 @@
 
   import { showDate, setDatePickers } from '../../calendar.js';
   import { toast } from '../../ToastUI/toast.js';
+  import { applyCurrentFiscalYearRange } from '../../utils/currentFiscalYear.js';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
@@ -300,11 +301,23 @@
         }
       }
 
-      const end = new Date();
-      const start = new Date();
-      start.setDate(end.getDate() - 365);
-      startDate = start.toISOString().slice(0, 10);
-      endDate = end.toISOString().slice(0, 10);
+      /*
+       * Default to the current fiscal year (if one is configured) so a closed
+       * year's journals stop appearing here, while the custom date range and
+       * the fiscal-year history can still show them.
+       */
+      const fyRange = await applyCurrentFiscalYearRange(({ from, to }) => {
+        startDate = from;
+        endDate = to;
+      });
+
+      if (!fyRange) {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(end.getDate() - 365);
+        startDate = start.toISOString().slice(0, 10);
+        endDate = end.toISOString().slice(0, 10);
+      }
       q = '';
       page = 1;
       lastPageKey = `${page}|${pageSize}`;

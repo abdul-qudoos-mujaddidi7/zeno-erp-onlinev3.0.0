@@ -9,6 +9,7 @@
   import { t, lang, translate_org_type, shortID, settings_all } from '../i18n/i18n.js';
   import { calculateRemainingAndBenefitOfAllSales } from './sales/SalesHelper.js';
   import SaleA4ReceiptModal from './sales/SaleA4ReceiptModal.svelte';
+  import { applyCurrentFiscalYearRange } from '../utils/currentFiscalYear.js';
   import SaleReceiptModal from './sales/SaleReceiptModal.svelte';
   import ProductsReport from './accounts/ProductsReport.svelte';
   import SummaryCard from '../components/common/SummaryCard.svelte';
@@ -357,6 +358,19 @@ import { saleApi } from '../api/saleApi.js';
     window.addEventListener('hashchange', syncTabFromHash);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+
+    /*
+     * Default to the CURRENT fiscal year so a closed year's invoices leave the
+     * operational list. They are never hidden by a status flag: the fiscal-year
+     * history can still scope this list to any year's date range, and the date
+     * filters below stay fully editable. No fiscal year configured -> no
+     * filter, exactly as before this step.
+     */
+    await applyCurrentFiscalYearRange(({ from, to }) => {
+      fromDate = from;
+      toDate = to;
+    });
+
     lastPageKey = getSalesQueryKey();
     bootstrapped = true;
     tick().then(() => setDatePickers(handleDateChange));

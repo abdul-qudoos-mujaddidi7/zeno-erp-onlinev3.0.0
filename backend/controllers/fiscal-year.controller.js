@@ -4,6 +4,9 @@ const fiscalYearService =
 const fiscalYearCloseService =
   require('../services/fiscal-year-close.service');
 
+const fiscalYearArchiveService =
+  require('../services/fiscal-year-archive.service');
+
 const {
   getRequestContext,
 } = require('../utils/requestContext');
@@ -119,6 +122,76 @@ async function close(req, res) {
   });
 }
 
+/*
+ * The roll-forward audit trail of a fiscal year: the opening balances it
+ * RECEIVED, and the ones it GENERATED for the next year when it was closed.
+ * Read-only; nothing here can edit a generated balance.
+ */
+async function openingBalances(req, res) {
+  const query = req.validated?.query || req.query;
+
+  const report =
+    await fiscalYearArchiveService.listOpeningBalances({
+      user: req.user,
+      fiscalYearId: req.validated.params.id,
+      includeInactive: Number(query.include_inactive) === 1,
+      generated: Number(query.generated ?? 1) === 1,
+    });
+
+  res.status(200).json({
+    success: true,
+    data: report,
+  });
+}
+
+/*
+ * One account's statement INSIDE one fiscal year:
+ * opening balance + that year's journals = closing balance. Historical years'
+ * journals are never mixed in, which is what stops a closed year's activity
+ * from being counted twice.
+ */
+async function accountStatement(req, res) {
+  const query = req.validated?.query || req.query;
+
+  const statement =
+    await fiscalYearArchiveService.getAccountStatement({
+      user: req.user,
+      fiscalYearId: req.validated.params.id,
+      accountId: req.validated.params.accountId,
+      currency: query.currency,
+      filters: query,
+    });
+
+  res.status(200).json({
+    success: true,
+    data: statement,
+  });
+}
+
+/*
+ * Reopening is the only supported way to undo a close. It is one
+ * backend-authoritative transaction: closing journals are reversed
+ * (soft-deleted, never erased), the opening balances this close generated are
+ * deactivated, and the year returns to OPEN.
+ */
+async function reopen(req, res) {
+  const result =
+    await fiscalYearCloseService.reopenFiscalYear({
+      user: req.user,
+      fiscalYearId: req.validated.params.id,
+      reason: req.validated?.body?.reason ?? null,
+      requestContext:
+        getRequestContext(req),
+    });
+
+  res.status(200).json({
+    success: true,
+    message:
+      'Fiscal year reopened successfully.',
+    data: result,
+  });
+}
+
 async function create(req, res) {
   const fiscalYear =
     await fiscalYearService.createFiscalYear({
@@ -162,6 +235,9 @@ module.exports = {
   summary,
   closePreview,
   close,
+  openingBalances,
+  accountStatement,
+  reopen,
   create,
   update,
 };

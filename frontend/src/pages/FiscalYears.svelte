@@ -10,8 +10,11 @@
   import ActionButton from '../components/common/ActionButton.svelte';
   import AppModal from '../components/common/AppModal.svelte';
   import AppDatePicker from '../components/common/AppDatePicker.svelte';
+  import FiscalYearHistory from './fiscalyears/FiscalYearHistory.svelte';
   import { t } from '../i18n/i18n';
   import { showDate } from '../calendar.js';
+  import { resetCurrentFiscalYearCache } from '../utils/currentFiscalYear.js';
+  import { todayAccountingDate } from '../utils/accountingDate.js';
 
   const number = (value) =>
     Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -43,6 +46,27 @@
   let closeError = '';
   let closeReadOnly = false;
 
+  /*
+   * Fiscal-year history (Step 5): one modal scoped to one year, with the
+   * year's documents and its roll-forward. Read-only by design.
+   */
+  let historyYear = null;
+
+  /*
+   * Reopening is the inverse of a close and the only supported way to undo
+   * one. It is a single backend transaction; this page only confirms and
+   * reports what it did.
+   */
+  let reopenTarget = null;
+  let reopenPreview = null;
+  let reopenPreviewLoading = false;
+  let reopening = false;
+  let reopenError = '';
+
+  function openHistory(year) {
+    historyYear = year;
+  }
+
   function money(map) {
     if (!map || typeof map !== 'object') return '0';
 
@@ -58,6 +82,21 @@
     date.setUTCDate(date.getUTCDate() + days);
 
     return date.toISOString().slice(0, 10);
+  }
+
+  /*
+   * Adds whole calendar years to a YYYY-MM-DD string, clamping a leap day to
+   * the last day of the target month (2028-02-29 + 1 year = 2029-02-28) so the
+   * proposal here, the close engine and MySQL's DATE_ADD all agree.
+   */
+  function addYears(dateOnly, years) {
+    const [year, month, day] = dateOnly.split('-').map(Number);
+    const targetYear = year + years;
+    const lastDayOfMonth = new Date(Date.UTC(targetYear, month, 0)).getUTCDate();
+
+    return `${String(targetYear).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(
+      Math.min(day, lastDayOfMonth),
+    ).padStart(2, '0')}`;
   }
 
   function isOpen(year) {
@@ -106,6 +145,91 @@
     closeReadOnly = false;
   }
 
+  /*
+   * Roll-forward summary of the close preview: which year receives the
+   * balances, how many, and per currency. The close itself recomputes all of
+   * this inside its own transaction, so nothing here is trusted on submit.
+   */
+  function rollForwardBlocked() {
+    return Boolean(closePreview) && closePreview.roll_forward_ready === false;
+  }
+
+  function rollForwardBlockReason() {
+    if (!closePreview) return '';
+
+    if (closePreview.roll_forward_blocker === 'NEXT_FISCAL_YEAR_NOT_OPEN') {
+      return t('The next fiscal year is closed. Reopen it before closing this year, or its opening balances cannot be written.');
+    }
+
+    if (closePreview.roll_forward_blocker === 'NEXT_FISCAL_YEAR_CONFLICT') {
+      return t('The day after this fiscal year ends already falls inside another fiscal year. Adjust the fiscal-year ranges so the next year can start on that day, then close this year.');
+    }
+
+    return t('This fiscal year cannot be closed while the roll-forward is blocked.');
+  }
+
+  async function openReopen(year) {
+    reopenTarget = year;
+    reopenPreview = null;
+    reopenError = '';
+    reopenPreviewLoading = true;
+
+    try {
+      const response = await fiscalYearApi.getOpeningBalances(year.id, {
+        generated: 1,
+        include_inactive: 0,
+      });
+
+      reopenPreview = response?.data || null;
+    } catch (cause) {
+      reopenError = cause.message || t('Could not load the roll-forward of this fiscal year.');
+    } finally {
+      reopenPreviewLoading = false;
+    }
+  }
+
+  function dismissReopen() {
+    reopenTarget = null;
+    reopenPreview = null;
+    reopenError = '';
+  }
+
+  async function confirmReopen() {
+    if (!reopenTarget || reopening) return;
+
+    const targetId = reopenTarget.id;
+
+    reopening = true;
+    reopenError = '';
+
+    try {
+      const response = await fiscalYearApi.reopen(targetId);
+      const result = response?.data || null;
+
+      toast.success(
+        t('Fiscal year reopened'),
+        `${result?.closing_journals_reversed || 0} ${t('closing journal(s) reversed')}, ` +
+          `${result?.opening_balances_deactivated || 0} ${t('opening balance(s) deactivated')}.`,
+      );
+
+      dismissReopen();
+
+      /*
+       * The operational screens default to the current fiscal year, so the
+       * memoized lookup has to be dropped (a year may just have become the
+       * current one again).
+       */
+      resetCurrentFiscalYearCache();
+
+      await load();
+    } catch (cause) {
+      /* the backend rolled everything back: the year is still closed */
+      reopenError = cause.message || t('Could not reopen the fiscal year.');
+    } finally {
+      reopening = false;
+    }
+  }
+
   async function confirmClose() {
     if (!closeTarget || closing) return;
 
@@ -122,12 +246,33 @@
         .map((entry) => `${signedMoney(entry.profit_loss)} ${currencyText(entry.currency)}`)
         .join(' · ');
 
-      toast.success(
-        t('Fiscal year closed'),
+      const rolled = Number(result?.opening_balances_created || 0);
+
+      /*
+       * The close may also have configured the successor year: that is a
+       * visible outcome, not an implementation detail.
+       */
+      const createdNextYear = result?.next_fiscal_year_created
+        ? `${t('Created fiscal year')} ${result?.next_fiscal_year?.name} (${result?.next_fiscal_year?.start_date} → ${result?.next_fiscal_year?.end_date}).`
+        : '';
+
+      const summary = [
         lines || t('No profit and loss activity in this fiscal year.'),
-      );
+        rolled
+          ? `${rolled} ${t('opening balance(s) carried into the next fiscal year.')}`
+          : '',
+        createdNextYear,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+
+      toast.success(t('Fiscal year closed'), summary);
 
       dismissClose();
+
+      /* the current fiscal year may have moved: drop the memoized lookup */
+      resetCurrentFiscalYearCache();
+
       await load();
 
       if (selectedYear?.id === targetId) {
@@ -145,28 +290,29 @@
   }
 
   /*
-   * A new fiscal year is proposed right after the latest one, keeping the
-   * organization's own cycle length (so an April-March book stays April-March).
+   * A new fiscal year is proposed right after the latest one using EXACTLY the
+   * rule the close engine uses when it creates the successor year
+   * automatically: start the day after this one ends, end one calendar year
+   * later. Keeping the calendar boundaries (rather than the previous year's
+   * length in days) is what keeps an April-March book April-March forever
+   * instead of letting a 371-day year push every later year forward.
    */
   function proposedRange() {
     if (!years.length) {
-      const today = new Date().toISOString().slice(0, 10);
+      /* the business day, not the UTC instant (same rule as payment dates) */
+      const today = todayAccountingDate();
 
-      return { start: today, end: addDays(today, 364) };
+      return { start: today, end: addYears(today, 1) };
     }
 
     const latest = [...years].sort((a, b) =>
       a.end_date < b.end_date ? 1 : -1,
     )[0];
-    const spanDays =
-      Math.round(
-        (new Date(`${latest.end_date}T00:00:00Z`) -
-          new Date(`${latest.start_date}T00:00:00Z`)) /
-          86400000,
-      ) + 1;
-    const start = addDays(latest.end_date, 1);
 
-    return { start, end: addDays(start, spanDays - 1) };
+    return {
+      start: addDays(latest.end_date, 1),
+      end: addYears(latest.end_date, 1),
+    };
   }
 
   function proposedName(range) {
@@ -386,6 +532,15 @@
                     on:click={() => openSummary(year)}
                   />
                   <ActionButton
+                    label={t('History')}
+                    icon="bi-clock-history"
+                    variant="icon"
+                    tone="view"
+                    compact
+                    title={t('History: this fiscal year\'s documents, opening balances and account statements')}
+                    on:click={() => openHistory(year)}
+                  />
+                  <ActionButton
                     label={t('Edit')}
                     icon="bi-pencil"
                     variant="icon"
@@ -402,7 +557,7 @@
                       variant="icon"
                       tone="danger"
                       compact
-                      title={t('Close fiscal year (accounting action, no undo yet)')}
+                      title={t('Close fiscal year (accounting action; it can be reopened)')}
                       on:click={() => openClose(year)}
                     />
                   {:else}
@@ -414,6 +569,15 @@
                       compact
                       title={t('Show the closing result of this fiscal year')}
                       on:click={() => openCloseResult(year)}
+                    />
+                    <ActionButton
+                      label={t('Reopen fiscal year')}
+                      icon="bi-unlock"
+                      variant="icon"
+                      tone="edit"
+                      compact
+                      title={t('Reopen: reverse the closing journals and deactivate the opening balances this close generated')}
+                      on:click={() => openReopen(year)}
                     />
                   {/if}
                 </div>
@@ -526,7 +690,7 @@
 
       {#if !closeReadOnly}
         <div class="fiscal-warning" role="alert">
-          {t('Closing is an accounting action. It posts one balanced closing journal per currency that moves this year\'s profit or loss into Retained Earnings, then locks the year. There is no undo in this version.')}
+          {t('Closing is an accounting action. It posts one balanced closing journal per currency that moves this year\'s profit or loss into Retained Earnings, carries the remaining balance-sheet balances into the next fiscal year as opening balances, and locks the year. It can be undone with Reopen.')}
         </div>
       {/if}
 
@@ -600,11 +764,79 @@
           </p>
         {/if}
 
+        {#if !closeReadOnly}
+          <section class="fiscal-close-currency">
+            <header>
+              <strong>{t('Balance roll-forward')}</strong>
+              <StatusBadge tone={closePreview.roll_forward_ready ? 'positive' : 'negative'}>
+                {closePreview.roll_forward_ready ? t('Ready') : t('Blocked')}
+              </StatusBadge>
+            </header>
+
+            {#if closePreview.next_fiscal_year}
+              <p class="fiscal-hint">
+                {t('Opening balances will be carried into')}
+                <strong>{closePreview.next_fiscal_year.name}</strong>
+                ({closePreview.next_fiscal_year.start_date} →
+                {closePreview.next_fiscal_year.end_date}).
+              </p>
+            {:else if closePreview.next_fiscal_year_will_be_created}
+              <p class="fiscal-hint fiscal-hint-positive">
+                {t('The next fiscal year does not exist yet and will be created automatically:')}
+                <strong>{closePreview.proposed_next_fiscal_year?.name}</strong>
+                ({closePreview.proposed_next_fiscal_year?.start_date} →
+                {closePreview.proposed_next_fiscal_year?.end_date}).
+              </p>
+            {:else}
+              <p class="fiscal-hint">
+                {t('The next fiscal year must start on')}
+                <strong>{closePreview.required_next_start_date}</strong>.
+              </p>
+            {/if}
+
+            {#if closePreview.proposed_opening_balance_count}
+              <DataTable minWidth="520px" layout="auto" ariaLabel={t('Proposed opening balances')}>
+                <thead>
+                  <tr>
+                    <th>{t('Account')}</th>
+                    <th>{t('Currency')}</th>
+                    <th>{t('Opening balance')}</th>
+                    <th>{t('Side')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each closePreview.proposed_opening_balances as row, index (index)}
+                    <tr>
+                      <td>{row.account_name || row.account_code}</td>
+                      <td>{currencyText(row.currency)}</td>
+                      <td>{number(row.opening_balance)}</td>
+                      <td>{row.balance_side === 'debit' ? t('Debit') : t('Credit')}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </DataTable>
+
+              <p class="fiscal-hint">
+                {closePreview.proposed_opening_balance_count}
+                {t('opening balance row(s) will be written for the next fiscal year. These are snapshots, not journals: the historical entries stay in the ledger, so no opening journal is posted.')}
+              </p>
+            {:else}
+              <p class="fiscal-hint">
+                {t('No balance-sheet balance has to be carried forward.')}
+              </p>
+            {/if}
+          </section>
+        {/if}
+
         {#if closePreview.already_closed && closeReadOnly}
           <ul class="fiscal-notes">
             <li>{t('This fiscal year is already closed. The figures above are the closing result, excluding the closing journals themselves.')}</li>
           </ul>
         {/if}
+      {/if}
+
+      {#if !closeReadOnly && rollForwardBlocked()}
+        <div class="fiscal-alert" role="alert">{rollForwardBlockReason()}</div>
       {/if}
 
       {#if closeError}
@@ -624,13 +856,76 @@
             label={t('Close fiscal year')}
             icon="bi-lock"
             loading={closing}
-            disabled={closePreviewLoading || !!closeError}
+            disabled={closePreviewLoading || !!closeError || rollForwardBlocked()}
             on:click={confirmClose}
           />
         {/if}
       </div>
     </svelte:fragment>
   </AppModal>
+{/if}
+
+{#if reopenTarget}
+  <AppModal
+    title={t('Reopen fiscal year')}
+    icon="bi-unlock"
+    variant="warning"
+    size="md"
+    loading={reopening}
+    on:close={dismissReopen}>
+    <div class="fiscal-close">
+      <p class="fiscal-close-range">
+        <strong>{reopenTarget.name}</strong>
+        <span class="fiscal-range">{reopenTarget.start_date} → {reopenTarget.end_date}</span>
+      </p>
+
+      <div class="fiscal-warning" role="alert">
+        {t('Reopening reverses the closing journals of this fiscal year and deactivates the opening balances it wrote into the next fiscal year. Nothing is deleted: every reversal is logged and the history stays available.')}
+      </div>
+
+      {#if reopenPreviewLoading}
+        <EmptyState loading={true} message={t('Loading')} />
+      {:else if reopenPreview}
+        <ul class="fiscal-notes">
+          <li>
+            {t('Closing journals to reverse')}:
+            <strong>{reopenPreview.generated_count ? reopenPreview.generated_count : 0}</strong>
+            {t('opening balance row(s) to deactivate')}
+          </li>
+          <li>
+            {reopenPreview.generated_next_fiscal_year
+              ? `${t('Affected next fiscal year')}: ${reopenPreview.generated_next_fiscal_year.name}`
+              : t('No opening balance was generated by this fiscal year.')}
+          </li>
+          <li>
+            {t('The fiscal year returns to OPEN and can be closed again; a new close writes a fresh generation of opening balances.')}
+          </li>
+        </ul>
+      {/if}
+
+      {#if reopenError}
+        <div class="fiscal-alert" role="alert">{reopenError}</div>
+      {/if}
+    </div>
+
+    <svelte:fragment slot="footer">
+      <div class="fiscal-form-actions">
+        <ActionButton label={t('Cancel')} variant="ghost" on:click={dismissReopen} />
+        <ActionButton
+          label={t('Reopen fiscal year')}
+          icon="bi-unlock"
+          tone="danger"
+          loading={reopening}
+          disabled={reopenPreviewLoading}
+          on:click={confirmReopen}
+        />
+      </div>
+    </svelte:fragment>
+  </AppModal>
+{/if}
+
+{#if historyYear}
+  <FiscalYearHistory year={historyYear} on:close={() => (historyYear = null)} />
 {/if}
 
 <style>
@@ -708,6 +1003,14 @@
     margin: 0.3rem 0 0;
     color: #64748b;
     font-size: 0.72rem;
+  }
+
+  /*
+   * A roll-forward that will create the next fiscal year: good news, but still
+   * something the operator must read before confirming an accounting action.
+   */
+  .fiscal-hint-positive {
+    color: #15803d;
   }
 
   .fiscal-cards {

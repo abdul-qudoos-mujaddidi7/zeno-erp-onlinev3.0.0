@@ -1,6 +1,7 @@
 <script>
   import { warehouseApi } from '../api/warehouseApi.js';
   import { purchaseApi } from '../api/purchaseApi.js';
+  import { applyCurrentFiscalYearRange } from '../utils/currentFiscalYear.js';
   import { onMount, tick, onDestroy } from 'svelte';
   import { showDate, setDatePickers } from '../calendar.js';
   import { push } from 'svelte-spa-router';
@@ -249,6 +250,18 @@ import { accountApi } from '../api/accountApi.js';
   }
 
   onMount(async () => {
+    /*
+     * Operational screens default to the CURRENT fiscal year, so a closed
+     * year's documents stop appearing here. Nothing is deleted: the year
+     * history still lists them, and the user can widen or replace the range
+     * with the same date filters as before. When no fiscal year is configured
+     * the range stays empty, which is the previous (lifetime) behaviour.
+     */
+    await applyCurrentFiscalYearRange(({ from, to }) => {
+      fromDate = from;
+      toDate = to;
+    });
+
     lastPageKey = getPurchasesQueryKey();
     bootstrapped = true;
     await load();

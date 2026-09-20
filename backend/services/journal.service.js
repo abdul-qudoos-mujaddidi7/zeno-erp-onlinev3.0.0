@@ -32,6 +32,9 @@ const paymentPosting =
 const fiscalYearService =
   require('./fiscal-year.service');
 
+const fiscalPostingGuard =
+  require('./fiscal-posting-guard.service');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -237,6 +240,20 @@ async function createJournal({
   try {
     await connection.beginTransaction();
 
+    /*
+     * Step 4.5: a closed fiscal year is final. The guard runs before the
+     * insert so nothing is written at all; a date with no configured fiscal
+     * year is still accepted, preserving existing behaviour.
+     */
+    await fiscalPostingGuard.assertAccountingDateOpen(
+      connection,
+      {
+        orgId,
+        date: data.date,
+        operation: 'journal.create',
+      },
+    );
+
     const localId = generateLocalId();
 
     const journal =
@@ -337,6 +354,20 @@ async function updateJournal({
         'JOURNAL_NOT_FOUND',
       );
     }
+
+    /*
+     * Both dates are checked: editing a journal must not change a closed
+     * year's result, and that applies to moving the entry OUT of a closed
+     * year just as much as moving one INTO it.
+     */
+    await fiscalPostingGuard.assertAccountingDatesOpen(
+      connection,
+      {
+        orgId,
+        dates: [oldJournal.date, data.date],
+        operation: 'journal.update',
+      },
+    );
 
     const updatedJournal =
       await journalRepository.update(
@@ -465,6 +496,20 @@ async function deleteJournal({
         'JOURNAL_ALREADY_DELETED',
       );
     }
+
+    /*
+     * Deleting an entry from a closed year would change that year's result
+     * in place, so it is refused. The original entry's own accounting date
+     * decides — never today's date.
+     */
+    await fiscalPostingGuard.assertAccountingDateOpen(
+      connection,
+      {
+        orgId,
+        date: oldJournal.date,
+        operation: 'journal.delete',
+      },
+    );
 
     const deletedJournal =
       await journalRepository.softDelete(

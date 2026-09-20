@@ -5,6 +5,7 @@
   import { lookupAccountByCode } from '../../lib/formLookups.js';
   import { t, lang, translate_org_type } from '../../i18n/i18n';
   import { showDate, setDatePickers } from '../../calendar.js';
+  import { applyCurrentFiscalYearRange } from '../../utils/currentFiscalYear.js';
   import { generatePDF } from '../generatePDF.js';
   import { generateExcel } from '../generateExcel.js';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
@@ -61,6 +62,17 @@
   onMount(async () => {
     loading = true;
     loadError = '';
+
+    /*
+     * Default to the current fiscal year. A closed year's journals therefore
+     * leave the report's default view while remaining fully available through
+     * the fiscal-year history; the existing custom date range still wins when
+     * the user sets one.
+     */
+    await applyCurrentFiscalYearRange(({ from, to }) => {
+      startDate = from;
+      endDate = to;
+    });
 
     try {
       const treasuryAccount = await lookupAccountByCode('TREASURY');

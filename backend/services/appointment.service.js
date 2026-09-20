@@ -16,6 +16,9 @@ const {
   generateLocalId,
 } = require('../utils/generateLocalId');
 
+const fiscalPostingGuard =
+  require('./fiscal-posting-guard.service');
+
 const {
   resolvePagination,
 } = require('../utils/pagination');
@@ -62,6 +65,21 @@ async function createJournalEntry(
     description,
   },
 ) {
+  /*
+   * Step 4.5: no journal may be written into a CLOSED fiscal year. Guarding
+   * here — not only at each document entry point — covers every call site of
+   * this module, present and future, and the guard throws before this
+   * transaction can commit any part of the operation.
+   */
+  await fiscalPostingGuard.assertAccountingDateOpen(
+    connection,
+    {
+      orgId,
+      date: data.date,
+      operation: 'appointment.journal',
+    },
+  );
+
   const localId = generateLocalId();
 
   const journal =

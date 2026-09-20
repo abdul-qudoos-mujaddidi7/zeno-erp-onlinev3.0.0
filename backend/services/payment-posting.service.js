@@ -57,6 +57,14 @@ const {
   accountingDate,
 } = require('../utils/accountingDate');
 
+/*
+ * Step 4.5 guard. It is a repositories+utils module like this one, so it does
+ * not break this file's "no service dependencies" rule (no recursive business
+ * callbacks can be introduced by requiring it).
+ */
+const fiscalPostingGuard =
+  require('./fiscal-posting-guard.service');
+
 function billRepository(isSale) {
   return isSale ? saleRepository : purchaseRepository;
 }
@@ -92,6 +100,22 @@ async function createJournalEntry(
     description,
   },
 ) {
+  /*
+   * Step 4.5 second line of defence: the payment entry points are already
+   * guarded (before the payment row is written), so this only catches a
+   * journal dated from something other than the payment. Keeping it here
+   * makes the invariant uniform: no module in the application writes a
+   * journal row without the date first passing this guard.
+   */
+  await fiscalPostingGuard.assertAccountingDateOpen(
+    connection,
+    {
+      orgId,
+      date: data.date,
+      operation: 'payment.journal',
+    },
+  );
+
   const localId = generateLocalId();
 
   const journal =
@@ -530,6 +554,22 @@ async function postBillPaymentOnConnection(
     ? `${storedDescription} ${marker}`
     : storedDescription;
 
+  /*
+   * Step 4.5: a payment may not be filed into a CLOSED fiscal year. The
+   * guarded value is exactly the date the payment's journals will carry, so
+   * the check and the posting can never disagree.
+   */
+  await fiscalPostingGuard.assertAccountingDateOpen(
+    connection,
+    {
+      orgId,
+      date: accountingDate(data.payment_date),
+      operation: isSale
+        ? 'sale_payment.create'
+        : 'purchase_payment.create',
+    },
+  );
+
   const paymentLocalId = generateLocalId();
 
   const payment = await repository.createPayment(
@@ -683,6 +723,22 @@ async function softDeleteBillPaymentOnConnection(
 ) {
   const repository = billRepository(isSale);
 
+  /*
+   * Step 4.5: the payment's own accounting date decides, never today's date.
+   * Reversing a payment that belongs to a closed year would change that
+   * year's result, so it is refused before anything is written.
+   */
+  await fiscalPostingGuard.assertAccountingDateOpen(
+    connection,
+    {
+      orgId,
+      date: accountingDate(payment.payment_date),
+      operation: isSale
+        ? 'sale_payment.delete'
+        : 'purchase_payment.delete',
+    },
+  );
+
   const deletedPayment = await repository.softDeletePayment(
     connection,
     {
@@ -789,6 +845,25 @@ async function updateBillPaymentOnConnection(
   if (data.status !== undefined) {
     merged.status = data.status;
   }
+
+  /*
+   * Step 4.5: BOTH dates are checked. Moving a payment into a closed year is
+   * a change to that year, and moving one OUT of it is a change to that year
+   * too — the already-published result would stop matching its journals.
+   */
+  await fiscalPostingGuard.assertAccountingDatesOpen(
+    connection,
+    {
+      orgId,
+      dates: [
+        accountingDate(oldPayment.payment_date),
+        accountingDate(merged.payment_date),
+      ],
+      operation: isSale
+        ? 'sale_payment.update'
+        : 'purchase_payment.update',
+    },
+  );
 
   await reverseBillPaymentJournals(
     connection,
@@ -1011,6 +1086,22 @@ async function recordJournalBillPayment(
 
     paymentCurrency = bill.currency;
   }
+
+  /*
+   * Step 4.5: this shadow payment takes the manual journal's own accounting
+   * date, so it belongs to the same fiscal period the journal was already
+   * checked against (journal.service guards that date before writing).
+   */
+  await fiscalPostingGuard.assertAccountingDateOpen(
+    connection,
+    {
+      orgId,
+      date: accountingDate(journal.date),
+      operation: isSale
+        ? 'sale_payment.create'
+        : 'purchase_payment.create',
+    },
+  );
 
   const paymentLocalId = generateLocalId();
 

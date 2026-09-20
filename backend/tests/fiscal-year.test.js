@@ -1274,23 +1274,21 @@ test('the router exposes only the fiscal-year foundation endpoints', () => {
     'GET /current',
     'GET /:id/summary',
     'GET /:id/close-preview',
+    'GET /:id/opening-balances',
+    'GET /:id/accounts/:accountId/statement',
     'GET /:id',
     'POST /',
     'PUT /:id',
     'POST /:id/close',
+    'POST /:id/reopen',
   ]);
 
   /*
-   * Closing is append-only: a close exists, but no reopen, no close delete
-   * and no destructive verb of any kind.
+   * Reopening is the only supported way to undo a close; no DELETE or PATCH
+   * route exists, and no unrecoverable destructive verb of any kind.
    */
   assert.equal(
     routes.some((route) => /DELETE|PATCH/i.test(route)),
-    false,
-  );
-
-  assert.equal(
-    routes.some((route) => /reopen|unclose|revert/i.test(route)),
     false,
   );
 });

@@ -118,7 +118,24 @@
     background: #ffffff;
     box-shadow: 0 20px 40px rgba(15, 23, 42, 0.14);
     overflow: hidden;
-    animation: appModalIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+
+    /*
+     * NO `forwards` here, on purpose.
+     *
+     * The enter animation ends on `transform: translateY(0) scale(1)`, which
+     * is visually identical to having no transform — but with a fill mode the
+     * animated value is RETAINED forever, and a retained transform turns this
+     * card into the containing block for every `position: fixed` descendant.
+     *
+     * The shared date picker renders its calendar as a fixed popup inside the
+     * modal, so a retained transform both moved that popup (it was positioned
+     * against the card instead of the viewport) and let the card's
+     * `overflow: hidden` clip it away: the calendar flashed and then slid out
+     * of sight. Without the fill mode the transform is gone the moment the
+     * animation ends, the popup is laid out against the viewport again and it
+     * is no longer clipped.
+     */
+    animation: appModalIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
     min-width: 0;
   }
 

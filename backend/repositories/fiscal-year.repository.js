@@ -187,7 +187,35 @@ async function findOverlapping(
   return rows;
 }
 
-async function findCoveringDate(executor, { orgId, date }) {
+/*
+ * `lock` turns the lookup into a locking read (Step 4.5 posting guard):
+ *
+ *   'share'  LOCK IN SHARE MODE — concurrent postings in the same open year
+ *            do not block each other, but a fiscal-year close (which needs
+ *            the same row exclusively) waits for them and therefore cannot
+ *            compute a period that misses an in-flight posting.
+ *   'update' FOR UPDATE
+ *
+ * LOCK IN SHARE MODE is used rather than MySQL 8.0's `FOR SHARE` because this
+ * deployment runs MariaDB 10.4, where `FOR SHARE` is not available. The read
+ * is a no-op lock outside a transaction, so only transactional callers should
+ * ask for it.
+ */
+async function findCoveringDate(
+  executor,
+  {
+    orgId,
+    date,
+    lock = null,
+  },
+) {
+  const lockSql =
+    lock === 'share'
+      ? 'LOCK IN SHARE MODE'
+      : lock === 'update'
+        ? 'FOR UPDATE'
+        : '';
+
   const [rows] = await executor.execute(
     `
       SELECT
@@ -199,8 +227,49 @@ async function findCoveringDate(executor, { orgId, date }) {
         AND end_date >= ?
       ORDER BY start_date DESC
       LIMIT 1
+      ${lockSql}
     `,
     [orgId, date, date],
+  );
+
+  return rows[0] || null;
+}
+
+/*
+ * The fiscal year that STARTS on an exact date (Step 5 roll-forward).
+ *
+ * The receiving year of a close is defined by the brief as
+ * `next.start_date = closed.end_date + 1 day`, so the lookup is by exact
+ * start date rather than "the next year that begins after X": a gap between
+ * two configured years must be reported as missing configuration instead of
+ * silently rolling balances into a year that does not follow the closed one.
+ */
+async function findByStartDate(
+  executor,
+  {
+    orgId,
+    startDate,
+    forUpdate = false,
+    includeDeleted = true,
+  },
+) {
+  const conditions = ['org_id = ?', 'start_date = ?'];
+
+  if (!includeDeleted) {
+    conditions.push('status = 1');
+  }
+
+  const [rows] = await executor.execute(
+    `
+      SELECT
+        ${FISCAL_YEAR_COLUMNS}
+      FROM fiscal_years
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY local_id ASC
+      LIMIT 1
+      ${forUpdate ? 'FOR UPDATE' : ''}
+    `,
+    [orgId, startDate],
   );
 
   return rows[0] || null;
@@ -638,6 +707,7 @@ module.exports = {
   windowSql,
   findAll,
   findByLocalId,
+  findByStartDate,
   findOverlapping,
   findCoveringDate,
   lockOrganizationYears,
