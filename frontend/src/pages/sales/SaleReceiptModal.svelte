@@ -9,7 +9,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import AppModal from '../../components/common/AppModal.svelte';
   import WhatsappModal from '../WhatsappModal.svelte';
 
-  import { t, lang, translate_org_type, shortID, settings_all } from '../../i18n/i18n';
+  import { t, lang, translate_org_type, settings_all } from '../../i18n/i18n';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   $: enable_generics = $settings_all.find((s) => s.key === 'enable_generics')?.value == 1;
@@ -234,13 +234,38 @@ import { currencyApi } from '../../api/currencyApi.js';
   });
   function printReceipt() {
     fitReceiptText();
+    /*
+     * `size: 74mm auto` is not a valid page size — the `size` descriptor takes
+     * one or two lengths — so a browser that drops the rule falls back to the
+     * printer's default paper and the slip prints with a long blank tail.
+     * The page height is measured from the slip's *printed content*, never from
+     * the element's box: a box that a parent has stretched or centred around
+     * would declare a page far taller than the ink, and every slip would carry
+     * blank paper at the top and at the bottom. The last child's bottom is the
+     * end of the ink, plus the slip's own bottom padding and a small feed.
+     */
+    const slip = document.querySelector('#receipt-content .receipt');
+    let pageHeight = 0;
+
+    if (slip) {
+      const box = slip.getBoundingClientRect();
+      let contentBottom = box.top;
+
+      for (const child of slip.children) {
+        const bottom = child.getBoundingClientRect().bottom;
+
+        if (bottom > contentBottom) contentBottom = bottom;
+      }
+
+      pageHeight = Math.ceil(contentBottom - box.top) + 16;
+    }
     const content = document.getElementById('receipt-content').innerHTML;
     const styles = `
         <style>
           /*
-           * One size and one weight for the whole slip: items, totals,
-           * payments and footer all print like the item-table header. Only the
-           * company name keeps a size of its own.
+           * Typography only: 13px / 500 base, one scale for headings (700)
+           * and money labels (600), NET Total above the rest (15px / 700).
+           * Layout, spacing, colors and alignment are untouched.
            */
           .receipt {
             width: 74mm;
@@ -249,10 +274,11 @@ import { currencyApi } from '../../api/currencyApi.js';
             overflow: hidden;
             word-wrap: break-word;
             word-break: break-word;
-            font-size: 10pt;
-            font-weight: 700;
+            font-size: 13px;
+            font-weight: 500;
+            line-height: 1.45;
           }
-          .brand { font-size: 16px; }
+          .brand { font-size: 18px; font-weight: 700; }
 
           table {
   table-layout: fixed;
@@ -263,7 +289,7 @@ td, th {
   word-break: break-word;
 }
          .underbrand {
-    font-weight: 700;
+    font-weight: 500;
 
     white-space: nowrap; /* ❗ FORCE ONE LINE */
     overflow: hidden;
@@ -323,14 +349,10 @@ td, th {
     line-height: 1.2;
   }
 
-  /*
-   * The two count lines carry the same weight as the Price / Amount column
-   * headers, so the whole item block reads as one table instead of a heavy
-   * heading over a light header.
-   */
+  /* The count lines: money labels, one step under the table headers. */
   .items-count {
     margin-top: 6px;
-    font-weight: 700;
+    font-weight: 600;
   }
 
   /*
@@ -404,7 +426,23 @@ td, th {
     overflow: hidden;
     word-break: break-word;
   }
-body { margin: 0; }
+/*
+ * The printed document is a page, not a layout: nothing may add an offset at
+ * its top, and nothing may centre the slip in the page box.
+ */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  background: #fff;
+}
+
+body {
+  display: block;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
        
 table { table-layout: fixed; width: 100%; }
 td {
@@ -415,27 +453,50 @@ td {
     font-size: inherit;
   }
 
-  /*
-   * Headers are explicitly bold instead of inheriting the table-header weight:
-   * on paper this stylesheet is written before the linked theme, so an
-   * inherited weight would flip between the preview and the printed slip. The
-   * size comes from the slip and stays overridable (no !important) so a long
-   * count header can be shrunk to stay on one line.
-   */
+  /* Item-table header: the slip's strongest table text. */
   th {
+    font-size: 13px;
     font-weight: 700 !important;
     padding: 3px 4px !important;
     border-bottom: 2px solid #000 !important;
   }
-          @page { size: 74mm auto; margin: 0; }
+  /* The count header reads with the count lines, not with Price / Amount. */
+  th.fit-cell { font-weight: 600 !important; }
+
+  /* Store address and item names: secondary text. */
+  .items-table .item-name-row td { font-weight: 500; }
+
+  /* Invoice information block (invoice #, customer, date, account number). */
+  .head-row { font-weight: 600; }
+
+  /* Count lines, quantity / price / amount, subtotal and detail rows. */
+  .items-count { font-weight: 600; }
+  .items-table .item-value-row td { font-weight: 600; }
+  .items-table .subtotal-row td,
+  .items-table .detail-row td { font-weight: 600; }
+
+  /* Payment and balance rows carry the same weight as the summary rows. */
+  .pay-row { font-weight: 600; }
+
+  /* NET Total stays the strongest row of the slip. */
+  .items-table .nettotal-row td { font-size: 15px; font-weight: 700; }
+
+  /*
+   * Footer: the contact / credit lines, then the sign-off. The sign-off keeps
+   * both classes, so it has to be declared last to win its own size/weight.
+   */
+  .receipt-footer .footer-line { font-size: 12px; font-weight: 500; }
+  .receipt-footer .footer-signoff { font-size: 13px; font-weight: 600; }
+          @page { size: 74mm ${pageHeight > 0 ? `${pageHeight}px` : 'auto'}; margin: 0; }
 
 .center { text-align: center; }
 .divider { border-top: 1px solid #000; margin: 6px 0; }
 .head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin-bottom: 2px; }
 .head-row .head-customer { text-align: end; overflow-wrap: anywhere; }
-.receipt-footer { text-align: start; line-height: 1.5; margin-top: 2px; }
+.head-row .head-gregorian { unicode-bidi: embed; white-space: nowrap; }
+.receipt-footer { text-align: start; line-height: 1.45; margin-top: 2px; }
 .receipt-footer .footer-line { white-space: normal; overflow-wrap: anywhere; }
-.receipt-footer .footer-signoff { text-align: center; margin-bottom: 2px; }
+.receipt-footer .footer-signoff { text-align: center; margin-bottom: 8px; }
 
 * {color:#000000 !important;}
         </style>
@@ -669,7 +730,7 @@ td {
                 <div class="brand mt-2">{settings.find((s) => s.key === 'company_name')?.value || 'Zeno ERP'}</div>
               {/if}
               {#if settings.find((s) => s.key === 'company_address')?.value}
-                <div class="underbrand fw-bold mb-1" bind:this={addressEl}>
+                <div class="underbrand mb-1" bind:this={addressEl}>
                   {settings.find((s) => s.key === 'company_address')?.value || 'Company Address'}
                 </div>
               {/if}
@@ -684,41 +745,32 @@ td {
 
             <!--
               Header of the reference slip: the invoice number and the customer
-              share the first line, the date (and the account number of a named
-              customer) sit under them.
+              share the first line; the date line below puts the local date
+              under the invoice number and the Gregorian date under the
+              customer. The customer's account number is not
+              printed at all.
             -->
             <div class="head-row">
               <span class="nowrap">
-                <small
-                  >{t('Invoice #')}: <span class="fw-bold">{sale?.invoice_number}</span></small
-                >
+                <small>{t('Invoice #')}: {sale?.invoice_number}</small>
               </span>
               <span class="head-customer">
-                <small
-                  >{t('Customer')}: <span class="fw-bold">{customerName}</span></small
-                >
+                <small>{t('Customer')}: {customerName}</small>
               </span>
             </div>
 
             <div class="head-row">
-              <span>
+              <span class="head-dates">
                 <small
-                  >{t('Date')}:
-                  <span class="fw-bold"
-                    >{@html sale?.invoice_date
-                      ? showDate(sale?.invoice_date.slice(0, 10), 'receipt')
-                      : ''}</span
-                  ></small
+                  >{t('Date')}:{@html sale?.invoice_date
+                    ? showDate(sale?.invoice_date.slice(0, 10), 'receipt')
+                    : ''}</small
                 >
-                <small class="fw-bold">{sale?.invoice_date?.slice(0, 10)}</small>
               </span>
-              {#if customer?.id > 100000}
-                <span class="nowrap">
-                  <small>
-                    {t('Number')}
-                    {t('Account')}: <span class="fw-bold">{shortID(customer?.id) || '-'}</span>
-                  </small>
-                </span>
+              {#if sale?.invoice_date}
+                <span dir="ltr" class="head-gregorian"
+                  >{sale.invoice_date.slice(0, 10)}</span
+                >
               {/if}
             </div>
 
@@ -737,7 +789,7 @@ td {
               <tbody>
                 {#each items as it}
                   <tr class="item-name-row">
-                    <td colspan="3" class="product-name fw-bold">
+                    <td colspan="3" class="product-name">
                       <div>{it.product_name}</div>
                       {#if it.generic_name}
                         <div class="small">{it.generic_name}</div>
@@ -745,15 +797,15 @@ td {
                     </td>
                   </tr>
                   <tr class="item-value-row">
-                    <td class="start fw-bold">
+                    <td class="start">
                       <span class="fit-amount">
                         {formatQty(it.quantity)}{#if it.unit_name}&nbsp;{it.unit_name}{/if}
                       </span>
                     </td>
-                    <td class="end fw-bold">
+                    <td class="end">
                       <span class="fit-amount">{formatMoney(it.unit_price)}</span>
                     </td>
-                    <td class="end fw-bold">
+                    <td class="end">
                       <span class="fit-amount">{formatMoney(lineAmount(it))}</span>
                     </td>
                   </tr>
@@ -765,8 +817,8 @@ td {
                   rest of the slip instead of being shrunk to fit one column.
                 -->
                 <tr class="subtotal-row">
-                  <td class="start fw-bold">{t('Subtotal')}:</td>
-                  <td colspan="2" class="end fw-bold">
+                  <td class="start">{t('Subtotal')}:</td>
+                  <td colspan="2" class="end">
                     <span class="fit-amount">{formatMoney(itemsSum)}</span>
                   </td>
                 </tr>
@@ -803,20 +855,20 @@ td {
             </table>
 
             <div class="payments-block small">
-              <div class="pay-row fw-bold">
+              <div class="pay-row">
                 <span>{t('Bill Received')}:</span>
                 <span class="nowrap">(&nbsp;{formatMoney(paid)}&nbsp;{t(paidCurrency) || ''}&nbsp;)</span>
               </div>
 
               {#if change > 0}
-                <div class="pay-row fw-bold">
+                <div class="pay-row">
                   <span>{t('Change')}:</span>
                   <span class="nowrap">(&nbsp;{formatMoney(change)}&nbsp;{t(sale?.currency) || ''}&nbsp;)</span>
                 </div>
               {/if}
 
               {#if Number(due) > 0}
-                <div class="pay-row fw-bold">
+                <div class="pay-row">
                   <span>{t('Bill Due')}:</span>
                   <span class="nowrap">(&nbsp;{formatMoney(due)}&nbsp;{t(sale?.currency) || ''}&nbsp;)</span>
                 </div>
@@ -827,9 +879,9 @@ td {
               <div class="divider"></div>
 
               <div class="totals small">
-                <div class="pay-row fw-bold">
+                <div class="pay-row">
                   <span>{t('Old Balance')}</span>
-                  <span class="fw-bold">
+                  <span>
                     <span dir="ltr"
                       >{balance[sale?.currency] !== undefined && balance[sale?.currency] !== null
                         ? Number(balance[sale?.currency] + due || 0).toLocaleString(undefined, {
@@ -841,9 +893,9 @@ td {
                   </span>
                 </div>
 
-                <div class="pay-row fw-bold">
+                <div class="pay-row">
                   <span>{t('Now Balance')}</span>
-                  <span class="fw-bold">
+                  <span>
                     {@html showAccountBalance}
                   </span>
                 </div>
@@ -920,18 +972,40 @@ td {
     font-size: inherit;
   }
 
-  /*
-   * Headers are explicitly bold instead of inheriting the table-header weight:
-   * on paper this stylesheet is written before the linked theme, so an
-   * inherited weight would flip between the preview and the printed slip. The
-   * size comes from the slip and stays overridable (no !important) so a long
-   * count header can be shrunk to stay on one line.
-   */
+  /* Item-table header: the slip's strongest table text. */
   th {
+    font-size: 13px;
     font-weight: 700 !important;
     padding: 3px 4px !important;
     border-bottom: 2px solid #000 !important;
   }
+  /* The count header reads with the count lines, not with Price / Amount. */
+  th.fit-cell { font-weight: 600 !important; }
+
+  /* Store address and item names: secondary text. */
+  .items-table .item-name-row td { font-weight: 500; }
+
+  /* Invoice information block (invoice #, customer, date, account number). */
+  .head-row { font-weight: 600; }
+
+  /* Count lines, quantity / price / amount, subtotal and detail rows. */
+  .items-count { font-weight: 600; }
+  .items-table .item-value-row td { font-weight: 600; }
+  .items-table .subtotal-row td,
+  .items-table .detail-row td { font-weight: 600; }
+
+  /* Payment and balance rows carry the same weight as the summary rows. */
+  .pay-row { font-weight: 600; }
+
+  /* NET Total stays the strongest row of the slip. */
+  .items-table .nettotal-row td { font-size: 15px; font-weight: 700; }
+
+  /*
+   * Footer: the contact / credit lines, then the sign-off. The sign-off keeps
+   * both classes, so it has to be declared last to win its own size/weight.
+   */
+  .receipt-footer .footer-line { font-size: 12px; font-weight: 500; }
+  .receipt-footer .footer-signoff { font-size: 13px; font-weight: 600; }
 
   table {
     table-layout: fixed;
@@ -977,14 +1051,10 @@ td {
     line-height: 1.2;
   }
 
-  /*
-   * The two count lines carry the same weight as the Price / Amount column
-   * headers, so the whole item block reads as one table instead of a heavy
-   * heading over a light header.
-   */
+  /* The count lines: money labels, one step under the table headers. */
   .items-count {
     margin-top: 6px;
-    font-weight: 700;
+    font-weight: 600;
   }
 
   /*
@@ -1040,8 +1110,9 @@ td {
     gap: 4px;
   }
 
+  /* Store name: the slip's heading. */
   .brand {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
   }
   :global(.app-modal--primary.app-modal--sm) {
@@ -1061,10 +1132,11 @@ td {
   }
 
   /*
-   * One size and one weight for the whole slip — items, totals, payments and
-   * footer all print like the item-table header, so nothing reads smaller or
-   * faded next to the rest. Each element keeps the inherited size unless its
-   * own text genuinely does not fit (see fitTextWithin).
+   * Typography only: 13px / 500 base, with headings at 700 and money labels
+   * at 600 — see the .brand, .head-row, .items-count, th / td and footer rules
+   * below. Layout, spacing, colors, alignment and the 74mm width are the same
+   * as before. An element keeps the inherited size unless its own text does
+   * not fit at all (see fitTextWithin).
    */
   .receipt {
     width: 74mm;
@@ -1075,8 +1147,9 @@ td {
     word-break: break-word;
     margin: 0 auto;
     background: #fff;
-    font-size: 10pt;
-    font-weight: 700;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.45;
   }
   * {
     box-sizing: border-box;
@@ -1105,7 +1178,7 @@ td {
     overflow-wrap: break-word;
   } */
   .underbrand {
-    font-weight: 700;
+    font-weight: 500;
 
     white-space: nowrap; /* ❗ FORCE ONE LINE */
     overflow: hidden;
@@ -1138,20 +1211,28 @@ td {
     text-align: end;
     overflow-wrap: anywhere;
   }
+  /* The Gregorian date keeps its own left-to-right reading on the date line. */
+  .head-row .head-gregorian {
+    unicode-bidi: embed;
+    white-space: nowrap;
+  }
 
   .receipt-footer {
     text-align: start;
-    line-height: 1.5;
+    line-height: 1.45;
     margin-top: 2px;
   }
   .receipt-footer .footer-line {
     white-space: normal;
     overflow-wrap: anywhere;
   }
-  /* The sign-off is the one centered line of the slip. */
+  /*
+   * The sign-off is the one centered line of the slip, and it keeps a clear
+   * gap before the contact lines under it.
+   */
   .receipt-footer .footer-signoff {
     text-align: center;
-    margin-bottom: 2px;
+    margin-bottom: 8px;
   }
   .divider {
     border-top: 1px solid #000;
