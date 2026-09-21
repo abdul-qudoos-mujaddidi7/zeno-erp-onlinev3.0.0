@@ -2,6 +2,7 @@
   import { onMount, createEventDispatcher, tick } from 'svelte';
   import { t, lang, translate_org_type } from '../../i18n/i18n';
   import { userRoleApi } from '../../api/userRoleApi.js';
+  import { DASHBOARD_CARD_CODES, expandDashboardCards } from '../../auth/permissions.js';
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -19,6 +20,8 @@
   let saving = false;
 
   const permissionItems = [
+    'Dashboard',
+    ...DASHBOARD_CARD_CODES,
     'Products',
     'POS',
     'Sales',
@@ -35,7 +38,10 @@
   function setDefaultPermissions() {
     parsedPermissions = permissionItems.map((item) => ({
       code: item,
-      view: false,
+      // Dashboard stays visible by default: it is the landing page and older
+      // roles have no Dashboard row at all. Unchecking it hides the page, its
+      // sidebar link and every card it cannot justify.
+      view: item === 'Dashboard',
       create: false,
       edit: false,
       approve: false,
@@ -159,6 +165,13 @@
             }
           : defaultPermission;
       }
+    );
+
+    parsedPermissions = expandDashboardCards(
+      parsedPermissions,
+      savedPermissions.map(
+        (permission) => permission && permission.code
+      )
     );
 
     await tick();
@@ -480,7 +493,32 @@
   }
 
   .role-modal__dialog :global(.qa-modal__form) {
-    overflow: hidden;
+    /* Never clip the form: the permission matrix can be taller than the panel. */
+    overflow-x: hidden;
+    overflow-y: auto;
+    align-content: start;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b6c2d4 transparent;
+  }
+
+  .role-modal__dialog :global(.qa-modal__form)::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .role-modal__dialog :global(.qa-modal__form)::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .role-modal__dialog :global(.qa-modal__form)::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: #b6c2d4;
+  }
+
+  .role-modal__dialog :global(.qa-modal__form)::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
   }
 
   .role-fields-row {
@@ -550,9 +588,33 @@
 
 .permission-table-wrap {
   width: 100%;
-  max-height: none;
+  /* Scroll the rows inside the card so the role fields and the Save button
+     stay visible no matter how many modules the permission matrix holds. */
+  max-height: min(48vh, 27rem);
   overflow-x: hidden;
-  overflow-y: visible;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #b6c2d4 transparent;
+}
+
+.permission-table-wrap::-webkit-scrollbar {
+  width: 10px;
+}
+
+.permission-table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.permission-table-wrap::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: #b6c2d4;
+}
+
+.permission-table-wrap::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
 }
 
 .permission-table {
@@ -565,7 +627,7 @@
 }
 
 .permission-table thead th {
-  position: static;
+  position: sticky;
   top: 0;
   z-index: 2;
   height: 2.5rem;
@@ -727,6 +789,16 @@
     border-color: rgba(148, 163, 184, 0.28);
     background: #18243a;
     color: #b9c7dd;
+  }
+
+  :global(html.dark) .permission-table-wrap,
+  :global(html.dark) .role-modal__dialog :global(.qa-modal__form) {
+    scrollbar-color: #3f5470 transparent;
+  }
+
+  :global(html.dark) .permission-table-wrap::-webkit-scrollbar-thumb,
+  :global(html.dark) .role-modal__dialog :global(.qa-modal__form)::-webkit-scrollbar-thumb {
+    background-color: #3f5470;
   }
 
   :global(html.dark) .permission-table tbody td {

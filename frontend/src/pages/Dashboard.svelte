@@ -7,10 +7,35 @@
   import AppDatePicker from '../components/common/AppDatePicker.svelte';
   import { theme } from '../stores/themeStore.js';
   import { dashboardApi } from '../api/dashboardApi.js';
+  import { auth } from '../auth/authStore';
+  import { canViewDashboard, canViewDashboardCard, canViewModule } from '../auth/permissions.js';
 
   $: _lang = $lang;
   $: currentTheme = $theme;
   $: enable_expiry_date = $settings_all.find((s) => s.key === 'enable_expiry_date')?.value == 1;
+
+  // Every card is gated by the module that owns its data. A permission set with
+  // no entry for a module keeps the legacy behaviour (visible), so a card only
+  // disappears when its permission was explicitly unchecked.
+  $: permissions = $auth.permissions;
+  $: canViewDashboardPage = canViewDashboard(permissions);
+  $: canViewBenefit = canViewModule(permissions, 'Benefit');
+  $: canViewAccounts = canViewModule(permissions, 'Accounts');
+  $: canViewSales = canViewModule(permissions, 'Sales');
+  $: canViewPurchases = canViewModule(permissions, 'Purchases');
+  $: canViewProducts = canViewModule(permissions, 'Products');
+
+  // Modules decide what the cards may contain (a series, a mix entry, a
+  // number). The card rows decide whether the card itself is shown, falling
+  // back to their module when the operator has no card decision.
+  $: cardBenefit = canViewDashboardCard(permissions, 'benefit');
+  $: cardExpenses = canViewDashboardCard(permissions, 'expenses');
+  $: cardNetProfit = canViewDashboardCard(permissions, 'netProfit');
+  $: cardTrend = canViewDashboardCard(permissions, 'trend');
+  $: cardRevenueMix = canViewDashboardCard(permissions, 'revenueMix');
+  $: cardTreasury = canViewDashboardCard(permissions, 'treasury');
+  $: cardTopProducts = canViewDashboardCard(permissions, 'topProducts');
+  $: cardStockAlerts = canViewDashboardCard(permissions, 'stockAlerts');
 
   let loading = true;
   let loadingMetricData = true;
@@ -147,8 +172,14 @@
     },
   ];
 
-  $: revenueMixTotal = periodMetrics.reduce((sum, item) => sum + Math.abs(item.value || 0), 0);
-  $: revenueMixGradient = buildMixGradient(periodMetrics, revenueMixTotal);
+  $: visiblePeriodMetrics = periodMetrics.filter((metric) => {
+    if (metric.key === 'sales' || metric.key === 'saleReturns') return canViewSales;
+    if (metric.key === 'purchases' || metric.key === 'purchaseReturns') return canViewPurchases;
+    if (metric.key === 'wastes') return canViewProducts;
+    return true;
+  });
+  $: revenueMixTotal = visiblePeriodMetrics.reduce((sum, item) => sum + Math.abs(item.value || 0), 0);
+  $: revenueMixGradient = buildMixGradient(visiblePeriodMetrics, revenueMixTotal);
   $: benefitTotal = Number(metricDataTotal.benefit) || 0;
   $: expenseTotal = Number(metricDataTotal.expenses) || 0;
   $: netProfit = benefitTotal - expenseTotal;
@@ -694,7 +725,7 @@
           {
             label: t('Total Benefit Amount'),
             data: [...trendData.benefit],
-            hidden: !trendDatasetVisible[0],
+            hidden: !canViewBenefit || !trendDatasetVisible[0],
             backgroundColor: 'rgba(15, 110, 253, 0.9)',
             borderColor: '#0f6efd',
             borderRadius: 0,
@@ -704,7 +735,7 @@
           {
             label: t('Expenses'),
             data: [...trendData.expenses],
-            hidden: !trendDatasetVisible[1],
+            hidden: !canViewAccounts || !trendDatasetVisible[1],
             backgroundColor: 'rgba(220, 53, 69, 0.85)',
             borderColor: '#dc3545',
             borderRadius: 0,
@@ -791,7 +822,9 @@
 
 </script>
 
-{#if loading}
+{#if !canViewDashboardPage}
+  <h3 class="text-danger m-3"><i class="bi bi-exclamation-triangle me-2"></i>{t('No access allowed')}</h3>
+{:else if loading}
   <div class="dashboard-loading">
     <div class="loading-card">
       <div class="spinner-border text-primary" role="status">
@@ -818,6 +851,7 @@
   <div class="dashboard-shell">
     <section class="summary-grid">
       <DashboardAccentPanel />
+      {#if cardBenefit}
       <article class="metric-card metric-card--benefit summary-metric-card">
         <span class="summary-metric-card__icon"><i class="bi bi-graph-up-arrow"></i></span>
         <div class="summary-metric-card__content">
@@ -828,7 +862,9 @@
           <span class="metric-card__label">{t('Total Benefit Amount')}</span>
         </div>
       </article>
+      {/if}
 
+      {#if cardExpenses}
       <article class="metric-card metric-card--expense summary-metric-card">
         <span class="summary-metric-card__icon"><i class="bi bi-coin"></i></span>
         <div class="summary-metric-card__content">
@@ -839,7 +875,9 @@
           <span class="metric-card__label">{t('Expenses')}</span>
         </div>
       </article>
+      {/if}
 
+      {#if cardNetProfit}
       <article class="metric-card metric-card--net summary-metric-card" class:negative={netProfit < 0}>
         <span class="summary-metric-card__icon"><i class="bi bi-wallet2"></i></span>
         <div class="summary-metric-card__content">
@@ -850,9 +888,11 @@
           <span class="metric-card__label">{t('Net Profit')}</span>
         </div>
       </article>
+      {/if}
     </section>
 
     <section class="dashboard-grid">
+      {#if cardTrend && (canViewBenefit || canViewAccounts)}
       <article class="panel panel-trend">
         <header class="panel-header">
           <div class="trend-period-label">
@@ -860,25 +900,31 @@
           </div>
           <div class="panel-actions" dir={t('dir')}>
             <div class="trend-header-legend" dir="ltr">
-              <button
-                type="button"
-                class:inactive={!trendDatasetVisible[0]}
-                aria-pressed={trendDatasetVisible[0]}
-                onclick={() => toggleTrendDataset(0)}>
-                <i class="trend-header-legend__benefit"></i>
-                {t('Benefit')}
-              </button>
-              <span class="trend-header-legend__separator">
-                {_lang === 'en' ? 'vs' : _lang === 'ps' ? 'په مقابل کې' : 'در مقابل'}
-              </span>
-              <button
-                type="button"
-                class:inactive={!trendDatasetVisible[1]}
-                aria-pressed={trendDatasetVisible[1]}
-                onclick={() => toggleTrendDataset(1)}>
-                <i class="trend-header-legend__expense"></i>
-                {t('Expenses')}
-              </button>
+              {#if canViewBenefit}
+                <button
+                  type="button"
+                  class:inactive={!trendDatasetVisible[0]}
+                  aria-pressed={trendDatasetVisible[0]}
+                  onclick={() => toggleTrendDataset(0)}>
+                  <i class="trend-header-legend__benefit"></i>
+                  {t('Benefit')}
+                </button>
+              {/if}
+              {#if canViewBenefit && canViewAccounts}
+                <span class="trend-header-legend__separator">
+                  {_lang === 'en' ? 'vs' : _lang === 'ps' ? 'په مقابل کې' : 'در مقابل'}
+                </span>
+              {/if}
+              {#if canViewAccounts}
+                <button
+                  type="button"
+                  class:inactive={!trendDatasetVisible[1]}
+                  aria-pressed={trendDatasetVisible[1]}
+                  onclick={() => toggleTrendDataset(1)}>
+                  <i class="trend-header-legend__expense"></i>
+                  {t('Expenses')}
+                </button>
+              {/if}
             </div>
 
             <div class="dashboard-filter-wrap">
@@ -927,7 +973,9 @@
           </div>
         </div>
       </article>
+      {/if}
 
+      {#if cardRevenueMix && visiblePeriodMetrics.length}
       <article class="panel mix-panel">
         <header class="panel-header">
           <div>
@@ -938,7 +986,7 @@
         </header>
 
         <div class="mix-list">
-          {#each periodMetrics as metric}
+          {#each visiblePeriodMetrics as metric}
             <div class="mix-item" style={`--metric-color: ${metric.color}; --metric-width: ${revenueMixTotal ? Math.max(4, Math.abs(metric.value) / revenueMixTotal * 100) : 4}%;`}>
               <div>
                 <span><i></i>{metric.label}</span>
@@ -949,10 +997,12 @@
           {/each}
         </div>
       </article>
+      {/if}
 
     </section>
 
     <section class="support-grid">
+      {#if cardTreasury}
       <article class="panel compact-panel">
         <header class="panel-header">
           <div>
@@ -977,7 +1027,9 @@
           {/if}
         </div>
       </article>
+      {/if}
 
+      {#if cardTopProducts}
       <article class="panel products-panel">
         <header class="panel-header">
           <div>
@@ -1010,7 +1062,9 @@
           {/if}
         </div>
       </article>
+      {/if}
 
+      {#if cardStockAlerts}
       <article class="panel compact-panel alert-panel" class:combined-alert-panel={enable_expiry_date}>
         <header class="panel-header">
           <div>
@@ -1076,6 +1130,7 @@
           {/if}
         </div>
       </article>
+      {/if}
     </section>
   </div>
 {/if}

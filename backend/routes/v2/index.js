@@ -165,7 +165,73 @@ const reconciliationRoutes =
 const fiscalYearRoutes =
   require('./fiscal-year.routes');
 
+const requireModulePermission =
+  require('../../middleware/permission');
+
 const router = express.Router();
+
+/*
+ * Module guards.
+ *
+ * Each ERP mount is owned by one permission module; a denied `view` blocks
+ * the whole mount (reads and writes). `read`/`write` list the other modules
+ * whose screens legitimately use this data — see the note in
+ * middleware/permission.js. A permission set with no entry for a module keeps
+ * its previous behaviour, so existing users are unaffected.
+ */
+const guardDashboard = requireModulePermission('Dashboard', {
+  read: ['Accounts'],
+  allDeniedBlocks: true,
+});
+
+const guardProducts = requireModulePermission('Products', {
+  read: ['Sales', 'Purchases', 'POS', 'Services', 'Accounts', 'Journals', 'Dashboard'],
+  write: ['Services', 'Purchases'],
+});
+
+const guardStock = requireModulePermission('Products', {
+  read: ['Sales', 'Purchases', 'POS', 'Services', 'Accounts', 'Dashboard'],
+  write: ['Sales', 'Purchases', 'Services'],
+});
+
+const guardInventoryRecords = requireModulePermission('Products', {
+  read: ['Sales', 'Accounts', 'Dashboard'],
+  write: ['Sales'],
+});
+
+const guardSales = requireModulePermission('Sales', {
+  read: ['Journals', 'Accounts', 'Dashboard', 'POS', 'Products', 'Services'],
+  write: ['POS', 'Services'],
+});
+
+const guardPurchases = requireModulePermission('Purchases', {
+  read: ['Journals', 'Accounts', 'Dashboard', 'Products'],
+});
+
+const guardJournals = requireModulePermission('Journals', {
+  read: ['Accounts', 'Sales', 'Purchases', 'Products', 'Dashboard'],
+  write: ['Products', 'Services'],
+});
+
+const guardAccounts = requireModulePermission('Accounts', {
+  read: ['Sales', 'Purchases', 'Journals', 'Products', 'POS', 'Dashboard', 'Services'],
+  write: ['Exchange', 'Users', 'Services'],
+});
+
+const guardFiscalYears = requireModulePermission('Journals', {
+  read: ['Accounts', 'Dashboard'],
+  write: ['Accounts'],
+});
+
+const guardExchanges = requireModulePermission('Exchange', {
+  read: ['Dashboard'],
+});
+
+const guardUsers = requireModulePermission('Users', {
+  selfService: true,
+});
+
+const guardUserRoles = requireModulePermission('Users');
 
 /*
  * Public system endpoints are registered before auth.
@@ -204,6 +270,7 @@ router.use(
 
 router.use(
   '/account-groups',
+  guardAccounts,
   accountGroupRoutes,
 );
 
@@ -214,26 +281,31 @@ router.use(
 
 router.use(
   '/products',
+  guardProducts,
   productRoutes,
 );
 
 router.use(
   '/purchases',
+  guardPurchases,
   purchaseRoutes,
 );
 
 router.use(
   '/purchase-items',
+  guardPurchases,
   purchaseItemRoutes,
 );
 
 router.use(
   '/journals',
+  guardJournals,
   journalRoutes,
 );
 
 router.use(
   '/dashboard',
+  guardDashboard,
   dashboardRoutes,
 );
 
@@ -244,46 +316,55 @@ router.use(
 
 router.use(
   '/accounts',
+  guardAccounts,
   accountRoutes,
 );
 
 router.use(
   '/account-types',
+  guardAccounts,
   accountTypeRoutes,
 );
 
 router.use(
   '/sales',
+  guardSales,
   saleRoutes,
 );
 
 router.use(
   '/sale-items',
+  guardSales,
   saleItemRoutes,
 );
 
 router.use(
   '/warehouse-products',
+  guardStock,
   warehouseProductRoutes,
 );
 
 router.use(
   '/stock-transactions',
+  guardStock,
   stockTransactionRoutes,
 );
 
 router.use(
   '/stock-batches',
+  guardStock,
   stockBatchRoutes,
 );
 
 router.use(
   '/stock-transfers',
+  guardStock,
   stockTransferRoutes,
 );
 
 router.use(
   '/wastes',
+  guardStock,
   wasteRoutes,
 );
 
@@ -299,11 +380,13 @@ router.use(
 
 router.use(
   '/product-images',
+  guardProducts,
   productImageRoutes,
 );
 
 router.use(
   '/users',
+  guardUsers,
   userRoutes,
 );
 
@@ -314,31 +397,37 @@ router.use(
 
 router.use(
   '/account-images',
+  guardAccounts,
   accountImageRoutes,
 );
 
 router.use(
   '/sale-payments',
+  guardSales,
   salePaymentRoutes,
 );
 
 router.use(
   '/purchase-payments',
+  guardPurchases,
   purchasePaymentRoutes,
 );
 
 router.use(
   '/exchanges',
+  guardExchanges,
   exchangeRoutes,
 );
 
 router.use(
   '/user-roles',
+  guardUserRoles,
   userRoleRoutes,
 );
 
 router.use(
   '/user-images',
+  guardUserRoles,
   userImageRoutes,
 );
 
@@ -359,6 +448,7 @@ router.use(
 
 router.use(
   '/inventory-records',
+  guardInventoryRecords,
   inventoryRecordRoutes,
 );
 
@@ -434,6 +524,7 @@ router.use(
 
 router.use(
   '/stock-adjustments',
+  guardStock,
   stockAdjustmentRoutes,
 );
 
@@ -444,6 +535,7 @@ router.use(
 
 router.use(
   '/fiscal-years',
+  guardFiscalYears,
   fiscalYearRoutes,
 );
 

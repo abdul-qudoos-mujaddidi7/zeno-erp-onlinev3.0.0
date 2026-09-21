@@ -4,6 +4,7 @@
   import { lang } from '../../i18n/i18n.js';
 
   import { t } from '../../i18n/i18n.js';
+  import { DASHBOARD_CARD_CODES, expandDashboardCards } from '../../auth/permissions.js';
 import { accountApi } from '../../api/accountApi.js';
 import { userApi } from '../../api/userApi.js';
 import { userImageApi } from '../../api/userImageApi.js';
@@ -31,12 +32,15 @@ import { accountImageApi } from '../../api/accountImageApi.js';
 
   let parsedPermissions = [];
 
-  const permission_items = ['Products', 'POS','Sales','Benefit', 'Purchases', 'Accounts', 'Journals','Exchange','Services', 'Users', 'Settings'];
+  const permission_items = ['Dashboard', ...DASHBOARD_CARD_CODES, 'Products', 'POS','Sales','Benefit', 'Purchases', 'Accounts', 'Journals','Exchange','Services', 'Users', 'Settings'];
 
   function setDefaultPermissions() {
     parsedPermissions = permission_items.map((item) => ({
       code: item,
-      view: false,
+      // Dashboard stays visible by default: it is the landing page and older
+      // permission sets have no Dashboard row at all. Unchecking it hides the
+      // page, its sidebar link and every card it cannot justify.
+      view: item === 'Dashboard',
       create: false,
       edit: false,
       approve: false,
@@ -97,6 +101,10 @@ import { accountImageApi } from '../../api/accountImageApi.js';
           const existing = savedPermissions.find((p) => p.code === defaultPermission.code);
           return existing ? { ...defaultPermission, ...existing } : defaultPermission;
         });
+        parsedPermissions = expandDashboardCards(
+          parsedPermissions,
+          savedPermissions.map((permission) => permission && permission.code),
+        );
       } else {
         setDefaultPermissions();
       }
@@ -361,6 +369,10 @@ import { accountImageApi } from '../../api/accountImageApi.js';
         const existing = rolePermissions.find((p) => p.code === defaultPermission.code);
         return existing ? { ...defaultPermission, ...existing } : defaultPermission;
       });
+      parsedPermissions = expandDashboardCards(
+        parsedPermissions,
+        rolePermissions.map((permission) => permission && permission.code),
+      );
     } else {
       setDefaultPermissions();
     }
@@ -666,22 +678,33 @@ import { accountImageApi } from '../../api/accountImageApi.js';
 
   .user-modal-body {
     overflow: auto;
+    min-height: 0;
     padding: 0.7rem;
     background: #f8fafc;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: thin;
+    scrollbar-color: #b6c2d4 transparent;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .user-modal-body::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
+    width: 10px;
+    height: 10px;
   }
 
-  .user-modal-body::-webkit-scrollbar-button {
-    display: none;
-    width: 0;
-    height: 0;
+  .user-modal-body::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .user-modal-body::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: #b6c2d4;
+  }
+
+  .user-modal-body::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
   }
 
   .user-modal-grid {
@@ -825,8 +848,34 @@ import { accountImageApi } from '../../api/accountImageApi.js';
   .permissions-table-wrap {
     border: 1px solid #dfe6f1;
     border-radius: 0 0 0.75rem 0.75rem;
-    overflow: hidden;
+    /* The permission matrix outgrew the viewport: scroll the rows inside the
+       card so the modal keeps its two-column layout and stays reachable. */
+    max-height: min(52vh, 30rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b6c2d4 transparent;
     background: #ffffff;
+  }
+
+  .permissions-table-wrap::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .permissions-table-wrap::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .permissions-table-wrap::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: #b6c2d4;
+  }
+
+  .permissions-table-wrap::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
   }
 
   .permissions-table {
@@ -872,6 +921,9 @@ import { accountImageApi } from '../../api/accountImageApi.js';
   }
 
   .permissions-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
     height: 2.25rem;
     padding: 0.42rem 0.3rem !important;
     background: #f8fafc;
@@ -1019,6 +1071,24 @@ import { accountImageApi } from '../../api/accountImageApi.js';
   :global(body.dark) .permissions-table,
   :global([data-theme='dark']) .permissions-table {
     color: #e5edf8;
+  }
+
+  :global(html.dark) .user-modal-body::-webkit-scrollbar-thumb,
+  :global(body.dark) .user-modal-body::-webkit-scrollbar-thumb,
+  :global([data-theme='dark']) .user-modal-body::-webkit-scrollbar-thumb {
+    background-color: #3f5470;
+  }
+
+  :global(html.dark) .permissions-table-wrap,
+  :global(body.dark) .permissions-table-wrap,
+  :global([data-theme='dark']) .permissions-table-wrap {
+    scrollbar-color: #3f5470 transparent;
+  }
+
+  :global(html.dark) .permissions-table-wrap::-webkit-scrollbar-thumb,
+  :global(body.dark) .permissions-table-wrap::-webkit-scrollbar-thumb,
+  :global([data-theme='dark']) .permissions-table-wrap::-webkit-scrollbar-thumb {
+    background-color: #3f5470;
   }
 
   :global(html.dark) .permissions-table thead th,

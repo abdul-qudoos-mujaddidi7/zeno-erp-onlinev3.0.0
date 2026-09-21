@@ -27,6 +27,14 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 
   
   import {calculateDiscountAmount} from './SalesHelper.js';
+
+  /*
+   * The same two counters the 74mm receipt prints are also printed on the A4
+   * invoice: how many lines the bill holds ("Items Count [1]") and the total
+   * quantity across those lines ("Items Qty Count [10]"). The helper is shared
+   * with SaleReceiptModal so both documents always count the same way.
+   */
+  import { formatCount, itemCounts } from './saleReceiptLayout.js';
   
   import QRCode from 'qrcode';
 import { currencyApi } from '../../api/currencyApi.js';
@@ -270,6 +278,8 @@ import { productBrandApi } from '../../api/productBrandApi.js';
 
   $: total = Number(sale?.total_amount || items.reduce((s, i) => s + Number(Number(i.unit_price || 0) * Number(i.quantity || 0)), 0));
 
+  $: counts = itemCounts(items);
+
   function exchangeRate(amount, fromCurrencyCode, toCurrencyCode) {
     if (!fromCurrencyCode || !toCurrencyCode || fromCurrencyCode === toCurrencyCode) {
       return Number(amount || 0);
@@ -469,6 +479,19 @@ import { productBrandApi } from '../../api/productBrandApi.js';
               </table>
 
           <!-- Customer & Invoice Info -->
+
+          <!--
+            Item counters, exactly like the 80mm receipt: the number of lines on
+            the bill and the total quantity they carry. Kept as inline styles
+            (not a component class) because the print window only receives this
+            markup plus mdb.css, never the component's stylesheet.
+          -->
+          <div
+            class="d-flex align-items-center fw-bold"
+            style="gap: 1.25rem; font-size: 10pt; margin: 0 0 4px;">
+            <span>{t('Items Count')} [{formatCount(counts.itemsCount)}]</span>
+            <span>{t('Items Qty Count')} [{formatCount(counts.itemsQtyCount)}]</span>
+          </div>
 
           <!-- Product Table -->
           <table class="table table-bordered">

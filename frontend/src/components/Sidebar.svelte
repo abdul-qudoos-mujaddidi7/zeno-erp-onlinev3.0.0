@@ -6,7 +6,8 @@
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
-  import {auth} from "../auth/authStore"
+  import { auth } from "../auth/authStore"
+  import { canViewDashboard } from '../auth/permissions.js';
   import { logout, logoutClear } from '../auth/authService.js';
   import { confirmModal } from './common/confirmModal.js';
   import { theme, toggleTheme } from '../stores/themeStore.js';
@@ -14,6 +15,10 @@ import { userApi } from '../api/userApi.js';
 import { settingsApi } from '../api/settingsApi.js';
 
   $: permissions = $auth.permissions;
+  // Dashboard visibility follows its own permission; a permission set without
+  // a Dashboard entry keeps the legacy behaviour (visible), unless the set
+  // denies every module it mentions — a locked-down account.
+  $: showDashboard = canViewDashboard(permissions);
   
   export let sidebarOpen = false;
   export let sidebarCollapsed = false;
@@ -228,14 +233,16 @@ import { settingsApi } from '../api/settingsApi.js';
       </div>
     </div>
     <div class="list-group list-group-flush sidebar-menu mt-2" use:sidebarMenuLabels>
-      <a
-        use:link
-        href="/dashboard"
-        class="list-group-item list-group-item-action"
-        class:active={$location === '/dashboard'}>
-        <i class="bi bi-speedometer2 me-2"></i>
-        {t('Dashboard')}
-      </a>
+      {#if showDashboard}
+        <a
+          use:link
+          href="/dashboard"
+          class="list-group-item list-group-item-action"
+          class:active={$location === '/dashboard'}>
+          <i class="bi bi-speedometer2 me-2"></i>
+          {t('Dashboard')}
+        </a>
+      {/if}
       <a
         use:link
         href="/dashboard/2"
