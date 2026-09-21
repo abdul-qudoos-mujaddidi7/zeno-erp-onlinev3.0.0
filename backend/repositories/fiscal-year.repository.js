@@ -5,20 +5,22 @@
  * a set of READ-ONLY aggregates used by the fiscal-year summary. No existing
  * table is written to, and no historical row is ever rewritten.
  *
- * Accounting-date convention: the summary classifies a document by its
- * ACCOUNTING CALENDAR DAY with a `created_at` fallback:
+ * Accounting-date convention: the summary classifies a document by its stored
+ * accounting CALENDAR DAY, with a `created_at` fallback:
  *
- *   COALESCE(<accounting day of date_col>, created_at) >= startDate
- *   AND COALESCE(...) < DATE_ADD(endDate, INTERVAL 1 DAY)
+ *   COALESCE(date_col, created_at) >= startDate
+ *   AND COALESCE(date_col, created_at) < DATE_ADD(endDate, INTERVAL 1 DAY)
  *
- * The accounting day is the one rule shared with the posting guard and the
- * closing engine (utils/accountingDaySql), so a document can never be filed
- * into one fiscal year here and another one there.
+ * The stored value IS the accounting day. It is compared directly, exactly as
+ * utils/accountingDate.storedCalendarDay reads it in JavaScript for the posting
+ * guard and the closing engine, so a document can never be filed into one
+ * fiscal year here and another one there. No timezone offset is applied: an
+ * audit of production proved the column holds several historical storage
+ * conventions, and reinterpreting it would move rows that are already correct.
+ *
+ * `created_at` needs no conversion either: MySQL writes it in the session's
+ * local wall clock, so it is already a calendar day.
  */
-
-const {
-  accountingDayOrCreatedAtSql,
-} = require('../utils/accountingDaySql');
 
 const FISCAL_YEAR_COLUMNS = `
   local_id AS id,
@@ -42,18 +44,23 @@ const FISCAL_YEAR_COLUMNS = `
  * The fiscal-year window is inclusive on both ends, so a document saved on
  * either boundary date belongs to the year.
  *
- * The date expression is compared as its ACCOUNTING CALENDAR DAY
- * (utils/accountingDaySql), not as its raw stored value: an accounting date
- * column is a DATETIME, and rows written by older paths hold the UTC instant
- * of the posting. Comparing those raw put an after-19:30 posting in the
- * previous day's year, while the posting guard filed it in the next one — the
- * same money in two fiscal years. Both halves now use the same rule.
+ * The date expression is compared as its STORED CALENDAR DAY — the accounting
+ * day is the value in the column, not an instant reinterpreted at read time.
+ * The posting guard makes the same decision for the same row (via
+ * utils/accountingDate.storedCalendarDay), so both halves always agree on which
+ * fiscal year a document belongs to.
  *
- * `created_at` stays unconverted: MySQL writes it in the session's local wall
- * clock, so shifting it would move it twice.
+ * `created_at` is the fallback for a row whose date column is NULL, and it is
+ * compared unconverted: MySQL writes it in the session's local wall clock, so
+ * it is already a calendar day.
  */
 function windowSql(dateExpression) {
-  const dayExpression = accountingDayOrCreatedAtSql(dateExpression);
+  const qualifier = dateExpression.includes('.')
+    ? dateExpression.slice(0, dateExpression.indexOf('.') + 1)
+    : '';
+
+  const dayExpression =
+    `COALESCE(${dateExpression}, ${qualifier}created_at)`;
 
   return `
     ${dayExpression} >= ?

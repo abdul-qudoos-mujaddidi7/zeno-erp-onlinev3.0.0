@@ -645,6 +645,33 @@ function installStubs() {
 
   fiscalYearCloseRepository.findPreferredAccountTypeId = async () => 1;
 
+  /*
+   * Ledger-hygiene reads. The production preview queries them, so without a
+   * stub here it reached the real pool and the preview tests failed on DNS.
+   * Both return nothing unless the test seeds a genuinely orphaned row.
+   */
+  fiscalYearCloseRepository.findOrphanClosingJournals = async (
+    conn,
+    { orgId, referenceType },
+  ) =>
+    (state.orphanClosingJournals || []).filter(
+      (journal) =>
+        Number(journal.org_id) === Number(orgId) &&
+        journal.reference_type === referenceType &&
+        Number(journal.status ?? 1) === 1,
+    );
+
+  fiscalYearCloseRepository.findOrphanOpeningBalances = async (
+    conn,
+    { orgId, source },
+  ) =>
+    (state.orphanOpeningBalances || []).filter(
+      (row) =>
+        Number(row.org_id) === Number(orgId) &&
+        row.source === source &&
+        Number(row.status ?? 1) === 1,
+    );
+
   fiscalYearCloseRepository.markClosed = async (conn, { orgId, localId, userId }) => {
     state.calls.push('markClosed');
 

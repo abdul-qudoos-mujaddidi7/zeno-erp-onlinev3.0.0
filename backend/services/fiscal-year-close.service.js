@@ -70,7 +70,6 @@ const {
 
 const {
   storedCalendarDay,
-  storedWallClockDay,
   kabulDateOnly,
 } = require('../utils/accountingDate');
 
@@ -170,12 +169,15 @@ function getAuthenticatedIdentity(user) {
 
 /*
  * The ONE accounting-day rule (utils/accountingDate.storedCalendarDay), shared
- * with the posting guard and the fiscal-year SQL windows.
+ * with the posting guard and the fiscal-year SQL windows: a STORED accounting
+ * date is its stored calendar day, unshifted.
  *
- * This used to read a stored value through `toISOString()`, i.e. the UTC day,
- * while the guard read the same value through its LOCAL components. For any row
- * written as an instant after 19:30 local the two answered with different days
- * — the close put the money in the closed year, the guard in the next one.
+ * This used to read a stored value through `toISOString()` while the guard read
+ * the same value through its LOCAL components; for a row stored after 19:30
+ * local the two answered with different days, putting the money in the closed
+ * year for one path and the next year for the other. Neither applies an offset
+ * now — the column is read at face value, and the +270 business offset is
+ * reserved for NEW transactions, where "today" is decided.
  */
 function toDateOnly(value) {
   return storedCalendarDay(value);
@@ -983,7 +985,7 @@ function orphanClosingJournalSummary(row) {
     currency: row.currency,
     accounting_date:
       toDateOnly(row.date) ||
-      storedWallClockDay(row.created_at),
+      toDateOnly(row.created_at),
     created_at: row.created_at,
     description: row.description,
   };

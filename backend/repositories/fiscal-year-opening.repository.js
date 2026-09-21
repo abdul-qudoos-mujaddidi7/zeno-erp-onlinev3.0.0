@@ -37,21 +37,24 @@
 /**
  * Inclusive upper date bound with the application's accounting-date fallback:
  *
- *   COALESCE(<accounting day of the date column>, created_at) < end_date + 1 day
+ *   COALESCE(date_col, created_at) < end_date + 1 day
  *
  * Same rule as fiscal-year.repository.windowSql (which the Step 4 close uses),
  * but ONE-SIDED on purpose: the roll-forward needs every journal up to the end
- * of the closed year, not activity inside a range. The accounting day itself
- * comes from utils/accountingDaySql, so the roll-forward cannot read a stored
- * instant as a different day than the posting guard does.
+ * of the closed year, not activity inside a range. The accounting day is the
+ * STORED calendar value, read exactly as the posting guard reads it, so the
+ * roll-forward can never classify a row into a different year than the guard.
  */
 function upToDateSql(dateExpression) {
-  return `${accountingDayOrCreatedAtSql(dateExpression)} < DATE_ADD(?, INTERVAL 1 DAY)`;
-}
+  const qualifier = dateExpression.includes('.')
+    ? dateExpression.slice(0, dateExpression.indexOf('.') + 1)
+    : '';
 
-const {
-  accountingDayOrCreatedAtSql,
-} = require('../utils/accountingDaySql');
+  return (
+    `COALESCE(${dateExpression}, ${qualifier}created_at) ` +
+    '< DATE_ADD(?, INTERVAL 1 DAY)'
+  );
+}
 
 const OPENING_BALANCE_COLUMNS = `
   o.local_id AS id,

@@ -816,6 +816,66 @@ function installStubs() {
     return assets?.account_type_id ?? 1;
   };
 
+  /*
+   * Ledger-hygiene reads, mirroring the production SQL: ACTIVE closing journals
+   * whose `fiscal_years` row does not exist, and ACTIVE opening balances whose
+   * source year is missing or no longer closed. Without these two stubs the
+   * preview reached the real pool and every preview test failed on DNS.
+   *
+   * A test seeds an orphan by posting a closing journal (or an opening) whose
+   * reference names no year of the organization.
+   */
+  fiscalYearCloseRepository.findOrphanClosingJournals = async (
+    conn,
+    { orgId, referenceType },
+  ) => {
+    state.calls.push('findOrphanClosingJournals');
+
+    return journalsForOrg(orgId).filter(
+      (journal) =>
+        journal.reference_type === referenceType &&
+        Number(journal.status ?? 1) === 1 &&
+        !state.years.some(
+          (year) =>
+            Number(year.org_id) === Number(orgId) &&
+            String(year.local_id) === String(journal.reference_id),
+        ),
+    );
+  };
+
+  fiscalYearCloseRepository.findOrphanOpeningBalances = async (
+    conn,
+    { orgId, source, fiscalYearId = null },
+  ) => {
+    state.calls.push('findOrphanOpeningBalances');
+
+    return state.openings.filter((row) => {
+      if (
+        Number(row.org_id) !== Number(orgId) ||
+        Number(row.status ?? 1) !== 1 ||
+        row.source !== source
+      ) {
+        return false;
+      }
+
+      if (
+        fiscalYearId !== null &&
+        fiscalYearId !== undefined &&
+        String(row.fiscal_year_id) !== String(fiscalYearId)
+      ) {
+        return false;
+      }
+
+      return !state.years.some(
+        (year) =>
+          Number(year.org_id) === Number(orgId) &&
+          String(year.local_id) === String(row.source_fiscal_year_id) &&
+          Number(year.status ?? 1) === 1 &&
+          year.fiscal_status === 'closed',
+      );
+    });
+  };
+
   fiscalYearCloseRepository.markClosed = async (conn, { orgId, localId, userId }) => {
     state.calls.push('markClosed');
 
@@ -2132,4 +2192,216 @@ test('the frontend API exposes a close, a preview and the audited reopen', () =>
     .join('\n');
 
   assert.equal(/unclose|revert/i.test(codeOnly), false);
+});
+
+/* ====================================================================== */
+/* Ledger hygiene: an orphaned close blocks its organization entirely      */
+/* ====================================================================== */
+
+/*
+ * An orphan closing journal is an ACTIVE `fiscal_year_close` journal whose
+ * reference_id names a fiscal year that does not exist. It is seeded directly
+ * because no code path can produce one: production holds six, all created
+ * outside the API by an older build, and they are never repaired here.
+ *
+ * Policy under test — deliberately DATE-INDEPENDENT:
+ *
+ *   ANY active orphan blocks EVERY close of that organization.
+ *
+ * The journal's own date is not the safety decision. Its service period is
+ * gone, so its accounting ownership cannot be proven, and the RETAINED effect
+ * it already produced is still posted. An orphan dated one day after a
+ * replacement year's end may well belong to the successor period — which is
+ * exactly why overlap cannot decide it.
+ */
+/* deliberately outside the harness's id generator (9000000000000000 + n) */
+const ORPHAN_FISCAL_YEAR_ID = '9999999999999999';
+
+function seedOrphanClosingJournal({
+  orgId = USER.org_id,
+  date = '2026-06-30',
+  currency = 'AFN',
+  status = 1,
+  referenceId = ORPHAN_FISCAL_YEAR_ID,
+} = {}) {
+  const localId = nextLocalId();
+
+  const journal = {
+    id: localId,
+    local_id: localId,
+    org_id: orgId,
+    reference_id: referenceId,
+    reference_type: 'fiscal_year_close',
+    description: 'closing entry of a fiscal year that no longer exists',
+    currency,
+    date,
+    status,
+    version: 1,
+    created_at: `${date}T10:00:00.000Z`,
+  };
+
+  state.journals.push(journal);
+
+  return journal;
+}
+
+function closingJournalsFor(referenceId) {
+  return state.journals.filter(
+    (journal) =>
+      journal.reference_type === 'fiscal_year_close' &&
+      String(journal.reference_id) === String(referenceId),
+  );
+}
+
+async function previewYear(year, user = USER) {
+  return fiscalYearCloseService.previewFiscalYearClose({
+    user,
+    fiscalYearId: year.id,
+  });
+}
+
+test('an orphan closing journal blocks the close of its organization', async () => {
+  seedContext();
+  const year = seedYear();
+  seedProfitableYear();
+
+  seedOrphanClosingJournal({ date: '2026-06-30' });
+
+  const journalsBefore = state.journals.length;
+
+  await assert.rejects(
+    () => closeYear(year),
+    (error) => {
+      assert.equal(error.statusCode, 409);
+      assert.equal(error.code, 'ORPHAN_CLOSING_JOURNALS');
+      assert.equal(error.details.orphan_closing_journals.length, 1);
+      assert.equal(
+        error.details.orphan_closing_journals[0].reference_id,
+        ORPHAN_FISCAL_YEAR_ID,
+      );
+
+      /* the date stays in the details, as a diagnostic only */
+      assert.equal(
+        error.details.orphan_closing_journals[0].accounting_date,
+        '2026-06-30',
+      );
+
+      assert.match(error.details.policy, /any active/);
+
+      return true;
+    },
+  );
+
+  /* nothing happened: no closing journal, no opening, no status flip */
+  assert.equal(state.journals.length, journalsBefore);
+  assert.equal(state.openings.length, 0);
+  assert.equal(connection.rolledBack, true);
+  assert.equal(
+    state.years.find((row) => row.local_id === year.id).fiscal_status,
+    'open',
+  );
+});
+
+test('an orphan dated OUTSIDE the candidate year blocks just as well', async () => {
+  seedContext();
+  const year = seedYear();
+  seedProfitableYear();
+
+  /* a year before the candidate: its own period is gone either way */
+  seedOrphanClosingJournal({ date: '2025-01-15' });
+
+  await assert.rejects(
+    () => closeYear(year),
+    (error) => error.code === 'ORPHAN_CLOSING_JOURNALS',
+  );
+
+  assert.equal(closingJournalsFor(year.id).length, 0);
+  assert.equal(connection.rolledBack, true);
+});
+
+test('an orphan one day after the candidate year end still blocks', async () => {
+  seedContext();
+  const year = seedYear();
+  seedProfitableYear();
+
+  /*
+   * 2027-01-01 is the day after FY 2026 ends, so it could belong to the
+   * successor period — which is exactly why overlap is not the rule.
+   */
+  seedOrphanClosingJournal({ date: '2027-01-01' });
+
+  await assert.rejects(
+    () => closeYear(year),
+    (error) => error.code === 'ORPHAN_CLOSING_JOURNALS',
+  );
+});
+
+test('a SOFT-DELETED orphan does not block: only active rows are read', async () => {
+  seedContext();
+  const year = seedYear();
+  seedProfitableYear();
+
+  seedOrphanClosingJournal({ date: '2026-06-30', status: 0 });
+
+  const result = await closeYear(year);
+
+  assert.equal(result.status, 'closed');
+});
+
+test('another organization\'s orphan does not block this one', async () => {
+  seedContext();
+  const year = seedYear();
+  seedProfitableYear();
+
+  seedOrphanClosingJournal({ orgId: USER.org_id + 1, date: '2026-06-30' });
+
+  const result = await closeYear(year);
+
+  assert.equal(result.status, 'closed');
+});
+
+test('the preview reports ledger_ready false when any active orphan exists', async () => {
+  seedContext();
+  const year = seedYear();
+  seedProfitableYear();
+
+  seedOrphanClosingJournal({ date: '2026-06-30' });
+
+  const journalsBefore = state.journals.length;
+
+  const preview = await previewYear(year);
+
+  assert.equal(preview.read_only, true);
+  assert.equal(preview.ledger_ready, false);
+  assert.equal(preview.orphan_closing_journals.length, 1);
+  assert.equal(preview.orphan_closing_journals_blocking.length, 1);
+  assert.equal(
+    preview.orphan_closing_journals_blocking[0].reference_id,
+    ORPHAN_FISCAL_YEAR_ID,
+  );
+
+  /* the date is reported, not used */
+  assert.equal(
+    preview.orphan_closing_journals[0].accounting_date,
+    '2026-06-30',
+  );
+
+  assert.equal(state.journals.length, journalsBefore, 'preview writes nothing');
+});
+
+test('a clean organization reports ledger_ready true and closes normally', async () => {
+  seedContext();
+  const year = seedYear();
+  seedProfitableYear();
+
+  const preview = await previewYear(year);
+
+  assert.equal(preview.ledger_ready, true);
+  assert.deepEqual(preview.orphan_closing_journals, []);
+  assert.deepEqual(preview.orphan_closing_journals_blocking, []);
+
+  const result = await closeYear(year);
+
+  assert.equal(result.status, 'closed');
+  assert.equal(closingJournalsFor(year.id).length > 0, true);
 });

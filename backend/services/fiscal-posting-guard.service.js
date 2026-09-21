@@ -82,14 +82,15 @@ const REASONS = {
  *
  * This is `storedCalendarDay` from utils/accountingDate — the ONE rule. It
  * matters that the guard does not have an opinion of its own here: the closing
- * engine and the fiscal-year SQL windows classify a stored date with the same
- * function (or its SQL mirror), so a document cannot belong to FY2026 for one
- * code path and FY2027 for another.
+ * engine and the fiscal-year SQL windows classify a stored date the same way
+ * (they compare the stored value directly), so a document cannot belong to
+ * FY2026 for one code path and FY2027 for another.
  *
- * Concretely, an accounting-date column written by an older path holds the UTC
- * instant of the posting; its accounting day is the LOCAL day of that instant
- * (`2026-09-09 20:00Z` is the 10th in Kabul), while a value written as
- * 'YYYY-MM-DD' is already a day and is never shifted.
+ * Concretely: a STORED accounting date is its stored calendar day, with no
+ * offset applied — `'2026-12-31 20:30:00'`, `'2026-12-31T20:30:00.000Z'` and a
+ * mysql2 Date of the same value are all 31 Dec. The +270-minute business offset
+ * belongs to NEW transactions (defaults and writes), where the current business
+ * day is decided, not to the reinterpretation of history.
  */
 function toCalendarDay(value) {
   return storedCalendarDay(value);

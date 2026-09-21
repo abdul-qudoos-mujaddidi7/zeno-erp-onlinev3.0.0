@@ -28,6 +28,18 @@
  *
  * Every function below is therefore expressed against BUSINESS_TIME_ZONE, and
  * none of them depends on `process.env.TZ` / `new Date().getTimezoneOffset()`.
+ *
+ * TWO POLICIES, DELIBERATELY DIFFERENT
+ * ------------------------------------
+ * NEW transactions: the accounting day is the BUSINESS (Kabul) calendar day of
+ * the moment (`kabulDateOnly`, `storageCalendarDay`), so a payment posted at
+ * 00:30 Kabul belongs to the new day even on a server whose own day lags.
+ *
+ * STORED / HISTORICAL values: THE STORED SQL CALENDAR DAY IS AUTHORITATIVE, and
+ * no offset is applied (`storedCalendarDay`). An audit of production found the
+ * same DATETIME column holding calendar days, UTC instants AND migrated
+ * wall-clock values, so an individual row's convention cannot be proven.
+ * Historical reclassification is out of scope; see the READING section below.
  */
 
 const BUSINESS_TIME_ZONE = 'Asia/Kabul';
@@ -107,41 +119,6 @@ function kabulDateOnly(value = new Date()) {
 }
 
 /*
- * The BUSINESS timezone's UTC offset in minutes (Kabul -> +270), measured from
- * ICU for the instant given (so a timezone with DST would still be exact).
- *
- * SQL cannot ask Node what "business local" means, so the fiscal-year windows
- * are handed this number as a literal — the same rule this module applies in
- * JavaScript, in every process timezone.
- */
-function businessOffsetMinutes(value = new Date()) {
-  const date = value instanceof Date ? value : new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return BUSINESS_OFFSET_FALLBACK_MINUTES;
-  }
-
-  const parts = businessTimeParts(date);
-
-  if (!parts) {
-    return BUSINESS_OFFSET_FALLBACK_MINUTES;
-  }
-
-  const wallClock = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  );
-
-  const instant = Math.floor(date.getTime() / 1000) * 1000;
-
-  return Math.round((wallClock - instant) / 60000);
-}
-
-/*
  * The process's own calendar day of an instant, as 'YYYY-MM-DD'.
  *
  * NOT an accounting rule any more: kept because a caller may legitimately ask
@@ -206,46 +183,61 @@ function isDateOnly(value) {
 
 /*
  * ---------------------------------------------------------------------------
- * READING a stored accounting date back (the ONE rule, Step 5 hardening)
+ * READING a stored accounting date back (historical policy)
  * ---------------------------------------------------------------------------
  *
- * An accounting date column is a DATETIME, and production holds two families
- * of values in it:
+ * THE STORED SQL CALENDAR DAY IS AUTHORITATIVE. A stored value is never
+ * shifted, by the business offset or by anything else:
  *
- *   calendar day   written from a 'YYYY-MM-DD' string by the Step 3.5 paths.
- *                  mysql2 stores it as midnight and the pool reads it back as
- *                  midnight in the "Z" frame, so the day is unambiguous.
- *   instant        written by older paths that passed `new Date()` or
- *                  `toISOString()`. The stored value is the UTC instant, so
- *                  its ACCOUNTING day is the BUSINESS (Kabul) day of that
- *                  instant — which is what the user actually posted it on.
+ *   '2026-12-31'                        -> 2026-12-31
+ *   '2026-12-31 20:30:00'               -> 2026-12-31
+ *   mysql2 Date '2026-12-31T20:30:00Z'  -> 2026-12-31
  *
- * Reading both with one getter is what produced the fiscal-year mismatch:
- * the posting guard read instants in one frame while the closing engine and
- * the SQL windows read them in another (previous day for any posting after
- * 19:30 Kabul). `storedCalendarDay` is the single decision:
+ * Why: the DATETIME column demonstrably holds more than one convention —
+ * calendar days written from 'YYYY-MM-DD', UTC instants written by older
+ * `new Date()` paths, and migrated rows whose clock is a local wall time. An
+ * audit of production found 7,627 non-midnight rows whose stored clock equals
+ * their own row-insertion clock (a wall clock, not an instant); applying the
+ * +270-minute business offset to those would move 129 of them a day forward.
+ * No per-row test can separate the families, so the column is read at face
+ * value and historical reclassification stays out of scope. A legacy
+ * UTC-looking 20:30 therefore ALSO stays on its stored day — deliberately, not
+ * by oversight.
  *
- *   midnight in the storage frame -> that day (a calendar-day value)
- *   anything with a time of day   -> the BUSINESS calendar day of the instant
+ * The +270 offset now applies to NEW transactions only (`kabulDateOnly` for a
+ * default/"today" and `storageCalendarDay` for anything written), which is
+ * where "the current business day" is decided.
  *
- * It is correct in every server timezone, because it never applies an offset
- * to a value that already is a day, and the offset it does apply is Kabul's —
- * never the process's.
+ * Because every reader shares this one function — the posting guard, the
+ * closing engine and the fiscal-year SQL windows (which compare the stored
+ * value directly) — a document can never be filed into one year by one path
+ * and a different year by another.
  */
-function isMidnightUtc(date) {
+function isRealCalendarDay(text) {
+  if (!DATE_ONLY.test(text)) {
+    return false;
+  }
+
+  const [year, month, day] = text.split('-').map(Number);
+  const probe = new Date(Date.UTC(year, month - 1, day));
+
+  /* rejects 2026-02-30, 2026-13-01 and anything else that is not a real day */
   return (
-    date.getUTCHours() === 0 &&
-    date.getUTCMinutes() === 0 &&
-    date.getUTCSeconds() === 0 &&
-    date.getUTCMilliseconds() === 0
+    probe.getUTCFullYear() === year &&
+    probe.getUTCMonth() === month - 1 &&
+    probe.getUTCDate() === day
   );
 }
 
 /*
- * Parses a stored/ISO string as the UTC instant its frame implies. A value
- * without an explicit zone is treated as storage-framed ("Z"), which is how
- * the pool reads every date column; 'YYYY-MM-DD HH:MM:SS' is therefore read
- * the same way a DB row is.
+ * Parses a string as the UTC instant its frame implies. Used by the WRITE path
+ * to recognise an instant that must be resolved to a business day
+ * (`storageCalendarDay`); the READ path never needs it, because a stored value
+ * is read as its own calendar day.
+ *
+ * A value without an explicit zone is treated as storage-framed ("Z"), which
+ * is how the pool reads every date column; 'YYYY-MM-DD HH:MM:SS' is therefore
+ * parsed the same way a DB row is.
  */
 function parseStoredInstant(text) {
   const normalized = text.includes('T') ? text : text.replace(' ', 'T');
@@ -263,11 +255,20 @@ function storedCalendarDay(value) {
   }
 
   if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) return null;
+    if (Number.isNaN(value.getTime())) {
+      return null;
+    }
 
-    return isMidnightUtc(value)
-      ? value.toISOString().slice(0, 10)
-      : kabulDateOnly(value);
+    /*
+     * UTC components, never local ones: the pool reads and writes this column
+     * in the "Z" frame, so a stored '2026-12-31 20:30:00' arrives as 20:30Z and
+     * its stored day is the 31st in every process timezone.
+     */
+    return [
+      value.getUTCFullYear(),
+      pad(value.getUTCMonth() + 1),
+      pad(value.getUTCDate()),
+    ].join('-');
   }
 
   const text = String(value).trim();
@@ -276,19 +277,10 @@ function storedCalendarDay(value) {
     return null;
   }
 
-  if (DATE_ONLY.test(text)) {
-    return text;
-  }
+  /* a stored string's day is its first ten characters — no Date in between */
+  const day = text.slice(0, 10);
 
-  const parsed = parseStoredInstant(text);
-
-  if (!parsed) {
-    const day = text.slice(0, 10);
-
-    return DATE_ONLY.test(day) ? day : null;
-  }
-
-  return storedCalendarDay(parsed);
+  return isRealCalendarDay(day) ? day : null;
 }
 
 /*
@@ -298,10 +290,13 @@ function storedCalendarDay(value) {
  *
  * Whatever the caller hands over — a Date, an ISO instant, a calendar day —
  * the column receives a CALENDAR DAY ('YYYY-MM-DD'), so the value can never
- * again mean two different days depending on who reads it. The day used for an
- * instant is the BUSINESS (Kabul) day, the same rule `storedCalendarDay` reads
- * back, so writing and reading round-trip exactly — and identically on a server
- * whose process timezone is UTC.
+ * again mean two different days depending on who reads it.
+ *
+ * The day chosen for an instant is the BUSINESS (Kabul) day: a payment posted
+ * at 00:30 Kabul on 1 Jan is stored as '2027-01-01', never as the 31 Dec UTC
+ * instant that a wall clock west of Kabul would read back. Reading is then
+ * trivially stable — `storedCalendarDay` returns the stored day unchanged — and
+ * identical on a server whose process timezone is UTC.
  *
  * A value that cannot be read as a date is passed through untouched (the
  * previous behaviour) instead of being turned into NULL.
@@ -330,48 +325,11 @@ function storageCalendarDay(value) {
   return parsed ? kabulDateOnly(parsed) : text;
 }
 
-/*
- * The STORED wall-clock day of a value that was never an instant.
- *
- * `created_at` is the only such column the fiscal-year windows touch: MySQL
- * writes it with NOW() in the session's clock, so what is stored IS a calendar
- * day, already local. Reading it back as an instant (the way journals.date is
- * read) would move it a day for late-evening rows and disagree with SQL, which
- * compares the stored value directly. Used for that column's diagnostics only.
- */
-function storedWallClockDay(value) {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime())
-      ? null
-      : value.toISOString().slice(0, 10);
-  }
-
-  const text = String(value).trim();
-
-  if (!text) {
-    return null;
-  }
-
-  if (DATE_ONLY.test(text)) {
-    return text;
-  }
-
-  const day = text.slice(0, 10);
-
-  return DATE_ONLY.test(day) ? day : null;
-}
-
 module.exports = {
   BUSINESS_TIME_ZONE,
   accountingDate,
   localDateOnly,
   kabulDateOnly,
-  businessOffsetMinutes,
-  storedWallClockDay,
   isDateOnly,
   storedCalendarDay,
   storageCalendarDay,

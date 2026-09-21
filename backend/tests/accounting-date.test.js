@@ -20,6 +20,7 @@ process.env.DB_NAME = 'accounting-date-test-db';
 
 const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
 
 const pool = require('../database/pool');
 
@@ -37,8 +38,11 @@ const accountService =
 
 const {
   accountingDate,
+  kabulDateOnly,
   localDateOnly,
   isDateOnly,
+  storedCalendarDay,
+  storageCalendarDay,
 } = require('../utils/accountingDate');
 
 const {
@@ -152,20 +156,22 @@ test('a Date is passed through so the instant is preserved', () => {
 test('an unparseable Date falls back instead of writing Invalid Date', () => {
   const invalid = new Date('not a date');
 
-  assert.equal(accountingDate(invalid), localDateOnly(new Date()));
+  assert.equal(accountingDate(invalid), kabulDateOnly(new Date()));
 });
 
-test('the fallback is the LOCAL calendar day, never the UTC day', () => {
+test('the fallback is the BUSINESS (Kabul) calendar day, never the UTC day', () => {
   /*
    * 21:30 UTC on 31 Dec is already 1 Jan in a UTC+4:30 book. Using the UTC
    * day here would file the entry into the previous fiscal year.
+   *
+   * The expected value is the BUSINESS day, not the process's own day: a
+   * server running in UTC must file the same entry on the same accounting day
+   * as one running in Kabul, which is what `kabulDateOnly` decides.
    */
   const instant = new Date('2026-12-31T21:30:00.000Z');
-  const expected = [
-    instant.getFullYear(),
-    String(instant.getMonth() + 1).padStart(2, '0'),
-    String(instant.getDate()).padStart(2, '0'),
-  ].join('-');
+  const expected = '2027-01-01';
+
+  assert.equal(kabulDateOnly(instant), expected);
 
   assert.equal(
     accountingDate(null, { fallback: instant }),
@@ -183,8 +189,8 @@ test('the fallback is the LOCAL calendar day, never the UTC day', () => {
   );
 });
 
-test('a local calendar day built by the server agrees with localDateOnly', () => {
-  const day = localDateOnly(new Date());
+test('a business calendar day built by the server agrees with kabulDateOnly', () => {
+  const day = kabulDateOnly(new Date());
 
   assert.match(day, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(day, accountingDate(undefined));
@@ -560,3 +566,337 @@ test('the fiscal-year migration does not alter any existing table', () => {
     /\b(INSERT|UPDATE|DELETE|ALTER|DROP|TRUNCATE)\s/i,
   );
 });
+
+/* ====================================================================== */
+/* Stored accounting dates: the stored SQL calendar day is authoritative   */
+/* ====================================================================== */
+
+/*
+ * Approved historical policy. An audit of production proved that the DATETIME
+ * column holds more than one convention:
+ *
+ *   137,218 rows  at midnight           calendar days written from 'YYYY-MM-DD'
+ *     7,627 rows  with a time of day    the stored clock EQUALS the row's own
+ *                                       insertion clock, i.e. a local wall
+ *                                       clock, not a serialized instant
+ *       358 rows  exactly +270 minutes  genuine UTC instants from older
+ *                                       `new Date()` paths writing through the
+ *                                       pool's "Z" frame
+ *     2,512 rows  backdated             convention undecidable per row
+ *
+ * Applying the +270 business offset to all of them moved 129 of the wall-clock
+ * rows a calendar day (their clock lands in the 19:30-23:59 window). No per-row
+ * test can separate the families, so a STORED value is now read at face value
+ * and historical reclassification is out of scope. The offset lives on in the
+ * NEW-transaction path only, where "today" is decided.
+ */
+
+test('a stored accounting date keeps its stored calendar day', () => {
+  /* calendar day */
+  assert.equal(storedCalendarDay('2026-12-31'), '2026-12-31');
+
+  /* a stored DATETIME with a time of day — no shift, whatever the hour */
+  assert.equal(storedCalendarDay('2026-12-31 20:30:00'), '2026-12-31');
+  assert.equal(storedCalendarDay('2026-12-31 23:59:59'), '2026-12-31');
+  assert.equal(storedCalendarDay('2026-01-01 00:00:01'), '2026-01-01');
+
+  /* what mysql2 returns for that DATETIME under a 'Z' pool: the same day */
+  assert.equal(
+    storedCalendarDay(new Date('2026-12-31T20:30:00.000Z')),
+    '2026-12-31',
+  );
+
+  /* a value that is not a real calendar day is still refused, not guessed */
+  assert.equal(storedCalendarDay('rubbish'), null);
+  assert.equal(storedCalendarDay('2026-02-30 10:00:00'), null);
+  assert.equal(storedCalendarDay(''), null);
+  assert.equal(storedCalendarDay(null), null);
+  assert.equal(storedCalendarDay(undefined), null);
+  assert.equal(storedCalendarDay(new Date('nonsense')), null);
+});
+
+test('the +270 business offset is never applied to a stored value', () => {
+  /*
+   * Both families stay on their stored day. The wall-clock row is correct by
+   * definition, and the legacy UTC-looking row is deliberately NOT reclassified
+   * — repairing history is a separate, explicitly approved operation.
+   */
+  assert.equal(storedCalendarDay('2026-12-31 20:30:00'), '2026-12-31');
+  assert.equal(
+    storedCalendarDay('2026-12-31T20:30:00.000Z'),
+    '2026-12-31',
+    'a legacy UTC-looking instant keeps its stored day',
+  );
+
+  /*
+   * Contrast, so the two policies cannot be confused: the SAME instant, when it
+   * is a NEW transaction's moment, is the next business day.
+   */
+  assert.equal(
+    storageCalendarDay(new Date('2026-12-31T20:30:00.000Z')),
+    '2027-01-01',
+    'a new write resolves to the business day',
+  );
+  assert.equal(
+    kabulDateOnly(new Date('2026-12-31T20:30:00.000Z')),
+    '2027-01-01',
+  );
+});
+
+test('a stored day is identical under UTC, Asia/Kabul and New York', () => {
+  const script = `
+    const { storedCalendarDay, kabulDateOnly } = require('./utils/accountingDate');
+
+    process.stdout.write(JSON.stringify({
+      zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      processOffset: -new Date().getTimezoneOffset(),
+      stored: storedCalendarDay('2026-12-31 20:30:00'),
+      dateOnly: storedCalendarDay('2026-12-31'),
+      mysql2Date: storedCalendarDay(new Date('2026-12-31T20:30:00.000Z')),
+      businessDay: kabulDateOnly(new Date('2026-12-31T20:30:00.000Z')),
+    }));
+  `;
+
+  const results = ['UTC', 'Asia/Kabul', 'EST5EDT'].map((tz) => {
+    const output = execFileSync(
+      process.execPath,
+      ['-e', script],
+      { cwd: process.cwd(), env: { ...process.env, TZ: tz }, encoding: 'utf8' },
+    );
+
+    return JSON.parse(output);
+  });
+
+  assert.equal(results[0].zone, 'UTC');
+  assert.equal(results[1].zone, 'Asia/Kabul');
+  assert.equal(results[2].zone, 'America/New_York');
+
+  /* the three processes really do disagree about their own calendar day */
+  assert.notDeepEqual(
+    results.map((row) => row.processOffset),
+    [270, 270, 270],
+    'the fixture must exercise genuinely different process timezones',
+  );
+
+  for (const row of results) {
+    assert.equal(row.stored, '2026-12-31', `${row.zone}: stored day`);
+    assert.equal(row.dateOnly, '2026-12-31', `${row.zone}: date-only day`);
+    assert.equal(row.mysql2Date, '2026-12-31', `${row.zone}: Date day`);
+    assert.equal(row.businessDay, '2027-01-01', `${row.zone}: business day`);
+  }
+});
+
+test('the fiscal-year SQL window compares the stored day, with no offset', async () => {
+  const fiscalYearCloseRepository =
+    require('../repositories/fiscal-year-close.repository');
+
+  const fiscalYearOpeningRepository =
+    require('../repositories/fiscal-year-opening.repository');
+
+  const statements = [];
+
+  const executor = {
+    execute: async (sql, values) => {
+      statements.push({ sql, values: values || [] });
+      return [[], {}];
+    },
+  };
+
+  await fiscalYearCloseRepository.sumPeriodAccountActivity(executor, {
+    orgId: 1,
+    startDate: '2026-01-01',
+    endDate: '2026-12-31',
+    codes: ['SALES'],
+  });
+
+  await fiscalYearOpeningRepository.findPeriodEndAccountBalances(executor, {
+    orgId: 1,
+    endDate: '2026-12-31',
+  });
+
+  assert.equal(statements.length, 4, 'both entry passes of both readers');
+
+  for (const { sql } of statements) {
+    /* the stored column is compared as stored, with the created_at fallback */
+    assert.match(
+      sql,
+      /COALESCE\(\s*j\.date\s*,\s*j\.created_at\s*\)/,
+      'the window must compare the stored value with its created_at fallback',
+    );
+
+    /* and nothing reinterprets it: no business offset, no UTC conversion */
+    assert.doesNotMatch(sql, /DATE_ADD\(\s*j\.date\s*,/i);
+    assert.doesNotMatch(sql, /270/);
+    assert.doesNotMatch(sql, /TIME_TO_SEC/i);
+    assert.doesNotMatch(sql, /CONVERT_TZ/i);
+  }
+
+  /* the inclusive upper bound is unchanged: end_date + 1 day, exclusive */
+  assert.match(statements[0].sql, /< DATE_ADD\(\?, INTERVAL 1 DAY\)/);
+});
+
+test('a fiscal-year boundary sorts by the stored calendar day', () => {
+  /*
+   * The SQL comparison, in memory: an inclusive start and an exclusive
+   * (end_date + 1 day) upper bound, both applied to the stored day. A document
+   * stored on the closing day belongs to the closing year; the next day belongs
+   * to the next one.
+   */
+  const inWindow = (day, startDate, endDate) => {
+    const upper = new Date(`${endDate}T00:00:00.000Z`);
+    upper.setUTCDate(upper.getUTCDate() + 1);
+
+    return day >= startDate && day < upper.toISOString().slice(0, 10);
+  };
+
+  const FY_2026 = ['2026-01-01', '2026-12-31'];
+  const FY_2027 = ['2027-01-01', '2027-12-31'];
+
+  const closingDay = storedCalendarDay('2026-12-31 20:30:00');
+  const openingDay = storedCalendarDay('2027-01-01 00:30:00');
+
+  assert.equal(closingDay, '2026-12-31');
+  assert.equal(openingDay, '2027-01-01');
+
+  assert.equal(inWindow(closingDay, ...FY_2026), true);
+  assert.equal(inWindow(closingDay, ...FY_2027), false);
+  assert.equal(inWindow(openingDay, ...FY_2027), true);
+  assert.equal(inWindow(openingDay, ...FY_2026), false);
+});
+
+/* ====================================================================== */
+/* NEW transactions: the Kabul business day, stored as a calendar day      */
+/* ====================================================================== */
+
+test('a new journal date is normalized to the Kabul business day', async () => {
+  const statements = [];
+
+  const executor = {
+    execute: async (sql, values) => {
+      statements.push({ sql, values: values || [] });
+      return [{ affectedRows: 1 }, {}];
+    },
+  };
+
+  /*
+   * The file's beforeEach stubs `create` for the service-level tests, so the
+   * real repository is loaded fresh here to observe what it actually binds.
+   */
+  const repositoryPath = require.resolve('../repositories/journal.repository');
+  const cached = require.cache[repositoryPath];
+
+  delete require.cache[repositoryPath];
+
+  const realJournalRepository = require('../repositories/journal.repository');
+
+  require.cache[repositoryPath] = cached;
+
+  /*
+   * 01:00 on 1 Jan in Kabul is 20:30 on 31 Dec UTC. Storing the instant would
+   * file the entry into the previous fiscal year; storing its BUSINESS day
+   * files it where the user made it, as a calendar day.
+   */
+  await realJournalRepository.create(executor, {
+    orgId: 42,
+    localId: 1,
+    userId: 7,
+    data: {
+      date: '2026-12-31T20:30:00.000Z',
+      reference_id: null,
+      reference_type: null,
+      description: 'payment',
+      currency: 'AFN',
+      first_entry_account: 1,
+      first_entry_debit: 10,
+      first_entry_credit: 0,
+      second_entry_account: 2,
+      second_entry_debit: 0,
+      second_entry_credit: 10,
+      status: 1,
+    },
+  });
+
+  const stored = statements[0].values[2];
+
+  assert.equal(stored, '2027-01-01');
+  assert.match(
+    stored,
+    /^\d{4}-\d{2}-\d{2}$/,
+    'stored as a calendar day, never an instant',
+  );
+});
+
+test('an unrelated journal edit never rewrites the stored accounting date', async () => {
+  const statements = [];
+
+  const executor = {
+    execute: async (sql, values) => {
+      statements.push({ sql, values: values || [] });
+      return [{ affectedRows: 1 }, {}];
+    },
+  };
+
+  /* a description-only edit */
+  await journalRepository.update(executor, {
+    orgId: 42,
+    localId: 1,
+    userId: 7,
+    data: { description: 'corrected note' },
+  });
+
+  const { sql } = statements[0];
+
+  assert.doesNotMatch(
+    sql,
+    /\bdate\s*=\s*\?/,
+    'a non-date edit must not carry the date column at all',
+  );
+
+  /* the historical value can only survive if nothing writes to the column */
+  assert.match(sql, /SET[\s\S]*description = \?/);
+});
+
+test('an explicit journal date update uses the calendar-day rule', async () => {
+  const statements = [];
+
+  const executor = {
+    execute: async (sql, values) => {
+      statements.push({ sql, values: values || [] });
+      return [{ affectedRows: 1 }, {}];
+    },
+  };
+
+  await journalRepository.update(executor, {
+    orgId: 42,
+    localId: 1,
+    userId: 7,
+    data: { date: new Date('2026-12-31T20:30:00.000Z') },
+  });
+
+  const { sql, values } = statements[0];
+
+  assert.match(sql, /\bdate\s*=\s*\?/);
+  assert.equal(
+    values[0],
+    '2027-01-01',
+    'an instant is resolved to its business day before storage',
+  );
+});
+
+test('a row with a NULL accounting date is classified by its created_at day', () => {
+  /*
+   * The window falls back to `created_at` UNCONVERTED, because MySQL writes
+   * that column with NOW() in the session clock — it is already a local
+   * calendar day. Reading it through the stored-day rule gives the same answer
+   * SQL compares, so a late-evening fallback row stays on its own day.
+   */
+  const fallbackDay = storedCalendarDay('2026-12-31 20:00:00');
+
+  assert.equal(fallbackDay, '2026-12-31');
+  assert.equal(
+    fallbackDay,
+    '2026-12-31 20:00:00'.slice(0, 10),
+    'the JS reading must equal the value SQL compares',
+  );
+});
+
