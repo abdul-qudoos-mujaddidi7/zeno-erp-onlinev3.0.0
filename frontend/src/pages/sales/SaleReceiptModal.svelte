@@ -32,6 +32,14 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { showDate } from '../../calendar.js';
 import { currencyApi } from '../../api/currencyApi.js';
 
+  /*
+   * Thermal roll width, in millimetres. The printed page is declared as this
+   * width (see printReceipt) so the page box equals the paper the driver already
+   * has loaded, and the 74mm slip is centred inside it. Change this single number
+   * for a 58mm roll — the slip's own width has to be narrowed to match.
+   */
+  const ROLL_WIDTH_MM = 80;
+
   export let sale = {};
   export let items = [];
   export let payments = [];
@@ -260,6 +268,34 @@ import { currencyApi } from '../../api/currencyApi.js';
       pageHeight = Math.ceil(contentBottom - box.top) + 16;
     }
     const content = document.getElementById('receipt-content').innerHTML;
+
+    /*
+     * The declared page is the PAPER, not the slip.
+     *
+     * Every other receipt in the app declares 'size: 74mm auto', which is
+     * invalid — 'auto' is only legal as the whole value — so browsers drop the
+     * rule and lay the slip out against the printer driver's paper. That is why
+     * those slips fill the roll. Here the rule IS valid, so the engine builds a
+     * real page box; if that box were the 74mm slip, the driver would have to
+     * place a 74mm page onto an 80mm roll and the leftover ~6mm would print as an
+     * empty strip on whichever side the driver aligns to (left on most thermal
+     * drivers, centred on some).
+     *
+     * So: declare the 80mm roll as the page and centre the 74mm slip inside it.
+     * The page box then equals the paper, the driver has nothing left to align,
+     * and the ink gets symmetric ~3mm margins — inside the normal non-printable
+     * edge of an 80mm roll. ROLL_WIDTH_MM is the one number to change for a 58mm
+     * printer (which also needs the slip narrowed).
+     *
+     * The height is the measured slip, which is what stops the blank tail. When
+     * the slip cannot be measured there is no height to declare, so no rule is
+     * emitted at all and the printer's own paper governs.
+     */
+    const pageRule =
+      pageHeight > 0
+        ? `@page { size: ${ROLL_WIDTH_MM}mm ${pageHeight}px; margin: 0; }`
+        : '';
+
     const styles = `
         <style>
           /*
@@ -428,7 +464,8 @@ td, th {
   }
 /*
  * The printed document is a page, not a layout: nothing may add an offset at
- * its top, and nothing may centre the slip in the page box.
+ * its top. Horizontal placement is deliberate and declared further down, next
+ * to the @page rule: the slip is centred in the paper (see the note there).
  */
 html,
 body {
@@ -436,12 +473,6 @@ body {
   padding: 0;
   min-height: 0;
   background: #fff;
-}
-
-body {
-  display: block;
-  align-items: flex-start;
-  justify-content: flex-start;
 }
        
 table { table-layout: fixed; width: 100%; }
@@ -487,7 +518,14 @@ td {
    */
   .receipt-footer .footer-line { font-size: 12px; font-weight: 500; }
   .receipt-footer .footer-signoff { font-size: 13px; font-weight: 600; }
-          @page { size: 74mm ${pageHeight > 0 ? `${pageHeight}px` : 'auto'}; margin: 0; }
+          ${pageRule}
+
+          /*
+           * Slip centred in the paper: a flex row keeps the page width and lets
+           * the slip keep its own 74mm. 'align-items: flex-start' stops the slip
+           * from being stretched to the page height.
+           */
+          body { display: flex; justify-content: center; align-items: flex-start; }
 
 .center { text-align: center; }
 .divider { border-top: 1px solid #000; margin: 6px 0; }
