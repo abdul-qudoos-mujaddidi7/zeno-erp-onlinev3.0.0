@@ -975,16 +975,8 @@ function resolveReportTitle(type) {
   return titles[type] || t('Report');
 }
 
-function resolveOrientation(type) {
-  return [
-    'accounts',
-    'account_financial_report',
-    'journals_report',
-    'product_transactions',
-    'account_products_report',
-  ].includes(type)
-    ? 'landscape'
-    : 'portrait';
+function resolveOrientation() {
+  return 'portrait';
 }
 
 function resolveFileName(type) {
@@ -4013,8 +4005,7 @@ export async function generatePDF(
     await loadThings();
 
     const rtl = t('dir') === 'rtl';
-    const orientation =
-      resolveOrientation(type);
+    const orientation = resolveOrientation();
     const doc = new jsPDF({
       orientation,
       unit: 'mm',

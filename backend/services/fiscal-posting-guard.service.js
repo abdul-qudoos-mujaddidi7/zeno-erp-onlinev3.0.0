@@ -65,7 +65,7 @@ const fiscalYearRepository =
   require('../repositories/fiscal-year.repository');
 
 const {
-  localDateOnly,
+  storedCalendarDay,
 } = require('../utils/accountingDate');
 
 const CLOSED_YEAR_ERROR = 'FISCAL_YEAR_CLOSED';
@@ -76,45 +76,23 @@ const REASONS = {
   OPEN_FISCAL_YEAR: 'open_fiscal_year',
 };
 
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-const ISO_DATE_TIME = /^(\d{4}-\d{2}-\d{2})[T ]/;
-
 /*
  * Resolves any accounting-date value to a comparable calendar day
  * ('YYYY-MM-DD'), or null when the value carries no usable date.
  *
- * A date-only string is never round-tripped through Date (that is the Step 3.5
- * rule). A stored DATETIME arrives as a JS Date and is read through its LOCAL
- * components, matching how the rest of the application displays such a date.
+ * This is `storedCalendarDay` from utils/accountingDate — the ONE rule. It
+ * matters that the guard does not have an opinion of its own here: the closing
+ * engine and the fiscal-year SQL windows classify a stored date with the same
+ * function (or its SQL mirror), so a document cannot belong to FY2026 for one
+ * code path and FY2027 for another.
+ *
+ * Concretely, an accounting-date column written by an older path holds the UTC
+ * instant of the posting; its accounting day is the LOCAL day of that instant
+ * (`2026-09-09 20:00Z` is the 10th in Kabul), while a value written as
+ * 'YYYY-MM-DD' is already a day and is never shifted.
  */
 function toCalendarDay(value) {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : localDateOnly(value);
-  }
-
-  const text = String(value).trim();
-
-  if (!text) {
-    return null;
-  }
-
-  if (DATE_ONLY.test(text)) {
-    return text;
-  }
-
-  const isoMatch = text.match(ISO_DATE_TIME);
-
-  if (isoMatch) {
-    return isoMatch[1];
-  }
-
-  const parsed = new Date(text);
-
-  return Number.isNaN(parsed.getTime()) ? null : localDateOnly(parsed);
+  return storedCalendarDay(value);
 }
 
 function closedYearError({

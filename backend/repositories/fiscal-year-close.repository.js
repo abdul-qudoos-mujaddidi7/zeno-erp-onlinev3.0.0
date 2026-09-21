@@ -108,6 +108,112 @@ async function findClosingJournals(
 }
 
 /*
+ * ACTIVE closing journals whose fiscal year no longer exists.
+ *
+ * A closing entry is identified by `reference_type = 'fiscal_year_close'` plus
+ * `reference_id = <fiscal year local_id>`, and nothing enforces that the year
+ * is still there. When a fiscal-year row disappears (outside the API: an older
+ * build, a manual SQL edit) the closing entry stays ACTIVE, keeps offsetting
+ * the P&L accounts and keeps its profit in RETAINED, while the date range it
+ * belongs to is no longer covered by any fiscal year — so the period silently
+ * reopens and the next close would compute a period result on top of a phantom
+ * closing entry.
+ *
+ * This read is how the close engine DETECTS that instead of silently
+ * compounding it. Nothing here is repaired: the rows are reported.
+ */
+async function findOrphanClosingJournals(
+  executor,
+  {
+    orgId,
+    referenceType,
+  },
+) {
+  const [rows] = await executor.execute(
+    `
+      SELECT
+        j.local_id AS id,
+        j.local_id,
+        j.reference_id,
+        j.currency,
+        j.date,
+        j.description,
+        j.created_at
+      FROM journals j
+      LEFT JOIN fiscal_years f
+        ON f.org_id = j.org_id
+       AND f.local_id = j.reference_id
+      WHERE j.org_id = ?
+        AND j.status = 1
+        AND j.reference_type = ?
+        AND f.local_id IS NULL
+      ORDER BY j.local_id ASC
+    `,
+    [orgId, referenceType],
+  );
+
+  return rows;
+}
+
+/*
+ * ACTIVE opening balances that no longer have a valid CLOSED source year.
+ *
+ * The receiving year's own guard rejects a second roll-forward with
+ * OPENING_BALANCES_ALREADY_EXIST and tells the operator to "reopen the year
+ * that produced them" — an instruction that cannot be followed when that year
+ * no longer exists. Reporting that case separately is what turns a dead end
+ * into an actionable business error.
+ */
+async function findOrphanOpeningBalances(
+  executor,
+  {
+    orgId,
+    source,
+    fiscalYearId = null,
+  },
+) {
+  const conditions = [
+    'o.org_id = ?',
+    'o.status = 1',
+    'o.source = ?',
+    "(s.local_id IS NULL OR s.status <> 1 OR LOWER(COALESCE(s.fiscal_status, '')) <> 'closed')",
+  ];
+
+  const values = [orgId, source];
+
+  if (fiscalYearId !== null && fiscalYearId !== undefined) {
+    conditions.push('o.fiscal_year_id = ?');
+    values.push(fiscalYearId);
+  }
+
+  const [rows] = await executor.execute(
+    `
+      SELECT
+        o.local_id AS id,
+        o.local_id,
+        o.fiscal_year_id,
+        o.source_fiscal_year_id,
+        o.account_id,
+        o.currency,
+        o.opening_balance,
+        o.balance_side,
+        o.note,
+        s.local_id AS source_found,
+        s.fiscal_status AS source_status
+      FROM fiscal_year_opening_balances o
+      LEFT JOIN fiscal_years s
+        ON s.org_id = o.org_id
+       AND s.local_id = o.source_fiscal_year_id
+      WHERE ${conditions.join('\n        AND ')}
+      ORDER BY o.local_id ASC
+    `,
+    values,
+  );
+
+  return rows;
+}
+
+/*
  * Net activity of the given account codes inside one inclusive period.
  *
  * A journal row has exactly two entry positions, so each row contributes to
@@ -402,6 +508,8 @@ async function markReopened(
 module.exports = {
   lockOrganization,
   findClosingJournals,
+  findOrphanClosingJournals,
+  findOrphanOpeningBalances,
   sumPeriodAccountActivity,
   findPreferredAccountTypeId,
   markClosed,

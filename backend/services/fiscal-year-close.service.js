@@ -69,6 +69,12 @@ const {
 } = require('../utils/generateLocalId');
 
 const {
+  storedCalendarDay,
+  storedWallClockDay,
+  kabulDateOnly,
+} = require('../utils/accountingDate');
+
+const {
   PNL_ACCOUNT_CODES,
   RETAINED_ACCOUNT_CODE,
 } = require('../constants/systemAccounts');
@@ -113,13 +119,22 @@ const RECEIVING_FISCAL_YEAR_CLOSED =
 const FISCAL_YEAR_NOT_CLOSED =
   'FISCAL_YEAR_NOT_CLOSED';
 
+/*
+ * A closing journal or an opening balance whose fiscal year no longer exists.
+ * Nothing is repaired automatically — the close REFUSES to run on top of it and
+ * reports the exact rows, because a phantom closing entry silently offsets the
+ * P&L accounts (and RETAINED) and a phantom roll-forward cannot be "reopened".
+ */
+const ORPHAN_CLOSING_JOURNALS =
+  'ORPHAN_CLOSING_JOURNALS';
+
+const ORPHAN_OPENING_BALANCES =
+  'ORPHAN_OPENING_BALANCES';
+
 const OPENING_BALANCES_ALREADY_EXIST =
   'FISCAL_YEAR_OPENING_BALANCES_EXIST';
 
 const AMOUNT_DECIMALS = 6;
-
-const DATE_PATTERN =
-  /^\d{4}-\d{2}-\d{2}$/;
 
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
@@ -154,33 +169,16 @@ function getAuthenticatedIdentity(user) {
 }
 
 /*
- * Same calendar-day rule as the fiscal-year foundation and the accounting
- * date helper: a DATE column is compared as a plain YYYY-MM-DD string, so no
- * timezone conversion can move the year boundary.
+ * The ONE accounting-day rule (utils/accountingDate.storedCalendarDay), shared
+ * with the posting guard and the fiscal-year SQL windows.
+ *
+ * This used to read a stored value through `toISOString()`, i.e. the UTC day,
+ * while the guard read the same value through its LOCAL components. For any row
+ * written as an instant after 19:30 local the two answered with different days
+ * — the close put the money in the closed year, the guard in the next one.
  */
 function toDateOnly(value) {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
-
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) return null;
-    return value.toISOString().slice(0, 10);
-  }
-
-  const text = String(value).trim();
-
-  if (DATE_PATTERN.test(text)) {
-    return text;
-  }
-
-  const parsed = new Date(text);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return parsed.toISOString().slice(0, 10);
+  return storedCalendarDay(value);
 }
 
 function normalizeYear(row) {
@@ -970,6 +968,76 @@ function summarizeRetainedAccount(account, extras = {}) {
   };
 }
 
+/*
+ * Diagnostics for a closing journal whose fiscal year no longer exists.
+ *
+ * The stored date is reported so the operator can see what the row is, but it
+ * is NOT the safety decision — see assertNoOrphanClosingJournals below: an
+ * active orphan blocks every close of the organization, whatever day it
+ * carries.
+ */
+function orphanClosingJournalSummary(row) {
+  return {
+    journal_id: row.local_id,
+    reference_id: row.reference_id,
+    currency: row.currency,
+    accounting_date:
+      toDateOnly(row.date) ||
+      storedWallClockDay(row.created_at),
+    created_at: row.created_at,
+    description: row.description,
+  };
+}
+
+/*
+ * Refuses the close when the organization holds ANY active closing journal of a
+ * fiscal year that no longer exists.
+ *
+ * Policy (deliberately date-independent):
+ *
+ *   The journal's original period is missing, so its accounting ownership
+ *   cannot be proven. An orphan dated one day past a replacement year's end may
+ *   actually belong to the successor period, and its P&L/RETAINED effect is
+ *   already posted. Closing on top of that — for this year or any other — would
+ *   produce a result nobody can defend.
+ *
+ * The journal dates stay in the error details as diagnostics; they are not used
+ * to decide whether the row blocks. Soft-deleted (status = 0) rows never reach
+ * here: the read filters them, so an already-resolved orphan does not block.
+ */
+function assertNoOrphanClosingJournals(orphans, fiscalYear) {
+  if (!orphans || orphans.length === 0) {
+    return null;
+  }
+
+  throw new AppError(
+    `${orphans.length} active fiscal-year closing journal(s) of this organization belong to a fiscal year that no longer exists. Until those rows are voided by an approved repair, no fiscal year of this organization can be closed — including ${fiscalYear.name} — because the missing period makes their accounting ownership unprovable.`,
+    409,
+    ORPHAN_CLOSING_JOURNALS,
+    {
+      fiscal_year_id: fiscalYear.id,
+      fiscal_year_name: fiscalYear.name,
+      orphan_closing_journals: orphans.map(orphanClosingJournalSummary),
+      policy:
+        'any active closing journal whose fiscal year no longer exists blocks every close of the organization; the journal date is reported for diagnosis only',
+    },
+  );
+}
+
+function orphanOpeningBalanceSummary(row) {
+  return {
+    opening_balance_id: row.local_id,
+    fiscal_year_id: row.fiscal_year_id,
+    source_fiscal_year_id: row.source_fiscal_year_id,
+    account_id: row.account_id,
+    currency: row.currency,
+    opening_balance: row.opening_balance,
+    source_fiscal_year_found: row.source_found !== null && row.source_found !== undefined,
+    source_fiscal_status: row.source_status ?? null,
+    note: row.note,
+  };
+}
+
 async function loadFiscalYear(executor, { orgId, fiscalYearId }) {
   const row = await fiscalYearRepository.findByLocalId(
     executor,
@@ -1021,6 +1089,29 @@ async function previewFiscalYearClose({
       fiscalYearId,
     },
   );
+
+  /*
+   * Read-only ledger hygiene check. Reported (never repaired) so the operator
+   * sees the same defect the close will refuse, before clicking.
+   */
+  const [orphanClosings, orphanOpenings] = await Promise.all([
+    fiscalYearCloseRepository.findOrphanClosingJournals(db, {
+      orgId,
+      referenceType: CLOSING_REFERENCE_TYPE,
+    }),
+    fiscalYearCloseRepository.findOrphanOpeningBalances(db, {
+      orgId,
+      source: OPENING_BALANCE_SOURCE,
+    }),
+  ]);
+
+  /*
+   * EVERY active orphan blocks (see assertNoOrphanClosingJournals): the period
+   * it belonged to is gone, so its accounting ownership cannot be proven — an
+   * orphan one day past a replacement year's end may still belong to the
+   * successor period, and its RETAINED effect is already posted.
+   */
+  const blockingOrphans = orphanClosings;
 
   const [retainedAccount, closingJournals, rows] =
     await Promise.all([
@@ -1226,6 +1317,24 @@ async function previewFiscalYearClose({
     existing_opening_balances:
       existingOpenings.map((row) => openingBalanceSummary(row)),
     retained_account_provisioned: Boolean(retainedActive),
+
+    /*
+     * Ledger hygiene. An active closing journal whose fiscal year no longer
+     * exists is never repaired here, and it blocks EVERY close of this
+     * organization: the period it belonged to is missing, so whether it should
+     * affect this year cannot be proven. The journal date stays in the
+     * diagnostics, but it is not the safety decision.
+     */
+    ledger_ready: orphanClosings.length === 0,
+    orphan_closing_journals:
+      orphanClosings.map(orphanClosingJournalSummary),
+    orphan_closing_journals_blocking:
+      blockingOrphans.map(orphanClosingJournalSummary),
+    orphan_opening_balances:
+      orphanOpenings.map(orphanOpeningBalanceSummary),
+    orphan_note:
+      'Active closing journals and opening balances whose fiscal year no longer exists are reported, never edited: closing a period overwrites nothing, so silently ignoring them would fold a phantom closing entry into the new period result.',
+
     opening_balance_note:
       'Snapshots for the receiving year: the historical journals are kept, so no opening journal is posted (that would double-count every balance-sheet account).',
   };
@@ -1324,6 +1433,29 @@ async function closeFiscalYear({
     }
 
     /*
+     * Ledger hygiene, checked BEFORE anything is posted.
+     *
+     * An active closing journal whose fiscal year no longer exists (a year
+     * removed outside this API) is still offsetting the P&L accounts and still
+     * holding its result in RETAINED. Its period is missing, so its intended
+     * accounting ownership cannot be proven: it may belong to the year being
+     * closed, to the successor period, or to nothing at all. The organization
+     * therefore cannot close ANY fiscal year until those rows are resolved by
+     * an approved repair — the journal's own date is reported as a diagnostic
+     * and is deliberately NOT used as the safety decision.
+     */
+    const orphanClosings =
+      await fiscalYearCloseRepository.findOrphanClosingJournals(
+        connection,
+        {
+          orgId,
+          referenceType: CLOSING_REFERENCE_TYPE,
+        },
+      );
+
+    assertNoOrphanClosingJournals(orphanClosings, fiscalYear);
+
+    /*
      * The receiving year is resolved BEFORE anything is posted, so the whole
      * close is refused up front when the balances would have nowhere to go.
      * When it does not exist yet it is CREATED here, inside this transaction:
@@ -1391,6 +1523,36 @@ async function closeFiscalYear({
      * another path. Reported instead of silently overwriting them.
      */
     if (existingOpenings.length > 0) {
+      /*
+       * Before telling the operator to "reopen the year that produced them",
+       * check that such a year still exists: a roll-forward whose source year
+       * is gone (or is not closed) can never be released by reopening it, so
+       * the generic instruction would be a dead end.
+       */
+      const orphanOpenings =
+        await fiscalYearCloseRepository.findOrphanOpeningBalances(
+          connection,
+          {
+            orgId,
+            source: OPENING_BALANCE_SOURCE,
+            fiscalYearId: receiving.fiscal_year.id,
+          },
+        );
+
+      if (orphanOpenings.length > 0) {
+        throw new AppError(
+          `${receiving.fiscal_year.name} already has ${orphanOpenings.length} active opening balance(s) whose source fiscal year no longer exists or is not closed, so they cannot be released by reopening that year. Those rows must be voided by an approved repair before ${fiscalYear.name} can be closed.`,
+          409,
+          ORPHAN_OPENING_BALANCES,
+          {
+            fiscal_year_id: receiving.fiscal_year.id,
+            orphan_opening_balances: orphanOpenings.map(
+              orphanOpeningBalanceSummary,
+            ),
+          },
+        );
+      }
+
       throw new AppError(
         `${receiving.fiscal_year.name} already has active opening balances. Reopen the year that produced them before closing ${fiscalYear.name}.`,
         409,
@@ -1834,7 +1996,7 @@ async function reopenFiscalYear({
           userId,
           note:
             `Deactivated by reopening ${fiscalYear.name} on ` +
-            `${new Date().toISOString().slice(0, 10)}.`,
+            `${kabulDateOnly(new Date())}.`,
         },
       );
 
@@ -2023,6 +2185,11 @@ module.exports = {
   RECEIVING_FISCAL_YEAR_CLOSED,
   FISCAL_YEAR_NOT_CLOSED,
   OPENING_BALANCES_ALREADY_EXIST,
+  ORPHAN_CLOSING_JOURNALS,
+  ORPHAN_OPENING_BALANCES,
+  assertNoOrphanClosingJournals,
+  orphanClosingJournalSummary,
+  orphanOpeningBalanceSummary,
   previewFiscalYearClose,
   closeFiscalYear,
   reopenFiscalYear,

@@ -13,11 +13,13 @@ const {
   generateLocalId,
 } = require('../utils/generateLocalId');
 
+const {
+  storedCalendarDay,
+  kabulDateOnly,
+} = require('../utils/accountingDate');
+
 const CLOSED_YEAR_ERROR =
   'FISCAL_YEAR_CLOSED';
-
-const DATE_PATTERN =
-  /^\d{4}-\d{2}-\d{2}$/;
 
 const OPEN_STATUS = 'open';
 
@@ -57,31 +59,12 @@ function getAuthenticatedIdentity(user) {
  * Fiscal years are compared as plain YYYY-MM-DD strings: they sort
  * chronologically and match the DATE columns in MySQL, so a range test needs
  * no timezone conversion. `Date` values (mysql2 returns DATE as a JS Date)
- * are normalized back to the calendar day.
+ * are normalized through the ONE accounting-day rule, so a fiscal year read
+ * here and the same date read by the posting guard or the closing engine can
+ * never be different days.
  */
 function toDateOnly(value) {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
-
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) return null;
-    return value.toISOString().slice(0, 10);
-  }
-
-  const text = String(value).trim();
-
-  if (DATE_PATTERN.test(text)) {
-    return text;
-  }
-
-  const parsed = new Date(text);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return parsed.toISOString().slice(0, 10);
+  return storedCalendarDay(value);
 }
 
 function normalizeYear(row) {
@@ -101,7 +84,14 @@ function normalizeYears(rows) {
 }
 
 function todayDateOnly() {
-  return new Date().toISOString().slice(0, 10);
+  /*
+   * The BUSINESS calendar day (Asia/Kabul), not the UTC one: for the first
+   * hours of every day in Kabul `toISOString()` answers with the previous day,
+   * which would default a fiscal year (or a resolved date) into the wrong day
+   * and possibly the wrong year. Pinned to Kabul so the answer does not depend
+   * on the server's process timezone.
+   */
+  return kabulDateOnly(new Date());
 }
 
 function defaultYearName(startDate, endDate) {

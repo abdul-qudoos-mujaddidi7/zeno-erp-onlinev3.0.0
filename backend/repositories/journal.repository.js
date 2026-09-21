@@ -1,3 +1,7 @@
+const {
+  storageCalendarDay,
+} = require('../utils/accountingDate');
+
 const JOURNAL_COLUMNS = `
   local_id AS id,
   local_id,
@@ -384,7 +388,7 @@ async function create(
     [
       orgId,
       localId,
-      data.date || null,
+      storageCalendarDay(data.date),
       data.reference_id ?? null,
       data.reference_type || null,
       data.description || null,
@@ -448,7 +452,17 @@ async function update(
   for (const [field, column] of Object.entries(columnMap)) {
     if (data[field] !== undefined) {
       sets.push(`${column} = ?`);
-      values.push(data[field]);
+      /*
+       * `date` is an ACCOUNTING date, so it is stored as a calendar day: a
+       * caller that hands over `new Date()` or an ISO instant is normalized to
+       * its local day instead of writing a moment that a second reader could
+       * classify as a different day (and a different fiscal year).
+       */
+      values.push(
+        field === 'date'
+          ? storageCalendarDay(data[field])
+          : data[field],
+      );
     }
   }
 

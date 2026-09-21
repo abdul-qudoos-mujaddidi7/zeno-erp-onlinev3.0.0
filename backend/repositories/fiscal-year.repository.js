@@ -5,13 +5,20 @@
  * a set of READ-ONLY aggregates used by the fiscal-year summary. No existing
  * table is written to, and no historical row is ever rewritten.
  *
- * Accounting-date convention: this application already classifies a document
- * by `COALESCE(<document date>, created_at)` (see dashboard.repository.js),
- * so the summary reuses exactly that window semantics:
+ * Accounting-date convention: the summary classifies a document by its
+ * ACCOUNTING CALENDAR DAY with a `created_at` fallback:
  *
- *   COALESCE(date_col, created_at) >= startDate
- *   AND COALESCE(date_col, created_at) < DATE_ADD(endDate, INTERVAL 1 DAY)
+ *   COALESCE(<accounting day of date_col>, created_at) >= startDate
+ *   AND COALESCE(...) < DATE_ADD(endDate, INTERVAL 1 DAY)
+ *
+ * The accounting day is the one rule shared with the posting guard and the
+ * closing engine (utils/accountingDaySql), so a document can never be filed
+ * into one fiscal year here and another one there.
  */
+
+const {
+  accountingDayOrCreatedAtSql,
+} = require('../utils/accountingDaySql');
 
 const FISCAL_YEAR_COLUMNS = `
   local_id AS id,
@@ -34,20 +41,23 @@ const FISCAL_YEAR_COLUMNS = `
 /*
  * The fiscal-year window is inclusive on both ends, so a document saved on
  * either boundary date belongs to the year.
+ *
+ * The date expression is compared as its ACCOUNTING CALENDAR DAY
+ * (utils/accountingDaySql), not as its raw stored value: an accounting date
+ * column is a DATETIME, and rows written by older paths hold the UTC instant
+ * of the posting. Comparing those raw put an after-19:30 posting in the
+ * previous day's year, while the posting guard filed it in the next one — the
+ * same money in two fiscal years. Both halves now use the same rule.
+ *
+ * `created_at` stays unconverted: MySQL writes it in the session's local wall
+ * clock, so shifting it would move it twice.
  */
 function windowSql(dateExpression) {
-  /*
-   * The `created_at` fallback must carry the same table qualifier as the
-   * date expression itself. journals and accounts both define created_at,
-   * so an unqualified fallback is ambiguous inside the joined queries.
-   */
-  const qualifier = dateExpression.includes('.')
-    ? dateExpression.slice(0, dateExpression.indexOf('.') + 1)
-    : '';
+  const dayExpression = accountingDayOrCreatedAtSql(dateExpression);
 
   return `
-    COALESCE(${dateExpression}, ${qualifier}created_at) >= ?
-    AND COALESCE(${dateExpression}, ${qualifier}created_at) < DATE_ADD(?, INTERVAL 1 DAY)
+    ${dayExpression} >= ?
+    AND ${dayExpression} < DATE_ADD(?, INTERVAL 1 DAY)
   `;
 }
 
