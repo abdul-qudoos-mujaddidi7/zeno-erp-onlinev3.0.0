@@ -46,6 +46,18 @@ export function resetCurrentFiscalYearCache() {
 }
 
 /**
+ * Makes an already-authoritative fiscal-year response the working year.
+ *
+ * Reopening is the inverse of closing: the documents in that year must become
+ * visible again on every operational screen.  Using the reopened row directly
+ * also avoids selecting the still-open successor year that the earlier close
+ * created for its roll-forward.
+ */
+export function setCurrentFiscalYear(fiscalYear) {
+  cache = { loaded: true, fiscalYear: fiscalYear || null };
+}
+
+/**
  * The fiscal year covering `date` (default: today), or null when the
  * organization has none. Never throws: a missing fiscal year is a valid,
  * backward-compatible state, not an error for an operational screen.

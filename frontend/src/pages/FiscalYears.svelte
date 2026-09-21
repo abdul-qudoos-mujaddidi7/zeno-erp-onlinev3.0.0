@@ -17,6 +17,7 @@
   import {
     loadCurrentFiscalYear,
     resetCurrentFiscalYearCache,
+    setCurrentFiscalYear,
   } from '../utils/currentFiscalYear.js';
   import { todayAccountingDate } from '../utils/accountingDate.js';
 
@@ -226,6 +227,20 @@
       resetCurrentFiscalYearCache();
 
       await load();
+
+      /*
+       * Closing may have created an open successor year. Reopening must put
+       * this year back into the operational screens instead of allowing the
+       * automatic selector to keep Sales, Purchases, Journals and reports on
+       * that successor's date range.
+       */
+      if (result?.fiscal_year) {
+        const reopenedYear =
+          years.find((year) => year.id === targetId) || result.fiscal_year;
+
+        setCurrentFiscalYear(reopenedYear);
+        currentYear = reopenedYear;
+      }
     } catch (cause) {
       /* the backend rolled everything back: the year is still closed */
       reopenError = cause.message || t('Could not reopen the fiscal year.');
