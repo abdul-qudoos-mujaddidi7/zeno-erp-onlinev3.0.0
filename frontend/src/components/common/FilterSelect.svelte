@@ -1,5 +1,12 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, tick } from 'svelte';
+  import { t } from '../../i18n/i18n';
+  import {
+    filterSelectOptions,
+    resolveKeyboardIndex,
+    resolveKeyboardSelection,
+    shouldShowFilterSearch,
+  } from '../../utils/filterSearch.js';
 
   export let label = '';
   export let icon = '';
@@ -8,6 +15,8 @@
   export let compact = false;
   export let variant = 'default';
   export let multiple = false;
+  /** `auto` (default) adds the search box to lists long enough to search, `true` always, `false` never. */
+  export let searchable = 'auto';
 
   const dispatch = createEventDispatcher();
 
@@ -15,6 +24,9 @@
   let triggerEl;
   let menuEl;
   let menuStyle = '';
+  let searchEl;
+  let query = '';
+  let activeIndex = -1;
 
   $: isOutline = variant === 'outline';
   $: selectedValues = Array.isArray(value) ? value : [];
@@ -26,28 +38,98 @@
       : (isOutline ? '' : label)
     : selectedOption?.label ?? (isOutline ? '' : label);
   $: hasValue = multiple ? selectedValues.length > 0 : !!selectedOption;
+  $: canSearch = shouldShowFilterSearch(options, searchable);
+  $: selection = filterSelectOptions(options, query);
+  $: visibleOptions = selection.visibleOptions;
+  $: pinnedOptions = selection.pinnedOptions;
+  $: queryText = selection.queryText;
+  $: matchedOptions = selection.matchedOptions;
 
   function portal(node) {
     document.body.appendChild(node);
     return { destroy() { node.remove(); } };
   }
 
-  function toggle() {
-    if (open) { open = false; return; }
+  async function toggle() {
+    if (open) { closeMenu(); return; }
     const rect = triggerEl.getBoundingClientRect();
     const width = Math.max(rect.width, 150);
     const maxHeight = Math.min(224, window.innerHeight * 0.45);
-    const openUp = window.innerHeight - rect.bottom < Math.min(maxHeight, options.length * 36 + 12);
+    const estimatedHeight = options.length * 36 + 12 + (canSearch ? 44 : 0);
+    const openUp = window.innerHeight - rect.bottom < Math.min(maxHeight, estimatedHeight);
     const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left));
     menuStyle = openUp
       ? `left:${left}px;width:${width}px;bottom:${window.innerHeight - rect.top + 5}px;top:auto;max-height:${maxHeight}px;`
       : `left:${left}px;width:${width}px;top:${rect.bottom + 5}px;bottom:auto;max-height:${maxHeight}px;`;
+    resetSearch();
     open = true;
+
+    if (canSearch) {
+      await tick();
+      searchEl?.focus();
+    }
+  }
+
+  function closeMenu() {
+    open = false;
+    resetSearch();
+    triggerEl?.focus();
+  }
+
+  function resetSearch() {
+    query = '';
+    activeIndex = -1;
+  }
+
+  function handleSearchInput(event) {
+    query = event.currentTarget.value;
+    activeIndex = -1;
+  }
+
+  function clearSearchInput() {
+    resetSearch();
+    searchEl?.focus();
+  }
+
+  function scrollActiveIntoView() {
+    const nodes = menuEl?.querySelectorAll('.filter-select__option');
+    nodes?.[activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function handleSearchKeydown(event) {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!visibleOptions.length) return;
+
+      activeIndex = resolveKeyboardIndex({
+        direction: event.key === 'ArrowDown' ? 1 : -1,
+        visibleOptions,
+        queryText,
+        pinnedOptions,
+        activeIndex,
+      });
+      scrollActiveIntoView();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+
+      const option = resolveKeyboardSelection({ visibleOptions, matchedOptions, queryText, activeIndex });
+      if (option) selectOption(option.value);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMenu();
+    }
   }
 
   function selectOption(optionValue) {
     if (!multiple) {
       open = false;
+      resetSearch();
       dispatch('change', optionValue);
       return;
     }
@@ -64,13 +146,16 @@
   }
 
   function closeOnEscape(event) {
-    if (event.key === 'Escape' && open) open = false;
+    if (event.key === 'Escape' && open) closeMenu();
   }
 
   function clickOutside(node) {
     function onClick(event) {
       if (!open) return;
-      if (!node.contains(event.target) && !menuEl?.contains(event.target)) open = false;
+      if (!node.contains(event.target) && !menuEl?.contains(event.target)) {
+        open = false;
+        resetSearch();
+      }
     }
 
     window.addEventListener('click', onClick);
@@ -120,28 +205,65 @@
     </button>
 
     {#if open}
-      <ul
+      <div
         bind:this={menuEl}
         use:portal
         class="filter-select__menu"
-        role="listbox"
+        role="presentation"
         style={menuStyle}
         on:click|stopPropagation>
-        {#each options as option (option.value)}
-          <li role="option" aria-selected={multiple ? selectedValues.includes(option.value) : String(option.value) === String(value)}>
-            <button
-              type="button"
-              class="filter-select__option"
-              class:active={multiple ? selectedValues.includes(option.value) : String(option.value) === String(value)}
-              on:click={() => selectOption(option.value)}>
-              {#if multiple && option.value !== 'all'}
-                <i class="bi {selectedValues.includes(option.value) ? 'bi-check-square-fill' : 'bi-square'} filter-select__check" aria-hidden="true"></i>
-              {/if}
-              {option.label}
-            </button>
-          </li>
-        {/each}
-      </ul>
+        {#if canSearch}
+          <div class="filter-select__search">
+            <i class="bi bi-search filter-select__search-icon" aria-hidden="true"></i>
+
+            <input
+              bind:this={searchEl}
+              type="text"
+              class="filter-select__search-input"
+              placeholder={t('Search')}
+              aria-label={t('Search')}
+              autocomplete="off"
+              spellcheck="false"
+              bind:value={query}
+              on:input={handleSearchInput}
+              on:keydown={handleSearchKeydown} />
+
+            {#if query}
+              <button
+                type="button"
+                class="filter-select__search-clear"
+                tabindex="-1"
+                aria-label={t('Clear')}
+                on:click={clearSearchInput}>
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+              </button>
+            {/if}
+          </div>
+        {/if}
+
+        <ul class="filter-select__options" role="listbox">
+          {#each visibleOptions as option, index (option.value)}
+            <li role="option" aria-selected={multiple ? selectedValues.includes(option.value) : String(option.value) === String(value)}>
+              <button
+                type="button"
+                class="filter-select__option"
+                class:active={multiple ? selectedValues.includes(option.value) : String(option.value) === String(value)}
+                class:is-active={activeIndex >= 0 && index === activeIndex}
+                on:mouseenter={() => (activeIndex = index)}
+                on:click={() => selectOption(option.value)}>
+                {#if multiple && option.value !== 'all'}
+                  <i class="bi {selectedValues.includes(option.value) ? 'bi-check-square-fill' : 'bi-square'} filter-select__check" aria-hidden="true"></i>
+                {/if}
+                {option.label}
+              </button>
+            </li>
+          {/each}
+
+          {#if queryText && !matchedOptions.length}
+            <li class="filter-select__empty">{t('No result')}</li>
+          {/if}
+        </ul>
+      </div>
     {/if}
   </div>
 </div>
@@ -277,6 +399,111 @@
 
   .filter-select__menu::-webkit-scrollbar {
     display: none;
+  }
+
+  /* In-menu search: sticky so it stays reachable while the list scrolls */
+
+  .filter-select__search {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0 0 0.3rem;
+    padding: 0.3rem 0.45rem;
+    border: 1px solid #dbe4f0;
+    border-radius: 0.5rem;
+    background: #ffffff;
+  }
+
+  :global(html.dark) .filter-select__search {
+    border-color: var(--erp-border);
+    background: var(--erp-surface-soft);
+  }
+
+  .filter-select__search-icon {
+    flex: 0 0 auto;
+    color: #94a3b8;
+    font-size: 0.7rem;
+  }
+
+  .filter-select__search-input {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    height: 1.55rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #0f172a;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  :global(html.dark) .filter-select__search-input {
+    color: var(--erp-text);
+  }
+
+  .filter-select__search-input::placeholder {
+    color: #9aa8b9;
+    font-weight: 500;
+  }
+
+  .filter-select__search-clear {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0.3rem;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 0.6rem;
+    cursor: pointer;
+  }
+
+  .filter-select__search-clear:hover {
+    background: #f1f5f9;
+    color: #475569;
+  }
+
+  :global(html.dark) .filter-select__search-clear:hover {
+    background: rgba(148, 163, 184, 0.14);
+    color: var(--erp-text);
+  }
+
+  .filter-select__options {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .filter-select__option.is-active {
+    background: rgba(59, 130, 246, 0.08);
+    color: #0f6efd;
+  }
+
+  :global(html.dark) .filter-select__option.is-active {
+    background: rgba(96, 165, 250, 0.16);
+    color: #bfdbfe;
+  }
+
+  .filter-select__empty {
+    padding: 0.6rem 0.5rem;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  :global(html.dark) .filter-select__empty {
+    color: var(--erp-muted);
   }
 
   .filter-select__option {

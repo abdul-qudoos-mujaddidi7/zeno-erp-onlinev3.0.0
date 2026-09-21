@@ -18,6 +18,7 @@
     import SummaryCard from '../../components/common/SummaryCard.svelte';
     import AccountsReportBillModal from './AccountsReportBillModal.svelte';
     import { DEFAULT_PAGE_SIZE } from '../../lib/pagination.js';
+    import { matchesFilterText } from '../../utils/filterSearch.js';
 
     $: enable_account_groups = $settings_all.find((s) => s.key === 'enable_account_groups')?.value == 1;
 
@@ -36,6 +37,8 @@
     let typeDropdownEl;
     let balDropdownEl;
     let groupDropdownEl;
+    let typeQuery = '';
+    let groupQuery = '';
     let balanceRefreshInterval = null;
     let showBillReceipt = false;
 
@@ -662,6 +665,10 @@
     let toDate = '';
     let showBalanceCards = true;
 
+    /* The type/group dropdowns list checkboxes, so they filter their own rows. */
+    $: visibleAccountTypes = accountTypes.filter((type) => matchesFilterText(getTypeName(type.id), typeQuery));
+    $: visibleAccountGroups = accountGroups.filter((group) => matchesFilterText(group.name, groupQuery));
+
     $: reportFilters = [
         {
             key: 'type', label: t('Account Types'), value: filterType.size === 1 ? [...filterType][0] : 'all', icon: 'bi-diagram-3',
@@ -1008,7 +1015,10 @@
                     <button
                         class="filter-dropdown-btn {filterType.size > 0 ? 'has-value' : ''}"
                         type="button"
-                        on:click={() => (typeDropdownOpen = !typeDropdownOpen)}
+                        on:click={() => {
+                            typeDropdownOpen = !typeDropdownOpen;
+                            if (typeDropdownOpen) typeQuery = '';
+                        }}
                     >
                         {#if filterType.size === 0}
                             {t("Account Types")}
@@ -1019,6 +1029,17 @@
 
                     {#if typeDropdownOpen}
                         <div class="filter-dropdown-menu">
+                            <label class="filter-dropdown-search">
+                                <i class="bi bi-search" aria-hidden="true"></i>
+                                <input
+                                    type="text"
+                                    placeholder={t('Search')}
+                                    aria-label={t('Search')}
+                                    autocomplete="off"
+                                    bind:value={typeQuery}
+                                />
+                            </label>
+
                             <!-- optional actions -->
                             <div class="d-flex justify-content-between mb-2">
                                 <button
@@ -1042,7 +1063,7 @@
                             </div>
 
                             <div class="border-top pt-2">
-                                {#each accountTypes as type}
+                                {#each visibleAccountTypes as type}
                                     <div class="form-check">
                                         <input
                                             class="form-check-input"
@@ -1068,6 +1089,10 @@
                                         </label>
                                     </div>
                                 {/each}
+
+                                {#if !visibleAccountTypes.length}
+                                    <div class="filter-dropdown-empty">{t('No result')}</div>
+                                {/if}
                             </div>
                         </div>
                     {/if}
@@ -1077,7 +1102,10 @@
                     <button
                         class="filter-dropdown-btn {filterGroup.size > 0 ? 'has-value' : ''}"
                         type="button"
-                        on:click={() => (groupDropdownOpen = !groupDropdownOpen)}
+                        on:click={() => {
+                            groupDropdownOpen = !groupDropdownOpen;
+                            if (groupDropdownOpen) groupQuery = '';
+                        }}
                     >
                         {#if filterGroup.size === 0}
                             {t("Account Groups")}
@@ -1088,6 +1116,17 @@
 
                     {#if groupDropdownOpen}
                         <div class="filter-dropdown-menu">
+                            <label class="filter-dropdown-search">
+                                <i class="bi bi-search" aria-hidden="true"></i>
+                                <input
+                                    type="text"
+                                    placeholder={t('Search')}
+                                    aria-label={t('Search')}
+                                    autocomplete="off"
+                                    bind:value={groupQuery}
+                                />
+                            </label>
+
                             <!-- optional actions -->
                             <div class="d-flex justify-content-between mb-2">
                                 <button
@@ -1111,7 +1150,7 @@
                             </div>
 
                             <div class="border-top pt-2">
-                                {#each accountGroups as group}
+                                {#each visibleAccountGroups as group}
                                     <div class="form-check">
                                         <input
                                             class="form-check-input"
@@ -1137,6 +1176,10 @@
                                         </label>
                                     </div>
                                 {/each}
+
+                                {#if !visibleAccountGroups.length}
+                                    <div class="filter-dropdown-empty">{t('No result')}</div>
+                                {/if}
                             </div>
                         </div>
                     {/if}
@@ -2062,6 +2105,43 @@
 
     .filter-dropdown-menu--compact {
         max-height: 240px;
+    }
+
+    .filter-dropdown-search {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-bottom: 0.5rem;
+        padding: 0.35rem 0.5rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #ffffff;
+    }
+
+    .filter-dropdown-search i {
+        color: #94a3b8;
+        font-size: 0.75rem;
+    }
+
+    .filter-dropdown-search input {
+        flex: 1 1 auto;
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: #0f172a;
+        font-family: inherit;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .filter-dropdown-empty {
+        padding: 0.5rem 0.25rem;
+        color: #94a3b8;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-align: center;
     }
 
     .report-card-header {

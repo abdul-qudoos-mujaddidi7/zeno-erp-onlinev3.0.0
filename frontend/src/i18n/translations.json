@@ -1,6 +1,9 @@
 {
   "en": {
     "app.title": "ZenoERP",
+    "Search": "Search",
+    "No result": "No result",
+    "Clear": "Clear",
     "Opening balance": "Opening balance",
     "Fiscal Year": "Fiscal Year",
     "English": "English",
@@ -1934,6 +1937,9 @@
     "This product has no stock to zero.": "این محصول موجودی‌ای برای صفر کردن ندارد."
   },
   "ps": {
+    "Search": "لټون",
+    "No result": "پایلې نشته",
+    "Clear": "پاکول",
     "Welcome": "ښه راغلاست",
     "Lang": "ps",
     "dir": "rtl",

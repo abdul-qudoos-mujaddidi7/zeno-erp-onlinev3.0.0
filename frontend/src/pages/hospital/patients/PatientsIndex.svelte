@@ -10,6 +10,7 @@
     import { patientTypeApi } from '../../../api/patientTypeApi.js';
     import { appointmentApi } from '../../../api/appointmentApi.js';
     import { DEFAULT_PAGE_SIZE, readListMeta } from '../../../lib/pagination.js';
+    import { matchesFilterText } from '../../../utils/filterSearch.js';
 
     $: enable_account_groups = $settings_all.find((s) => s.key === 'enable_account_groups')?.value == 1;
     $: _lang = $lang;
@@ -32,6 +33,12 @@
     let typeDropdownOpen = false;
     let filterGroup = new Set();
     let groupDropdownOpen = false;
+    let typeQuery = '';
+    let groupQuery = '';
+
+    /* The type/group dropdowns list checkboxes, so they filter their own rows. */
+    $: visiblePatientTypes = patientTypes.filter((type) => matchesFilterText(getTypeName(type.id), typeQuery));
+    $: visiblePatientGroups = accountGroups.filter((group) => matchesFilterText(group.name, groupQuery));
 
     let searchTerm = "";
     let filterStatus = "active";
@@ -355,7 +362,10 @@
                     <button
                         class="btn btn-outline-secondary dropdown-toggle"
                         type="button"
-                        on:click={() => (typeDropdownOpen = !typeDropdownOpen)}
+                        on:click={() => {
+                            typeDropdownOpen = !typeDropdownOpen;
+                            if (typeDropdownOpen) typeQuery = '';
+                        }}
                     >
                         {#if filterType.size === 0}
                             {t("Patient Types")}
@@ -369,6 +379,17 @@
                             class="dropdown-menu show p-2 shadow"
                             style="min-width:260px; max-height:320px; overflow:auto;"
                         >
+                            <label class="filter-dropdown-search">
+                                <i class="bi bi-search" aria-hidden="true"></i>
+                                <input
+                                    type="text"
+                                    placeholder={t('Search')}
+                                    aria-label={t('Search')}
+                                    autocomplete="off"
+                                    bind:value={typeQuery}
+                                />
+                            </label>
+
                             <div class="d-flex justify-content-between mb-2">
                                 <button
                                     class="btn btn-sm btn-link p-0"
@@ -393,7 +414,7 @@
                             </div>
 
                             <div class="border-top pt-2">
-                                {#each patientTypes as type}
+                                {#each visiblePatientTypes as type}
                                     <div class="form-check">
                                         <input
                                             class="form-check-input"
@@ -420,6 +441,10 @@
                                         </label>
                                     </div>
                                 {/each}
+
+                                {#if !visiblePatientTypes.length}
+                                    <div class="filter-dropdown-empty">{t('No result')}</div>
+                                {/if}
                             </div>
                         </div>
                     {/if}
@@ -432,7 +457,10 @@
                     <button
                         class="btn btn-outline-secondary dropdown-toggle"
                         type="button"
-                        on:click={() => (groupDropdownOpen = !groupDropdownOpen)}
+                        on:click={() => {
+                            groupDropdownOpen = !groupDropdownOpen;
+                            if (groupDropdownOpen) groupQuery = '';
+                        }}
                     >
                         {#if filterGroup.size === 0}
                             {t("Patient Groups")}
@@ -446,6 +474,17 @@
                             class="dropdown-menu show p-2 shadow"
                             style="min-width:260px; max-height:320px; overflow:auto;"
                         >
+                            <label class="filter-dropdown-search">
+                                <i class="bi bi-search" aria-hidden="true"></i>
+                                <input
+                                    type="text"
+                                    placeholder={t('Search')}
+                                    aria-label={t('Search')}
+                                    autocomplete="off"
+                                    bind:value={groupQuery}
+                                />
+                            </label>
+
                             <div class="d-flex justify-content-between mb-2">
                                 <button
                                     class="btn btn-sm btn-link p-0"
@@ -470,7 +509,7 @@
                             </div>
 
                             <div class="border-top pt-2">
-                                {#each accountGroups as group}
+                                {#each visiblePatientGroups as group}
                                     <div class="form-check">
                                         <input
                                             class="form-check-input"
@@ -497,6 +536,10 @@
                                         </label>
                                     </div>
                                 {/each}
+
+                                {#if !visiblePatientGroups.length}
+                                    <div class="filter-dropdown-empty">{t('No result')}</div>
+                                {/if}
                             </div>
                         </div>
                     {/if}
@@ -855,6 +898,43 @@
 <PatientModal bind:this={modalRef} {patientTypes} on:saved={loadPatients} />
 
 <style>
+    .filter-dropdown-search {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-bottom: 0.5rem;
+        padding: 0.35rem 0.5rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #ffffff;
+    }
+
+    .filter-dropdown-search i {
+        color: #94a3b8;
+        font-size: 0.75rem;
+    }
+
+    .filter-dropdown-search input {
+        flex: 1 1 auto;
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: #0f172a;
+        font-family: inherit;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .filter-dropdown-empty {
+        padding: 0.5rem 0.25rem;
+        color: #94a3b8;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-align: center;
+    }
+
     .cursor-pointer {
         cursor: pointer;
     }
