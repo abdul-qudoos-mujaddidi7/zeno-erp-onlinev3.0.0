@@ -1295,7 +1295,15 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     }
 
     await hydrateProductGroup(product);
-    await refreshCanonicalStock();
+
+    /*
+     * Opening a product is a read-only action. The stock rebuild
+     * (reconcile) must not run here, otherwise merely viewing a
+     * product would overwrite its stored quantity and the list would
+     * show a different number after returning. Reconcile still runs
+     * after an explicit transaction edit below.
+     */
+    await refreshCanonicalStock({ reconcile: false });
 
     const [categoryRes, unitRes, imgRes] = await Promise.all([
       product.category_id
@@ -1326,58 +1334,65 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
       loading = false;
     }
   }
-  async function refreshCanonicalStock() {
+  async function refreshCanonicalStock({ reconcile = true } = {}) {
     if (!product?.id) return;
 
-    inventoryMethod =
-      await resolveInventoryMethod();
+    /*
+     * Only an explicit recalculation may write stock. A read-only
+     * refresh (reconcile = false) just keeps the displayed balance in
+     * sync with the already-loaded product.
+     */
+    if (reconcile) {
+      inventoryMethod =
+        await resolveInventoryMethod();
 
-    const currentImageUrl =
-      product.imageUrl;
+      const currentImageUrl =
+        product.imageUrl;
 
-    const currentThumbnailUrl =
-      product.thumbnailUrl;
+      const currentThumbnailUrl =
+        product.thumbnailUrl;
 
-    const idsToRefresh =
-      productGroupIds.length > 0
-        ? productGroupIds
-        : [Number(product.id)];
+      const idsToRefresh =
+        productGroupIds.length > 0
+          ? productGroupIds
+          : [Number(product.id)];
 
-    for (const productId of idsToRefresh) {
-      try {
-        await productApi.reconcileStock(productId);
-      } catch (error) {
-        console.warn('Failed to reconcile product stock:', productId, error);
-        await calculateProductStock(
-          productId,
-          inventoryMethod,
-        );
+      for (const productId of idsToRefresh) {
+        try {
+          await productApi.reconcileStock(productId);
+        } catch (error) {
+          console.warn('Failed to reconcile product stock:', productId, error);
+          await calculateProductStock(
+            productId,
+            inventoryMethod,
+          );
+        }
       }
-    }
 
-    const freshProduct =
-      (await productApi.getById(product.id))?.data || null;
+      const freshProduct =
+        (await productApi.getById(product.id))?.data || null;
 
-    if (freshProduct) {
-      await hydrateProductGroup(freshProduct);
-      product = {
-        ...product,
-        quantity: toNumber(product.quantity),
-        initial_quantity:
-          freshProduct.initial_quantity ?? product.initial_quantity,
-        initial_warehouse_id:
-          freshProduct.initial_warehouse_id ?? product.initial_warehouse_id,
-        imageUrl:
-          currentImageUrl ||
-          product.imageUrl ||
-          freshProduct.imageUrl ||
-          '/img/no-image.png',
-        thumbnailUrl:
-          currentThumbnailUrl ||
-          product.thumbnailUrl ||
-          freshProduct.thumbnailUrl ||
-          '/img/no-image.png',
-      };
+      if (freshProduct) {
+        await hydrateProductGroup(freshProduct);
+        product = {
+          ...product,
+          quantity: toNumber(product.quantity),
+          initial_quantity:
+            freshProduct.initial_quantity ?? product.initial_quantity,
+          initial_warehouse_id:
+            freshProduct.initial_warehouse_id ?? product.initial_warehouse_id,
+          imageUrl:
+            currentImageUrl ||
+            product.imageUrl ||
+            freshProduct.imageUrl ||
+            '/img/no-image.png',
+          thumbnailUrl:
+            currentThumbnailUrl ||
+            product.thumbnailUrl ||
+            freshProduct.thumbnailUrl ||
+            '/img/no-image.png',
+        };
+      }
     }
 
     qtyBalance = Number(
