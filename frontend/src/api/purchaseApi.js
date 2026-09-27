@@ -113,6 +113,14 @@ export const purchaseApi = {
     return api.get(`${BASE_URL}/${id}`);
   },
 
+  /*
+   * The bill number the backend will stamp on the next purchase.
+   * Read-only: fetching it never consumes a number.
+   */
+  getNextNumber() {
+    return api.get(`${BASE_URL}/next-number`);
+  },
+
   create(data) {
     return api.post(BASE_URL, data);
   },

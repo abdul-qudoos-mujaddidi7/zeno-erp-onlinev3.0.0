@@ -32,6 +32,16 @@ router.get(
   ),
 );
 
+/*
+ * Registered before '/:id' so "next-number" is not parsed as a purchase id.
+ */
+router.get(
+  '/next-number',
+  asyncHandler(
+    purchaseController.nextNumber,
+  ),
+);
+
 router.get(
   '/:id',
   validate({

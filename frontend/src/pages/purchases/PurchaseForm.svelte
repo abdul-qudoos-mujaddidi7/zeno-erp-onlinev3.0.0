@@ -1,6 +1,5 @@
 <script>
 import { productUnitApi } from '../../api/productUnitApi.js';
-import { settingsApi } from '../../api/settingsApi.js';
   import { onMount, tick } from 'svelte';
   import PurchaseItemsTable from './PurchaseItemsTable.svelte';
   import AccountModal from '../accounts/AccountModal.svelte';
@@ -18,7 +17,6 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
 import { purchaseApi } from '../../api/purchaseApi.js';
 import { productApi } from '../../api/productApi.js';
 import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
-  import { get } from 'svelte/store';
   import {
     mergeById,
     lookupAccounts,
@@ -308,7 +306,6 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   let warehouses = [];
   let suppliers = [];
   let currencies = [];
-  let settings = [];
   let accountTypes = [];
 
   let items = [];
@@ -703,16 +700,12 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
   let partySearchTimer;
   onMount(async () => {
-    const settingsNow = get(settings_all) || [];
-    const billSetting = settingsNow.find((row) => row.key === 'bill_index');
-
     const [
       treasuryAccount,
       notrackAccount,
       supplierRows,
       warehousesResponse,
       currenciesResponse,
-      settingsResponse,
       accountTypesResponse,
     ] = await Promise.all([
       lookupAccountByCode('TREASURY'),
@@ -720,9 +713,6 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       lookupAccounts({ account_type_id: SUPPLIER_TYPE_ID }),
       warehouseApi.getAll({ status: 1 }),
       currencyApi.getAll({ status: 1 }),
-      billSetting
-        ? Promise.resolve({ data: [billSetting] })
-        : settingsApi.getAll({ status: 1, key: 'bill_index' }),
       accountTypeApi.getAll({ status: 1 }),
     ]);
 
@@ -737,9 +727,6 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     }
 
     currencies = currenciesResponse?.data || [];
-    settings = settingsResponse?.data || [];
-
-    form.bill_number = settings[0]?.value;
 
     allAccountTypes = accountTypesResponse?.data || [];
     accountTypes = allAccountTypes.filter((at) => at.id == SUPPLIER_TYPE_ID && at.status === 1);
@@ -752,6 +739,12 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     if (purchaseId) await loadPurchase(purchaseId);
 
     restorePurchaseFormDraft();
+    /*
+     * The bill number is allocated by the backend when the bill is stored, so
+     * the form shows the number the next bill will receive. An existing bill
+     * keeps the number it was saved with.
+     */
+    await refreshBillNumberPreview();
     await consumeCreatedProductForPurchase();
     purchaseDraftReady = true;
     savePurchaseFormDraft();
@@ -1053,6 +1046,18 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
     loading = false;
   }
+  async function refreshBillNumberPreview() {
+    if (purchaseId) return;
+
+    try {
+      const response = await purchaseApi.getNextNumber();
+
+      form.bill_number = response?.data?.bill_number || '';
+    } catch (error) {
+      console.warn('Could not load the next bill number:', error);
+    }
+  }
+
   function resetForm() {
     /*
      * The bill date is the purchase's accounting date: it decides the

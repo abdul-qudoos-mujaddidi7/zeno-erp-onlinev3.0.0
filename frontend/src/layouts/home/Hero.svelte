@@ -74,10 +74,7 @@
         <div
           class="zeno-hero__content {contentDirectionClass}"
         >
-          <div class="zeno-hero__badge">
-            <i class="bi bi-stars"></i>
-            <span>{text.eyebrow}</span>
-          </div>
+          
 
           <h1 class="zeno-hero__title">
             {text.title}

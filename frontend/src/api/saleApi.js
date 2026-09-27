@@ -120,6 +120,24 @@ export const saleApi = {
     );
   },
 
+  /*
+   * The invoice number the backend will stamp on the next confirmed sale.
+   * Read-only: fetching it never consumes a number.
+   */
+  getNextNumber({ sale_type = '' } = {}) {
+    const params = new URLSearchParams();
+
+    if (sale_type) {
+      params.set('sale_type', String(sale_type));
+    }
+
+    const query = params.toString();
+
+    return api.get(
+      `${BASE_URL}/next-number${query ? `?${query}` : ''}`,
+    );
+  },
+
   addPayment(saleId, data) {
     return api.post(
       `${BASE_URL}/${saleId}/payments`,

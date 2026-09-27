@@ -940,78 +940,47 @@
   }
 
   /*
-   * Dark theme
+   * The registration modal is intentionally light-only, even when the rest
+   * of the app runs in dark mode: every field here follows the landing page
+   * styling. Global dark rules from app.css (.dropdown-menu, .dropdown-item,
+   * .text-danger) use !important, so they have to be neutralised explicitly.
    */
-  :global(html.dark) .zeno-registration-modal__orgtype-control {
-    border-color: var(--erp-border, #2b3a4f);
-    background: var(--erp-surface, #111827);
-    color-scheme: dark;
+  :global(html.dark) .zeno-registration-modal .dropdown-menu {
+    border-color: #dbe4f0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.14) !important;
   }
 
-  :global(html.dark) .zeno-registration-modal__orgtype-control:hover {
-    border-color: var(--erp-border-strong, #40516a);
+  :global(html.dark) .zeno-registration-modal .dropdown-item {
+    color: #334155 !important;
   }
 
-  :global(html.dark) .zeno-registration-modal__orgtype-control:focus-within {
-    border-color: var(--erp-primary, #60a5fa);
-    box-shadow: 0 0 0 0.2rem rgba(96, 165, 250, 0.15);
+  :global(html.dark) .zeno-registration-modal .dropdown-item:hover,
+  :global(html.dark) .zeno-registration-modal .dropdown-item:focus {
+    background: #f6f9fd !important;
+    color: #1d4ed8 !important;
   }
 
-  :global(html.dark) .zeno-registration-modal__orgtype-leading,
-  :global(html.dark) .zeno-registration-modal__orgtype-chevron,
-  :global(html.dark) .zeno-registration-modal__orgtype-clear {
-    color: var(--erp-muted, #94a3b8);
+  :global(html.dark) .zeno-registration-modal .dropdown-item.active,
+  :global(html.dark) .zeno-registration-modal .dropdown-item:active {
+    background: #eef4ff !important;
+    color: #2f6fed !important;
   }
 
-  :global(html.dark) .zeno-registration-modal__orgtype-input {
-    color: var(--erp-text, #e5edf7);
-    caret-color: var(--erp-text, #e5edf7);
+  :global(html.dark) .zeno-registration-modal label,
+  :global(html.dark) .zeno-registration-modal .zeno-registration-modal__field {
+    color: var(--z-text, #0f172a) !important;
   }
 
-  :global(html.dark) .zeno-registration-modal__orgtype-input::placeholder {
-    color: var(--erp-muted, #94a3b8);
+  :global(html.dark) .zeno-registration-modal small:not(.text-danger) {
+    color: var(--z-muted, #64748b) !important;
   }
 
-  :global(html.dark) .zeno-registration-modal__orgtype-clear:hover {
-    background: rgba(148, 163, 184, 0.1);
-    color: var(--erp-text-soft, #cbd5e1);
-  }
-
-  :global(html.dark) .zeno-registration-modal__orgtype-menu {
-    border-color: var(--erp-border, #2b3a4f);
-    background: var(--erp-surface, #111827);
-    box-shadow: 0 18px 38px rgba(0, 0, 0, 0.32);
-    scrollbar-color: #52647d transparent;
-  }
-
-  :global(html.dark) .zeno-registration-modal__orgtype-menu::-webkit-scrollbar-thumb {
-    background: #52647d;
-  }
-
-  :global(html.dark) .zeno-registration-modal__orgtype-option:hover,
-  :global(html.dark) .zeno-registration-modal__orgtype-option:focus-visible {
-    background: rgba(148, 163, 184, 0.08);
-  }
-
-  :global(html.dark) .zeno-registration-modal__orgtype-option.active {
-    background: rgba(96, 165, 250, 0.12);
-  }
-
-  :global(html.dark) .zeno-registration-modal__orgtype-option > i {
-    color: var(--erp-text-soft, #cbd5e1);
-  }
-
-  :global(html.dark) .zeno-registration-modal__orgtype-option.active > i {
-    color: var(--erp-primary, #60a5fa);
-  }
-
-  :global(html.dark) .zeno-registration-modal__orgtype-option-copy strong {
-    color: var(--erp-text, #e5edf7);
-  }
-
-  :global(html.dark) .zeno-registration-modal__orgtype-option-copy small,
-  :global(html.dark) .zeno-registration-modal__orgtype-empty {
-    color: var(--erp-muted, #94a3b8);
+  :global(html.dark)
+    .zeno-registration-modal__field
+    .zeno-registration-modal__hint.text-danger {
+    color: #dc3545 !important;
   }
 
   @media (max-width: 575.98px) {

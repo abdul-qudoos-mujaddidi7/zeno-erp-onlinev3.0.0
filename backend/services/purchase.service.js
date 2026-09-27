@@ -22,6 +22,9 @@ const journalRepository =
 const activityRepository =
   require('../repositories/activity.repository');
 
+const settingsRepository =
+  require('../repositories/settings.repository');
+
 const {
   generateLocalId,
 } = require('../utils/generateLocalId');
@@ -99,6 +102,131 @@ async function toProductStockQuantity(connection, orgId, item) {
       item,
     },
   );
+}
+
+/*
+ * Bills keep only the counter in `bill_number` (`275`), the prefix is added
+ * when the document is rendered. The allocation mirrors sales: the
+ * `bill_index` setting is locked with SELECT ... FOR UPDATE and the number is
+ * checked against the bills that already exist, so a stale value coming from
+ * the client can never be stored twice.
+ *
+ * A preview (consume: false) resolves the same number without moving the
+ * counter, so the purchase form can display it.
+ */
+async function allocateBillNumber(
+  connection,
+  {
+    orgId,
+    userId,
+    consume = true,
+  },
+) {
+  const indexSetting = await settingsRepository.findByKey(
+    connection,
+    {
+      orgId,
+      key: 'bill_index',
+      forUpdate: consume,
+    },
+  );
+
+  let index = Number(indexSetting?.value || 0);
+
+  /*
+   * If the counter was clobbered, fall back to the highest sequential bill
+   * number actually in use instead of issuing absurd numbers.
+   */
+  if (!Number.isSafeInteger(index) || index > 99999999) {
+    const [rows] = await connection.execute(
+      `SELECT
+         MAX(CAST(bill_number AS UNSIGNED)) m
+       FROM purchases
+       WHERE org_id = ?
+         AND bill_number REGEXP '^[0-9]+$'`,
+      [orgId],
+    );
+
+    index = Math.max(Number(rows[0]?.m || 0), 0);
+  }
+
+  let billNumber = String(index + 1);
+
+  while (await billNumberExists(connection, { orgId, billNumber })) {
+    index += 1;
+    billNumber = String(index + 1);
+  }
+
+  index += 1;
+
+  if (consume && indexSetting) {
+    await settingsRepository.update(
+      connection,
+      {
+        orgId,
+        localId: indexSetting.local_id,
+        userId,
+        data: {
+          value: String(index),
+        },
+      },
+    );
+  }
+
+  return billNumber;
+}
+
+async function billNumberExists(
+  connection,
+  {
+    orgId,
+    billNumber,
+  },
+) {
+  const [rows] = await connection.execute(
+    `
+      SELECT 1
+      FROM purchases
+      WHERE org_id = ?
+        AND bill_number = ?
+      LIMIT 1
+    `,
+    [
+      orgId,
+      billNumber,
+    ],
+  );
+
+  return rows.length > 0;
+}
+
+/*
+ * Read-only counterpart used by GET /purchases/next-number.
+ */
+async function previewNextBillNumber({
+  user,
+}) {
+  const {
+    orgId,
+    userId,
+  } = getAuthenticatedIdentity(user);
+
+  const connection = await db.getConnection();
+
+  try {
+    return {
+      bill_number: await allocateBillNumber(
+        connection,
+        {
+          orgId,
+          userId,
+          consume: false,
+        },
+      ),
+    };
+  } finally {
+    connection.release();
+  }
 }
 
 /*
@@ -385,6 +513,22 @@ async function createPurchase({
 
     const localId = generateLocalId();
 
+    /*
+     * Confirmed and draft bills alike get their number from the org's
+     * counter, allocated atomically inside this transaction. The form only
+     * shows a preview of that number, so two bills can never share one.
+     */
+    const resolvedData = {
+      ...data,
+      bill_number: await allocateBillNumber(
+        connection,
+        {
+          orgId,
+          userId,
+        },
+      ),
+    };
+
     const purchase =
       await purchaseRepository.create(
         connection,
@@ -392,7 +536,7 @@ async function createPurchase({
           orgId,
           localId,
           userId,
-          data,
+          data: resolvedData,
         },
       );
 
@@ -2336,4 +2480,7 @@ module.exports = {
   deletePayment,
   createReturn,
   deleteReturn,
+  previewNextBillNumber,
+  /* Exported for the bill-number regression tests. */
+  allocateBillNumber,
 };

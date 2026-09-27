@@ -293,11 +293,25 @@ const updateSaleSchema =
 const updatePaymentSchema =
   paymentBodySchema.partial();
 
+/*
+ * Used by GET /sales/next-number. `sale_type` decides which prefix the
+ * counter is published under (POS- vs INV-).
+ */
+const nextInvoiceNumberQuerySchema = z.object({
+  sale_type: z
+    .string()
+    .trim()
+    .max(63)
+    .optional()
+    .default(''),
+});
+
 module.exports = {
   createSaleSchema: saleBodySchema,
   updateSaleSchema,
   saleIdParamsSchema: idParamsSchema,
   saleListQuerySchema,
+  nextInvoiceNumberQuerySchema,
   createPaymentSchema: paymentBodySchema,
   updatePaymentSchema,
   paymentIdParamsSchema,

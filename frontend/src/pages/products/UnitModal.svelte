@@ -50,32 +50,49 @@
   }
 
   export async function editUnit(unit) {
+    // The API returns decimals as strings ("43.000000"); the number input
+    // should show 43, not the padded value.
+    const multiple = Number(unit.subunit_multiple);
+
     editingId = unit.id;
-    name = unit.name;
-    code = unit.code;
-    description = unit.description;
-    subunit_id = unit.subunit_id;
-    subunit_multiple = unit.subunit_multiple;
+    name = unit.name ?? '';
+    code = unit.code ?? '';
+    description = unit.description ?? '';
+    subunit_id = unit.subunit_id ?? null;
+    subunit_multiple =
+      Number.isFinite(multiple) && multiple > 0 ? multiple : null;
     status = unit.status;
-    hasSubunit = !!(unit.subunit_id || unit.subunit_multiple);
+    hasSubunit = !!(unit.subunit_id || subunit_multiple);
 
     const unitModal = window.mdb.Modal.getOrCreateInstance(unitModalEl);
     unitModal.show();
   }
 
   async function saveUnit() {
-    if (!name.trim()) {
+    const trimmedName = String(name ?? '').trim();
+
+    if (!trimmedName) {
       alert('Name is required.');
       return;
     }
 
+    // The multiple comes back from the API as a decimal string, and the
+    // number input yields undefined when it is cleared.
+    const parsedMultiple =
+      subunit_multiple === null || subunit_multiple === undefined || subunit_multiple === ''
+        ? Number.NaN
+        : Number(subunit_multiple);
+
     try {
       const payload = {
-        name: name.trim(),
-        code: code.trim(),
-        description,
+        name: trimmedName,
+        code: String(code ?? '').trim(),
+        description: description ?? '',
         subunit_id: subunit_id || null,
-        subunit_multiple: subunit_multiple || null,
+        subunit_multiple:
+          Number.isFinite(parsedMultiple) && parsedMultiple > 0
+            ? parsedMultiple
+            : null,
         status: parseInt(status) || 1,
       };
 
@@ -174,6 +191,9 @@
               type="number"
               id="c-subunit_multiple"
               class="form-control"
+              step="any"
+              min="0"
+              inputmode="decimal"
               placeholder={t('Subunit Multiple')}
               bind:value={subunit_multiple} />
             <select id="c-subunit" class="form-select" bind:value={subunit_id}>

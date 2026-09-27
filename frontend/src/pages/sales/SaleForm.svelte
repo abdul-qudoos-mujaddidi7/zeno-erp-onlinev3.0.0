@@ -1,6 +1,5 @@
 <script>
 import { productUnitApi } from '../../api/productUnitApi.js';
-import { settingsApi } from '../../api/settingsApi.js';
   import { onMount, tick } from 'svelte';
   import SaleItemsTable from './SaleItemsTable.svelte';
   import SaleReceiptModal from './SaleReceiptModal.svelte';
@@ -21,7 +20,6 @@ import { settingsApi } from '../../api/settingsApi.js';
   let accountModalRef;
 
   import { calculateRemainingAndBenefit, resolveCostCurrency } from './SalesHelper.js';
-  import { get } from 'svelte/store';
   import {
     mergeById,
     lookupAccounts,
@@ -167,14 +165,12 @@ import { settingsApi } from '../../api/settingsApi.js';
   let currencies = [];
   let settings = [];
   let accountTypes = [];
-  let invoice_index = 0;
 
   let selected_account_id;
 
   $: if (form.account_id) {
     selected_account_id = form.account_id;
   }
-  let invoice_index_prefix = 'INV-';
 
   let journals = [];
 
@@ -306,11 +302,6 @@ import { settingsApi } from '../../api/settingsApi.js';
 
   let defaultCurrency = 'AFN';
   onMount(async () => {
-    const settingsNow = get(settings_all) || [];
-    const hasInvoiceSettings =
-      settingsNow.some((row) => row.key === 'invoice_index') &&
-      settingsNow.some((row) => row.key === 'invoice_index_prefix');
-
     const [
       treasuryAccount,
       notrackAccount,
@@ -319,8 +310,6 @@ import { settingsApi } from '../../api/settingsApi.js';
       accountTypesResponse,
       warehousesResponse,
       currenciesResponse,
-      invoiceIndexResponse,
-      invoicePrefixResponse,
     ] = await Promise.all([
       lookupAccountByCode('TREASURY'),
       lookupAccountByCode('NOTRACK'),
@@ -329,12 +318,6 @@ import { settingsApi } from '../../api/settingsApi.js';
       accountTypeApi.getAll({ status: 1 }),
       warehouseApi.getAll({ status: 1 }),
       currencyApi.getAll({ status: 1 }),
-      hasInvoiceSettings
-        ? Promise.resolve({ data: [settingsNow.find((row) => row.key === 'invoice_index')] })
-        : settingsApi.getAll({ status: 1, key: 'invoice_index' }),
-      hasInvoiceSettings
-        ? Promise.resolve({ data: [settingsNow.find((row) => row.key === 'invoice_index_prefix')] })
-        : settingsApi.getAll({ status: 1, key: 'invoice_index_prefix' }),
     ]);
 
     treasury_ID = treasuryAccount?.id || 0;
@@ -351,9 +334,6 @@ import { settingsApi } from '../../api/settingsApi.js';
     }
     form.warehouse_id = warehouses.length > 0 ? warehouses[0].id : '';
     currencies = currenciesResponse?.data || [];
-    invoice_index = Number(invoiceIndexResponse?.data?.[0]?.value);
-    invoice_index_prefix = invoicePrefixResponse?.data?.[0]?.value || 'INV-';
-    form.invoice_number = invoice_index_prefix + invoice_index || '';
     accountTypes = allAccountTypes.filter((at) => at.id == CUSTOMER_TYPE_ID && at.status === 1);
     defaultCurrency = currencies.find((c) => c.isDefault == 1);
     if (defaultCurrency && !form.currency) form.currency = defaultCurrency.code;
@@ -367,6 +347,13 @@ import { settingsApi } from '../../api/settingsApi.js';
       await loadSale(saleId);
     } else {
       restoreSaleFormDraft();
+      /*
+       * The invoice number is stamped by the backend when a sale is
+       * confirmed, so the form asks for the number the next confirmed sale
+       * will receive instead of reading a cached counter that drifts behind.
+       * Refreshed after a restored draft, which may hold yesterday's number.
+       */
+      await refreshInvoiceNumberPreview();
     }
 
     saleDraftReady = true;
@@ -1338,6 +1325,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
           snapshotCustomer,
         });
         resetForm();
+        await refreshInvoiceNumberPreview();
         toast.success(t('Success'), t('Sale Confirmed.'));
         calculateRemainingAndBenefit(savedId).catch((error) => {
           console.warn('Failed to recalculate sale totals:', error);
@@ -1365,6 +1353,24 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     }
 
     loading = false;
+  }
+
+  /*
+   * Asks the backend which invoice number the next confirmed sale will get.
+   * Read-only: the counter only moves when a confirmed sale is stored.
+   */
+  async function refreshInvoiceNumberPreview() {
+    if (saleId) return;
+
+    try {
+      const response = await saleApi.getNextNumber({
+        sale_type: form.sale_type,
+      });
+
+      form.invoice_number = response?.data?.invoice_number || '';
+    } catch (error) {
+      console.warn('Could not load the next invoice number:', error);
+    }
   }
 
   function resetForm() {

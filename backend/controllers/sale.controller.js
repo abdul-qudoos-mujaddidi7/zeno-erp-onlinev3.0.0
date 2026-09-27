@@ -32,6 +32,23 @@ async function getById(req, res) {
   });
 }
 
+/*
+ * Reports the invoice number the next confirmed sale will receive. The form
+ * displays this instead of a locally cached counter value.
+ */
+async function nextNumber(req, res) {
+  const result =
+    await saleService.previewNextInvoiceNumber({
+      user: req.user,
+      saleType: req.validated.query.sale_type,
+    });
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+}
+
 async function create(req, res) {
   const sale =
     await saleService.createSale({
@@ -157,6 +174,7 @@ async function removeReturn(req, res) {
 module.exports = {
   list,
   getById,
+  nextNumber,
   create,
   update,
   remove,

@@ -32,6 +32,22 @@ async function getById(req, res) {
   });
 }
 
+/*
+ * Reports the bill number the next purchase will receive. The form displays
+ * this instead of a locally cached counter value.
+ */
+async function nextNumber(req, res) {
+  const result =
+    await purchaseService.previewNextBillNumber({
+      user: req.user,
+    });
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+}
+
 async function create(req, res) {
   const purchase =
     await purchaseService.createPurchase({
@@ -157,6 +173,7 @@ async function removeReturn(req, res) {
 module.exports = {
   list,
   getById,
+  nextNumber,
   create,
   update,
   remove,

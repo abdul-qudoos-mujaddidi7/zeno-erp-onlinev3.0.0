@@ -25,7 +25,7 @@
 <section id="features" class="zeno-features">
   <div class="zeno-container zeno-container--wide">
     <div class="zeno-section-header zeno-features__header">
-      <span class="zeno-section-kicker">Features</span>
+      
       <h2>{text.title}</h2>
       <p>{text.subtitle}</p>
     </div>

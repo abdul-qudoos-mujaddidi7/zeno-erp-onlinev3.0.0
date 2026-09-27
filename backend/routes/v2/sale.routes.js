@@ -14,6 +14,7 @@ const {
   updateSaleSchema,
   saleIdParamsSchema,
   saleListQuerySchema,
+  nextInvoiceNumberQuerySchema,
   createPaymentSchema,
   paymentIdParamsSchema,
   createReturnSchema,
@@ -29,6 +30,19 @@ router.get(
   }),
   asyncHandler(
     saleController.list,
+  ),
+);
+
+/*
+ * Registered before '/:id' so "next-number" is not parsed as a sale id.
+ */
+router.get(
+  '/next-number',
+  validate({
+    query: nextInvoiceNumberQuerySchema,
+  }),
+  asyncHandler(
+    saleController.nextNumber,
   ),
 );
 

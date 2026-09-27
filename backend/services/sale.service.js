@@ -167,6 +167,12 @@ async function allocateInvoiceNumber(
     orgId,
     userId,
     saleType,
+    /*
+     * A preview (consume: false) resolves the very same number without
+     * locking rows or moving the counter, so a form can show the number
+     * the backend will actually stamp.
+     */
+    consume = true,
   },
 ) {
   const isPos = String(saleType || '') === 'pos';
@@ -176,7 +182,7 @@ async function allocateInvoiceNumber(
     {
       orgId,
       key: isPos ? 'pos_index_prefix' : 'invoice_index_prefix',
-      forUpdate: true,
+      forUpdate: consume,
     },
   );
 
@@ -185,7 +191,7 @@ async function allocateInvoiceNumber(
     {
       orgId,
       key: 'invoice_index',
-      forUpdate: true,
+      forUpdate: consume,
     },
   );
 
@@ -230,7 +236,7 @@ async function allocateInvoiceNumber(
   }
   index += 1;
 
-  if (indexSetting) {
+  if (consume && indexSetting) {
     await settingsRepository.update(
       connection,
       {
@@ -245,6 +251,39 @@ async function allocateInvoiceNumber(
   }
 
   return invoiceNumber;
+}
+
+/*
+ * Read-only counterpart of allocateInvoiceNumber. The sale form needs to show
+ * the number the backend is going to stamp, but the counter must only move
+ * when a confirmed sale is actually stored.
+ */
+async function previewNextInvoiceNumber({
+  user,
+  saleType,
+}) {
+  const {
+    orgId,
+    userId,
+  } = getAuthenticatedIdentity(user);
+
+  const connection = await db.getConnection();
+
+  try {
+    return {
+      invoice_number: await allocateInvoiceNumber(
+        connection,
+        {
+          orgId,
+          userId,
+          saleType,
+          consume: false,
+        },
+      ),
+    };
+  } finally {
+    connection.release();
+  }
 }
 
 /*
@@ -2588,6 +2627,9 @@ module.exports = {
   deletePayment,
   createReturn,
   deleteReturn,
+  previewNextInvoiceNumber,
+  /* Exported for the document-numbering regression tests. */
+  allocateInvoiceNumber,
   /* Exported for the Step 2.7 inventory-costing regression tests. */
   persistSaleBatchCosts,
 };
