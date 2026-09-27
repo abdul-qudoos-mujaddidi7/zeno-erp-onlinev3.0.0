@@ -202,7 +202,8 @@
       class:erp-form-route={loc.startsWith('/dashboard/sale-form/') ||
         loc.startsWith('/dashboard/account-sale-form/') ||
         loc.startsWith('/dashboard/purchase-form/') ||
-        loc.startsWith('/dashboard/account-purchase-form/')}>
+        loc.startsWith('/dashboard/account-purchase-form/') ||
+        loc.startsWith('/dashboard/stock-transfer-form/')}>
       {#key currentLang}
       {#if loc === '/dashboard'}
         <AsyncPage loader={loadDashboard} />

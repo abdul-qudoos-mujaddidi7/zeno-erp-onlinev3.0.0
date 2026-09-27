@@ -1,3 +1,3 @@
 export const API_URL = import.meta.env.VITE_API_URL;
 
-export const app_version = 'v3.1.1';
+export const app_version = 'v3.1.2';
