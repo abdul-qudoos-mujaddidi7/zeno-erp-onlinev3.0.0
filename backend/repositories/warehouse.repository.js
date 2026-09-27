@@ -95,6 +95,34 @@ async function findByLocalId(
   return rows[0] || null;
 }
 
+async function hasNonZeroInventory(
+  executor,
+  {
+    orgId,
+    warehouseId,
+  },
+) {
+  const [rows] = await executor.execute(
+    `
+      SELECT quantity
+      FROM warehouse_products
+      WHERE org_id = ?
+        AND warehouse_id = ?
+        AND status = 1
+      FOR UPDATE
+    `,
+    [
+      orgId,
+      warehouseId,
+    ],
+  );
+
+  return rows.some(
+    (row) =>
+      Math.abs(Number(row.quantity || 0)) > 0.000000001,
+  );
+}
+
 async function create(
   connection,
   {
@@ -241,6 +269,7 @@ async function softDelete(
 module.exports = {
   findAll,
   findByLocalId,
+  hasNonZeroInventory,
   create,
   update,
   softDelete,

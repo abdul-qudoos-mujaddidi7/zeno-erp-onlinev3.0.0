@@ -193,6 +193,24 @@ async function updateWarehouse({
       );
     }
 
+    if (
+      Number(oldWarehouse.status) === 1 &&
+      Number(data.status) === 0 &&
+      await warehouseRepository.hasNonZeroInventory(
+        connection,
+        {
+          orgId,
+          warehouseId,
+        },
+      )
+    ) {
+      throw new AppError(
+        'Warehouse cannot be deactivated while it contains product quantity.',
+        409,
+        'WAREHOUSE_HAS_INVENTORY',
+      );
+    }
+
     const updatedWarehouse =
       await warehouseRepository.update(
         connection,
@@ -281,6 +299,22 @@ async function deleteWarehouse({
         'Warehouse is already deleted.',
         409,
         'WAREHOUSE_ALREADY_DELETED',
+      );
+    }
+
+    if (
+      await warehouseRepository.hasNonZeroInventory(
+        connection,
+        {
+          orgId,
+          warehouseId,
+        },
+      )
+    ) {
+      throw new AppError(
+        'Warehouse cannot be deactivated while it contains product quantity.',
+        409,
+        'WAREHOUSE_HAS_INVENTORY',
       );
     }
 

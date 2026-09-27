@@ -567,7 +567,7 @@ import { saleApi } from '../api/saleApi.js';
 {#if !permissions?.some((p) => p.code === 'Sales' && p.view)}
   <h3 class="permission-denied"><i class="bi bi-exclamation-triangle"></i>{t('No access allowed')}</h3>
 {:else if activeTab === 'products'}
-  <ProductsReport account_id={account_id} />
+  <ProductsReport account_id={account_id} itemType="sale" />
 {:else}
   <IndexPageLayout
     dir={t('dir')}

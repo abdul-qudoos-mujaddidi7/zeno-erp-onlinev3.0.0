@@ -14,6 +14,7 @@
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import { DEFAULT_PAGE_SIZE } from '../../lib/pagination.js';
+  import { toast } from '../../ToastUI/toast.js';
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -34,12 +35,13 @@
   async function loadWarehouses() {
     loading = true;
     try {
-      [warehouses, warehouseProducts] = await Promise.all([
+      const [activeWarehouses, archivedWarehouses, products] = await Promise.all([
         warehouseApi.getAll({ status: 1 }).then((response) => response?.data || []),
+        warehouseApi.getAll({ status: 0 }).then((response) => response?.data || []),
         warehouseProductApi.getAll({ status: 1 }).then((response) => response?.data || []),
       ]);
-      warehouses = warehouses.filter((warehouse) => warehouse.status !== 0);
-      warehouseProducts = warehouseProducts.filter((item) => item.status !== 0);
+      warehouses = [...activeWarehouses, ...archivedWarehouses];
+      warehouseProducts = products.filter((item) => item.status !== 0);
     } catch (error) {
       console.error('Failed to load warehouses:', error);
     } finally {
@@ -60,6 +62,52 @@
 
   function getProductCount(warehouseId) {
     return warehouseProducts.filter((item) => item.warehouse_id == warehouseId).length;
+  }
+
+  function getWarehouseQuantity(warehouseId) {
+    return warehouseProducts
+      .filter((item) => item.warehouse_id == warehouseId)
+      .reduce((total, item) => total + Math.abs(Number(item.quantity || 0)), 0);
+  }
+
+  async function changeWarehouseStatus(warehouse) {
+    const deactivating = Number(warehouse.status) === 1;
+
+    if (deactivating && getWarehouseQuantity(warehouse.id) > 1e-9) {
+      toast.error(
+        t('Cannot deactivate warehouse'),
+        t('Warehouse cannot be deactivated while it contains product quantity.'),
+      );
+      return;
+    }
+
+    const action = deactivating ? t('Deactivate') : t('Activate');
+    const confirmed = await toast.confirm(
+      t('Are you sure?'),
+      `${action} ${warehouse.name}?`,
+    );
+    if (!confirmed) return;
+
+    try {
+      await warehouseApi.update(warehouse.id, {
+        name: warehouse.name,
+        location: warehouse.location || null,
+        manager_name: warehouse.manager_name || null,
+        description: warehouse.description || null,
+        isDefault: Number(warehouse.isDefault || 0),
+        status: deactivating ? 0 : 1,
+      });
+      await loadWarehouses();
+      toast.success(
+        t('Success'),
+        deactivating
+          ? t('Warehouse deactivated successfully.')
+          : t('Warehouse activated successfully.'),
+      );
+    } catch (error) {
+      console.error('Failed to change warehouse status:', error);
+      toast.error(t('Error'), error.message || t('Error'));
+    }
   }
 
   function getPageNumbers(current, total) {
@@ -296,6 +344,12 @@
                 icon="bi-pencil"
                 title={t('Edit')}
                 on:click={() => warehouseModalRef?.editWarehouse(warehouse)} />
+              <ActionButton
+                variant="icon"
+                tone={warehouse.status === 1 ? 'danger' : 'edit'}
+                icon={warehouse.status === 1 ? 'bi-pause-circle' : 'bi-play-circle'}
+                title={warehouse.status === 1 ? t('Deactivate') : t('Activate')}
+                on:click={() => changeWarehouseStatus(warehouse)} />
             </div>
           </td>
         </tr>

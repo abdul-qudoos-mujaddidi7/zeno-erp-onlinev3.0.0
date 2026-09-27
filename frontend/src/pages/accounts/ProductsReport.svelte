@@ -5,7 +5,6 @@
   import { generatePDF } from '../generatePDF.js';
   import { generateExcel } from '../generateExcel.js';
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
-  import SummaryCard from '../../components/common/SummaryCard.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import ExportMenu from '../../components/common/ExportMenu.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
@@ -15,7 +14,6 @@
   import { showDate, setDatePickers } from '../../calendar.js';
 
   import { t, lang, translate_org_type, shortID, settings_all } from '../../i18n/i18n.js';
-  import { currencyApi } from '../../api/currencyApi.js';
   import { accountApi } from '../../api/accountApi.js';
   import { productApi } from '../../api/productApi.js';
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../lib/pagination.js';
@@ -24,13 +22,17 @@
   $: _translate_org_type = $translate_org_type;
 
   let units = [];
-  let currencies = [];
   let products = [];
   let items = [];
-  let summaryItems = [];
   let pdfItems = [];
 
   export let account_id = null;
+  /*
+   * Account details may show both purchases and sales, while the global
+   * Sales page must never include purchase lines. When supplied, this prop
+   * fixes every report request (page, summary and export) to that item type.
+   */
+  export let itemType = null;
   let loading = true;
   let exportingReport = false;
   let lookupsLoaded = false;
@@ -41,7 +43,6 @@
   let currentPage = 1;
   let itemsPerPage = DEFAULT_PAGE_SIZE;
   let totalPages = 1;
-  let showProductStats = true;
   let fromDate = '';
   let toDate = '';
   let bootstrapped = false;
@@ -55,6 +56,10 @@
     return { from: '', to: '' };
   }
 
+  function requestedItemType() {
+    return itemType || filterStatus;
+  }
+
   function handleDateChange(inputName, value) {
     if (inputName === 'fromDate') fromDate = value;
     else if (inputName === 'toDate') toDate = value;
@@ -65,65 +70,21 @@
 
   async function loadLookups() {
     if (lookupsLoaded) return;
-    const [currencyResponse, unitsResponse] = await Promise.all([
-      currencyApi.getAll({ status: 1 }),
-      productUnitApi.getAll({ status: 1 }),
-    ]);
-    currencies = currencyResponse?.data || [];
+    const unitsResponse = await productUnitApi.getAll({ status: 1 });
     units = unitsResponse?.data || [];
     lookupsLoaded = true;
-  }
-
-  async function fetchAllForSummary() {
-    const pageSize = 200;
-    const all = [];
-    let page = 1;
-    for (;;) {
-      const response = await accountApi.getProductItems(account_id, {
-        item_type: filterStatus,
-        product_id: selectedProduct !== 'all' ? Number(selectedProduct) : undefined,
-        search: searchTerm.trim(),
-        date_from: fromDate || undefined,
-        date_to: toDate || undefined,
-        page,
-        limit: pageSize,
-        skip_count: 1,
-      });
-      const rows = response?.data || [];
-      all.push(...rows);
-      if (!rows.length || !response?.meta?.hasMore) break;
-      page += 1;
-    }
-    return all;
-  }
-
-  let summaryRequestId = 0;
-  let needsSummaryRefresh = false;
-
-  async function loadSummary() {
-    const reqId = ++summaryRequestId;
-    try {
-      const all = await fetchAllForSummary();
-      if (reqId === summaryRequestId) summaryItems = all;
-    } catch (e) {
-      console.error('Failed to load summary:', e);
-      if (reqId === summaryRequestId) summaryItems = [];
-    }
   }
 
   async function load() {
     const requestId = ++loadRequestId;
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     loading = true;
-    const shouldRefreshSummary = needsSummaryRefresh;
-    needsSummaryRefresh = false;
 
     try {
       const lookupsPromise = loadLookups();
-      const summaryPromise = shouldRefreshSummary ? loadSummary() : Promise.resolve();
 
       const response = await accountApi.getProductItems(account_id, {
-        item_type: filterStatus,
+        item_type: requestedItemType(),
         product_id: selectedProduct !== 'all' ? Number(selectedProduct) : undefined,
         search: searchTerm.trim(),
         date_from: fromDate || undefined,
@@ -156,7 +117,7 @@
           })
         : Promise.resolve();
 
-      await Promise.all([lookupsPromise, productPromise, summaryPromise]);
+      await Promise.all([lookupsPromise, productPromise]);
 
       for (const row of items) {
         if (row.product_name && !products.some((p) => Number(p.id) === Number(row.product_id))) {
@@ -186,7 +147,6 @@
   function scheduleSearchReload() {
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
-      needsSummaryRefresh = true;
       if (currentPage !== 1) currentPage = 1;
       else load();
     }, 300);
@@ -197,7 +157,6 @@
     toDate = '';
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     bootstrapped = true;
-    needsSummaryRefresh = true;
     await load();
     tick().then(() => setDatePickers(handleDateChange));
   });
@@ -274,7 +233,7 @@
 
     for (;;) {
       const response = await accountApi.getProductItems(account_id, {
-        item_type: filterStatus,
+        item_type: requestedItemType(),
         product_id: selectedProduct !== 'all' ? Number(selectedProduct) : undefined,
         search: searchTerm.trim(),
         date_from: fromDate || undefined,
@@ -302,7 +261,7 @@
     try {
       const exporter = format === 'excel' ? generateExcel : generatePDF;
 
-      const allItems = (summaryItems.length ? summaryItems : await fetchAllItemsForExport()).map(decorateItem);
+      const allItems = (await fetchAllItemsForExport()).map(decorateItem);
 
       await exporter(
         'account_products_report',
@@ -351,8 +310,6 @@
 
   $: pdfItems = paginatedItems.map(decorateItem);
 
-  $: pageTotalAmount = sumSubtotals(paginatedItems);
-
   $: enable_services = $settings_all.find((s) => s.key === 'enable_services')?.value == 1;
 
   $: reportFilters = [
@@ -390,7 +347,6 @@
     if (key === 'product') selectedProduct = value;
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
-    needsSummaryRefresh = true;
     currentPage = 1;
     lastPageKey = `1|${itemsPerPage}`;
     load();
@@ -402,25 +358,11 @@
     selectedProduct = 'all';
     fromDate = '';
     toDate = '';
-    needsSummaryRefresh = true;
     currentPage = 1;
     lastPageKey = `1|${itemsPerPage}`;
     load();
   }
 
-  $: summaryTotalAmount = sumSubtotals(summaryItems);
-  $: totalAmountHtml =
-    Object.entries(summaryTotalAmount)
-      .map(
-        ([currency, amount]) =>
-          `<span class="amount-inline"><span dir="ltr">${Number(amount).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span><span>${t(currency || '')}</span></span>`,
-      )
-      .join('<br />') || '0';
-
-  $: saleItemCount = summaryItems.filter((r) => r.item_type === 'sale').length;
-  $: totalQuantity = summaryItems.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
-  $: totalQuantityHtml =
-    `<span class="amount-inline"><span dir="ltr">${totalQuantity.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span></span>`;
 </script>
 
 <div class="products-report-page" dir={t('dir')}>
@@ -428,7 +370,6 @@
     dir={t('dir')}
     ariaLabel={t('Products Report')}
     toolbarWidth="25rem"
-    showStats={showProductStats}
     showFooter={!loading && paginatedItems.length > 0}
     dense={true}
     tablePadding={true}>
@@ -439,16 +380,6 @@
         disabled={exportingReport || loading || pdfItems.length === 0}
         on:export={(event) => exportProducts(event.detail)}
       />
-      <button
-        type="button"
-        class="index-settings-button"
-        class:is-active={showProductStats}
-        aria-label={t('Statistics')}
-        aria-expanded={showProductStats}
-        title={t('Statistics')}
-        on:click={() => (showProductStats = !showProductStats)}>
-        <i class="bi {showProductStats ? 'bi-x-lg' : 'bi-gear'}"></i>
-      </button>
     </svelte:fragment>
 
     <svelte:fragment slot="toolbar">
@@ -465,32 +396,6 @@
         }}
         on:filterChange={handleReportFilter}
         on:reset={resetReportFilters} />
-    </svelte:fragment>
-
-    <svelte:fragment slot="stats">
-      <div class="index-summary-grid product-report-summary">
-        <SummaryCard
-          label={t('Total Amount')}
-          icon="bi-cash-stack"
-          tone="cyan">
-          <div class="report-summary-values">
-            {@html totalAmountHtml}
-          </div>
-        </SummaryCard>
-        <SummaryCard
-          label={t('Total Quantity')}
-          icon="bi-box-seam"
-          tone="green">
-          {@html totalQuantityHtml}
-        </SummaryCard>
-        <SummaryCard
-          label={t('Sale Items')}
-          icon="bi-bag-check"
-          tone="blue">
-          {saleItemCount}
-        </SummaryCard>
-
-      </div>
     </svelte:fragment>
 
     {#if loading}
@@ -596,13 +501,6 @@
     overflow: hidden;
   }
 
-  .product-report-summary {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  :global(.index-statistics) {
-    padding-inline: 0 !important;
-  }
 
   .report-date {
     white-space: nowrap;
@@ -639,20 +537,4 @@
     white-space: nowrap;
   }
 
-  .report-summary-values {
-    text-align: start;
-  }
-
-
-   :global(.index-statistics) {
-    padding-inline: 0 !important;
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .index-summary-grid.product-report-summary {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    width: 100%;
-    max-width: 100%;
-  }
 </style>
