@@ -94,9 +94,10 @@ import { settingsApi } from '../../api/settingsApi.js';
       reference_type: referenceType,
       status: 1,
     });
-    const movements = (response?.data || []).filter(
-      (m) => m.transaction_type === referenceType,
-    );
+    const allMovements = response?.data || [];
+    const movements = isBuy
+      ? allMovements.filter((m) => m.transaction_type === referenceType)
+      : consolidateSaleMovements(allMovements);
 
     const headerMap = await loadDocumentHeaders(movements, referenceType);
 
@@ -132,6 +133,60 @@ import { settingsApi } from '../../api/settingsApi.js';
         };
       })
       .sort((a, b) => ((b.date || '') > (a.date || '') ? 1 : -1));
+  }
+
+  /*
+   * A confirmed sale edit restores the previous stock movement and posts the
+   * edited one. Keep that audit trail in the database, but show the product's
+   * Sale tab as one current row for the invoice instead of one row per edit.
+   */
+  function consolidateSaleMovements(movements) {
+    const groups = new Map();
+
+    for (const movement of movements) {
+      if (!['sale', 'sale_revert'].includes(movement.transaction_type)) continue;
+
+      const key = [
+        String(movement.reference_id ?? ''),
+        String(movement.product_unit_id ?? ''),
+      ].join(':');
+      const current = groups.get(key) || {
+        latest: movement,
+        quantity: 0,
+        totalCost: 0,
+      };
+      const quantity = Math.abs(Number(movement.quantity || 0));
+
+      current.quantity += movement.transaction_type === 'sale'
+        ? -quantity
+        : quantity;
+      current.totalCost += Number(movement.total_cost || 0);
+
+      const currentTime = new Date(
+        current.latest.updated_at ||
+        current.latest.created_at ||
+        current.latest.date ||
+        0,
+      ).getTime();
+      const movementTime = new Date(
+        movement.updated_at ||
+        movement.created_at ||
+        movement.date ||
+        0,
+      ).getTime();
+      if (movementTime > currentTime) current.latest = movement;
+
+      groups.set(key, current);
+    }
+
+    return [...groups.values()]
+      .filter((group) => group.quantity < -1e-9)
+      .map((group) => ({
+        ...group.latest,
+        transaction_type: 'sale',
+        quantity: group.quantity,
+        total_cost: group.totalCost,
+      }));
   }
 
   async function loadDocumentHeaders(movements, referenceType) {

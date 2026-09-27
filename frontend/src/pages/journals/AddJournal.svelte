@@ -29,6 +29,7 @@
   let enable_notrack = false;
 
   let loading = true;
+  let saving = false;
   let showTrackModal = false;
 
   function portal(node) {
@@ -267,6 +268,8 @@
   });
 
   async function saveJournal() {
+  if (saving) return;
+
   const debitAmount = Number(first_entry_debit ?? 0);
   const creditAmount = Number(first_entry_credit ?? 0);
 
@@ -346,6 +349,8 @@
     status: parseInt(status) || 1,
   };
 
+  saving = true;
+
   try {
     let saved;
 
@@ -389,6 +394,8 @@
       t('Error'),
       t('An error occurred while saving the journal. Please try again.')
     );
+  } finally {
+    saving = false;
   }
 
   }
@@ -1452,9 +1459,18 @@ import { purchaseApi } from '../../api/purchaseApi.js';
               on:input={(e) => onSecondCreditInput(e.target.value)} />
           </div>
           <div class="col-md-3 d-flex align-items-start gap-2 journal-submit-field">
-            <button class="btn btn-primary btn-sm w-100 journal-submit-btn" on:click={saveJournal}>
-              <i class="bi bi-check-circle"></i>
-              {journalId ? t('Update Journal') : t('Add Journal')}
+            <button
+              type="button"
+              class="btn btn-primary btn-sm w-100 journal-submit-btn"
+              disabled={saving}
+              aria-busy={saving}
+              on:click={saveJournal}>
+              <i class="bi {saving ? 'bi-arrow-repeat journal-submit-spinner' : 'bi-check-circle'}"></i>
+              {saving
+                ? t('Saving...')
+                : journalId
+                  ? t('Update Journal')
+                  : t('Add Journal')}
             </button>
           </div>
         </div>
@@ -1477,6 +1493,17 @@ import { purchaseApi } from '../../api/purchaseApi.js';
 {/if}
 
 <style>
+  .journal-submit-spinner {
+    display: inline-block;
+    animation: journal-submit-spin 0.8s linear infinite;
+  }
+
+  @keyframes journal-submit-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
   :global(.quick-entry-modal.receipt-open) {
     visibility: hidden;
   }

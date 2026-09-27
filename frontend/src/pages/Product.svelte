@@ -588,6 +588,79 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     return OUTGOING_STOCK_TYPES.has(type);
   }
 
+  /*
+   * Editing a confirmed sale is posted atomically by restoring the old
+   * quantity and then deducting the edited quantity.  Those compensating
+   * movements are useful audit history, but presenting each one as a new
+   * sale makes a single invoice appear several times in the product Sale
+   * and Report tabs.  Fold the history of each sale into the invoice's
+   * current net stock effect before calculating the running report.
+   *
+   * Examples:
+   *   sale -1, sale_revert +1, sale -1 => one sale of 1
+   *   sale -1, sale_revert +1, sale -2 => one sale of 2
+   * A zero net effect means the product was removed from the edited sale.
+   */
+  function consolidateSaleMovements(transactions) {
+    const result = [];
+    const saleGroups = new Map();
+
+    for (const transaction of transactions) {
+      if (
+        transaction.reference_type !== 'sale' ||
+        !['sale', 'sale_revert'].includes(transaction.transaction_type) ||
+        transaction.reference_id === null ||
+        transaction.reference_id === undefined
+      ) {
+        result.push(transaction);
+        continue;
+      }
+
+      const key = [
+        String(transaction.reference_id),
+        String(transaction.product_id ?? ''),
+        String(transaction.product_unit_id ?? ''),
+      ].join(':');
+
+      let group = saleGroups.get(key);
+      if (!group) {
+        group = {
+          rows: [],
+          quantity: 0,
+          totalCost: 0,
+        };
+        saleGroups.set(key, group);
+      }
+
+      const quantity = Math.abs(Number(transaction.quantity || 0));
+      group.quantity += transaction.transaction_type === 'sale'
+        ? -quantity
+        : quantity;
+      group.totalCost += Number(transaction.total_cost || 0);
+      group.rows.push(transaction);
+    }
+
+    for (const group of saleGroups.values()) {
+      if (Math.abs(group.quantity) <= 1e-9) continue;
+
+      const latest = group.rows.reduce((current, row) =>
+        compareTransactionsChronologically(current, row) <= 0
+          ? row
+          : current,
+      );
+      const isSale = group.quantity < 0;
+
+      result.push({
+        ...latest,
+        transaction_type: isSale ? 'sale' : 'sale_revert',
+        quantity: group.quantity,
+        total_cost: group.totalCost,
+      });
+    }
+
+    return result;
+  }
+
   async function loadStockTransactions() {
     reportLoading = true;
 
@@ -773,6 +846,8 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
           };
         },
       );
+
+    stockTransactions = consolidateSaleMovements(stockTransactions);
 
     /*
      * Running report balances must be calculated from the oldest
