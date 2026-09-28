@@ -90,6 +90,8 @@ const journalListQuerySchema = z.object({
     .max(50)
     .optional(),
 
+  currency: z.string().trim().max(50).optional(),
+
   date_from: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'date_from must be YYYY-MM-DD')

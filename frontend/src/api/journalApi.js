@@ -9,6 +9,7 @@ export const journalApi = {
     search = '',
     reference_id,
     reference_type,
+    currency,
     date_from,
     date_to,
     exclude_system_accounts = 0,
@@ -34,6 +35,8 @@ export const journalApi = {
     if (reference_type) {
       params.set('reference_type', String(reference_type));
     }
+
+    if (currency && currency !== 'all') params.set('currency', String(currency));
 
     if (date_from) {
       params.set('date_from', String(date_from));

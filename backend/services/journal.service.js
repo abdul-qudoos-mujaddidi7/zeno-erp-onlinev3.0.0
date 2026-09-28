@@ -118,6 +118,7 @@ async function listJournals({
     dateFrom,
     dateTo,
     accountId: filters.account_id,
+    currency: filters.currency,
     excludeSystemAccounts:
       Number(filters.exclude_system_accounts) === 1,
     excludeReportAccounts:

@@ -6,6 +6,7 @@ function buildSaleQuery({
   orgId,
   accountId,
   productId,
+  currency,
   search,
   dateFrom,
   dateTo,
@@ -31,6 +32,11 @@ function buildSaleQuery({
   if (productId !== undefined && productId !== null && productId !== '') {
     conditions.push('si.product_id = ?');
     values.push(productId);
+  }
+
+  if (currency) {
+    conditions.push('si.currency = ?');
+    values.push(currency);
   }
 
   if (dateFrom) {
@@ -106,6 +112,7 @@ function buildPurchaseQuery({
   orgId,
   accountId,
   productId,
+  currency,
   search,
   dateFrom,
   dateTo,
@@ -131,6 +138,12 @@ function buildPurchaseQuery({
   if (productId !== undefined && productId !== null && productId !== '') {
     conditions.push('pi.product_id = ?');
     values.push(productId);
+  }
+
+
+  if (currency) {
+    conditions.push('pi.currency = ?');
+    values.push(currency);
   }
 
   if (dateFrom) {
@@ -222,6 +235,7 @@ async function findByAccount(
     accountId,
     itemType = 'all',
     productId,
+    currency,
     search = '',
     dateFrom,
     dateTo,
@@ -244,6 +258,7 @@ async function findByAccount(
       orgId,
       accountId,
       productId,
+      currency,
       search,
       dateFrom,
       dateTo,
@@ -261,6 +276,7 @@ async function findByAccount(
       orgId,
       accountId,
       productId,
+      currency,
       search,
       dateFrom,
       dateTo,

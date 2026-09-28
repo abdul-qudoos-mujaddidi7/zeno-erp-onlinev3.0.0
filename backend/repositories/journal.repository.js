@@ -41,6 +41,7 @@ async function findAll(
     dateFrom,
     dateTo,
     accountId,
+    currency,
     excludeSystemAccounts = false,
     excludeReportAccounts = false,
     skipCount = false,
@@ -61,6 +62,11 @@ async function findAll(
       '(first_entry_account = ? OR second_entry_account = ?)',
     );
     values.push(accountId, accountId);
+  }
+
+  if (currency) {
+    conditions.push('currency = ?');
+    values.push(currency);
   }
 
   if (search) {
@@ -190,6 +196,7 @@ async function findSummary(
     dateFrom,
     dateTo,
     accountId,
+    currency,
     excludeSystemAccounts = false,
     excludeReportAccounts = false,
   },
@@ -205,6 +212,11 @@ async function findSummary(
       '(j.first_entry_account = ? OR j.second_entry_account = ?)',
     );
     values.push(accountId, accountId);
+  }
+
+  if (currency) {
+    conditions.push('j.currency = ?');
+    values.push(currency);
   }
 
   if (search) {

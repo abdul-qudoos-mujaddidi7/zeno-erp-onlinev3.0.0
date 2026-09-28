@@ -877,6 +877,7 @@ async function listAccountProductItems({
       accountId: accountId != null ? Number(accountId) : null,
       itemType,
       productId: filters.product_id,
+      currency: filters.currency,
       search: filters.search || '',
       dateFrom: filters.date_from,
       dateTo: filters.date_to,

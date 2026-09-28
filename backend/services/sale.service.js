@@ -384,6 +384,7 @@ async function listSales({
       status: filters.status,
       search: filters.search,
       accountId: filters.account_id,
+      currency: filters.currency,
       dateFrom: filters.date_from,
       dateTo: filters.date_to,
       invoiceStatus: filters.invoice_status,

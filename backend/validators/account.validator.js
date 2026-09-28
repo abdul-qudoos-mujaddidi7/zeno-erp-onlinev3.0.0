@@ -253,6 +253,8 @@ const accountProductItemsQuerySchema = z.object({
     .positive()
     .optional(),
 
+  currency: z.string().trim().max(50).optional(),
+
   search: z
     .string()
     .trim()

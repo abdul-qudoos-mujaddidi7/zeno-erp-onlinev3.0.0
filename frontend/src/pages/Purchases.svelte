@@ -21,6 +21,7 @@
   import TableActions from '../components/common/TableActions.svelte';
   import IndexPageLayout from '../lib/components/index/IndexPageLayout.svelte';
 import { accountApi } from '../api/accountApi.js';
+import { currencyApi } from '../api/currencyApi.js';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../lib/pagination.js';
 
   $: bill_index_prefix = $settings_all.find((s) => s.key === 'bill_index_prefix')?.value || 'B-';
@@ -38,6 +39,7 @@ import { accountApi } from '../api/accountApi.js';
   let showSummaryCards = false;
   let accounts = [];
   let warehouses = [];
+  let currencies = [];
   let purchase_payments = [];
   let purchase_returns = [];
   let totalItems = 0;
@@ -49,12 +51,13 @@ import { accountApi } from '../api/accountApi.js';
   let lookupsLoaded = false;
 
   function getPurchasesQueryKey() {
-    return `${currentPage}|${itemsPerPage}|${account_id || ''}|${filterStatus}|${paymentStatus}|${fromDate}|${toDate}`;
+    return `${currentPage}|${itemsPerPage}|${account_id || ''}|${filterStatus}|${paymentStatus}|${selectedCurrency}|${fromDate}|${toDate}`;
   }
 
   let searchTerm = '';
   let filterStatus = 'all';
   let paymentStatus = 'all';
+  let selectedCurrency = 'all';
   let currentPage = 1;
   let itemsPerPage = DEFAULT_PAGE_SIZE;
   let sortColumn = 'created_at';
@@ -173,22 +176,26 @@ import { accountApi } from '../api/accountApi.js';
   async function loadLookups() {
     if (lookupsLoaded) return;
     if (account_id) {
-      const [accountsResponse, warehouseResponse] = await Promise.all([
+      const [accountsResponse, warehouseResponse, currencyResponse] = await Promise.all([
         accountApi.getById(account_id),
         warehouseApi.getAll({ status: 1 }),
+        currencyApi.getAll({ status: 1 }),
       ]);
       accounts = accountsResponse?.data ? [accountsResponse.data] : [];
       warehouses = warehouseResponse?.data || [];
+      currencies = currencyResponse?.data || [];
       lookupsLoaded = true;
       return;
     }
 
-    const [accountsResponse, warehouseResponse] = await Promise.all([
+    const [accountsResponse, warehouseResponse, currencyResponse] = await Promise.all([
       accountApi.getAll({ status: 1, role: 'supplier' }),
       warehouseApi.getAll({ status: 1 }),
+      currencyApi.getAll({ status: 1 }),
     ]);
     accounts = accountsResponse?.data || [];
     warehouses = warehouseResponse?.data || [];
+    currencies = currencyResponse?.data || [];
     lookupsLoaded = true;
   }
 
@@ -206,6 +213,7 @@ import { accountApi } from '../api/accountApi.js';
             account_id: account_id || undefined,
             bill_status: filterStatus !== 'all' ? filterStatus : undefined,
             payment_status: paymentStatus !== 'all' ? paymentStatus : undefined,
+            currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
             page: currentPage,
             limit: itemsPerPage,
             skip_count:
@@ -278,6 +286,7 @@ import { accountApi } from '../api/accountApi.js';
     void account_id;
     void filterStatus;
     void paymentStatus;
+    void selectedCurrency;
     void fromDate;
     void toDate;
     const key = getPurchasesQueryKey();
@@ -347,6 +356,7 @@ import { accountApi } from '../api/accountApi.js';
     }
     filterStatus = 'all';
     paymentStatus = 'all';
+    selectedCurrency = 'all';
     searchTerm = '';
     if (currentPage !== 1) currentPage = 1;
     else load();
@@ -450,6 +460,7 @@ import { accountApi } from '../api/accountApi.js';
     (account_id ? 1 : 0) +
     (filterStatus !== 'all' ? 1 : 0) +
     (paymentStatus !== 'all' ? 1 : 0) +
+    (selectedCurrency !== 'all' ? 1 : 0) +
     (fromDate || toDate ? 1 : 0);
   $: supplierSuggestions =
     account_id || !searchTerm.trim()
@@ -487,6 +498,7 @@ import { accountApi } from '../api/accountApi.js';
       icon: 'bi-credit-card',
       options: paymentStatusFilterOptions,
     },
+    { key: 'currency', label: t('Currency'), value: selectedCurrency, icon: 'bi-cash-stack', options: [{ value: 'all', label: t('All') }, ...currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))] },
     { key: 'fromDate', label: t('From Date'), value: fromDate, icon: 'bi-calendar3', type: 'date' },
     { key: 'toDate', label: t('To Date'), value: toDate, icon: 'bi-calendar3', type: 'date' },
   ];
@@ -499,6 +511,7 @@ import { accountApi } from '../api/accountApi.js';
     }
     if (key === 'status') filterStatus = value;
     if (key === 'paymentStatus') paymentStatus = value;
+    if (key === 'currency') selectedCurrency = value;
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
     if (currentPage !== 1) currentPage = 1;

@@ -350,6 +350,7 @@
     let filterGroup = new Set();
     let groupDropdownOpen = false;
     let filterStatus = "active"; // 'all', 'active', 'inactive'
+    let selectedCurrency = 'all';
     let currentPage = 1;
     let itemsPerPage = DEFAULT_PAGE_SIZE;
     let sortColumn = "id";
@@ -552,6 +553,16 @@
             });
         }
 
+        if (selectedCurrency !== 'all') {
+            result = result.filter((account) => {
+                const balances = account.computedBalances || {};
+                for (const code of Object.keys(balances)) {
+                    balances[code].active = code === selectedCurrency && balances[code].active !== false;
+                }
+                return Object.prototype.hasOwnProperty.call(balances, selectedCurrency);
+            });
+        }
+
         result = result.sort((a, b) => {
             let valA = a[sortColumn];
             let valB = b[sortColumn];
@@ -632,7 +643,8 @@
     $: activeFilterCount =
         filterType.size +
         (enable_account_groups ? filterGroup.size : 0) +
-        (filterBalState !== 0 ? 1 : 0);
+        (filterBalState !== 0 ? 1 : 0) +
+        (selectedCurrency !== 'all' ? 1 : 0);
 
     function showInitials(name) {
         if (!name) return "";
@@ -671,6 +683,13 @@
 
     $: reportFilters = [
         {
+            key: 'currency', label: t('Currency'), value: selectedCurrency, icon: 'bi-cash-stack',
+            options: [
+                { value: 'all', label: t('All') },
+                ...[...new Set(accounts.flatMap((account) => Object.keys(account.computedBalances || {})))].map((code) => ({ value: code, label: t(code) })),
+            ],
+        },
+        {
             key: 'type', label: t('Account Types'), value: filterType.size === 1 ? [...filterType][0] : 'all', icon: 'bi-diagram-3',
             options: [{ value: 'all', label: t('All') }, ...accountTypes.map((type) => ({ value: type.id, label: getTypeName(type.id) }))],
         },
@@ -697,6 +716,7 @@
         if (key === 'type') filterType = value === 'all' ? new Set() : new Set([Number(value)]);
         if (key === 'group') filterGroup = Array.isArray(value) ? new Set(value.map(Number)) : value === 'all' ? new Set() : new Set([Number(value)]);
         if (key === 'balance') filterBalState = value === 'all' ? 0 : Number(value);
+        if (key === 'currency') selectedCurrency = value;
         currentPage = 1;
     }
 
@@ -705,6 +725,7 @@
         filterType = new Set();
         filterGroup = new Set();
         filterBalState = 0;
+        selectedCurrency = 'all';
         currentPage = 1;
     }
 

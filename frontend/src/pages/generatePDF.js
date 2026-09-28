@@ -968,6 +968,7 @@ function resolveReportTitle(type) {
     accounts: t('Accounts Report'),
     account_financial_report: t('Account Financial Report'),
     journals_report: t('Journals Report'),
+    exchanges_report: t('Exchanges Report'),
     product_transactions: t('Product Transactions Report'),
     account_products_report: t('Account Products Report'),
   };
@@ -3067,6 +3068,66 @@ function buildReportMetrics({
     ];
   }
 
+  if (type === 'exchanges_report') {
+    /*
+     * Exchanges move money between two accounts, so debits and credits are
+     * totalled per currency and reported separately.
+     */
+    const sent = {};
+    const received = {};
+
+    normalizeItems(filteredItems).forEach((row) => {
+      const debitCurrency =
+        row.first_currency || '';
+      const creditCurrency =
+        row.second_currency || '';
+
+      if (debitCurrency) {
+        sent[debitCurrency] =
+          Number(sent[debitCurrency] || 0) +
+          Number(row.first_entry_debit || 0);
+      }
+
+      if (creditCurrency) {
+        received[creditCurrency] =
+          Number(received[creditCurrency] || 0) +
+          Number(row.second_entry_credit || 0);
+      }
+    });
+
+    return [
+      {
+        label: t('Date Range'),
+        value: dateRange,
+        icon: 'calendar',
+        tone: 'blue',
+      },
+      {
+        label: t('Exchanges'),
+        value: String(length),
+        icon: 'receipt',
+        tone: 'cyan',
+      },
+      {
+        label: t('Debit'),
+        icon: 'wallet',
+        value:
+          formatCurrencyMap(sent, ' | ') || '0',
+        tone: 'red',
+      },
+      {
+        label: t('Credit'),
+        icon: 'coin',
+        value:
+          formatCurrencyMap(
+            received,
+            ' | ',
+          ) || '0',
+        tone: 'green',
+      },
+    ];
+  }
+
   if (type === 'product_transactions') {
     const product = extraInfo?.product || {};
 
@@ -3434,6 +3495,123 @@ function buildJournalsTable(items, rtl) {
   };
 }
 
+function buildExchangesTable(
+  items,
+  rtl,
+  printableWidth,
+) {
+  const headers = [
+    '#',
+    t('Date'),
+    t('From Account'),
+    t('To Account'),
+    t('Description'),
+    t('Debit'),
+    t('Rate'),
+    t('Credit'),
+  ];
+
+  /*
+   * Every column is pinned on purpose. The two money columns hold no
+   * measurable text (they are drawn manually), so when autoTable is left to
+   * distribute the width the last column is starved and its header ends up
+   * wrapped one letter per line.
+   *
+   * The widths are then scaled to fill the printable width, so the table
+   * ends flush with the "Details" title instead of stopping short of it.
+   * RTL reverses the header row, so the widths must be reversed with it or
+   * they land on the wrong columns.
+   */
+  const baseWidths = [
+    8, 20, 28, 28, 30, 24, 18, 24,
+  ];
+  const baseTotal = baseWidths.reduce(
+    (sum, width) => sum + width,
+    0,
+  );
+  const targetWidth =
+    Number(printableWidth) > 0
+      ? Number(printableWidth)
+      : baseTotal;
+  const scale = targetWidth / baseTotal;
+  const columnWidths = baseWidths.map(
+    (width) =>
+      Math.round(width * scale * 100) / 100,
+  );
+  const orderedWidths = rtl
+    ? [...columnWidths].reverse()
+    : columnWidths;
+
+  function resolveAccountName(accountId) {
+    return getAccountName(
+      accounts.find(
+        (candidate) =>
+          Number(candidate.id) ===
+          Number(accountId),
+      ),
+    );
+  }
+
+  const body = items.map(
+    (exchange, index) => {
+      const debit = Number(
+        exchange.first_entry_debit || 0,
+      );
+      const credit = Number(
+        exchange.second_entry_credit || 0,
+      );
+      const rate = Number(exchange.rate || 0);
+
+      const row = [
+        index + 1,
+        formatDateForPDF(
+          exchange.date ||
+            exchange.created_at,
+        ),
+        resolveAccountName(
+          exchange.first_entry_account,
+        ),
+        resolveAccountName(
+          exchange.second_entry_account,
+        ),
+        stripTags(
+          exchange.description || '',
+        ),
+        debit
+          ? createMoneyCell(
+              debit,
+              exchange.first_currency,
+            )
+          : '',
+        rate
+          ? formatNumber(rate, {
+              maximumFractionDigits: 6,
+            })
+          : '',
+        credit
+          ? createMoneyCell(
+              credit,
+              exchange.second_currency,
+            )
+          : '',
+      ];
+
+      return rtl ? [...row].reverse() : row;
+    },
+  );
+
+  return {
+    head: [rtl ? [...headers].reverse() : headers],
+    body,
+    columnStyles: Object.fromEntries(
+      orderedWidths.map((cellWidth, index) => [
+        index,
+        { cellWidth },
+      ]),
+    ),
+  };
+}
+
 function resolveProductMovementType(transactionType) {
   if (
     [
@@ -3752,6 +3930,7 @@ function buildTableData({
   items,
   extraInfo,
   rtl,
+  printableWidth,
 }) {
   if (type === 'accounts') {
     return buildAccountsTable(items, rtl);
@@ -3769,6 +3948,14 @@ function buildTableData({
 
   if (type === 'journals_report') {
     return buildJournalsTable(items, rtl);
+  }
+
+  if (type === 'exchanges_report') {
+    return buildExchangesTable(
+      items,
+      rtl,
+      printableWidth,
+    );
   }
 
   if (type === 'product_transactions') {
@@ -3798,7 +3985,8 @@ function getTableFontSize(type) {
 
   if (
     type === 'account_financial_report' ||
-    type === 'journals_report'
+    type === 'journals_report' ||
+    type === 'exchanges_report'
   ) {
     return 8.2;
   }
@@ -4107,6 +4295,8 @@ export async function generatePDF(
       items,
       extraInfo,
       rtl,
+      printableWidth:
+        pageWidth - margin * 2,
     });
 
     const fontSize =

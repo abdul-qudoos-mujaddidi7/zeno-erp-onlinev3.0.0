@@ -22,8 +22,6 @@
   let TREASURY_ID = null;
   let accountsLoaded = false;
 
-  let modalRef;
-
   let currency = '';
   import { showDate } from '../../calendar.js';
 
@@ -36,7 +34,6 @@
   import StatusBadge from '../../components/common/StatusBadge.svelte';
   import TableActions from '../../components/common/TableActions.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
-  import EditExchangeModal from '../exchanges/EditExchangeModal.svelte';
   import { auth } from '../../auth/authStore';
   import { currencyApi } from '../../api/currencyApi.js';
   import { accountApi } from '../../api/accountApi.js';
@@ -321,6 +318,15 @@
       },
     }];
 
+    if (permissions?.some((permission) => permission.code === 'Exchange' && permission.edit)) {
+      actions.push({
+        icon: 'bi-pencil',
+        label: t('Edit'),
+        tone: 'edit',
+        onClick: () => editExchange(exchange),
+      });
+    }
+
     if (permissions?.some((permission) => permission.code === 'Exchange' && permission.delete)) {
       actions.push({
         icon: 'bi-trash',
@@ -356,12 +362,26 @@
     loadExchanges();
   }
 
-  function editExchange(j) {}
+  function editExchange(exchange) {
+    editingExchangeId = exchange.id;
+    showExchangeForm = true;
+  }
 
-  let showAddExchange = false;
+  let showExchangeForm = false;
+  let editingExchangeId = null;
+
+  function openAddExchange() {
+    editingExchangeId = null;
+    showExchangeForm = true;
+  }
+
+  function closeExchangeForm() {
+    showExchangeForm = false;
+    editingExchangeId = null;
+  }
 
   async function handleExchangeSaved() {
-    showAddExchange = false;
+    closeExchangeForm();
     await loadExchanges();
   }
 
@@ -387,19 +407,19 @@
   ];
 </script>
 
-<EditExchangeModal bind:this={modalRef} on:saved={loadExchanges} />
-
 <div class="exchanges-page">
 
-{#if showAddExchange}
+{#if showExchangeForm}
   <QuickEntryModal
-    title={t('Add Exchange')}
+    title={editingExchangeId ? t('Update Exchange') : t('Add Exchange')}
     subtitle=""
     icon="bi-currency-exchange"
     appearance="exchange"
     dir={t('dir')}
-    on:close={() => (showAddExchange = false)}>
-    <AddExchange on:saved={handleExchangeSaved} />
+    on:close={closeExchangeForm}>
+    {#key editingExchangeId}
+      <AddExchange exchangeId={editingExchangeId} on:saved={handleExchangeSaved} />
+    {/key}
   </QuickEntryModal>
 {/if}
 
@@ -413,7 +433,7 @@
   <svelte:fragment slot="actions">
     <ActionButton icon="bi-plus-lg"
      label={t('Add Exchange')}
-     on:click={() => (showAddExchange = true)} />
+     on:click={openAddExchange} />
 </svelte:fragment>
   <svelte:fragment slot="toolbar">
     <FilterToolbar

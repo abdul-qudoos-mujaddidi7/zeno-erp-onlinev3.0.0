@@ -94,6 +94,7 @@ export const accountApi = {
   getProductItems(accountId, {
     item_type = 'all',
     product_id,
+    currency,
     search = '',
     date_from,
     date_to,
@@ -104,6 +105,7 @@ export const accountApi = {
     const params = new URLSearchParams();
     params.set('item_type', String(item_type || 'all'));
     if (product_id) params.set('product_id', String(product_id));
+    if (currency && currency !== 'all') params.set('currency', String(currency));
     if (search.trim()) params.set('search', search.trim());
     if (date_from) params.set('date_from', String(date_from));
     if (date_to) params.set('date_to', String(date_to));

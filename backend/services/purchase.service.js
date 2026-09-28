@@ -327,6 +327,7 @@ async function listPurchases({
       status: filters.status,
       search: filters.search,
       accountId: filters.account_id,
+      currency: filters.currency,
       dateFrom: filters.date_from,
       dateTo: filters.date_to,
       billStatus: filters.bill_status,

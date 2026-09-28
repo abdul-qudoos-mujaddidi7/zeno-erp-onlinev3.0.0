@@ -153,6 +153,7 @@ async function findAll(
     status = 1,
     search = '',
     accountId,
+    currency,
     dateFrom,
     dateTo,
     billStatus,
@@ -183,6 +184,12 @@ async function findAll(
   if (accountId !== undefined && accountId !== null && accountId !== '') {
     conditions.push('account_id = ?');
     values.push(accountId);
+  }
+
+
+  if (currency) {
+    conditions.push('currency = ?');
+    values.push(currency);
   }
 
   if (search) {

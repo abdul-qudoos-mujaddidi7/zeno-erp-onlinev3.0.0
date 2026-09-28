@@ -137,7 +137,7 @@ import { currencyApi } from '../../api/currencyApi.js';
         payable_amount: payableAmount,
       },
       customer,
-      {},
+      balance,
     );
   }
 

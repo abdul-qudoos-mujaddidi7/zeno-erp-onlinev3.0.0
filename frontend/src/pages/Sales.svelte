@@ -55,7 +55,7 @@ import { saleApi } from '../api/saleApi.js';
   let lookupsLoaded = false;
 
   function getSalesQueryKey() {
-    return `${currentPage}|${itemsPerPage}|${account_id || ''}|${filterStatus}|${filterPaymentStatus}|${fromDate}|${toDate}`;
+    return `${currentPage}|${itemsPerPage}|${account_id || ''}|${filterStatus}|${filterPaymentStatus}|${selectedCurrency}|${fromDate}|${toDate}`;
   }
 
   let shiftPressed = false;
@@ -101,6 +101,7 @@ import { saleApi } from '../api/saleApi.js';
   let searchTerm = '';
   let filterStatus = 'all';
   let filterPaymentStatus = 'all';
+  let selectedCurrency = 'all';
   let currentPage = 1;
   let itemsPerPage = DEFAULT_PAGE_SIZE;
   let sortColumn = 'created_at';
@@ -199,6 +200,7 @@ import { saleApi } from '../api/saleApi.js';
         account_id: account_id || undefined,
         invoice_status: filterStatus !== 'all' ? filterStatus : undefined,
         payment_status: filterPaymentStatus !== 'all' ? filterPaymentStatus : undefined,
+        currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
         page,
         limit: pageSize,
         skip_count: 1,
@@ -312,6 +314,7 @@ import { saleApi } from '../api/saleApi.js';
             account_id: account_id || undefined,
             invoice_status: filterStatus !== 'all' ? filterStatus : undefined,
             payment_status: filterPaymentStatus !== 'all' ? filterPaymentStatus : undefined,
+            currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
             page: currentPage,
             limit: itemsPerPage,
             skip_count:
@@ -370,6 +373,7 @@ import { saleApi } from '../api/saleApi.js';
       fromDate = from;
       toDate = to;
     });
+    await loadLookups();
 
     lastPageKey = getSalesQueryKey();
     bootstrapped = true;
@@ -385,6 +389,7 @@ import { saleApi } from '../api/saleApi.js';
     void account_id;
     void filterStatus;
     void filterPaymentStatus;
+    void selectedCurrency;
     void fromDate;
     void toDate;
     const key = getSalesQueryKey();
@@ -463,6 +468,7 @@ import { saleApi } from '../api/saleApi.js';
     }
     filterStatus = 'all';
     filterPaymentStatus = 'all';
+    selectedCurrency = 'all';
     searchTerm = '';
     if (currentPage !== 1) currentPage = 1;
     else load();
@@ -514,6 +520,7 @@ import { saleApi } from '../api/saleApi.js';
     (account_id ? 1 : 0) +
     (filterStatus !== 'all' ? 1 : 0) +
     (filterPaymentStatus !== 'all' ? 1 : 0) +
+    (selectedCurrency !== 'all' ? 1 : 0) +
     (fromDate || toDate ? 1 : 0);
   $: customerSuggestions =
     account_id || !searchTerm.trim()
@@ -546,6 +553,7 @@ import { saleApi } from '../api/saleApi.js';
     },
     { key: 'status', label: t('Status'), value: filterStatus, icon: 'bi-activity', options: statusFilterOptions },
     { key: 'payment', label: t('Payment'), value: filterPaymentStatus, icon: 'bi-wallet2', options: paymentStatusFilterOptions },
+    { key: 'currency', label: t('Currency'), value: selectedCurrency, icon: 'bi-cash-stack', options: [{ value: 'all', label: t('All') }, ...currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))] },
     { key: 'fromDate', label: t('From Date'), value: fromDate, icon: 'bi-calendar3', type: 'date' },
     { key: 'toDate', label: t('To Date'), value: toDate, icon: 'bi-calendar3', type: 'date' },
   ];
@@ -558,6 +566,7 @@ import { saleApi } from '../api/saleApi.js';
     }
     if (key === 'status') filterStatus = value;
     if (key === 'payment') filterPaymentStatus = value;
+    if (key === 'currency') selectedCurrency = value;
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
     if (currentPage !== 1) currentPage = 1;
@@ -567,7 +576,7 @@ import { saleApi } from '../api/saleApi.js';
 {#if !permissions?.some((p) => p.code === 'Sales' && p.view)}
   <h3 class="permission-denied"><i class="bi bi-exclamation-triangle"></i>{t('No access allowed')}</h3>
 {:else if activeTab === 'products'}
-  <ProductsReport account_id={account_id} itemType="sale" />
+  <ProductsReport account_id={account_id} itemType="sale" bind:selectedCurrency {currencies} />
 {:else}
   <IndexPageLayout
     dir={t('dir')}

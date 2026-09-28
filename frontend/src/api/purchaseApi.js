@@ -9,6 +9,7 @@ export const purchaseApi = {
     search = '',
     relations = 0,
     account_id,
+    currency,
     date_from,
     date_to,
     page,
@@ -39,6 +40,8 @@ export const purchaseApi = {
     if (account_id !== undefined && account_id !== null && account_id !== '') {
       params.set('account_id', String(account_id));
     }
+
+    if (currency && currency !== 'all') params.set('currency', String(currency));
 
     if (date_from) {
       params.set('date_from', String(date_from));
@@ -82,6 +85,7 @@ export const purchaseApi = {
     status = 1,
     search = '',
     account_id,
+    currency,
     date_from,
     date_to,
     page,
@@ -97,6 +101,7 @@ export const purchaseApi = {
       search,
       relations: 1,
       account_id,
+      currency,
       date_from,
       date_to,
       page,

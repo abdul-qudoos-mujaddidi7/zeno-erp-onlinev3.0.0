@@ -9,10 +9,13 @@
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import ExportMenu from '../../components/common/ExportMenu.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
   import SummaryCard from '../../components/common/SummaryCard.svelte';
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../lib/pagination.js';
+  import { generatePDF } from '../generatePDF.js';
+  import { generateExcel } from '../generateExcel.js';
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -28,6 +31,7 @@
   let endDate = '';
   let currentPage = 1;
   let itemsPerPage = DEFAULT_PAGE_SIZE;
+  let exportingReport = false;
 
   function localDateValue(value) {
     if (!value) return '';
@@ -136,6 +140,26 @@
     currentPage = 1;
   }
 
+  async function downloadReport(format) {
+    if (exportingReport) return;
+
+    exportingReport = true;
+
+    try {
+      /*
+       * Export every row that matches the current filters, not just the
+       * rows visible on the current page.
+       */
+      const exporter = format === 'excel' ? generateExcel : generatePDF;
+
+      await exporter('exchanges_report', filtered, startDate, endDate, filtered.length);
+    } catch (error) {
+      console.error('Failed to generate the exchange report:', error);
+    } finally {
+      exportingReport = false;
+    }
+  }
+
   function getPageNumbers(current, total) {
     const pages = [];
     for (let page = 1; page <= total; page += 1) {
@@ -177,6 +201,13 @@
     showFooter={!loading && filtered.length > 0}
     dense
     tablePadding>
+    <svelte:fragment slot="actions">
+      <ExportMenu
+        loading={exportingReport}
+        disabled={exportingReport || loading || !!loadError || filtered.length === 0}
+        on:export={(event) => downloadReport(event.detail)} />
+    </svelte:fragment>
+
     <svelte:fragment slot="toolbar">
       <FilterToolbar
         searchValue={searchTerm}

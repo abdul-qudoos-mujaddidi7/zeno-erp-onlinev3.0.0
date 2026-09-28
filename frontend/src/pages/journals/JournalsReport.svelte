@@ -2,6 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { journalApi } from '../../api/journalApi.js';
   import { accountApi } from '../../api/accountApi.js';
+  import { currencyApi } from '../../api/currencyApi.js';
   import { lookupAccountByCode } from '../../lib/formLookups.js';
   import { t, lang, translate_org_type } from '../../i18n/i18n';
   import { showDate, setDatePickers } from '../../calendar.js';
@@ -31,6 +32,8 @@
 
   let componentRoot = null;
   let accounts = [];
+  let currencies = [];
+  let selectedCurrency = 'all';
   let account = null;
 
   let computedBalance = {};
@@ -76,6 +79,7 @@
 
     try {
       const treasuryAccount = await lookupAccountByCode('TREASURY');
+      currencies = (await currencyApi.getAll({ status: 1 }))?.data || [];
       TREASURY_ID = treasuryAccount?.id ?? null;
       if (treasuryAccount) accounts = [treasuryAccount];
 
@@ -159,6 +163,7 @@
       search: q.trim(),
       date_from: startDate || undefined,
       date_to: endDate || undefined,
+      currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
       exclude_system_accounts: 1,
       exclude_report_accounts: 1,
       ...extra,
@@ -284,6 +289,13 @@
       icon: 'bi-calendar3',
       value: endDate,
     },
+    {
+      key: 'currency',
+      label: t('Currency'),
+      icon: 'bi-cash-stack',
+      value: selectedCurrency,
+      options: [{ value: 'all', label: t('All') }, ...currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))],
+    },
   ];
 
   function handleReportFilter(event) {
@@ -291,6 +303,7 @@
 
     if (key === 'startDate') startDate = value;
     if (key === 'endDate') endDate = value;
+    if (key === 'currency') selectedCurrency = value;
 
     reloadFromFirstPage();
   }
@@ -300,6 +313,7 @@
     startDate = '';
     endDate = '';
     q = '';
+    selectedCurrency = 'all';
     reloadFromFirstPage();
   }
 

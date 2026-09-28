@@ -33,6 +33,8 @@
    * fixes every report request (page, summary and export) to that item type.
    */
   export let itemType = null;
+  export let selectedCurrency = 'all';
+  export let currencies = [];
   let loading = true;
   let exportingReport = false;
   let lookupsLoaded = false;
@@ -86,6 +88,7 @@
       const response = await accountApi.getProductItems(account_id, {
         item_type: requestedItemType(),
         product_id: selectedProduct !== 'all' ? Number(selectedProduct) : undefined,
+        currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
         search: searchTerm.trim(),
         date_from: fromDate || undefined,
         date_to: toDate || undefined,
@@ -235,6 +238,7 @@
       const response = await accountApi.getProductItems(account_id, {
         item_type: requestedItemType(),
         product_id: selectedProduct !== 'all' ? Number(selectedProduct) : undefined,
+        currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
         search: searchTerm.trim(),
         date_from: fromDate || undefined,
         date_to: toDate || undefined,
@@ -339,12 +343,20 @@
         })),
       ],
     },
+    {
+      key: 'currency',
+      label: t('Currency'),
+      value: selectedCurrency,
+      icon: 'bi-cash-stack',
+      options: [{ value: 'all', label: t('All') }, ...currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))],
+    },
   ];
 
   function handleReportFilter(event) {
     const { key, value } = event.detail;
     if (key === 'type') filterStatus = value;
     if (key === 'product') selectedProduct = value;
+    if (key === 'currency') selectedCurrency = value;
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
     currentPage = 1;
@@ -356,6 +368,7 @@
     searchTerm = '';
     filterStatus = 'all';
     selectedProduct = 'all';
+    selectedCurrency = 'all';
     fromDate = '';
     toDate = '';
     currentPage = 1;
