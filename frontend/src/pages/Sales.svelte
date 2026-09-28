@@ -286,7 +286,7 @@ import { saleApi } from '../api/saleApi.js';
     const [currencyResponse, accountsResponse, warehouseResponse] =
       await Promise.all([
         currencyApi.getAll({ status: 1 }),
-        accountApi.getAll({ status: 1, account_type_id: 4 }),
+        accountApi.getAll({ status: 1, role: 'customer' }),
         warehouseApi.getAll({ status: 1 }),
       ]);
     currencies = currencyResponse?.data || [];

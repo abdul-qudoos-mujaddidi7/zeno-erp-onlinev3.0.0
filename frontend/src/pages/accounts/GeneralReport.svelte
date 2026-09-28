@@ -192,6 +192,7 @@ import { dashboardApi } from '../../api/dashboardApi.js';
       accountTypes = bootstrap.account_types || [];
       accountGroups = bootstrap.account_groups || [];
       accounts = bootstrap.accounts || [];
+      directionalBalances = (await accountApi.getDirectionalBalances())?.data || [];
       loading = false;
   }
 
@@ -279,6 +280,7 @@ import { dashboardApi } from '../../api/dashboardApi.js';
   let AllCustomersBalances = {};
   let AllSupplierBalances = {};
   let AllShareholderBalances = {};
+  let directionalBalances = [];
 
   let checkAll = false;
 
@@ -310,17 +312,14 @@ import { dashboardApi } from '../../api/dashboardApi.js';
             TreasuryBalances[b[0]] = TreasuryBalances[b[0]] ? TreasuryBalances[b[0]] + thisBal : thisBal;
           });
         }
-        if (a.account_type_id == 4) {
-          Object.entries(a.computedBalances).forEach((b) => {
-            let thisBal = b[1].credit - b[1].debit;
-            AllCustomersBalances[b[0]] = AllCustomersBalances[b[0]] ? AllCustomersBalances[b[0]] + thisBal : thisBal;
-          });
-        }
-        if (a.account_type_id == 3) {
-          Object.entries(a.computedBalances).forEach((b) => {
-            let thisBal = b[1].credit - b[1].debit;
-            AllSupplierBalances[b[0]] = AllSupplierBalances[b[0]] ? AllSupplierBalances[b[0]] + thisBal : thisBal;
-          });
+        for (const row of directionalBalances.filter((entry) => Number(entry.account_id) === Number(a.id))) {
+          const currency = row.currency || 'AFN';
+          if (Number(a.can_be_customer) === 1 || a.account_type_id == 4) {
+            AllCustomersBalances[currency] = (AllCustomersBalances[currency] || 0) - Number(row.customer_receivable || 0);
+          }
+          if (Number(a.can_be_supplier) === 1 || a.account_type_id == 3) {
+            AllSupplierBalances[currency] = (AllSupplierBalances[currency] || 0) + Number(row.supplier_payable || 0);
+          }
         }
         if (a.account_type_id == 7) {
           Object.entries(a.computedBalances).forEach((b) => {

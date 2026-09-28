@@ -30,6 +30,7 @@ export function isActiveProduct(product) {
 
 export async function lookupAccounts({
   account_type_id,
+  role,
   code = '',
   search = '',
   exclude_system,
@@ -38,6 +39,7 @@ export async function lookupAccounts({
   const response = await accountApi.getAll({
     status: 1,
     account_type_id: account_type_id || '',
+    role: role || '',
     code: code || '',
     search: search || '',
     exclude_system,

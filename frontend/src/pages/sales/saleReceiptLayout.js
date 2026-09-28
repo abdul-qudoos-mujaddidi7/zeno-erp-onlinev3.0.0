@@ -143,6 +143,90 @@ export function formatContactPhone(phone, countryCode = RECEIPT_COUNTRY_CODE) {
   return `${countryCode} ${text}`;
 }
 
+/* The three receipt languages, as the locales that spell their day period. */
+const TIME_LOCALES = { en: 'en-US', fa: 'fa-AF', ps: 'ps-AF' };
+
+/*
+ * The clock time of the sale, for the receipt's date line.
+ *
+ * Stored timestamps reach the browser with the database's own digits
+ * ('2026-09-27T14:43:30.968Z' — the app's connection tells the driver the
+ * column is UTC while the value it carries is the wall clock the database
+ * wrote). That clock is the business clock the invoice date is taken from, so
+ * the time is read straight out of the digits: recovering the time by way of
+ * Date and a time zone would print an hour the shop never saw (Kabul is
+ * +04:30, which would turn 14:43 into 19:13).
+ *
+ * The slip prints the hour the way the shop reads it — a 12-hour clock with
+ * the day period of the receipt's own language ('ب.ظ', 'غ.و', 'PM') — and in
+ * the numerals of the Persian date beside it.
+ *
+ *   '2026-09-27T14:43:30.968Z' -> '۲:۴۳ ب.ظ'   (fa)
+ *   '2026-09-27T14:43:30.968Z' -> '2:43 PM'     (en)
+ *   '2026-09-27T09:05:00.000Z' -> '۹:۰۵ ق.ظ'
+ *   '2026-09-27T00:00:00.000Z' -> ''            (a date-only row)
+ *   '' / null / 'nonsense'     -> ''
+ */
+export function receiptTime(value, lang = 'fa') {
+  const match = String(value ?? '').match(/(\d{1,2}):(\d{2})/);
+
+  if (!match) return '';
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+
+  if (hour > 23 || minute > 59) return '';
+
+  /*
+   * Midnight is the value a business date is stored with, not a time a bill
+   * was written: printing it would date every unread row to the same minute.
+   */
+  if (hour === 0 && minute === 0) return '';
+
+  const locale = TIME_LOCALES[lang] || TIME_LOCALES.fa;
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  const clock = `${hour12}:${String(minute).padStart(2, '0')}`;
+  const digits = locale.startsWith('fa') || locale.startsWith('ps')
+    ? toPersianDigits(clock)
+    : clock;
+  const period = dayPeriod(hour, locale);
+
+  return `${digits} ${period}`.trim();
+}
+
+/*
+ * 'ق.ظ' / 'ب.ظ' / 'غ.م' / 'غ.و' / 'AM' / 'PM', from the locale's own data —
+ * the same source the Persian date on this slip is formatted from, so a
+ * language added to the app needs no new translations here.
+ *
+ * The hour is pinned to UTC because only the day period is wanted: the value
+ * carries the digits the database wrote, and re-reading it through a time
+ * zone could flip the marker to the wrong half of the day.
+ */
+function dayPeriod(hour, locale) {
+  const probe = new Date(Date.UTC(2000, 0, 1, hour));
+  const parts = new Intl.DateTimeFormat(locale, {
+    hour: 'numeric',
+    hour12: true,
+    timeZone: 'UTC',
+  }).formatToParts(probe);
+
+  /* CLDR writes the Persian markers with a closing dot ('ق.ظ.'); a receipt
+   * prints the abbreviation, so the trailing dot is dropped. */
+  return (parts.find((part) => part.type === 'dayPeriod')?.value || '').replace(/\.$/, '');
+}
+
+const PERSIAN_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+
+/*
+ * The slip prints the Persian date with Persian numerals (Intl 'fa-AF'), so
+ * the time sharing that line is converted to match instead of mixing two
+ * numeral systems inside one phrase.
+ */
+export function toPersianDigits(text) {
+  return String(text ?? '').replace(/\d/g, (digit) => PERSIAN_DIGITS[Number(digit)]);
+}
+
 /*
  * What a line prints as its amount: the sale currency is named once, on the
  * NET Total row, so the item rows stay inside 74mm.

@@ -27,6 +27,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     itemCounts,
     itemsSubtotal,
     lineAmount,
+    receiptTime,
   } from './saleReceiptLayout.js';
 
   import { showDate } from '../../calendar.js';
@@ -65,6 +66,16 @@ import { currencyApi } from '../../api/currencyApi.js';
    * fallbacks the receipt always used.
    */
   $: customerName = getAccountName(customer) || sale?.description || 'Walk-in';
+
+  /*
+   * The time of the sale, printed beside the date. It comes from the row's own
+   * timestamp (the invoice date is the business DAY, so it is always midnight)
+   * and reads on a 12-hour clock in the slip's own language — see receiptTime().
+   */
+  $: printedTime = sale?.invoice_date
+    ? receiptTime(sale?.created_at || sale?.invoice_date, $lang)
+    : '';
+
   let generics = [];
   let addressEl;
   let WhatsappModalRef = null;
@@ -532,6 +543,7 @@ td {
 .head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin-bottom: 2px; }
 .head-row .head-customer { text-align: end; overflow-wrap: anywhere; }
 .head-row .head-gregorian { unicode-bidi: embed; white-space: nowrap; }
+.head-row .head-time { unicode-bidi: isolate; white-space: nowrap; }
 .receipt-footer { text-align: start; line-height: 1.45; margin-top: 2px; }
 .receipt-footer .footer-line { white-space: normal; overflow-wrap: anywhere; }
 .receipt-footer .footer-signoff { text-align: center; margin-bottom: 8px; }
@@ -802,7 +814,9 @@ td {
                 <small
                   >{t('Date')}:{@html sale?.invoice_date
                     ? showDate(sale?.invoice_date.slice(0, 10), 'receipt')
-                    : ''}</small
+                    : ''}{#if printedTime}<span class="head-time"
+                      >&nbsp;– {printedTime}</span
+                    >{/if}</small
                 >
               </span>
               {#if sale?.invoice_date}
@@ -1252,6 +1266,16 @@ td {
   /* The Gregorian date keeps its own left-to-right reading on the date line. */
   .head-row .head-gregorian {
     unicode-bidi: embed;
+    white-space: nowrap;
+  }
+  /*
+   * The time shares the date line. It is isolated, not forced left-to-right:
+   * beside the Persian date the hour and its marker ('۲:۴۳ ب.ظ') must read in
+   * the line's own direction, and a slip in English must still read
+   * '2:43 PM'. Isolation keeps the dash between the two from flipping.
+   */
+  .head-row .head-time {
+    unicode-bidi: isolate;
     white-space: nowrap;
   }
 

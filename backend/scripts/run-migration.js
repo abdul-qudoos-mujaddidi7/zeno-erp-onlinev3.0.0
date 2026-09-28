@@ -27,7 +27,7 @@ const pool = require('../db');
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 
-const ALLOWED_STATEMENT = /^\s*CREATE\s+(TABLE|INDEX|UNIQUE\s+INDEX|VIEW)/i;
+const ALLOWED_STATEMENT = /^\s*(?:CREATE\s+(?:TABLE|INDEX|UNIQUE\s+INDEX|VIEW)|ALTER\s+TABLE\s+[A-Za-z0-9_`]+\s+ADD\s+COLUMN)/i;
 
 /**
  * Splits a migration file into single statements. `--` comments are dropped
@@ -67,6 +67,31 @@ async function tableExists(connection, tableName) {
   return Number(rows[0]?.total || 0) > 0;
 }
 
+function addedColumn(statement) {
+  const match = statement.match(/^\s*ALTER\s+TABLE\s+`?([\w]+)`?\s+ADD\s+COLUMN\s+`?([\w]+)`?/i);
+  return match ? { table: match[1], column: match[2] } : null;
+}
+
+function createdIndex(statement) {
+  const match = statement.match(/^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+`?([\w]+)`?\s+ON\s+`?([\w]+)`?/i);
+  return match ? { index: match[1], table: match[2] } : null;
+}
+
+async function schemaItemExists(connection, item) {
+  if (item.column) {
+    const [rows] = await connection.execute(
+      `SELECT COUNT(*) total FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?`,
+      [item.table, item.column],
+    );
+    return Number(rows[0]?.total || 0) > 0;
+  }
+  const [rows] = await connection.execute(
+    `SELECT COUNT(*) total FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? AND index_name=?`,
+    [item.table, item.index],
+  );
+  return Number(rows[0]?.total || 0) > 0;
+}
+
 async function applyMigration(fileName, { dryRun = false } = {}) {
   const filePath = path.join(MIGRATIONS_DIR, fileName);
 
@@ -101,9 +126,16 @@ async function applyMigration(fileName, { dryRun = false } = {}) {
   try {
     for (const statement of statements) {
       const tableName = createdTableName(statement);
+      const schemaItem = addedColumn(statement) || createdIndex(statement);
 
       if (tableName && (await tableExists(connection, tableName))) {
         console.log(`SKIP  ${tableName} already exists`);
+        skipped += 1;
+        continue;
+      }
+
+      if (schemaItem && (await schemaItemExists(connection, schemaItem))) {
+        console.log(`SKIP  ${schemaItem.column || schemaItem.index} already exists`);
         skipped += 1;
         continue;
       }

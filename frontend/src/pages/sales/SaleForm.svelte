@@ -314,7 +314,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
       lookupAccountByCode('TREASURY'),
       lookupAccountByCode('NOTRACK'),
       lookupAccountByCode('WALKIN'),
-      lookupAccounts({ account_type_id: CUSTOMER_TYPE_ID }),
+      lookupAccounts({ role: 'customer' }),
       accountTypeApi.getAll({ status: 1 }),
       warehouseApi.getAll({ status: 1 }),
       currencyApi.getAll({ status: 1 }),
@@ -1502,7 +1502,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
     partySearchTimer = setTimeout(async () => {
       const rows = await lookupAccounts({
-        account_type_id: CUSTOMER_TYPE_ID,
+        role: 'customer',
         search: term,
       });
       customers = mergeById(customers, rows);
@@ -1779,14 +1779,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                       </strong>
 
                       <small>
-                        {#if accountTypes.find((at) => at.id === acc.account_type_id)?.name}
+                        {#if allAccountTypes.find((at) => Number(at.id) === Number(acc.account_type_id))?.name}
                           {t('Lang') === 'en'
-                            ? accountTypes.find((at) => at.id === acc.account_type_id)?.name
+                            ? allAccountTypes.find((at) => Number(at.id) === Number(acc.account_type_id))?.name
                             : t('Lang') === 'fa'
-                              ? accountTypes.find((at) => at.id === acc.account_type_id)?.name_fa
+                              ? allAccountTypes.find((at) => Number(at.id) === Number(acc.account_type_id))?.name_fa
                               : t('Lang') === 'ps'
-                                ? accountTypes.find((at) => at.id === acc.account_type_id)?.name_ps
-                                : accountTypes.find((at) => at.id === acc.account_type_id)?.name}
+                                ? allAccountTypes.find((at) => Number(at.id) === Number(acc.account_type_id))?.name_ps
+                                : allAccountTypes.find((at) => Number(at.id) === Number(acc.account_type_id))?.name}
                         {:else}
                           N/A
                         {/if}
@@ -2656,7 +2656,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   on:saved={(e) => {
     const newAccount = e.detail.account;
     if (newAccount) customers = mergeById(customers, [newAccount]);
-    if (newAccount && newAccount.account_type_id == CUSTOMER_TYPE_ID) {
+    if (newAccount && (newAccount.account_type_id == CUSTOMER_TYPE_ID || Number(newAccount.can_be_customer) === 1)) {
       form.account_id = newAccount.id;
     }
   }} />

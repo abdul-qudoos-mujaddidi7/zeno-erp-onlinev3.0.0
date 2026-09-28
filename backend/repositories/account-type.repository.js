@@ -1,6 +1,9 @@
 const ACCOUNT_TYPE_COLUMNS = `
   local_id AS id,
   local_id,
+  code,
+  can_be_customer,
+  can_be_supplier,
   name,
   name_fa,
   name_ps,
@@ -108,6 +111,9 @@ async function create(
       INSERT INTO account_types (
         org_id,
         local_id,
+        code,
+        can_be_customer,
+        can_be_supplier,
         name,
         name_fa,
         name_ps,
@@ -120,12 +126,15 @@ async function create(
         updated_at
       )
       VALUES (
-        ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NOW(3), NOW(3)
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NOW(3), NOW(3)
       )
     `,
     [
       orgId,
       localId,
+      data.code ?? null,
+      Number(data.can_be_customer || 0),
+      Number(data.can_be_supplier || 0),
       data.name ?? null,
       data.name_fa ?? null,
       data.name_ps ?? null,
@@ -158,6 +167,9 @@ async function update(
   const values = [];
 
   const columnMap = {
+    code: 'code',
+    can_be_customer: 'can_be_customer',
+    can_be_supplier: 'can_be_supplier',
     name: 'name',
     name_fa: 'name_fa',
     name_ps: 'name_ps',

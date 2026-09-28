@@ -184,7 +184,7 @@ import { accountApi } from '../api/accountApi.js';
     }
 
     const [accountsResponse, warehouseResponse] = await Promise.all([
-      accountApi.getAll({ status: 1, account_type_id: 3 }),
+      accountApi.getAll({ status: 1, role: 'supplier' }),
       warehouseApi.getAll({ status: 1 }),
     ]);
     accounts = accountsResponse?.data || [];

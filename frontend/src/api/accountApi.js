@@ -9,6 +9,7 @@ export const accountApi = {
     search = '',
     code = '',
     account_type_id = '',
+    role = '',
     account_group_id = '',
     patient_type_id = '',
     account_status = '',
@@ -36,6 +37,8 @@ export const accountApi = {
     if (account_type_id) {
       params.set('account_type_id', String(account_type_id));
     }
+
+    if (role) params.set('role', String(role));
 
     if (account_group_id) {
       params.set('account_group_id', String(account_group_id));
@@ -74,6 +77,12 @@ export const accountApi = {
     params.set('status', String(status));
     if (account_ids) params.set('account_ids', String(account_ids));
     return api.get(`${BASE_URL}/credit-debit?${params}`, { cache: false });
+  },
+
+  getDirectionalBalances({ account_ids = '' } = {}) {
+    const params = new URLSearchParams();
+    if (account_ids) params.set('account_ids', String(account_ids));
+    return api.get(`${BASE_URL}/directional-balances?${params}`, { cache: false });
   },
 
   getReportBootstrap({ status = 1 } = {}) {

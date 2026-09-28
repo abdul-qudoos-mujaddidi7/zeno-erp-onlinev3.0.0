@@ -358,7 +358,7 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
 
   async function loadCustomers({ preferWalkin = true, selectId = null } = {}) {
     const [customerRows, walkin, treasury] = await Promise.all([
-      lookupAccounts({ account_type_id: CUSTOMER_TYPE_ID }),
+      lookupAccounts({ role: 'customer' }),
       lookupAccountByCode('WALKIN'),
       lookupAccountByCode('TREASURY'),
     ]);
@@ -604,7 +604,7 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
 
     customerSearchTimer = setTimeout(async () => {
       const rows = await lookupAccounts({
-        account_type_id: CUSTOMER_TYPE_ID,
+        role: 'customer',
         search: term,
       });
       customers = mergeById(customers, rows);
@@ -1810,8 +1810,8 @@ import { warehouseProductApi } from '../api/warehouseProductApi.js';
     on:saved={async (e) => {
       const newAccount = e.detail.account;
       await loadCustomers({
-        preferWalkin: !(newAccount && newAccount.account_type_id == 4),
-        selectId: newAccount && newAccount.account_type_id == 4 ? newAccount.id : null,
+        preferWalkin: !(newAccount && (newAccount.account_type_id == 4 || Number(newAccount.can_be_customer) === 1)),
+        selectId: newAccount && (newAccount.account_type_id == 4 || Number(newAccount.can_be_customer) === 1) ? newAccount.id : null,
       });
     }} />
 

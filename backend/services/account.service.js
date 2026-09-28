@@ -106,6 +106,7 @@ async function listAccounts({
       search: filters.search,
       code: filters.code,
       accountTypeId: filters.account_type_id,
+      role: filters.role,
       accountGroupId: filters.account_group_id,
       patientTypeId: filters.patient_type_id,
       accountStatus: filters.account_status,
@@ -224,6 +225,14 @@ async function listAccountCreditDebit({
   );
 }
 
+async function listDirectionalBalances({ user, filters }) {
+  const { orgId } = getAuthenticatedIdentity(user);
+  return accountRepository.findDirectionalBalances(db, {
+    orgId,
+    accountIds: filters.accountIds,
+  });
+}
+
 function invalidateAccountAggregates(orgId) {
   ttlCache.invalidatePrefix(
     ttlCache.makeKey(['balances', orgId]),
@@ -271,6 +280,10 @@ async function getReportBootstrap({
           local_id,
           account_status,
           account_type_id,
+          COALESCE((SELECT at_cap.can_be_customer FROM account_types at_cap
+            WHERE at_cap.org_id = accounts.org_id AND at_cap.local_id = accounts.account_type_id LIMIT 1), 0) AS can_be_customer,
+          COALESCE((SELECT at_cap.can_be_supplier FROM account_types at_cap
+            WHERE at_cap.org_id = accounts.org_id AND at_cap.local_id = accounts.account_type_id LIMIT 1), 0) AS can_be_supplier,
           account_group_id,
           code,
           name,
@@ -877,6 +890,7 @@ module.exports = {
   listAccounts,
   listAccountBalances,
   listAccountCreditDebit,
+  listDirectionalBalances,
   getReportBootstrap,
   listAccountProductItems,
   invalidateAccountAggregates,

@@ -31,6 +31,12 @@ const accountTypeFields = {
 
   description: nullableString(65535),
 
+  code: nullableString(50),
+
+  can_be_customer: z.coerce.number().int().min(0).max(1).default(0),
+
+  can_be_supplier: z.coerce.number().int().min(0).max(1).default(0),
+
   status: z
     .coerce
     .number()

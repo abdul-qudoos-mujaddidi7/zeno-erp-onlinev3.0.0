@@ -71,6 +71,17 @@ async function creditDebit(req, res) {
   });
 }
 
+async function directionalBalances(req, res) {
+  const accountIds = String(req.validated?.query?.account_ids || '')
+    .split(',').map((value) => Number(value.trim()))
+    .filter((value) => Number.isSafeInteger(value) && value > 0);
+  const data = await accountService.listDirectionalBalances({
+    user: req.user,
+    filters: { accountIds: accountIds.length ? accountIds : null },
+  });
+  res.status(200).json({ success: true, data });
+}
+
 async function reportBootstrap(req, res) {
   const data =
     await accountService.getReportBootstrap({
@@ -177,6 +188,7 @@ module.exports = {
   list,
   balances,
   creditDebit,
+  directionalBalances,
   reportBootstrap,
   productItems,
   allProductItems,

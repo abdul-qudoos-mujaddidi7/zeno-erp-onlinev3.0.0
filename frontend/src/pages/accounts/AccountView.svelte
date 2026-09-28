@@ -27,6 +27,7 @@
     import ApartmentsIndex from '../apartments/apartments_index.svelte';
 
   let account = null;
+  let directionalBalances = [];
 
   export let page = 'info';
 
@@ -40,6 +41,8 @@
     if (!currentId) return;
     const response = await accountApi.getById(currentId);
     account = response?.data || null;
+    const directional = await accountApi.getDirectionalBalances({ account_ids: String(currentId) });
+    directionalBalances = directional?.data || [];
   }
   $: if (id) {
     loadAccount(id);
@@ -61,6 +64,24 @@
   <h3 class="text-danger m-3"><i class="bi bi-exclamation-triangle me-2"></i>{t('No access allowed')}</h3>
 {:else}
   {#if page == 'info'}
+    {#if Number(account?.can_be_customer) === 1 || Number(account?.can_be_supplier) === 1}
+      <div class="directional-balances">
+        {#each directionalBalances as balance}
+          <div class="directional-balance-card">
+            <strong>{t('Customer Receivable')}</strong>
+            <span>{Number(balance.customer_receivable).toLocaleString()} {t(balance.currency)}</span>
+          </div>
+          <div class="directional-balance-card">
+            <strong>{t('Supplier Payable')}</strong>
+            <span>{Number(balance.supplier_payable).toLocaleString()} {t(balance.currency)}</span>
+          </div>
+          <div class="directional-balance-card">
+            <strong>{t('Net Position')}</strong>
+            <span>{Number(balance.net_position).toLocaleString()} {t(balance.currency)}</span>
+          </div>
+        {/each}
+      </div>
+    {/if}
     <AccountBalance {id} />
   {:else if page == 'documents'}
     <div class="account-documents-index">
@@ -77,15 +98,14 @@
   {:else if page == 'financial-report'}
     <AccountReport {id} />
   {:else if page == 'bills'}
-    {#if account?.account_type_id == 4 || account?.account_type_id == 3}
-      {#if account?.account_type_id == 4}
+    {#if Number(account?.can_be_customer) === 1 || account?.account_type_id == 4}
         <Sales account_id={id} embedded />
-      {:else if account?.account_type_id == 3}
+    {/if}
+    {#if Number(account?.can_be_supplier) === 1 || account?.account_type_id == 3}
         <Purchases account_id={id} />
-      {/if}
     {/if}
   {:else if page == 'products'}
-    {#if account?.account_type_id == 4 || account?.account_type_id == 3}
+    {#if Number(account?.can_be_customer) === 1 || Number(account?.can_be_supplier) === 1 || account?.account_type_id == 4 || account?.account_type_id == 3}
       <ProductsReport account_id={id} />
     {/if}
   {:else if page == 'apartments'}
@@ -103,6 +123,8 @@
   {/if}
 {/if}
 <style>
+  .directional-balances { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin:16px; }
+  .directional-balance-card { display:flex; flex-direction:column; gap:6px; padding:16px; border:1px solid #dbe3ef; border-radius:12px; background:#fff; }
   .account-journals-index {
     display: flex;
     flex: 1 1 auto;

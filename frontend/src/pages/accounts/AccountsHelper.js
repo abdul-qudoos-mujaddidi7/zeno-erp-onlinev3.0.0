@@ -65,12 +65,14 @@ export async function getGeneralBenefit() {
       currenciesResponse,
       warehouseProductsResponse,
       productsResponse,
+      directionalResponse,
     ] = await Promise.all([
       calculateBalancesOfAllAccounts(),
       accountApi.getAll({ status: 1 }),
       currencyApi.getAll({ status: 1 }),
       warehouseProductApi.getAll({ status: 1 }),
       productApi.getAll({ status: 1 }),
+      accountApi.getDirectionalBalances(),
     ]);
     
     accounts = accountsResponse?.data || [];
@@ -85,6 +87,11 @@ export async function getGeneralBenefit() {
     let AllCustomersBalances = {};
     let AllSupplierBalances = {};
     let AllShareholderBalances = {};
+    const directionalByAccount = new Map();
+    for (const row of directionalResponse?.data || []) {
+      if (!directionalByAccount.has(Number(row.account_id))) directionalByAccount.set(Number(row.account_id), []);
+      directionalByAccount.get(Number(row.account_id)).push(row);
+    }
 
     accounts.forEach((a) => {
       if (a.computedBalances) {
@@ -95,18 +102,14 @@ export async function getGeneralBenefit() {
           });
         }
 
-        if (a.account_type_id == 4) {
-          Object.entries(a.computedBalances).forEach((b) => {
-            let thisBal = parseFloat(b[1]) || 0;
-            AllCustomersBalances[b[0]] = AllCustomersBalances[b[0]] ? AllCustomersBalances[b[0]] + thisBal : thisBal;
-          });
-        }
-
-        if (a.account_type_id == 3) {
-          Object.entries(a.computedBalances).forEach((b) => {
-            let thisBal = parseFloat(b[1]) || 0;
-            AllSupplierBalances[b[0]] = AllSupplierBalances[b[0]] ? AllSupplierBalances[b[0]] + thisBal : thisBal;
-          });
+        for (const row of directionalByAccount.get(Number(a.id)) || []) {
+          const currency = row.currency || 'AFN';
+          if (Number(a.can_be_customer) === 1 || a.account_type_id == 4) {
+            AllCustomersBalances[currency] = (AllCustomersBalances[currency] || 0) - Number(row.customer_receivable || 0);
+          }
+          if (Number(a.can_be_supplier) === 1 || a.account_type_id == 3) {
+            AllSupplierBalances[currency] = (AllSupplierBalances[currency] || 0) + Number(row.supplier_payable || 0);
+          }
         }
 
         if (a.account_type_id == 7) {

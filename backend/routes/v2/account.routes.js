@@ -51,6 +51,12 @@ router.get(
 );
 
 router.get(
+  '/directional-balances',
+  validate({ query: accountBalancesQuerySchema }),
+  asyncHandler(accountController.directionalBalances),
+);
+
+router.get(
   '/report-bootstrap',
   validate({
     query: accountBalancesQuerySchema,

@@ -685,10 +685,10 @@ import { purchaseApi } from '../../api/purchaseApi.js';
    * bill by debiting the supplier (credit disabled).
    */
   $: isCustomerBill = Boolean(
-    selectedBill && getAccountTypeId(first_entry_account) === 4,
+    selectedBill && selectedBill._role === 'customer',
   );
   $: isSupplierBill = Boolean(
-    selectedBill && getAccountTypeId(first_entry_account) === 3,
+    selectedBill && selectedBill._role === 'supplier',
   );
   $: isBillCurrencyLocked = Boolean(selectedBill);
 
@@ -719,6 +719,20 @@ import { purchaseApi } from '../../api/purchaseApi.js';
   function getAccountTypeId(accountId) {
     const acc = accounts.find((a) => Number(a.id) === Number(accountId));
     return acc ? Number(acc.account_type_id) : null;
+  }
+
+  function getAccountById(accountId) {
+    return accounts.find((a) => Number(a.id) === Number(accountId)) || null;
+  }
+
+  function canBeCustomer(accountId) {
+    const acc = getAccountById(accountId);
+    return Boolean(acc && (Number(acc.account_type_id) === 4 || Number(acc.can_be_customer) === 1));
+  }
+
+  function canBeSupplier(accountId) {
+    const acc = getAccountById(accountId);
+    return Boolean(acc && (Number(acc.account_type_id) === 3 || Number(acc.can_be_supplier) === 1));
   }
 
   function exchangeRate(amount, fromCurrencyCode, toCurrencyCode) {
@@ -754,21 +768,29 @@ import { purchaseApi } from '../../api/purchaseApi.js';
     billSearch = '';
     billFilter = '';
 
-    const typeId = getAccountTypeId(accountId);
-    if (typeId !== 4 && typeId !== 3) return;
+    const customerCapable = canBeCustomer(accountId);
+    const supplierCapable = canBeSupplier(accountId);
+    if (!customerCapable && !supplierCapable) return;
 
     billLoading = true;
     try {
-      const response =
-        typeId === 4
-          ? await saleApi.getAll({ status: 1, account_id: accountId, relations: 1, limit: 100, skip_count: 1 })
-          : await purchaseApi.getAll({ status: 1, account_id: accountId, relations: 1, limit: 100, skip_count: 1 });
+      const [salesResponse, purchasesResponse] = await Promise.all([
+        customerCapable
+          ? saleApi.getAll({ status: 1, account_id: accountId, relations: 1, limit: 100, skip_count: 1 })
+          : Promise.resolve({ data: [] }),
+        supplierCapable
+          ? purchaseApi.getAll({ status: 1, account_id: accountId, relations: 1, limit: 100, skip_count: 1 })
+          : Promise.resolve({ data: [] }),
+      ]);
 
-      bills = (response?.data || [])
+      bills = [
+        ...(salesResponse?.data || []).map((bill) => ({ ...bill, _role: 'customer' })),
+        ...(purchasesResponse?.data || []).map((bill) => ({ ...bill, _role: 'supplier' })),
+      ]
         .filter(
           (b) =>
             Number(b.status) === 1 &&
-            (typeId === 4
+            (b._role === 'customer'
               ? b.invoice_status === 'confirmed'
               : b.bill_status === 'confirmed'),
         )
@@ -789,7 +811,7 @@ import { purchaseApi } from '../../api/purchaseApi.js';
     currency = bill.currency;
     currencyMenuFor = null;
     reference_id = bill.id;
-    reference_type = getAccountTypeId(first_entry_account) === 4 ? 'sale' : 'purchase';
+    reference_type = bill._role === 'customer' ? 'sale' : 'purchase';
 
     const remaining = Number(bill._remaining || 0);
     if (remaining > 0) {
@@ -1040,7 +1062,7 @@ import { purchaseApi } from '../../api/purchaseApi.js';
             </div>
           </div>
 
-          {#if getAccountTypeId(first_entry_account) === 4 || getAccountTypeId(first_entry_account) === 3}
+          {#if canBeCustomer(first_entry_account) || canBeSupplier(first_entry_account)}
           <div class="col-12 journal-bill-field">
             <label class="journal-field-label">{t('Select Bill')}</label>
             <div class="journal-customer-anchor">
@@ -1097,6 +1119,13 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                           <strong>
                             <span dir="ltr">{billLabel(bill)}</span>
                             <span
+                              class="journal-bill-role-badge"
+                              class:journal-bill-role-badge--sale={bill._role === 'customer'}
+                              class:journal-bill-role-badge--purchase={bill._role === 'supplier'}>
+                              <i class="bi {bill._role === 'customer' ? 'bi-cart-check' : 'bi-bag-check'}" aria-hidden="true"></i>
+                              {bill._role === 'customer' ? t('Sale') : t('Purchase')}
+                            </span>
+                            <span
                               class="journal-bill-badge"
                               class:journal-bill-badge--paid={Number(bill._remaining) <= 0}
                               class:journal-bill-badge--unpaid={Number(bill._remaining) > 0}>
@@ -1104,6 +1133,8 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                             </span>
                           </strong>
                           <small>
+                            {bill._role === 'customer' ? t('Customer Receivable') : t('Supplier Payable')}
+                            &nbsp;·&nbsp;
                             {@html showDate(bill.invoice_date || bill.bill_date)} &nbsp;·&nbsp;
                             <span dir="ltr">{Number(bill.total_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
                             {t(bill.currency)}
@@ -2499,6 +2530,29 @@ import { purchaseApi } from '../../api/purchaseApi.js';
   .journal-bill-badge--unpaid {
     background: #fef1e7;
     color: #b45309;
+  }
+
+  .journal-bill-role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-inline-start: 0.45rem;
+    padding: 0.08rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 750;
+    line-height: 1.4;
+    vertical-align: 1px;
+  }
+
+  .journal-bill-role-badge--sale {
+    background: #e8f3ff;
+    color: #0b63ce;
+  }
+
+  .journal-bill-role-badge--purchase {
+    background: #fff2df;
+    color: #a45b00;
   }
 
   .journal-bill-dropdown {

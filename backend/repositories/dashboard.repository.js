@@ -505,87 +505,36 @@ async function findBenefitAccounts(executor, orgId) {
  * into Node and building a giant IN (...).
  */
 async function sumBenefitBalancesByBucket(executor, orgId) {
-  const bucketExpr = `
-    CASE
-      WHEN a.code = 'TREASURY' THEN 'treasury'
-      WHEN a.account_type_id = 4 THEN 'customer'
-      WHEN a.account_type_id = 3 THEN 'supplier'
-      WHEN a.account_type_id = 7 THEN 'shareholder'
-      ELSE NULL
-    END
-  `;
-
-  const [firstPass, secondPass] = await Promise.all([
-    executor.execute(
-      `
-        SELECT
-          ${bucketExpr} AS bucket,
-          j.currency,
-          SUM(
-            COALESCE(j.first_entry_credit, 0) - COALESCE(j.first_entry_debit, 0)
-          ) AS balance
-        FROM journals j
-        INNER JOIN accounts a
-          ON a.org_id = j.org_id
-         AND a.local_id = j.first_entry_account
-         AND a.status = 1
-        WHERE j.org_id = ?
-          AND j.status = 1
-          AND (
-            a.code = 'TREASURY'
-            OR a.account_type_id IN (3, 4, 7)
-          )
-        GROUP BY bucket, j.currency
-        HAVING bucket IS NOT NULL
-      `,
-      [orgId],
-    ),
-    executor.execute(
-      `
-        SELECT
-          ${bucketExpr} AS bucket,
-          j.currency,
-          SUM(
-            COALESCE(j.second_entry_credit, 0) - COALESCE(j.second_entry_debit, 0)
-          ) AS balance
-        FROM journals j
-        INNER JOIN accounts a
-          ON a.org_id = j.org_id
-         AND a.local_id = j.second_entry_account
-         AND a.status = 1
-        WHERE j.org_id = ?
-          AND j.status = 1
-          AND (
-            a.code = 'TREASURY'
-            OR a.account_type_id IN (3, 4, 7)
-          )
-        GROUP BY bucket, j.currency
-        HAVING bucket IS NOT NULL
-      `,
-      [orgId],
-    ),
-  ]);
-
-  const merged = new Map();
-
-  for (const row of [...(firstPass[0] || []), ...(secondPass[0] || [])]) {
-    if (!row?.bucket) continue;
-    const key = `${row.bucket}|${row.currency || 'AFN'}`;
-    const existing = merged.get(key);
-
-    if (existing) {
-      existing.balance =
-        Number(existing.balance) + (Number(row.balance) || 0);
-    } else {
-      merged.set(key, {
-        bucket: row.bucket,
-        currency: row.currency || 'AFN',
-        balance: Number(row.balance) || 0,
-      });
-    }
-  }
-
-  return [...merged.values()];
+  const [rows] = await executor.execute(
+    `SELECT bucket, currency, SUM(credit - debit) AS balance
+       FROM (
+         SELECT e.currency, e.credit, e.debit,
+           CASE
+             WHEN a.code = 'TREASURY' THEN 'treasury'
+             WHEN a.account_type_id = 7 THEN 'shareholder'
+             WHEN e.reference_type IN ('sale','sale_payment','sale_return')
+               AND (a.account_type_id = 4 OR COALESCE(at.can_be_customer,0) = 1) THEN 'customer'
+             WHEN e.reference_type IN ('purchase','purchase_payment','purchase_return')
+               AND (a.account_type_id = 3 OR COALESCE(at.can_be_supplier,0) = 1) THEN 'supplier'
+             ELSE NULL
+           END AS bucket
+         FROM (
+           SELECT org_id, first_entry_account account_id, currency, reference_type,
+             COALESCE(first_entry_credit,0) credit, COALESCE(first_entry_debit,0) debit
+           FROM journals WHERE org_id = ? AND status = 1
+           UNION ALL
+           SELECT org_id, second_entry_account account_id, currency, reference_type,
+             COALESCE(second_entry_credit,0) credit, COALESCE(second_entry_debit,0) debit
+           FROM journals WHERE org_id = ? AND status = 1
+         ) e
+         JOIN accounts a ON a.org_id=e.org_id AND a.local_id=e.account_id AND a.status=1
+         LEFT JOIN account_types at ON at.org_id=a.org_id AND at.local_id=a.account_type_id AND at.status=1
+       ) classified
+      WHERE bucket IS NOT NULL
+      GROUP BY bucket, currency`,
+    [orgId, orgId],
+  );
+  return rows.map((row) => ({ ...row, currency: row.currency || 'AFN', balance: Number(row.balance) || 0 }));
 }
 
 module.exports = {

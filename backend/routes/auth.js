@@ -1315,6 +1315,17 @@ router.post("/register", async (req, res) => {
         },
         {
           id: 9,
+          name: "Both",
+          name_fa: "مشتری و تأمین کننده",
+          name_ps: "پېرودونکی او عرضه کوونکی",
+          code: "BOTH",
+          can_be_customer: 1,
+          can_be_supplier: 1,
+          description: "Can be used as both customer and supplier",
+          status: 1,
+        },
+        {
+          id: 9,
           name: "لیتر",
           code: "L",
           description: "",
@@ -1915,10 +1926,13 @@ router.post("/register", async (req, res) => {
 
       for (const at of account_types) {
         const [r] = await db.execute(
-          "INSERT INTO account_types (org_id, local_id, name, name_fa, name_ps, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO account_types (org_id, local_id, code, can_be_customer, can_be_supplier, name, name_fa, name_ps, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             org_id,
             at.id || null,
+            at.code || null,
+            at.can_be_customer ?? (at.id === 4 ? 1 : 0),
+            at.can_be_supplier ?? (at.id === 3 ? 1 : 0),
             at.name,
             at.name_fa || null,
             at.name_ps || null,

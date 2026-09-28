@@ -15,6 +15,8 @@
     let code = "";
     let description = "";
     let status = 1;
+    let can_be_customer = 0;
+    let can_be_supplier = 0;
     let editingId = null;
     let maxID = 0;
     async function loadAccountTypes() {
@@ -54,6 +56,8 @@
         code = "";
         description = "";
         status = 1;
+        can_be_customer = 0;
+        can_be_supplier = 0;
         accountTypesModal.show();
     }
     function editAccountType(category) {
@@ -65,6 +69,8 @@
         code = category.code;
         description = category.description;
         status = category.status;
+        can_be_customer = Number(category.can_be_customer || category.id == 4);
+        can_be_supplier = Number(category.can_be_supplier || category.id == 3);
         accountTypesModal.show();
     }
     async function saveAccountType() {
@@ -83,6 +89,9 @@
                 name_fa: name_fa.trim(),
                 name_ps: name_ps.trim(),
                 description,
+                code: code.trim().toUpperCase() || null,
+                can_be_customer: Number(can_be_customer),
+                can_be_supplier: Number(can_be_supplier),
                 status: parseInt(status) || 1,
             };
             if (editingId) {
@@ -206,6 +215,14 @@
                             <label class="form-label" for="c-id">{t("ID")}</label
                             >
                         </div>
+                    </div>
+                    <div class="col-md-6 mb-3 form-check">
+                        <input class="form-check-input" type="checkbox" id="can-customer" bind:checked={can_be_customer} />
+                        <label class="form-check-label" for="can-customer">{t("Can be customer")}</label>
+                    </div>
+                    <div class="col-md-6 mb-3 form-check">
+                        <input class="form-check-input" type="checkbox" id="can-supplier" bind:checked={can_be_supplier} />
+                        <label class="form-check-label" for="can-supplier">{t("Can be supplier")}</label>
                     </div>
                     <div class="col-md-6 mb-4">
                         <div class="form-outline" data-mdb-input-init>

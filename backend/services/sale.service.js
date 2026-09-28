@@ -46,6 +46,7 @@ const accountService =
 
 const paymentPosting =
   require('./payment-posting.service');
+const accountRole = require('./account-role.service');
 
 const fiscalPostingGuard =
   require('./fiscal-posting-guard.service');
@@ -910,6 +911,12 @@ async function updateSale({
         404,
         'SALE_NOT_FOUND',
       );
+    }
+
+    if (data.account_id != null && oldSale.account_id != null && String(data.account_id) !== String(oldSale.account_id)) {
+      await accountRole.assertAccountRole(connection, {
+        orgId, accountId: data.account_id, role: 'customer',
+      });
     }
 
     if (Number(oldSale.status) === 0) {
@@ -2142,6 +2149,10 @@ async function createReturn({
         404,
         'SALE_NOT_FOUND',
       );
+    }
+
+    if (data.account_id != null && Number(data.account_id) !== Number(sale.account_id)) {
+      throw new AppError('Sale return account must match the sale account.', 400, 'SALE_RETURN_ACCOUNT_MISMATCH');
     }
 
     /*

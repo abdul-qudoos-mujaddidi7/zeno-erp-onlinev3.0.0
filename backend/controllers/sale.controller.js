@@ -1,5 +1,7 @@
 const saleService =
   require('../services/sale.service');
+const db = require('../database/pool');
+const accountRole = require('../services/account-role.service');
 
 const {
   getRequestContext,
@@ -50,6 +52,11 @@ async function nextNumber(req, res) {
 }
 
 async function create(req, res) {
+  await accountRole.assertAccountRole(db, {
+    orgId: Number(req.user.org_id),
+    accountId: req.validated.body.account_id,
+    role: 'customer',
+  });
   const sale =
     await saleService.createSale({
       user: req.user,

@@ -46,6 +46,7 @@ const accountService =
 
 const paymentPosting =
   require('./payment-posting.service');
+const accountRole = require('./account-role.service');
 
 const fiscalPostingGuard =
   require('./fiscal-posting-guard.service');
@@ -1131,6 +1132,12 @@ async function updatePurchase({
       );
     }
 
+    if (data.account_id != null && oldPurchase.account_id != null && String(data.account_id) !== String(oldPurchase.account_id)) {
+      await accountRole.assertAccountRole(connection, {
+        orgId, accountId: data.account_id, role: 'supplier',
+      });
+    }
+
     /*
      * Step 4.5: both the stored bill date and the incoming one are checked.
      * This also covers the confirmed -> draft reversal, which re-reads and
@@ -1991,6 +1998,10 @@ async function createReturn({
         404,
         'PURCHASE_NOT_FOUND',
       );
+    }
+
+    if (data.account_id != null && Number(data.account_id) !== Number(purchase.account_id)) {
+      throw new AppError('Purchase return account must match the purchase account.', 400, 'PURCHASE_RETURN_ACCOUNT_MISMATCH');
     }
 
     /*

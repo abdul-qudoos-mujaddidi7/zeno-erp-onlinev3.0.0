@@ -8,6 +8,12 @@ const ACCOUNT_COLUMNS = `
   local_id,
   account_status,
   account_type_id,
+  COALESCE((SELECT at_cap.can_be_customer FROM account_types at_cap
+    WHERE at_cap.org_id = accounts.org_id AND at_cap.local_id = accounts.account_type_id LIMIT 1),
+    CASE WHEN account_type_id = 4 THEN 1 ELSE 0 END) AS can_be_customer,
+  COALESCE((SELECT at_cap.can_be_supplier FROM account_types at_cap
+    WHERE at_cap.org_id = accounts.org_id AND at_cap.local_id = accounts.account_type_id LIMIT 1),
+    CASE WHEN account_type_id = 3 THEN 1 ELSE 0 END) AS can_be_supplier,
   account_group_id,
   patient_type_id,
   nid,
@@ -47,6 +53,7 @@ async function findAll(
     search = '',
     code,
     accountTypeId,
+    role,
     accountGroupId,
     patientTypeId,
     accountStatus,
@@ -98,6 +105,21 @@ async function findAll(
   if (accountTypeId) {
     conditions.push('account_type_id = ?');
     values.push(accountTypeId);
+  }
+
+  if (role === 'customer' || role === 'supplier') {
+    const capability = role === 'customer' ? 'can_be_customer' : 'can_be_supplier';
+    const legacyType = role === 'customer' ? 4 : 3;
+    conditions.push(`(
+      account_type_id = ? OR EXISTS (
+        SELECT 1 FROM account_types at_role
+        WHERE at_role.org_id = accounts.org_id
+          AND at_role.local_id = accounts.account_type_id
+          AND at_role.status = 1
+          AND at_role.${capability} = 1
+      )
+    )`);
+    values.push(legacyType);
   }
 
   if (accountGroupId) {
@@ -308,6 +330,48 @@ async function findCreditDebit(
   }
 
   return [...merged.values()];
+}
+
+async function findDirectionalBalances(executor, { orgId, accountIds = null }) {
+  const idFilter = Array.isArray(accountIds) && accountIds.length
+    ? ` AND entry_account IN (${accountIds.map(() => '?').join(', ')})`
+    : '';
+  const [rows] = await executor.execute(
+    `
+      SELECT entry_account AS account_id, currency,
+        SUM(CASE WHEN reference_type IN ('sale','sale_payment','sale_return')
+          THEN debit - credit ELSE 0 END) AS customer_receivable,
+        SUM(CASE WHEN reference_type IN ('purchase','purchase_payment','purchase_return')
+          THEN credit - debit ELSE 0 END) AS supplier_payable
+      FROM (
+        SELECT first_entry_account AS entry_account, currency, reference_type,
+          COALESCE(first_entry_debit,0) AS debit,
+          COALESCE(first_entry_credit,0) AS credit
+        FROM journals WHERE org_id = ? AND status = 1
+        UNION ALL
+        SELECT second_entry_account AS entry_account, currency, reference_type,
+          COALESCE(second_entry_debit,0) AS debit,
+          COALESCE(second_entry_credit,0) AS credit
+        FROM journals WHERE org_id = ? AND status = 1
+      ) directional
+      WHERE reference_type IN ('sale','sale_payment','sale_return','purchase','purchase_payment','purchase_return')
+        ${idFilter}
+      GROUP BY entry_account, currency
+      ORDER BY entry_account, currency
+    `,
+    [orgId, orgId, ...(accountIds || [])],
+  );
+  return rows.map((row) => {
+    const customerReceivable = Number(row.customer_receivable || 0);
+    const supplierPayable = Number(row.supplier_payable || 0);
+    return {
+      account_id: Number(row.account_id),
+      currency: row.currency || 'AFN',
+      customer_receivable: customerReceivable,
+      supplier_payable: supplierPayable,
+      net_position: customerReceivable - supplierPayable,
+    };
+  });
 }
 
 async function findByLocalId(
@@ -567,6 +631,7 @@ module.exports = {
   findAll,
   findBalances,
   findCreditDebit,
+  findDirectionalBalances,
   findByLocalId,
   findByCode,
   create,
