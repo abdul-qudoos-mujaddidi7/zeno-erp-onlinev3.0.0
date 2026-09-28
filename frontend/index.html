@@ -2,6 +2,29 @@
 <html lang="en" dir="ltr">
   <head>
     <link rel="icon" href="/img/favicon.png" type="image/png" />
+    <!-- PWA: <link rel="manifest"> is injected by vite-plugin-pwa (see vite.config.js) -->
+    <meta name="theme-color" content="#2f6fed" />
+    <link rel="apple-touch-icon" href="/pwa-192x192.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="ZenoERP" />
+    <script>
+      // PWA: Chrome fires `beforeinstallprompt` only once per page load and it
+      // can arrive before the Svelte bundle mounts, so the event is kept here
+      // and the "Install ZenoERP" button picks it up from window.
+      window.__zenoPwaInstallEvent = null;
+      window.__zenoPwaInstalled = false;
+      window.addEventListener('beforeinstallprompt', function (event) {
+        event.preventDefault();
+        window.__zenoPwaInstallEvent = event;
+        window.dispatchEvent(new Event('zeno-pwa-installprompt'));
+      });
+      window.addEventListener('appinstalled', function () {
+        window.__zenoPwaInstallEvent = null;
+        window.__zenoPwaInstalled = true;
+        window.dispatchEvent(new Event('zeno-pwa-installed'));
+      });
+    </script>
 
     <style>
       .backup-modal {

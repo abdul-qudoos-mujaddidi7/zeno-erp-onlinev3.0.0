@@ -8,6 +8,7 @@
   import { auth } from '../auth/authStore';
   import { userApi } from '../api/userApi.js';
   import { accountApi } from '../api/accountApi.js';
+  import InstallPwaButton from './InstallPwaButton.svelte';
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -692,6 +693,8 @@
         <input id="rtlToggle" type="checkbox" bind:checked={rtl} on:change={toggleRTL} aria-label="Toggle RTL" />
         <label class="form-check-label" for="rtlToggle">RTL</label>
       </div>
+      <InstallPwaButton />
+
       <div class="version-pill">
         <i class="bi bi-check-circle-fill"></i>
         <small>{app_version}</small>
