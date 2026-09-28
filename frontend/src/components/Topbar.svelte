@@ -7,6 +7,7 @@
   import { location, querystring, link } from 'svelte-spa-router';
   import { auth } from '../auth/authStore';
   import { userApi } from '../api/userApi.js';
+  import { accountApi } from '../api/accountApi.js';
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -118,8 +119,10 @@
   $: loc = $location ? $location.replace(/\/+$/g, '') : '';
   $: locPath = loc.split('?')[0];
   $: selectedWarehouseId = loc && loc.startsWith('/dashboard/warehouse/') ? loc.split('/').pop() : null;
+  $: selectedAccountId = loc && loc.startsWith('/dashboard/account/') ? loc.split('/').pop() : null;
 
   let currentWarehouse = null;
+  let currentAccount = null;
 
   function getLocalizedName(item, fallback = '') {
     if (!item) return fallback;
@@ -136,6 +139,15 @@
   } else {
     currentWarehouse = null;
   }
+
+  $: if (selectedAccountId) {
+    accountApi
+      .getById(Number(selectedAccountId))
+      .then((a) => (currentAccount = a?.data || null))
+      .catch(() => (currentAccount = null));
+  } else {
+    currentAccount = null;
+  }
   $: locQuery = $querystring || '';
   $: accountViewTab = new URLSearchParams(locQuery).get('tab') || 'info';
   $: salesTab = new URLSearchParams(locQuery).get('tab') === 'products' ? 'products' : 'sales';
@@ -146,7 +158,10 @@
       const accountHref = (tab) => `/#/dashboard/account/${accountId}${tab === 'info' ? '' : `?tab=${tab}`}`;
       return `
           <ul class="navbar-nav me-auto stock-top-tabs">
-            <li class="nav-item stock-top-tabs__icon"><i class="bi bi-person"></i></li>
+            <li class="nav-item stock-top-tabs__icon">
+              <i class="bi bi-person"></i>
+              <strong class="topbar-account-name">${getLocalizedName(currentAccount)}</strong>
+            </li>
             <li class="nav-item">
               <a class="nav-link ${accountViewTab === 'info' ? 'active' : ''} py-0" href="${accountHref('info')}">
                 <small>${t('Overview')}</small>
@@ -159,6 +174,10 @@
             <li class="nav-item d-flex align-items-center"><div class="nav-divider"></div></li>
             <li class="nav-item">
               <a class="nav-link ${accountViewTab === 'journals' ? 'active' : ''} py-0" href="${accountHref('journals')}"><small>${t('Journals')}</small></a>
+            </li>
+            <li class="nav-item d-flex align-items-center"><div class="nav-divider"></div></li>
+            <li class="nav-item">
+              <a class="nav-link ${accountViewTab === 'exchanges' ? 'active' : ''} py-0" href="${accountHref('exchanges')}"><small>${t('Exchanges')}</small></a>
             </li>
             <li class="nav-item d-flex align-items-center"><div class="nav-divider"></div></li>
             <li class="nav-item">
@@ -742,6 +761,17 @@
   :global(.topbar-page-title .nav-link.active) {
     color: #2f6fed !important;
     font-weight: 800;
+  }
+
+  :global(.topbar-account-name) {
+    max-width: 12rem;
+    overflow: hidden;
+    margin-inline-start: 0.35rem;
+    color: #172033;
+    font-size: var(--control-font, 0.82rem);
+    font-weight: 850;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .topbar-actions,

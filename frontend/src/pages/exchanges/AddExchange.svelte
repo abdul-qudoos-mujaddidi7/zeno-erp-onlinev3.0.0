@@ -524,8 +524,10 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   let currencyMenuFor = null; // 'debit' | 'credit'
   let first_entry_account_search_input = null;
 
-  function getAccountName(id) {
-    const acc = accounts.find((a) => a.id === id);
+  // `accountList` is passed explicitly at call sites so the name also renders
+  // after the accounts array finishes loading.
+  function getAccountName(id, accountList = accounts) {
+    const acc = accountList.find((a) => a.id === id);
     if (!acc) return '';
     if (t('Lang') === 'fa') return acc.name_fa || acc.name;
     if (t('Lang') === 'ps') return acc.name_ps || acc.name;
@@ -606,7 +608,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
             <label class="exchange-field-label">{t('Select Account')}</label>
             <div class="exchange-unified-input-group">
               <span class="form-control form-control-sm exchange-account-selected-name">
-                {getAccountName(first_entry_account)}
+                {getAccountName(first_entry_account, accounts)}
               </span>
             </div>
           </div>
@@ -637,7 +639,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
             first_entry_account_search_input?.focus();
           }}>
           <span class="exchange-selected-account__name">
-            {getAccountName(first_entry_account)}
+            {getAccountName(first_entry_account, accounts)}
           </span>
           <i class="bi bi-pencil-square" aria-hidden="true"></i>
         </button>

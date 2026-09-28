@@ -8,6 +8,7 @@
 
   import AccountBalance from './AccountBalance.svelte';
   import JournalsIndex from '../journals/JournalsIndex.svelte';
+  import ExchangesIndex from '../exchanges/ExchangesIndex.svelte';
   import AccountReport from './AccountReport.svelte';
   import Sales from '../Sales.svelte';
   import Purchases from '../Purchases.svelte';
@@ -94,6 +95,10 @@
   {:else if page == 'journals'}
     <div class="account-journals-index">
       <JournalsIndex account_id={id} />
+    </div>
+  {:else if page == 'exchanges'}
+    <div class="account-journals-index">
+      <ExchangesIndex account_id={id} />
     </div>
   {:else if page == 'financial-report'}
     <AccountReport {id} />

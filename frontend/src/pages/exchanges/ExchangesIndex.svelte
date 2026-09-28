@@ -39,6 +39,8 @@
   import { accountApi } from '../../api/accountApi.js';
   $: permissions = $auth.permissions;
 
+  export let account_id = null;
+
   async function loadAccountsForFilter() {
     if (accountsLoaded) return;
     const [accountsResponse, treasuryResponse] = await Promise.all([
@@ -92,7 +94,8 @@
         search: searchTerm.trim(),
         exclude_system_accounts: 1,
         skip_count: 1,
-        account_id: filterAccount !== 'all' ? Number(filterAccount) : undefined,
+        account_id:
+          account_id || (filterAccount !== 'all' ? Number(filterAccount) : undefined),
         reference_type: reference_type || undefined,
         page: currentPage,
         limit: itemsPerPage,
@@ -390,6 +393,7 @@
       key: 'account',
       label: t('Account'),
       value: filterAccount,
+      visible: !account_id,
       options: [
         { value: 'all', label: t('All') },
         ...accounts.map((account) => ({ value: account.id, label: getAccountName(account.id) })),
@@ -418,7 +422,10 @@
     dir={t('dir')}
     on:close={closeExchangeForm}>
     {#key editingExchangeId}
-      <AddExchange exchangeId={editingExchangeId} on:saved={handleExchangeSaved} />
+      <AddExchange
+        exchangeId={editingExchangeId}
+        selectedAccountID={account_id ? Number(account_id) : null}
+        on:saved={handleExchangeSaved} />
     {/key}
   </QuickEntryModal>
 {/if}
