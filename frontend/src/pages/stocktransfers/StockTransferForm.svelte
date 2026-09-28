@@ -16,6 +16,7 @@ import { accountApi } from '../../api/accountApi.js';
 import { accountTypeApi } from '../../api/accountTypeApi.js';
 import { productApi } from '../../api/productApi.js';
 import { stockTransferApi } from '../../api/stockTransferApi.js';
+import { journalApi } from '../../api/journalApi.js';
   import FilterSelect from '../../components/common/FilterSelect.svelte';
   import AppDatePicker from '../../components/common/AppDatePicker.svelte';
   let warehouseModalRef;
@@ -93,7 +94,13 @@ import { stockTransferApi } from '../../api/stockTransferApi.js';
     try {
       const response = await stockTransferApi.getById(Number(id));
       const stocktransfer = response?.data;
-      if (!stocktransfer || stocktransfer.transfer_status !== 'draft' || Number(stocktransfer.status) !== 1) {
+      if (!stocktransfer || Number(stocktransfer.status) !== 1) {
+        Swal.fire({
+          icon: 'error',
+          title: t('Error'),
+          text: t('Stock Transfer not found.'),
+          confirmButtonText: t('OK'),
+        });
         push('/dashboard/stock-transfers');
         return;
       }
@@ -101,7 +108,7 @@ import { stockTransferApi } from '../../api/stockTransferApi.js';
         warehouse_id: stocktransfer.warehouse_id,
         to_warehouse_id: stocktransfer.to_warehouse_id,
         transfer_number: stocktransfer.transfer_number,
-        transfer_date: stocktransfer.transfer_date,
+        transfer_date: stocktransfer.transfer_date?.slice(0, 10) || '',
         description: stocktransfer.description,
         currency: stocktransfer.currency,
         transfer_status: stocktransfer.transfer_status,
@@ -111,16 +118,31 @@ import { stockTransferApi } from '../../api/stockTransferApi.js';
       const productIds = stocktransferItems.map((i) => i.product_id);
       const products = (await productApi.getAll({ status: 1 }))?.data || [];
       items = stocktransferItems.map((i) => {
-        const product = products.find((p) => p.id === i.product_id);
+        const product = products.find((p) => Number(p.id) === Number(i.product_id));
+        const quantity = Number(i.quantity || 0);
+        const unit_price = Number(i.unit_price || 0);
         return {
           product_id: i.product_id,
           product_name: product?.name || 'Unknown',
           product_unit_id: i.product_unit_id || product?.product_unit_id,
-          quantity: i.quantity,
-          unit_price: i.unit_price,
-          subtotal: i.subtotal,
+          quantity,
+          unit_price,
+          calculated_price: unit_price,
+          currency: i.currency || stocktransfer.currency,
+          subtotal: quantity * unit_price,
         };
       });
+
+      const journals = (await journalApi.getAll({ status: 1 }))?.data || [];
+      const transferJournal = journals.find(
+        (journal) =>
+          journal.reference_type === 'stock_transfer' &&
+          Number(journal.reference_id) === Number(stocktransfer.id) &&
+          Number(journal.status) === 1,
+      );
+      paymentAmount = transferJournal ? Number(transferJournal.first_entry_credit || 0) : 0;
+      paymentCurrency = transferJournal?.currency || stocktransfer.currency || paymentCurrency;
+      second_entry_account = transferJournal?.second_entry_account || second_entry_account;
     } catch (err) {
       console.error(err);
       Swal.fire({
@@ -131,7 +153,7 @@ import { stockTransferApi } from '../../api/stockTransferApi.js';
       });
     }
   }
-  $: total_amount = items.reduce((s, i) => s + i.subtotal, 0);
+  $: total_amount = items.reduce((s, i) => s + Number(i.subtotal || 0), 0);
   $: if (form.currency) paymentCurrency = form.currency;
   async function saveStockTransfer(confirm = false) {
     if (!form.warehouse_id || !form.to_warehouse_id) {

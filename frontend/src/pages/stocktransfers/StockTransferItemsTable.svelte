@@ -57,6 +57,15 @@ import { warehouseApi } from '../../api/warehouseApi.js';
     // Build lookup map
     $: unitMap = Object.fromEntries(units.map((u) => [u.id, u]));
 
+    /*
+     * Items loaded for editing do not carry the unit ladder that addItem()
+     * builds, so rebuild it once products and units are available. Without it
+     * the unit column stays blank and warehouse stock is not unit-adjusted.
+     */
+    $: if (products.length && units.length) {
+        hydrateItemUnits();
+    }
+
     // Get full unit chain recursively
     function getUnitHierarchy(unitId) {
         const result = [];
@@ -81,6 +90,34 @@ import { warehouseApi } from '../../api/warehouseApi.js';
         traverse(unitId);
         return result;
     }
+    function hydrateItemUnits() {
+        let changed = false;
+
+        const next = items.map((item) => {
+            if (item.availableUnits?.length) return item;
+
+            const product = products.find(
+                (p) => Number(p.id) === Number(item.product_id),
+            );
+            const unitId = item.product_unit_id || product?.product_unit_id;
+            const availableUnits = unitId ? getUnitHierarchy(unitId) : [];
+
+            if (!availableUnits.length) return item;
+
+            changed = true;
+
+            return {
+                ...item,
+                product_unit_id: unitId,
+                availableUnits,
+            };
+        });
+
+        if (changed) {
+            items = next;
+        }
+    }
+
     function changeUnit(item, unitId) {
         unitId = Number(unitId);
 
@@ -230,7 +267,7 @@ import { warehouseApi } from '../../api/warehouseApi.js';
         addItem();
     }
 
-    $: total = items.reduce((s, i) => s + i.subtotal, 0);
+    $: total = items.reduce((s, i) => s + Number(i.subtotal || 0), 0);
 
     function getProductStock(productId) {
         return (
@@ -414,7 +451,7 @@ import { warehouseApi } from '../../api/warehouseApi.js';
 
                             <td class="text-center">
                                 <span class="transfer-item-money">
-                                    <strong>{item.subtotal.toFixed(2)}</strong>
+                                    <strong>{Number(item.subtotal || 0).toFixed(2)}</strong>
                                     <small>{t(currency)}</small>
                                 </span>
                             </td>
@@ -446,7 +483,7 @@ import { warehouseApi } from '../../api/warehouseApi.js';
         <footer class="transfer-items-total-row">
             <div class="transfer-items-grand-total">
                 <span>{t("Total")}</span>
-                <strong>{total.toFixed(2)}</strong>
+                <strong>{Number(total || 0).toFixed(2)}</strong>
                 <small>{t(currency)}</small>
             </div>
         </footer>

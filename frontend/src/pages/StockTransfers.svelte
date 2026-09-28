@@ -13,6 +13,8 @@
   import ActionButton from '../components/common/ActionButton.svelte';
   import PaginationBar from '../components/common/PaginationBar.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
+  import TableActions from '../components/common/TableActions.svelte';
+  import StockTransferDeleteModal from './stocktransfers/StockTransferDeleteModal.svelte';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../lib/pagination.js';
   import { onDestroy } from 'svelte';
   $: _lang = $lang;
@@ -27,6 +29,7 @@
   let lastPageKey = '';
   let searchDebounceTimer = null;
   let loadRequestId = 0;
+  let transferToDelete = null;
 
   // --- Table State ---
   let searchTerm = '';
@@ -222,6 +225,12 @@
     toDate = '';
     currentPage = 1;
   }
+
+  async function closeDeleteModal() {
+    transferToDelete = null;
+    await load();
+  }
+
 </script>
 
 <IndexPageLayout
@@ -294,7 +303,7 @@
                   >{/if}</th>
               <th class="text-center">{t('Status')}</th>
               <th class="text-center">{t('Created Date')}</th>
-              <th width="150" class="text-center">{t('Actions')}</th>
+              <th class="text-center">{t('Actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -315,15 +324,27 @@
 
                 <td class="text-center"><span dir="ltr">{new Date(s.created_at).toLocaleString()}</span></td>
                 <td class="text-center">
-                  <button
-                    class="btn btn-sm btn-outline-primary me-1"
-                    on:click={() => push(`/dashboard/stock-transfers/${s.id}`)}
-                    title="View"><i class="bi bi-eye"></i></button>
-                  {#if s.transfer_status === 'draft'}
-                    <button
-                      class="btn btn-sm btn-warning"
-                      on:click={() => push(`/dashboard/stock-transfer-form/` + s.id)}>{t('Edit')}</button>
-                  {/if}
+                  <TableActions
+                    actions={[
+                      {
+                        icon: 'bi-eye',
+                        label: t('View'),
+                        tone: 'view',
+                        onClick: () => push(`/dashboard/stock-transfers/${s.id}`),
+                      },
+                      {
+                        icon: 'bi-pencil',
+                        label: t('Edit'),
+                        tone: 'edit',
+                        onClick: () => push(`/dashboard/stock-transfer-form/${s.id}`),
+                      },
+                      {
+                        icon: 'bi-trash',
+                        label: t('Delete'),
+                        tone: 'delete',
+                        onClick: () => (transferToDelete = s),
+                      },
+                    ]} />
                 </td>
               </tr>
             {/each}
@@ -350,6 +371,10 @@
       {getPageNumbers} />
   </svelte:fragment>
 </IndexPageLayout>
+
+{#if transferToDelete}
+  <StockTransferDeleteModal stocktransfer={transferToDelete} on:close={closeDeleteModal} />
+{/if}
 
 <style>
   .cursor-pointer {

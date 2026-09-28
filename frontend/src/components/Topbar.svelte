@@ -6,7 +6,7 @@
   import { supported, t, setLanguage, isRTL, lang, translate_org_type, settings_all } from '../i18n/i18n';
   import { location, querystring, link } from 'svelte-spa-router';
   import { auth } from '../auth/authStore';
-import { userApi } from '../api/userApi.js';
+  import { userApi } from '../api/userApi.js';
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -205,6 +205,25 @@ import { userApi } from '../api/userApi.js';
           `;
     }
 
+    if (locPath.startsWith('/dashboard/exchanges/') && locPath.split('/').length === 4) {
+      return `
+          <ul class="navbar-nav me-auto stock-top-tabs">
+            <li class="nav-item stock-top-tabs__icon"><i class="bi bi-currency-exchange"></i></li>
+            <li class="nav-item">
+              <a class="nav-link ${locPath === '/dashboard/exchanges/list' ? 'active' : ''} py-0" href="/#/dashboard/exchanges/list">
+                <small>${t('Exchanges')}</small>
+              </a>
+            </li>
+            <li class="nav-item d-flex align-items-center"><div class="nav-divider"></div></li>
+            <li class="nav-item">
+              <a class="nav-link ${locPath === '/dashboard/exchanges/report' ? 'active' : ''} py-0" href="/#/dashboard/exchanges/report">
+                <small>${t('Report')}</small>
+              </a>
+            </li>
+          </ul>
+          `;
+    }
+
     if (loc.startsWith('/dashboard/master-exchanges/') && loc.split('/').length === 4) {
       // add back button and icon for account view
       return `
@@ -237,7 +256,6 @@ import { userApi } from '../api/userApi.js';
           `;
     }
 
-    
     if (loc.startsWith('/dashboard/apartments/') && loc.split('/').length === 4) {
       // add back button and icon for account view
       return `<ul class="navbar-nav me-auto">
@@ -667,18 +685,17 @@ import { userApi } from '../api/userApi.js';
       <button class="btn btn-sm btn-light erp-icon-btn" title="Fullscreen" on:click={toggleFullscreen}>
         <i class="bi bi-arrows-fullscreen"></i>
       </button>
-      
-
     </div>
   </div>
 </nav>
 
-<nav class="navbar d-md-none navbar-expand mobile-page-nav overflow-x-auto" class:dashboard-topbar={loc === '/dashboard'}>
+<nav
+  class="navbar d-md-none navbar-expand mobile-page-nav overflow-x-auto"
+  class:dashboard-topbar={loc === '/dashboard'}>
   <div class="container-fluid">
     {@html pageKey}
   </div>
 </nav>
-
 
 <style>
   .erp-topbar {

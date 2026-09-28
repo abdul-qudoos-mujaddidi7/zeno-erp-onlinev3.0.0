@@ -161,7 +161,7 @@ import { warehouseApi } from '../../api/warehouseApi.js';
   }
 </script>
 
-<div class="modal-backdrop show" style="z-index:1040;" on:click={close}></div>
+<div class="modal-backdrop show" style="z-index:1040;" on:click={() => dispatch('close')}></div>
 <div class="modal show d-block" tabindex="-1">
   <div class="modal-dialog modal-xl">
     <div class="modal-content">

@@ -519,13 +519,10 @@ async function updateStockTransfer({
       data.transfer_status ?? oldStockTransfer.transfer_status;
 
     /*
-     * Confirmed -> draft: undo the transfer.
+     * Any edit of a confirmed transfer must first undo its old stock,
+     * batch and journal effects. Confirmed replacements are reapplied below.
      */
-    if (
-      isConfirmed(oldStockTransfer.transfer_status) &&
-      nextStatus &&
-      !isConfirmed(nextStatus)
-    ) {
+    if (isConfirmed(oldStockTransfer.transfer_status)) {
       await applyTransferStock(
         connection,
         {
@@ -603,13 +600,8 @@ async function updateStockTransfer({
       createdItems.push(createdItem);
     }
 
-    /*
-     * Draft -> confirmed: apply the transfer.
-     */
-    if (
-      !isConfirmed(oldStockTransfer.transfer_status) &&
-      isConfirmed(nextStatus)
-    ) {
+    /* Apply the current values whenever the resulting transfer is confirmed. */
+    if (isConfirmed(nextStatus)) {
       await applyTransferStock(
         connection,
         {
