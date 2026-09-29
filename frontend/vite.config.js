@@ -85,8 +85,17 @@ export default defineConfig(({ mode }) => {
           skipWaiting: true,
         },
         devOptions: {
-          // Keep `npm run dev` free of service worker interference.
-          enabled: false,
+          /**
+           * The service worker is also registered on the dev server so the app
+           * is installable (and the "Install ZenoERP" button can appear) while
+           * developing on localhost:5173. The dev service worker only precaches
+           * static dev assets - it never caches API/financial responses, and
+           * `navigateFallback` is intentionally left unset in dev so page
+           * navigations always come from Vite.
+           */
+          enabled: true,
+          type: 'classic',
+          suppressWarnings: true,
         },
       }),
     ],

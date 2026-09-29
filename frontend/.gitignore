@@ -11,6 +11,9 @@ dist/
 build/
 .svelte-kit/
 
+# PWA service worker generated for `npm run dev`
+dev-dist/
+
 # Logs
 *.log
 npm-debug.log*

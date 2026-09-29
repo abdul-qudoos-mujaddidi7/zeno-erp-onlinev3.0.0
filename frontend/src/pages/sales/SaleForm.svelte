@@ -20,6 +20,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   let accountModalRef;
 
   import { calculateRemainingAndBenefit, resolveCostCurrency } from './SalesHelper.js';
+  import { repriceSaleItem } from './saleCurrencyPrices.js';
   import {
     mergeById,
     lookupAccounts,
@@ -1561,24 +1562,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
     if (newCode && oldCode && oldCode !== newCode) {
       if (Array.isArray(items) && items.length) {
-        items = items.map((item) => {
-          const fromCode = item.currency || oldCode;
-          const convertedPrice = exchangeRate(
-            Number(item.calculated_price) || 0,
-            fromCode,
+        items = items.map((item) =>
+          repriceSaleItem(
+            item,
+            item.currency || oldCode,
             newCode,
-          );
-          const roundedPrice = Math.round(convertedPrice * 100) / 100;
-
-          return {
-            ...item,
-            buy_price_currency: item.buy_price_currency,
-            calculated_price: roundedPrice,
-            unit_price: roundedPrice,
-            currency: newCode,
-            subtotal: Number(item.quantity || 0) * roundedPrice,
-          };
-        });
+            exchangeRate,
+          ),
+        );
       }
 
       form.currency = newCode;
