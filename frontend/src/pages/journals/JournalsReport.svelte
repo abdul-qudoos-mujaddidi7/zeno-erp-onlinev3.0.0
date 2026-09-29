@@ -16,6 +16,7 @@
   import EmptyState from '../../components/common/EmptyState.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import SummaryCard from '../../components/common/SummaryCard.svelte';
+  import { localizeDescription } from '../../utils/localizedDescription.js';
   import {
     DEFAULT_PAGE_SIZE,
     PAGE_SIZE_OPTIONS,
@@ -601,7 +602,7 @@
                 class="description-cell"
                 title={journal.description || ''}
               >
-                {journal.description || '—'}
+                {localizeDescription(journal.description, $lang, t) || '—'}
               </span>
             </td>
 

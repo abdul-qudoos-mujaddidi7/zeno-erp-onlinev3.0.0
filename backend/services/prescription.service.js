@@ -29,6 +29,10 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
+const {
+  paymentDescription,
+} = require('../utils/transactionDescription');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -1199,8 +1203,14 @@ async function createPayment({
       );
     }
 
-    const paymentDescription =
-      data.description || 'Payment for Prescription';
+    const paymentDescriptionText =
+      String(data.description || '').trim() ||
+      paymentDescription({
+        kind: 'prescription',
+        document: prescription,
+        payment: data,
+        language: requestContext?.language,
+      });
 
     const signedAmount = Number(payment.amount || 0);
     const isReceive = signedAmount >= 0;
@@ -1224,7 +1234,7 @@ async function createPayment({
           date: new Date().toISOString(),
           reference_id: payment.id,
           reference_type: 'prescription_payment',
-          description: paymentDescription,
+          description: paymentDescriptionText,
           currency: payment.currency || null,
           first_entry_account: salesAcct.id,
           first_entry_debit: salesDebit,
@@ -1249,7 +1259,7 @@ async function createPayment({
           date: new Date().toISOString(),
           reference_id: payment.id,
           reference_type: 'prescription_payment',
-          description: paymentDescription,
+          description: paymentDescriptionText,
           currency: payment.currency || null,
           first_entry_account: patientAccountId,
           first_entry_debit: salesDebit,

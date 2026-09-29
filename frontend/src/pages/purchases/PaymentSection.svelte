@@ -5,6 +5,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { confirmModal } from '../../components/common/confirmModal.js';
 
   import { t, lang, translate_org_type } from '../../i18n/i18n';
+  import { localizeDescription } from '../../utils/localizedDescription.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
@@ -639,7 +640,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                     <td class="pd-table__col-date">
                       <span dir="ltr">{accountingDateOfStoredValue(p.payment_date)}</span>
                     </td>
-                    <td class="pd-table__col-desc">{p.description || '—'}</td>
+                    <td class="pd-table__col-desc">{localizeDescription(p.description, $lang, t) || '—'}</td>
                     <td class="pd-table__amount pd-table__col-num">
                       <span class="pd-table__num">
                         <span dir="ltr">{formatAmount(p.amount)}</span>

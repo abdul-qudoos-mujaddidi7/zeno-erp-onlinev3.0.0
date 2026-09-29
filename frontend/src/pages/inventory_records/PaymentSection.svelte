@@ -3,6 +3,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { onMount } from 'svelte';
 
   import { t, lang, translate_org_type } from '../../i18n/i18n';
+  import { localizeDescription } from '../../utils/localizedDescription.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   import { auth } from '../../auth/authStore';
@@ -236,7 +237,7 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
               {#each payments as p}
                 <tr>
                   <td>{accountingDateOfStoredValue(p.payment_date)}</td>
-                  <td>{p.description}</td>
+                  <td>{localizeDescription(p.description, $lang, t) || '—'}</td>
                   <td class="text-end"><span dir="ltr">{p.amount}</span> {t(p.currency)}</td>
                   <td class="text-center">{getAccountName(p.account_id)}</td>
                   <td class="text-center">

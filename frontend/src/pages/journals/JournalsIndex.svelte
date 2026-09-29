@@ -29,6 +29,7 @@ import {
 import { accountApi } from '../../api/accountApi.js';
 import { accountTypeApi } from '../../api/accountTypeApi.js';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../../lib/pagination.js';
+  import { localizeDescription } from '../../utils/localizedDescription.js';
 
   let showReceipt = false;
   let showA4Receipt = false;
@@ -673,7 +674,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
                     </StatusBadge>
                   </div>
                 </td>
-                <td><span class="description-cell" title={j.description || ''}>{j.description || '—'}</span></td>
+                <td><span class="description-cell" title={j.description || ''}>{localizeDescription(j.description, $lang, t) || '—'}</span></td>
                 <td>
                   {#if j.first_entry_debit != 0}
                     <StatusBadge tone="negative">

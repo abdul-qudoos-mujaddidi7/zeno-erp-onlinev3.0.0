@@ -4,6 +4,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 
   import { auth } from '../../auth/authStore';
   import { t, lang, translate_org_type, settings_all } from '../../i18n/i18n';
+  import { localizeDescription } from '../../utils/localizedDescription.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   $: permissions = $auth.permissions;
@@ -585,7 +586,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                 {#each payments as p}
                   <tr>
                     <td class="pd-table__col-date">{accountingDateOfStoredValue(p.payment_date)}</td>
-                    <td class="pd-table__col-desc">{p.description || '—'}</td>
+                    <td class="pd-table__col-desc">{localizeDescription(p.description, $lang, t) || '—'}</td>
                     <td class="pd-table__amount pd-table__col-num">
                       <span class="pd-table__num">
                         <span dir="ltr">{formatAmount(p.amount)}</span>

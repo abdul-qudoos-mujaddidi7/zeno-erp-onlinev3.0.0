@@ -8,6 +8,7 @@
   import { t, lang, translate_org_type, shortID } from '../../i18n/i18n';
   import { push } from 'svelte-spa-router';
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../lib/pagination.js';
+  import { localizeDescription } from '../../utils/localizedDescription.js';
 
   import EditJournalModal from '../journals/EditJournalModal.svelte';
 
@@ -1184,7 +1185,7 @@
                   {/if}
                 {:else}{/if}
               </td>
-              <td>{j.description || '-'}</td>
+              <td>{localizeDescription(j.description, $lang, t) || '-'}</td>
               <td class="col-start value-cell"
                 >{#if j.debit || 0}<span class="amount-inline debit-value"
                     ><span dir="ltr">{j.debit.toLocaleString(undefined, { maximumFractionDigits: 3 }) || 0}</span>

@@ -57,6 +57,10 @@ const {
   accountingDate,
 } = require('../utils/accountingDate');
 
+const {
+  paymentDescription,
+} = require('../utils/transactionDescription');
+
 /*
  * Step 4.5 guard. It is a repositories+utils module like this one, so it does
  * not break this file's "no service dependencies" rule (no recursive business
@@ -542,9 +546,12 @@ async function postBillPaymentOnConnection(
     }
   }
 
-  const defaultDescription = isSale
-    ? 'Payment for Sales Invoice'
-    : 'Payment for Purchase Invoice';
+  const defaultDescription = paymentDescription({
+    kind: isSale ? 'sale' : 'purchase',
+    document: bill,
+    payment: data,
+    language: requestContext?.language,
+  });
 
   const storedDescription =
     data.description ||

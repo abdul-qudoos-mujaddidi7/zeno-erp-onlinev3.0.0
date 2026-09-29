@@ -30,6 +30,12 @@ function getRequestContext(req) {
     deviceInfo:
       req.headers['user-agent'] ||
       null,
+
+    // Used for human-readable descriptions written by backend workflows.
+    language:
+      req.user?.language ||
+      req.headers['accept-language'] ||
+      'en',
   };
 }
 

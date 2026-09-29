@@ -23,6 +23,10 @@ const {
   resolvePagination,
 } = require('../utils/pagination');
 
+const {
+  paymentDescription,
+} = require('../utils/transactionDescription');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -136,6 +140,14 @@ async function upsertAppointmentFeeJournals(
 ) {
   const fee = Number(data.fee || 0);
   const paidAmount = Number(data.paid_amount || 0);
+  const appointmentPaymentDescription =
+    String(data.description || '').trim() ||
+    paymentDescription({
+      kind: 'appointment',
+      document: { id: appointmentId, patient_id: data.patient_id },
+      payment: { amount: paidAmount, currency: data.currency },
+      language: requestContext?.language,
+    });
 
   const receivableAccount =
     await appointmentRepository.findAccountByCode(
@@ -241,8 +253,7 @@ async function upsertAppointmentFeeJournals(
         userId,
         data: {
           date: data.date || null,
-          description:
-            data.description || `Appointment Fee Payment for patient ID ${data.patient_id}`,
+          description: appointmentPaymentDescription,
           reference_id: appointmentId,
           reference_type: 'appointment_fee_payment',
           currency: data.currency || null,
@@ -265,8 +276,7 @@ async function upsertAppointmentFeeJournals(
         requestContext,
         data: {
           date: data.date || null,
-          description:
-            data.description || `Appointment Fee Payment for patient ID ${data.patient_id}`,
+          description: appointmentPaymentDescription,
           reference_id: appointmentId,
           reference_type: 'appointment_fee_payment',
           currency: data.currency || null,
