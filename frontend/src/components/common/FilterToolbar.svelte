@@ -18,7 +18,11 @@
 
   $: visibleFilters = filters.filter((filter) => filter.visible !== false);
 
-  $: activeFilterCount = visibleFilters.filter((filter) => !['', 'all', null, undefined].includes(filter.value)).length;
+  $: activeFilterCount = visibleFilters.filter((filter) =>
+    Array.isArray(filter.value)
+      ? filter.value.length > 0
+      : !['', 'all', null, undefined].includes(filter.value),
+  ).length;
 
   function toggleFilters() {
     filtersOpen = !filtersOpen;

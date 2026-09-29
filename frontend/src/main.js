@@ -7,12 +7,17 @@ import './components/common/quick-action-modal.css'
 import './components/common/track-picker.css'
 import { initGlobalDatePickers } from './calendar.js'
 import { applyMdbStylesheet } from './lib/mdbTheme.js'
+import { installTableCards } from './utils/tableCards.js'
 
 const langCode = localStorage.getItem('lang') || 'fa';
 const isRtl = langCode === 'fa' || langCode === 'ps';
 document.documentElement.setAttribute('dir', isRtl ? 'rtl' : 'ltr');
 document.documentElement.lang = langCode;
 applyMdbStylesheet(isRtl);
+
+// Tables that are wider than a phone screen read as cards instead of forcing
+// the user to drag the row sideways to reach the amount and the actions.
+installTableCards();
 
 const hash = window.location.hash || '';
 if (hash.startsWith('#/dashboard') || hash.startsWith('#/pos')) {

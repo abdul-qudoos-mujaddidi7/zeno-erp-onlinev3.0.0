@@ -31,3 +31,35 @@ export function aggregateSelectedProductItems(rows = []) {
     balances,
   };
 }
+
+export function aggregateProductItemsForExport(rows = []) {
+  const groups = new Map();
+
+  for (const row of rows) {
+    const key = [row.product_id, row.product_unit_id, row.currency || ''].join('|');
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, {
+        ...row,
+        quantity: Number(row.quantity) || 0,
+        subtotal: Number(row.subtotal) || 0,
+        source_count: 1,
+        is_product_total: true,
+      });
+      continue;
+    }
+
+    existing.quantity += Number(row.quantity) || 0;
+    existing.subtotal += Number(row.subtotal) || 0;
+    existing.source_count += 1;
+
+    const currentDate = new Date(existing.created_at || 0).getTime();
+    const rowDate = new Date(row.created_at || 0).getTime();
+    if (rowDate > currentDate) existing.created_at = row.created_at;
+  }
+
+  return [...groups.values()].map((row) => ({
+    ...row,
+    unit_price: row.quantity ? row.subtotal / row.quantity : 0,
+  }));
+}

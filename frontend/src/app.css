@@ -1537,3 +1537,110 @@ html[data-mdb-theme='dark'] .product-tabs__btn--active {
   background: var(--erp-primary-soft) !important;
   color: #bfdbfe !important;
 }
+
+/* =============================================================================
+   Phone tables — Bootstrap .table-responsive
+
+   A .table-responsive table answers a narrow screen by scrolling sideways, so
+   the money columns and the row actions sit off-screen. When such a table is
+   genuinely wider than its container, `utils/tableCards.js` adds
+   `.table-cards` to the wrapper and the rules below lay the row out as a card:
+   one label/value line per cell, the label copied onto the cell by that module
+   as `data-label`. Tables that already fit are never marked, so nothing that
+   works today changes shape.
+   ============================================================================= */
+
+.table-responsive.table-cards {
+  overflow-x: hidden;
+}
+
+.table-responsive.table-cards > .table {
+  display: block;
+  min-width: 0 !important;
+  border-collapse: separate;
+}
+
+.table-responsive.table-cards > .table > thead {
+  display: none;
+}
+
+.table-responsive.table-cards > .table > tbody {
+  display: block;
+}
+
+.table-responsive.table-cards > .table > tbody > tr {
+  display: block;
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--erp-border) !important;
+  border-radius: 12px;
+  background: var(--erp-surface);
+  overflow: hidden;
+}
+
+.table-responsive.table-cards > .table > tbody > tr:last-child {
+  margin-bottom: 0;
+}
+
+.table-responsive.table-cards > .table > tbody > tr > td,
+.table-responsive.table-cards > .table > tbody > tr > th {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: auto;
+  min-width: 0;
+  padding: 0.4rem 0.7rem !important;
+  border: 0 !important;
+  border-bottom: 1px solid #eef2f7 !important;
+  text-align: end !important;
+  white-space: normal !important;
+  background: transparent !important;
+}
+
+.table-responsive.table-cards > .table > tbody > tr > td:last-child,
+.table-responsive.table-cards > .table > tbody > tr > th:last-child {
+  border-bottom: 0 !important;
+}
+
+.table-responsive.table-cards > .table > tbody > tr > td::before,
+.table-responsive.table-cards > .table > tbody > tr > th::before {
+  content: attr(data-label);
+  flex: 0 1 auto;
+  min-width: 0;
+  color: #66758a;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+/* Rows without a matching column (subtotals, notes) read as plain lines. */
+.table-responsive.table-cards > .table > tbody > tr > td:not([data-label]),
+.table-responsive.table-cards > .table > tbody > tr > th:not([data-label]) {
+  justify-content: flex-start;
+  text-align: start !important;
+}
+
+.table-responsive.table-cards > .table > tbody > tr > td:not([data-label])::before,
+.table-responsive.table-cards > .table > tbody > tr > th:not([data-label])::before {
+  content: none;
+}
+
+/* Action cells: the controls sit on their own line and share the width. */
+.table-responsive.table-cards > .table > tbody > tr > td:has(> :nth-child(2)) {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+html.dark .table-responsive.table-cards > .table > tbody > tr,
+html[data-mdb-theme='dark'] .table-responsive.table-cards > .table > tbody > tr {
+  border-color: var(--erp-border) !important;
+  background: var(--erp-surface);
+}
+
+html.dark .table-responsive.table-cards > .table > tbody > tr > td,
+html.dark .table-responsive.table-cards > .table > tbody > tr > th,
+html[data-mdb-theme='dark'] .table-responsive.table-cards > .table > tbody > tr > td,
+html[data-mdb-theme='dark'] .table-responsive.table-cards > .table > tbody > tr > th {
+  border-bottom-color: var(--erp-border) !important;
+}

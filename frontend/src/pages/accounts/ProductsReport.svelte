@@ -17,7 +17,10 @@
   import { accountApi } from '../../api/accountApi.js';
   import { productApi } from '../../api/productApi.js';
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../lib/pagination.js';
-  import { aggregateSelectedProductItems } from './productReportAggregation.js';
+  import {
+    aggregateProductItemsForExport,
+    aggregateSelectedProductItems,
+  } from './productReportAggregation.js';
   import { oneMonthDateWindow } from './reportDateRange.js';
 
   $: _lang = $lang;
@@ -43,7 +46,7 @@
 
   let searchTerm = '';
   let filterStatus = 'all';
-  let selectedProduct = 'all';
+  let selectedProducts = [];
   let currentPage = 1;
   let itemsPerPage = DEFAULT_PAGE_SIZE;
   let totalPages = 1;
@@ -87,9 +90,12 @@
     try {
       const lookupsPromise = loadLookups();
 
-      const productSelected = selectedProduct !== 'all';
+      const selectedProductIds = selectedProducts
+        .map(Number)
+        .filter((id) => Number.isFinite(id) && id > 0);
+      const productSelected = selectedProductIds.length > 0;
       const response = productSelected
-        ? await fetchFilteredItems()
+        ? (await Promise.all(selectedProductIds.map((productId) => fetchFilteredItems(productId)))).flat()
         : await accountApi.getProductItems(account_id, {
             item_type: requestedItemType(),
             currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
@@ -104,10 +110,15 @@
       if (requestId !== loadRequestId) return;
 
       const responseRows = Array.isArray(response) ? response : response?.data || [];
-      const productTotal = productSelected
-        ? aggregateSelectedProductItems(responseRows)
-        : null;
-      items = productTotal ? [productTotal] : responseRows;
+      items = productSelected
+        ? selectedProductIds
+            .map((productId) =>
+              aggregateSelectedProductItems(
+                responseRows.filter((row) => Number(row.product_id) === productId),
+              ),
+            )
+            .filter(Boolean)
+        : responseRows;
 
       const missingProductIds = [
         ...new Set(
@@ -222,7 +233,9 @@
       product_name: product?.name || product?.code || item.product_id,
       product_unit_name: unit?.name || '',
       invoice_text:
-        item.document_number || shortID(item.sale_id || item.purchase_id || item.product_id),
+        item.source_count > 1
+          ? `${item.source_count} ${t('Invoices')}`
+          : item.document_number || shortID(item.sale_id || item.purchase_id || item.product_id),
     };
   }
 
@@ -234,7 +247,7 @@
     }, {});
   }
 
-  async function fetchFilteredItems() {
+  async function fetchFilteredItems(productId = null) {
     const pageSize = 200;
     const all = [];
     let page = 1;
@@ -242,7 +255,7 @@
     for (;;) {
       const response = await accountApi.getProductItems(account_id, {
         item_type: requestedItemType(),
-        product_id: selectedProduct !== 'all' ? Number(selectedProduct) : undefined,
+        product_id: productId || undefined,
         currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
         search: searchTerm.trim(),
         date_from: fromDate || undefined,
@@ -266,7 +279,14 @@
    * fetch every row that matches the active filters instead.
    */
   async function fetchAllItemsForExport() {
-    return fetchFilteredItems();
+    const selectedProductIds = selectedProducts
+      .map(Number)
+      .filter((id) => Number.isFinite(id) && id > 0);
+    if (!selectedProductIds.length) return fetchFilteredItems();
+    const rows = (await Promise.all(
+      selectedProductIds.map((productId) => fetchFilteredItems(productId)),
+    )).flat();
+    return aggregateProductItemsForExport(rows);
   }
 
   async function exportProducts(format) {
@@ -346,7 +366,8 @@
     {
       key: 'product',
       label: enable_services ? t('Product or Service') : t('Product'),
-      value: selectedProduct,
+      value: selectedProducts,
+      multiple: true,
       options: [
         { value: 'all', label: t('All') },
         ...products.map((product) => ({
@@ -367,7 +388,7 @@
   function handleReportFilter(event) {
     const { key, value } = event.detail;
     if (key === 'type') filterStatus = value;
-    if (key === 'product') selectedProduct = value;
+    if (key === 'product') selectedProducts = Array.isArray(value) ? value : [];
     if (key === 'currency') selectedCurrency = value;
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
@@ -379,7 +400,7 @@
   function resetReportFilters() {
     searchTerm = '';
     filterStatus = 'all';
-    selectedProduct = 'all';
+    selectedProducts = [];
     selectedCurrency = 'all';
     fromDate = '';
     toDate = '';

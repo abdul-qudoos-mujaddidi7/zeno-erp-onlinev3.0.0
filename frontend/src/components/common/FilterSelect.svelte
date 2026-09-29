@@ -241,7 +241,7 @@
           </div>
         {/if}
 
-        <ul class="filter-select__options" role="listbox">
+        <ul class="filter-select__options" role="listbox" aria-multiselectable={multiple ? 'true' : undefined}>
           {#each visibleOptions as option, index (option.value)}
             <li role="option" aria-selected={multiple ? selectedValues.includes(option.value) : String(option.value) === String(value)}>
               <button

@@ -1,4 +1,7 @@
 <script>
+  import { onMount } from 'svelte';
+  import { labelTableRows } from '../../utils/tableCards.js';
+
   export let minWidth = '720px';
   export let ariaLabel = '';
   export let dense = true;
@@ -8,17 +11,48 @@
   export let layout = 'fixed';
   export let scrollbar = 'thin';
   export let clipCells = true;
+  /**
+   * On phones the row is shown as a stacked card — one label/value line per
+   * cell — instead of a 720px+ table that has to be dragged sideways. Set to
+   * false for a table that only makes sense as a grid.
+   */
+  export let mobileCards = true;
 
   $: tableLayout = layout === 'auto' ? 'auto' : 'fixed';
   $: scrollbarMode = ['thin', 'hidden', 'normal'].includes(scrollbar) ? scrollbar : 'thin';
+
+  let tableEl;
+
+  /*
+   * The card layout labels each cell from its column header (see
+   * utils/tableCards.js): the headers live in a slot, so the rendered <thead>
+   * is the only reliable source.
+   */
+  const labelRows = () => labelTableRows(tableEl);
+
+  onMount(() => {
+    labelRows();
+
+    const body = tableEl?.querySelector('tbody');
+    if (!body) return;
+
+    /* Rows are re-rendered on sort, filter and paging — keep the labels in
+       step. Attributes are not observed, so writing `data-label` cannot loop. */
+    const observer = new MutationObserver(labelRows);
+    observer.observe(body, { childList: true, subtree: true, characterData: true });
+
+    return () => observer.disconnect();
+  });
 </script>
 
 <div
   class="data-table-wrap table-container"
+  class:mobile-cards={mobileCards}
   class:scrollbar-thin={scrollbarMode === 'thin'}
   class:scrollbar-hidden={scrollbarMode === 'hidden'}
   class:scrollbar-normal={scrollbarMode === 'normal'}>
   <table
+    bind:this={tableEl}
     class="data-table"
     class:data-table--dense={dense}
     class:data-table--striped={striped}
@@ -249,5 +283,97 @@
   .data-table :global(.erp-badge),
   .data-table :global(.price-pill) {
     vertical-align: middle;
+  }
+
+  /*
+   * Phone layout: every row becomes a card, every cell a label/value line.
+   * This replaces the sideways drag of a 720px+ table, so the amount and the
+   * row actions are reachable without scrolling. The label comes from the
+   * column header copied by labelRows() above.
+   */
+  @media (max-width: 767px) {
+    .data-table-wrap.mobile-cards {
+      overflow-x: hidden;
+    }
+
+    /* The inline min-width (e.g. 780px) would otherwise keep the drag. */
+    .data-table-wrap.mobile-cards .data-table {
+      display: block;
+      min-width: 0 !important;
+      border-collapse: separate;
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(thead) {
+      display: none;
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(tbody) {
+      display: block;
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(tbody tr) {
+      display: block;
+      margin-bottom: 0.6rem;
+      border: 1px solid var(--erp-border, #e2e8f0);
+      border-radius: 12px;
+      background: var(--erp-surface, #ffffff);
+      overflow: hidden;
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(tbody tr:last-child) {
+      margin-bottom: 0;
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(tbody td) {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      width: auto;
+      min-width: 0;
+      padding: 0.4rem 0.7rem;
+      border-bottom: 1px solid #eef2f7;
+      text-align: end;
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(tbody td:last-child) {
+      border-bottom: 0;
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(tbody td)::before {
+      content: attr(data-label);
+      flex: 0 1 auto;
+      min-width: 0;
+      color: #66758a;
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-align: start;
+      overflow-wrap: anywhere;
+    }
+
+    /* Rows without a matching column (subtotals, notes) read as plain lines. */
+    .data-table-wrap.mobile-cards .data-table :global(tbody td:not([data-label])) {
+      justify-content: flex-start;
+      text-align: start;
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(tbody td:not([data-label]))::before {
+      content: none;
+    }
+
+    /* Action cells: the controls sit on their own line and share the width. */
+    .data-table-wrap.mobile-cards .data-table :global(tbody td:has(> :nth-child(2))) {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(tbody tr),
+    .data-table-wrap.mobile-cards .data-table--striped :global(tbody tr:nth-child(odd)),
+    .data-table-wrap.mobile-cards .data-table--striped :global(tbody tr:nth-child(even)) {
+      background: var(--erp-surface, #ffffff);
+    }
   }
 </style>
