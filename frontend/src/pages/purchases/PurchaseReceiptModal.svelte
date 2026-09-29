@@ -13,8 +13,15 @@
   /*
    * The bill's own amount, spelled out under the figures, in the language the
    * receipt is printed in.
+   *
+   * The words restate the very figure the subtotal row prints — the lines this
+   * receipt shows — and never the payment, so the figures and the words can
+   * never disagree about what the bill is for.
    */
-  $: totalInWords = amountInWords(total, $lang, currencyLabels(purchase?.currency, t));
+  $: itemsTotal = items && items.length
+    ? items.reduce((s, i) => s + (Number(i.subtotal) || 0), 0)
+    : 0;
+  $: totalInWords = amountInWords(itemsTotal, $lang, currencyLabels(purchase?.currency, t));
 import { accountApi } from '../../api/accountApi.js';
 
 
@@ -247,10 +254,20 @@ import { accountApi } from '../../api/accountApi.js';
               <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
                 <div>{t('Subtotal')}</div>
                 <div class="right">
-                  {items.reduce((s, i) => s + (Number(i.subtotal) || 0), 0).toFixed(2)}
+                  {itemsTotal.toFixed(2)}
                   {t(purchase?.currency) || ''}
                 </div>
               </div>
+
+              <!--
+                The bill's own amount, stated twice: the figures above, the
+                words directly under them. It lands before the payment rows so
+                it reads with the total and not with what was handed over.
+              -->
+              <div class="words-line" style="margin-bottom:6px;text-align:end;">
+                <span dir="ltr">{totalInWords}</span>
+              </div>
+
               {#if payments.length > 0}
                 <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
                   <div>{t('Total Paid')}</div>
@@ -273,11 +290,6 @@ import { accountApi } from '../../api/accountApi.js';
                 > -->
                 <div>{t('Due')}</div>
                 <div class="right">{due} {t(purchase?.currency) || ''}</div>
-              </div>
-
-              <!-- The amount stated twice: the figures above, the words here. -->
-              <div class="words-line" style="margin-top:6px;">
-                <span dir="ltr">{totalInWords}</span>
               </div>
             </div>
 
