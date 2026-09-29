@@ -4,6 +4,8 @@
   import { buildingApi } from '../../api/buildingApi.js';
   import { floorApi } from '../../api/floorApi.js';
   import { t, lang, translate_org_type, settings_all, shortID } from '../../i18n/i18n.js';
+  import { amountInWords } from '../../utils/amountInWords.js';
+  import { currencyLabels } from '../../utils/currencyLabel.js';
   import { showDate } from '../../calendar.js';
   import { push } from 'svelte-spa-router';
   import QRCode from 'qrcode';
@@ -270,11 +272,18 @@
                       >{Number(lease.monthly_rent || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
                       {t(lease.currency)}</td>
                   </tr>
+                  <!-- The rent stated again in words, in the contract's language. -->
+                  <tr>
+                    <td class="p-2 py-1" style="font-size:9pt;" colspan="2">{amountInWords(lease.monthly_rent, $lang, currencyLabels(lease.currency, t))}</td>
+                  </tr>
                   <tr>
                     <td class="p-2 py-1"> {t('Deposit Amount')}</td>
                     <td class="fw-bold p-2 py-1"
                       >{Number(lease.deposit_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
                       {t(lease.currency)}</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2 py-1" style="font-size:9pt;" colspan="2">{amountInWords(lease.deposit_amount, $lang, currencyLabels(lease.currency, t))}</td>
                   </tr>
                 </tbody>
               </table>

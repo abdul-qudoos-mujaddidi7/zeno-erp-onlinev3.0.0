@@ -10,8 +10,26 @@
 import { accountApi } from '../../api/accountApi.js';
 import WhatsappModal from '../WhatsappModal.svelte';
 import { settingsApi } from '../../api/settingsApi.js';
+import { amountInWords } from '../../utils/amountInWords.js';
+import { currencyLabels } from '../../utils/currencyLabel.js';
 
   export let exchange = {};
+
+  /*
+   * Both sides of the exchange stated again in words, under the figures they
+   * restate: the receipt is a document of money, so the amount has to appear
+   * spelled out in the language the slip is printed in.
+   */
+  $: debitInWords = amountInWords(
+    exchange?.first_entry_debit,
+    $lang,
+    currencyLabels(exchange?.first_currency, t),
+  );
+  $: creditInWords = amountInWords(
+    exchange?.second_entry_credit,
+    $lang,
+    currencyLabels(exchange?.second_currency, t),
+  );
 
   const dispatch = createEventDispatcher();
 
@@ -224,6 +242,10 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
                   })}
                   {t(exchange?.first_currency)}</span>
               </div>
+
+              <div class="words-line" style="font-size:10pt;">
+                <span dir="ltr">{debitInWords}</span>
+              </div>
             {/if}
 
             <div class="divider"></div>
@@ -260,6 +282,10 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
                     maximumFractionDigits: 3,minimumFractionDigits: 2,
                   })}
                   {t(exchange?.second_currency)}</span>
+              </div>
+
+              <div class="words-line" style="font-size:10pt;">
+                <span dir="ltr">{creditInWords}</span>
               </div>
             {/if}
 

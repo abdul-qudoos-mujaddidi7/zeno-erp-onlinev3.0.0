@@ -5,6 +5,11 @@ import { settingsApi } from '../../api/settingsApi.js';
 import { productUnitApi } from '../../api/productUnitApi.js';
   import { productGenericApi } from '../../api/productGenericApi.js';
   import { t, lang, translate_org_type, settings_all } from '../../i18n/i18n.js';
+  import { amountInWords } from '../../utils/amountInWords.js';
+  import { currencyLabels } from '../../utils/currencyLabel.js';
+
+  /* The payable amount, spelled out under the figures. */
+  $: totalInWords = amountInWords(total, $lang, currencyLabels(inventory_record?.currency, t));
   import { showDate } from '../../calendar.js';
   import { push } from 'svelte-spa-router';
 
@@ -501,6 +506,11 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
                   {/if}
                 </tbody>
               </table>
+
+              <!-- The bill states its amount twice: figures above, words here. -->
+              <div class="words-line" style="font-size:10pt; padding:2px 8px;">
+                <strong dir="ltr">{totalInWords}</strong>
+              </div>
             </div>
             {#if !enable_vertical_info}
               <div class="col-sm-12">

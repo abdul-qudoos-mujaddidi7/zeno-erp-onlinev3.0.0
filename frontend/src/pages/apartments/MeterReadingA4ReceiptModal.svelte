@@ -5,6 +5,15 @@
   import { buildingApi } from '../../api/buildingApi.js';
   import { floorApi } from '../../api/floorApi.js';
   import { t, lang, translate_org_type, settings_all, shortID } from '../../i18n/i18n.js';
+  import { amountInWords } from '../../utils/amountInWords.js';
+  import { currencyLabels } from '../../utils/currencyLabel.js';
+
+  /* The billed amount, spelled out under the figure it restates. */
+  $: totalInWords = amountInWords(
+    meter_reading?.calculated_amount,
+    $lang,
+    currencyLabels(meter_reading?.currency, t),
+  );
   import { showDate } from '../../calendar.js';
   import { push } from 'svelte-spa-router';
   import QRCode from 'qrcode';
@@ -217,6 +226,9 @@ import { settingsApi } from '../../api/settingsApi.js';
                         maximumFractionDigits: 3,
                       })}
                       {t(meter_reading.currency)}</td>
+                  </tr>
+                  <tr>
+                    <td class="p-2 py-1" style="font-size:9pt;" colspan="2">{totalInWords}</td>
                   </tr>
                 </tbody>
               </table>

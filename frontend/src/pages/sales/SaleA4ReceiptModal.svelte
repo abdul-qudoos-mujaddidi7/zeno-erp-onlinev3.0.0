@@ -35,6 +35,8 @@ import { productUnitApi } from '../../api/productUnitApi.js';
    * with SaleReceiptModal so both documents always count the same way.
    */
   import { formatCount, itemCounts } from './saleReceiptLayout.js';
+  import { amountInWords } from '../../utils/amountInWords.js';
+  import { currencyLabels } from '../../utils/currencyLabel.js';
   
   import QRCode from 'qrcode';
 import { currencyApi } from '../../api/currencyApi.js';
@@ -279,6 +281,12 @@ import { productBrandApi } from '../../api/productBrandApi.js';
   $: total = Number(sale?.total_amount || items.reduce((s, i) => s + Number(Number(i.unit_price || 0) * Number(i.quantity || 0)), 0));
 
   $: counts = itemCounts(items);
+
+  /*
+   * The payable amount stated again in words, under the figures, in the
+   * invoice's own language — the same rule the 74mm receipt follows.
+   */
+  $: totalInWords = amountInWords(total, $lang, currencyLabels(sale?.currency, t));
 
   function exchangeRate(amount, fromCurrencyCode, toCurrencyCode) {
     if (!fromCurrencyCode || !toCurrencyCode || fromCurrencyCode === toCurrencyCode) {
@@ -703,6 +711,14 @@ import { productBrandApi } from '../../api/productBrandApi.js';
                   {/if}
                 </tbody>
               </table>
+
+              <!--
+                The bill states its amount twice: the figures above, and the
+                same amount spelled out here so an altered digit stands out.
+              -->
+              <div class="words-line" style="font-size:10pt; padding:2px 8px;">
+                <strong dir="ltr">{totalInWords}</strong>
+              </div>
             </div>
             {#if !enable_vertical_info}
               <div class="col-sm-12">

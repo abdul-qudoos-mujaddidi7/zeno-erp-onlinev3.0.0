@@ -4,6 +4,11 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 import { settingsApi } from '../../api/settingsApi.js';
 
   import { t, lang, translate_org_type, shortID } from '../../i18n/i18n.js';
+  import { amountInWords } from '../../utils/amountInWords.js';
+  import { currencyLabels } from '../../utils/currencyLabel.js';
+
+  /* The bill's own amount, spelled out under the figures. */
+  $: totalInWords = amountInWords(total, $lang, currencyLabels(inventory_record?.currency, t));
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
@@ -460,6 +465,11 @@ td {
                     : 0}
                   {t(inventory_record?.currency) || ''}
                 </div>
+              </div>
+
+              <!-- The amount stated twice: the figures above, the words here. -->
+              <div class="words-line" style="margin-top:6px;">
+                <span dir="ltr">{totalInWords}</span>
               </div>
               <div class="fw-bold" style="display:flex;justify-content:space-between;margin-bottom:6px;">
                 <div class="fw-bold">{t('Bill Received')}</div>

@@ -2,8 +2,39 @@ import { auth } from './authStore';
 import { API_URL } from '../config';
 import { setTranslateOrgType, setSettingsAll } from '../i18n/i18n';
 import { parsePermissions, writeStoredPermissions } from './permissions.js';
+import { clearSessionStorage, sessionExpiryFromLogin, writeSessionExpiry } from '../utils/session.js';
 
 const API = API_URL + '/api';
+
+/*
+ * Delete the session on the server as well.
+ *
+ * The browser has already thrown its own token away by the time this runs, so
+ * the operator is signed out whatever happens here: this call is what stops a
+ * copy of the token that leaked into a cache, a log or another device from
+ * being usable for the rest of its 24 hours.
+ *
+ * It is bounded by a timeout because it sits on the way to the login page — an
+ * unreachable server must not leave the dashboard on screen.
+ */
+async function deleteServerSession(token, timeoutMs = 2000) {
+  if (!token) return;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    await fetch(`${API}/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+  } catch (error) {
+    /* Offline, or no answer in time: the local logout stands. */
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export async function validateRegister(username, email) {
   const res = await fetch(`${API}/auth/validate-register`, {
@@ -58,6 +89,12 @@ export async function login(username, password) {
   const permissions = parsePermissions(data.permissions);
 
   localStorage.setItem('token', data.token);
+  /*
+   * Start the 24-hour clock. Stored beside the token so every tab of this
+   * browser shares the one deadline, and counted from here rather than taken
+   * from a server timestamp (see utils/session.js).
+   */
+  writeSessionExpiry(sessionExpiryFromLogin(data));
   localStorage.setItem('user_id', data.user_id);
   localStorage.setItem('role_id', data.role_id);
   localStorage.setItem('org_id', data.org_id);
@@ -102,6 +139,15 @@ export async function login(username, password) {
 }
 
 import { push } from 'svelte-spa-router';
+
+/* The token as it is stored right now — captured before it is deleted. */
+function readToken() {
+  try {
+    return localStorage.getItem('token');
+  } catch (e) {
+    return null;
+  }
+}
 
 async function clearEverything() {
   // Best-effort wipe of leftover IndexedDB from the old Dexie era.
@@ -149,6 +195,16 @@ async function clearEverything() {
 }
 
 export async function logoutClear() {
+  const token = readToken();
+
+  /*
+   * The token and its deadline go first, and synchronously. localStorage is
+   * shared by every window of this browser, so the moment they are gone no
+   * other tab can reopen the dashboard — a full wipe of the rest (IndexedDB,
+   * caches) can take its time.
+   */
+  clearSessionStorage();
+
   auth.set({
     token: null,
     user_id: null,
@@ -159,6 +215,9 @@ export async function logoutClear() {
     permissions: null,
     isAuthenticated: false,
   });
+
+  await deleteServerSession(token);
+
   try {
     const { clearOrganizationContext } = await import('../stores/organizationStore.js');
     clearOrganizationContext();
@@ -168,20 +227,30 @@ export async function logoutClear() {
   await clearEverything();
 
   try {
-    push('/');
+    push('/login');
     location.reload();
   } catch (e) {
     /* ignore if reload unavailable */
   }
 
   try {
-    push('/');
+    push('/login');
   } catch (e) {
     /* ignore if push unavailable */
   }
 }
 
 export async function logout(clearLocalData = true) {
+  const token = readToken();
+
+  /*
+   * Logout is deliberately token-first and synchronous: the token is what every
+   * other window reads to decide whether it may show the dashboard, so removing
+   * it here is what makes the logout immediate everywhere rather than only in
+   * the window the button was clicked in.
+   */
+  clearSessionStorage();
+
   auth.set({
     token: null,
     user_id: null,
@@ -193,15 +262,17 @@ export async function logout(clearLocalData = true) {
     isAuthenticated: false,
   });
 
-  try {
-    localStorage.clear();
-  } catch (e) {}
-  try {
-    sessionStorage.clear();
-  } catch (e) {}
+  /* Then the server's copy, so the token cannot be replayed. */
+  await deleteServerSession(token);
+
+  if (clearLocalData) {
+    try {
+      sessionStorage.clear();
+    } catch (e) {}
+  }
 
   try {
-    push('/');
+    push('/login');
   } catch (e) {
     /* ignore if push unavailable */
   }

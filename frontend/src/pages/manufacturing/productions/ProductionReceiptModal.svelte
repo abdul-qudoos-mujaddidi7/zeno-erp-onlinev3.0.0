@@ -5,6 +5,11 @@ import { settingsApi } from '../../../api/settingsApi.js';
   import { productionApi } from '../../../api/productionApi.js';
 
   import { t, lang, translate_org_type,shortID } from '../../../i18n/i18n.js';
+  import { amountInWords } from '../../../utils/amountInWords.js';
+  import { currencyLabels } from '../../../utils/currencyLabel.js';
+
+  /* The bill's own amount, spelled out under the figures. */
+  $: totalInWords = amountInWords(total, $lang, currencyLabels(production?.currency, t));
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
@@ -379,6 +384,11 @@ let showAccountBalance = "-";
                   {Number(paid || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
                   {t(production?.currency) || ''}
                 </div>
+              </div>
+
+              <!-- The amount stated twice: the figures above, the words here. -->
+              <div class="words-line" style="margin-top:6px;">
+                <span dir="ltr">{totalInWords}</span>
               </div>
 
               <!-- <div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;"><div>{t("Total")}</div><div class="right">{total.toFixed(2)} {t(production?.currency) || ''}</div></div> -->

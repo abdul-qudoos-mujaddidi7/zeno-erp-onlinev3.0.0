@@ -4,6 +4,11 @@
 import { settingsApi } from '../../../api/settingsApi.js';
   import { productionApi } from '../../../api/productionApi.js';
   import { t, lang, translate_org_type } from '../../../i18n/i18n.js';
+  import { amountInWords } from '../../../utils/amountInWords.js';
+  import { currencyLabels } from '../../../utils/currencyLabel.js';
+
+  /* The payable amount, spelled out under the figures. */
+  $: totalInWords = amountInWords(total, $lang, currencyLabels(production?.currency, t));
   import { showDate } from '../../../calendar.js';
   import {push} from 'svelte-spa-router';
 import { currencyApi } from '../../../api/currencyApi.js';
@@ -203,6 +208,11 @@ import { productApi } from '../../../api/productApi.js';
               <tr>
                 <td class="p-2">{t('Due')}</td>
                 <td class="p-2 fw-bold">{Number(due).toLocaleString(undefined, { maximumFractionDigits: 3 })} {t(production?.currency) || ''}</td>
+              </tr>
+
+              <!-- The bill states its amount twice: figures above, words here. -->
+              <tr>
+                <td class="p-2 fw-bold" style="font-size:10pt;" dir="ltr" colspan="2">{totalInWords}</td>
               </tr>
             </tbody>
           </table>

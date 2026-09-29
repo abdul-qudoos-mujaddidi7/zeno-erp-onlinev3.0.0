@@ -12,6 +12,8 @@ import { salePaymentApi } from '../../../api/salePaymentApi.js';
   let WhatsappModalRef = null;
 
   import { t, lang, translate_org_type, shortID } from '../../../i18n/i18n.js';
+  import { amountInWords } from '../../../utils/amountInWords.js';
+  import { currencyLabels } from '../../../utils/currencyLabel.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
@@ -333,6 +335,13 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
               </tr>
               </tbody>
             </table>
+
+            {#if appointment?.fee != 0}
+              <!-- The fee stated twice: figures above, words here. -->
+              <div class="words-line">
+                <span class="fw-bold">{amountInWords(appointment?.fee, $lang, currencyLabels(appointment?.currency, t))}</span>
+              </div>
+            {/if}
 
             {#if appointment?.description && appointment?.description !== ''}
               <div class="divider"></div>

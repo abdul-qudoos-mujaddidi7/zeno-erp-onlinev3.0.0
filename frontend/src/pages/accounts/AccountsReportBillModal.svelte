@@ -2,7 +2,8 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import AppModal from '../../components/common/AppModal.svelte';
   import { showDate } from '../../calendar.js';
-  import { t } from '../../i18n/i18n.js';
+  import { t, lang } from '../../i18n/i18n.js';
+  import { amountInWords } from '../../utils/amountInWords.js';
 import { settingsApi } from '../../api/settingsApi.js';
 
   export let accounts = [];
@@ -515,6 +516,19 @@ import { settingsApi } from '../../api/settingsApi.js';
                     </span>
                   {/if}
                 </span>
+              </td>
+            </tr>
+
+            <!--
+              Every currency total is spelled out under its own figure: the
+              statement is a money document, so each amount reads in words too.
+            -->
+            <tr class="words-row">
+              <td
+                colspan="4"
+                style="font-size:9pt;"
+              >
+                {amountInWords(total.balanceNumeric, $lang, { currency: total.balanceCurrency })}
               </td>
             </tr>
           {/each}

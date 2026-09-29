@@ -33,6 +33,13 @@ const AMBIGUOUS_USERNAME_MESSAGE =
   "This username is used in more than one organization. Please type the full username.";
 
 /*
+ * How long a login lasts, in hours. A session is valid for exactly one day;
+ * after that the token is refused and the operator signs in again.
+ */
+const SESSION_TTL_HOURS = 24;
+const SESSION_TTL_SECONDS = SESSION_TTL_HOURS * 60 * 60;
+
+/*
  * Accounts whose stored name ends with the typed name.
  *
  * Accounts created in Settings → Users are stored under their organization's
@@ -199,14 +206,24 @@ router.post("/login", async (req, res) => {
   }
 
   const token = generateToken();
-  // const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
+  /*
+   * The expiry is written by the database, not by Node, and it is written as
+   * "now + 24 hours" instead of an absolute instant.
+   *
+   * Both readers of this column (middleware/auth.js and the system repository)
+   * decide with `expires_at > NOW()`, and NOW() is the database server's own
+   * wall clock — here it runs at +04:30 while the driver is configured with
+   * timezone 'Z'. A Date computed in Node would therefore be stored 4.5 hours
+   * behind NOW() and a "24 hour" token would really die after 19.5 hours.
+   * Letting MySQL add the interval to its own NOW() keeps the lifetime exactly
+   * 24 hours whatever clock the server runs on.
+   */
   const now = new Date().toISOString().slice(0, 23).replace("T", " ");
-  console.log(user.local_id);
   await db.execute(
-    "INSERT INTO auth_tokens (user_id, token, expires_at, created_at) VALUES (?, ?, ?, ?)",
-    [String(user.local_id), token, expires, now],
+    `INSERT INTO auth_tokens (user_id, token, expires_at, created_at)
+     VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ${SESSION_TTL_HOURS} HOUR), ?)`,
+    [String(user.local_id), token, now],
   );
 
   let org_type = await db.execute(
@@ -239,6 +256,14 @@ router.post("/login", async (req, res) => {
   }
   res.json({
     token,
+    /*
+     * How long the client may keep this token, in seconds from receipt.
+     *
+     * An absolute timestamp would have to cross the database's clock above;
+     * a duration does not, so the browser can count 24 hours of its own and
+     * land on the login page before the server starts refusing requests.
+     */
+    expires_in: SESSION_TTL_SECONDS,
     settings: settings,
     org_id: user.org_id,
     org_type: user.org_type,
@@ -251,6 +276,40 @@ router.post("/login", async (req, res) => {
     subscription: mainSubscription,
     permissions:user.permissions ? user.permissions : null,
   });
+});
+
+/*
+ * Logout deletes the token itself, so the session is over everywhere and not
+ * just in the window that was clicked.
+ *
+ * The browser clears its own copy first (see authService.logout), which is what
+ * actually stops another window from reopening the dashboard; this call is what
+ * makes the token unusable on the server too — otherwise a copy that leaked
+ * into a cache, a log or another device would stay valid for the rest of its
+ * 24 hours.
+ *
+ * It is deliberately not behind the auth middleware: an expired token must
+ * still be able to remove itself, and the middleware would answer 401 before
+ * the row could be deleted.
+ */
+router.post("/logout", async (req, res) => {
+  const header = req.headers.authorization || "";
+  const token = String(header).replace(/^Bearer\s+/i, "").trim();
+
+  if (token) {
+    try {
+      await db.execute("DELETE FROM auth_tokens WHERE token = ?", [token]);
+    } catch (error) {
+      /*
+       * The browser has already dropped its token, so a failed delete must not
+       * turn into a failed logout: the operator is signed out either way, and
+       * the row is inert once its 24 hours are up.
+       */
+      console.error("Failed to delete session token:", error.message);
+    }
+  }
+
+  res.json({ success: true });
 });
 
 router.post("/validate-register", async (req, res) => {

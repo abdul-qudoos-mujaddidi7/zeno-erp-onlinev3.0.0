@@ -1,6 +1,11 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte';
   import { t, lang, translate_org_type } from '../../../i18n/i18n';
+  import { amountInWords } from '../../../utils/amountInWords.js';
+  import { currencyLabels } from '../../../utils/currencyLabel.js';
+
+  /* The bill's own amount, spelled out under the figures. */
+  $: totalInWords = amountInWords(total, $lang, currencyLabels(bom?.currency, t));
   import { settingsApi } from '../../../api/settingsApi.js';
   import { productApi } from '../../../api/productApi.js';
   import { bomApi } from '../../../api/bomApi.js';
@@ -181,6 +186,11 @@
               <div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px;">
                 <div>{t('Total')}</div>
                 <div class="right">{Number(total).toFixed(2)} {t(bom?.currency) || ''}</div>
+              </div>
+
+              <!-- The amount stated twice: the figures above, the words here. -->
+              <div class="words-line" style="margin-top:6px;">
+                <span dir="ltr">{totalInWords}</span>
               </div>
             </div>
 

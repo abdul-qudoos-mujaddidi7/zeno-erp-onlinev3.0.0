@@ -7,6 +7,14 @@
   import AppModal from '../../components/common/AppModal.svelte';
 
   import { t, lang, translate_org_type ,settings_all} from '../../i18n/i18n';
+  import { amountInWords } from '../../utils/amountInWords.js';
+  import { currencyLabels } from '../../utils/currencyLabel.js';
+
+  /*
+   * The bill's own amount, spelled out under the figures, in the language the
+   * receipt is printed in.
+   */
+  $: totalInWords = amountInWords(total, $lang, currencyLabels(purchase?.currency, t));
 import { accountApi } from '../../api/accountApi.js';
 
 
@@ -265,6 +273,11 @@ import { accountApi } from '../../api/accountApi.js';
                 > -->
                 <div>{t('Due')}</div>
                 <div class="right">{due} {t(purchase?.currency) || ''}</div>
+              </div>
+
+              <!-- The amount stated twice: the figures above, the words here. -->
+              <div class="words-line" style="margin-top:6px;">
+                <span dir="ltr">{totalInWords}</span>
               </div>
             </div>
 

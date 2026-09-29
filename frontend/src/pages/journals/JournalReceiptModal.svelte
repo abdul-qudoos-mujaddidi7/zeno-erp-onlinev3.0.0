@@ -6,6 +6,8 @@
   import WhatsappModal from '../WhatsappModal.svelte';
   let WhatsappModalRef = null;
   import { t, lang, translate_org_type, shortID } from '../../i18n/i18n.js';
+  import { amountInWords } from '../../utils/amountInWords.js';
+  import { currencyLabels } from '../../utils/currencyLabel.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   import { calculateBalanceOfAccount } from '../accounts/AccountsHelper.js';
@@ -333,6 +335,10 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
                   })}
                   {t(journal?.currency)}</span>
               </div>
+              <!-- The amount stated twice: figures above, words here. -->
+              <div class="words-line">
+                <span class="fw-bold">{amountInWords(journal?.first_entry_debit, $lang, currencyLabels(journal?.currency, t))}</span>
+              </div>
             {/if}
             {#if journal?.first_entry_credit != 0}<div>
                 {t('Credit')}:
@@ -341,6 +347,10 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
                     maximumFractionDigits: 3,
                   })}
                   {t(journal?.currency)}</span>
+              </div>
+              <!-- The amount stated twice: figures above, words here. -->
+              <div class="words-line">
+                <span class="fw-bold">{amountInWords(journal?.first_entry_credit, $lang, currencyLabels(journal?.currency, t))}</span>
               </div>
             {/if}
             <div class="divider"></div>

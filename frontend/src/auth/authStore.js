@@ -5,16 +5,41 @@ import {
   readStoredPermissions,
   writeStoredPermissions,
 } from './permissions.js';
+import { clearSessionStorage, hasValidSession } from '../utils/session.js';
+
+/*
+ * May this tab open a dashboard?
+ *
+ * A token is not enough on its own: a session lasts 24 hours, so a stored token
+ * whose deadline has passed has to be treated as no token at all. Deciding here
+ * — once, before the store exists — is what makes a tab opened a day later land
+ * on the login page instead of drawing a dashboard whose every request would
+ * come back 401.
+ *
+ * The expired token is removed rather than left in place, because the API client
+ * and the media loader read localStorage directly and would otherwise keep
+ * sending a token the server will refuse. Language and theme are left alone;
+ * they are settings, not credentials.
+ */
+const sessionIsValid = hasValidSession();
+
+if (!sessionIsValid) {
+  clearSessionStorage();
+}
+
+function stored(key) {
+  return sessionIsValid ? localStorage.getItem(key) : null;
+}
 
 export const auth = writable({
-  token: localStorage.getItem('token'),
-  user_id: localStorage.getItem('user_id'),
-  org_id: localStorage.getItem('org_id'),
-  username: localStorage.getItem('username'),
-  role_id: localStorage.getItem('role_id'),
-  subscription: localStorage.getItem('subscription'),
-  permissions: readStoredPermissions(),
-  isAuthenticated: !!localStorage.getItem('token'),
+  token: stored('token'),
+  user_id: stored('user_id'),
+  org_id: stored('org_id'),
+  username: stored('username'),
+  role_id: stored('role_id'),
+  subscription: stored('subscription'),
+  permissions: sessionIsValid ? readStoredPermissions() : [],
+  isAuthenticated: sessionIsValid,
 });
 
 

@@ -7,6 +7,11 @@
   let WhatsappModalRef = null;
 
   import { t, lang, translate_org_type, shortID,settings_all } from '../../i18n/i18n.js';
+  import { amountInWords } from '../../utils/amountInWords.js';
+  import { currencyLabels } from '../../utils/currencyLabel.js';
+
+  /* The payable amount, spelled out under the figures. */
+  $: payableInWords = amountInWords(saleData?.payable, $lang, currencyLabels(saleData?.currency, t));
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
@@ -257,6 +262,13 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
                 {#if saleData.expenses}<div class="col border-start">{t('Expenses')}: <strong><span dir='ltr'>{saleData.expenses}</span> {t(saleData.currency)}</strong></div>{/if}
                 <div class="col border-start">{t('Discount')}: <strong> <span dir='ltr'>{saleData.discount}</span> {t(saleData.currency)}</strong></div>
                 <div class="col border-start">{t('Payable')}: <strong><span dir='ltr'>{saleData.payable}</span> {t(saleData.currency)}</strong></div>
+              </div>
+
+              <!-- The bill states its amount twice: figures above, words here. -->
+              <div class="row">
+                <div class="col">
+                  <strong>{payableInWords}</strong>
+                </div>
               </div>
               <hr class="my-1" />
               <div class="row">

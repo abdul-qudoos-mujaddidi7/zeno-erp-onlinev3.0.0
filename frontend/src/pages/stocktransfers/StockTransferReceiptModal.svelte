@@ -6,7 +6,12 @@ import { settingsApi } from '../../api/settingsApi.js';
   import { productApi } from "../../api/productApi.js";
 
   import { t, lang, translate_org_type } from "../../i18n/i18n.js";
+  import { amountInWords } from "../../utils/amountInWords.js";
+  import { currencyLabels } from "../../utils/currencyLabel.js";
   $: _lang = $lang;
+
+  /* The transfer's amount stated again in words, in the receipt's language. */
+  $: totalInWords = amountInWords(total, $lang, currencyLabels(stocktransfer?.currency, t));
   $: _translate_org_type = $translate_org_type;
 
   import { showDate } from "../../calendar.js";
@@ -221,6 +226,11 @@ import { warehouseApi } from '../../api/warehouseApi.js';
                   {Number(stocktransfer?.total_amount || 0).toFixed(2)}
                   {t(stocktransfer?.currency) || ""}
                 </div>
+              </div>
+
+              <!-- The amount stated twice: the figures above, the words here. -->
+              <div class="words-line" style="margin-top:6px;">
+                <span dir="ltr">{totalInWords}</span>
               </div>
               
 

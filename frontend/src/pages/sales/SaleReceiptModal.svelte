@@ -18,6 +18,8 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   
   import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   import { calculateDiscountAmount } from './SalesHelper.js';
+  import { amountInWords } from '../../utils/amountInWords.js';
+  import { currencyLabels } from '../../utils/currencyLabel.js';
   import {
     billChange,
     formatContactPhone,
@@ -521,6 +523,13 @@ td {
   .pay-row { font-weight: 600; }
 
   /* NET Total stays the strongest row of the slip. */
+
+  /* The total spelled out: smaller than the figures it restates. */
+  .items-table .words-row td {
+    font-size: 11px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
   .items-table .nettotal-row td { font-size: 15px; font-weight: 700; }
 
   /*
@@ -731,6 +740,13 @@ td {
   $: itemsSum = itemsSubtotal(items);
   $: change = billChange(total, paidInSaleCurrency);
 
+  /*
+   * The same total, spelled out, printed under the figures. A bill states its
+   * amount twice so a hand-altered digit cannot pass unnoticed, and the words
+   * are read in the slip's own language.
+   */
+  $: totalInWords = amountInWords(total, $lang, currencyLabels(sale?.currency, t));
+
   let showAccountBalance = '-';
 
   let balance = {};
@@ -903,6 +919,20 @@ td {
                     <span class="fit-amount">{formatMoney(total)}&nbsp;{t(sale?.currency) || ''}</span>
                   </td>
                 </tr>
+
+                <!--
+                  The total stated again in words, in the slip's own language.
+                  It spans all three columns because a spelled-out amount is
+                  wider than any single money column of a 74mm slip, and it
+                  takes the amount's own alignment ('end') so the words read
+                  directly under the figure they restate instead of under the
+                  label on the far side of the row.
+                -->
+                <tr class="words-row">
+                  <td class="end" colspan="3">
+                    <span dir="ltr">{totalInWords}</span>
+                  </td>
+                </tr>
               </tbody>
             </table>
 
@@ -1050,6 +1080,13 @@ td {
   .pay-row { font-weight: 600; }
 
   /* NET Total stays the strongest row of the slip. */
+
+  /* The total spelled out: smaller than the figures it restates. */
+  .items-table .words-row td {
+    font-size: 11px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
   .items-table .nettotal-row td { font-size: 15px; font-weight: 700; }
 
   /*

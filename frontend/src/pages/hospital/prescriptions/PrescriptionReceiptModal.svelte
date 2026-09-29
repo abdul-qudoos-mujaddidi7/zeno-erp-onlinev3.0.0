@@ -4,6 +4,11 @@ import { productUnitApi } from '../../../api/productUnitApi.js';
 import { settingsApi } from '../../../api/settingsApi.js';
 
   import { t, lang, translate_org_type, shortID } from '../../../i18n/i18n.js';
+  import { amountInWords } from '../../../utils/amountInWords.js';
+  import { currencyLabels } from '../../../utils/currencyLabel.js';
+
+  /* The bill's own amount, spelled out under the figures. */
+  $: totalInWords = amountInWords(total, $lang, currencyLabels(prescription?.currency, t));
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
@@ -435,6 +440,11 @@ td {
                   {Number(paid || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
                   {t(prescription?.currency) || ''}
                 </div>
+              </div>
+
+              <!-- The amount stated twice: the figures above, the words here. -->
+              <div class="words-line" style="margin-top:6px;">
+                <span dir="ltr">{totalInWords}</span>
               </div>
 
               <div style="display:flex;justify-content:space-between;margin-top:4px;">
