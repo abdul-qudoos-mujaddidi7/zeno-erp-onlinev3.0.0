@@ -17,6 +17,8 @@
   import { accountApi } from '../../api/accountApi.js';
   import { productApi } from '../../api/productApi.js';
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../lib/pagination.js';
+  import { aggregateSelectedProductItems } from './productReportAggregation.js';
+  import { oneMonthDateWindow } from './reportDateRange.js';
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -55,7 +57,7 @@
   let sortDirection = 'desc';
 
   function defaultDateWindow() {
-    return { from: '', to: '' };
+    return oneMonthDateWindow();
   }
 
   function requestedItemType() {
@@ -85,21 +87,27 @@
     try {
       const lookupsPromise = loadLookups();
 
-      const response = await accountApi.getProductItems(account_id, {
-        item_type: requestedItemType(),
-        product_id: selectedProduct !== 'all' ? Number(selectedProduct) : undefined,
-        currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
-        search: searchTerm.trim(),
-        date_from: fromDate || undefined,
-        date_to: toDate || undefined,
-        page: currentPage,
-        limit: itemsPerPage,
-        skip_count: 1,
-      });
+      const productSelected = selectedProduct !== 'all';
+      const response = productSelected
+        ? await fetchFilteredItems()
+        : await accountApi.getProductItems(account_id, {
+            item_type: requestedItemType(),
+            currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
+            search: searchTerm.trim(),
+            date_from: fromDate || undefined,
+            date_to: toDate || undefined,
+            page: currentPage,
+            limit: itemsPerPage,
+            skip_count: 1,
+          });
 
       if (requestId !== loadRequestId) return;
 
-      items = response?.data || [];
+      const responseRows = Array.isArray(response) ? response : response?.data || [];
+      const productTotal = productSelected
+        ? aggregateSelectedProductItems(responseRows)
+        : null;
+      items = productTotal ? [productTotal] : responseRows;
 
       const missingProductIds = [
         ...new Set(
@@ -134,7 +142,7 @@
         }
       }
 
-      const hasMore = Boolean(response?.meta?.hasMore);
+      const hasMore = productSelected ? false : Boolean(response?.meta?.hasMore);
       totalPages = hasMore
         ? Math.max(currentPage + 1, currentPage)
         : Math.max(currentPage, items.length ? currentPage : 1);
@@ -156,8 +164,9 @@
   }
 
   onMount(async () => {
-    fromDate = '';
-    toDate = '';
+    const defaultRange = defaultDateWindow();
+    fromDate = defaultRange.from;
+    toDate = defaultRange.to;
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     bootstrapped = true;
     await load();
@@ -225,11 +234,7 @@
     }, {});
   }
 
-  /*
-   * The table only holds the current page. For PDF/Excel exports,
-   * fetch every row that matches the active filters instead.
-   */
-  async function fetchAllItemsForExport() {
+  async function fetchFilteredItems() {
     const pageSize = 200;
     const all = [];
     let page = 1;
@@ -249,12 +254,19 @@
 
       const rows = response?.data || [];
       all.push(...rows);
-
       if (!rows.length || !response?.meta?.hasMore) break;
       page += 1;
     }
 
     return all;
+  }
+
+  /*
+   * The table only holds the current page. For PDF/Excel exports,
+   * fetch every row that matches the active filters instead.
+   */
+  async function fetchAllItemsForExport() {
+    return fetchFilteredItems();
   }
 
   async function exportProducts(format) {
@@ -439,9 +451,17 @@
         </svelte:fragment>
         {#each paginatedItems as row}
           <tr>
-            <td><span class="report-date">{@html showDate(row.created_at)}</span></td>
             <td>
-              {#if row.sale_id}
+              {#if row.is_product_total}
+                <span class="report-total-label">{t('Total')}</span>
+              {:else}
+                <span class="report-date">{@html showDate(row.created_at)}</span>
+              {/if}
+            </td>
+            <td>
+              {#if row.is_product_total}
+                <span>{row.source_count} {t('Sale Items')}</span>
+              {:else if row.sale_id}
                 <button class="report-link" on:click={() => push(`/dashboard/sales/${row.sale_id}`)}
                   >{row.document_number || shortID(row.sale_id)}</button>
               {/if}
@@ -451,7 +471,9 @@
               {/if}
             </td>
             <td>
-              {#if row.account_id}
+              {#if row.is_product_total}
+                <span>{row.account_count} {t('Accounts')}</span>
+              {:else if row.account_id}
                 <button class="product-link" on:click={() => push(`/dashboard/account/${row.account_id}?tab=financial-report`)}
                   >{row.account_name_fa || row.account_name || '—'}</button>
               {:else}
@@ -463,22 +485,44 @@
                 >{row.product_name || products.find((product) => product.id == row.product_id)?.name || '—'}</button>
             </td>
             <td class="col-start fw-bold">
-              <span class="amount-inline">
-                <span dir="ltr">{Number(row.unit_price).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
-                <span>{t(row.currency)}</span>
-              </span>
+              {#if row.is_product_total}
+                <span aria-label={t('Not applicable')}>—</span>
+              {:else}
+                <span class="amount-inline">
+                  <span dir="ltr">{Number(row.unit_price).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                  <span>{t(row.currency)}</span>
+                </span>
+              {/if}
             </td>
             <td class="col-start">
-              <span class="amount-inline">
-                <span dir="ltr">{Number(row.quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
-                <span>{row.product_unit_name || units.find((unit) => unit.id == row.product_unit_id)?.name || ''}</span>
-              </span>
+              {#if row.is_product_total}
+                {#each Object.entries(row.quantities) as [unitName, quantity]}
+                  <span class="amount-inline aggregate-line">
+                    <span dir="ltr">{Number(quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                    <span>{unitName}</span>
+                  </span>
+                {/each}
+              {:else}
+                <span class="amount-inline">
+                  <span dir="ltr">{Number(row.quantity).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                  <span>{row.product_unit_name || units.find((unit) => unit.id == row.product_unit_id)?.name || ''}</span>
+                </span>
+              {/if}
             </td>
             <td class="col-start fw-bold">
-              <span class="amount-inline">
-                <span dir="ltr">{Number(row.subtotal).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
-                <span>{t(row.currency)}</span>
-              </span>
+              {#if row.is_product_total}
+                {#each Object.entries(row.balances) as [currencyCode, balance]}
+                  <span class="amount-inline aggregate-line">
+                    <span dir="ltr">{Number(balance).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                    <span>{t(currencyCode)}</span>
+                  </span>
+                {/each}
+              {:else}
+                <span class="amount-inline">
+                  <span dir="ltr">{Number(row.subtotal).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                  <span>{t(row.currency)}</span>
+                </span>
+              {/if}
             </td>
           </tr>
         {/each}
@@ -548,6 +592,14 @@
     align-items: center;
     gap: 4px;
     white-space: nowrap;
+  }
+
+  .aggregate-line {
+    display: flex;
+  }
+
+  .report-total-label {
+    font-weight: 800;
   }
 
 </style>

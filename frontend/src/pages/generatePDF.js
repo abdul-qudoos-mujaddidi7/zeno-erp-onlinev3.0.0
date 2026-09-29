@@ -24,6 +24,7 @@ import autoTable from 'jspdf-autotable';
 import { t, shortID } from '../i18n/i18n';
 import { accountApi } from '../api/accountApi.js';
 import { accountTypeApi } from '../api/accountTypeApi.js';
+import { sumReportQuantity } from './reportQuantity.js';
 
 /*
  * ZenoERP modern PDF report generator
@@ -3192,6 +3193,10 @@ function buildReportMetrics({
   }
 
   if (type === 'account_products_report') {
+    const totalQuantity = sumReportQuantity(
+      normalizeItems(filteredItems),
+    );
+
     return [
       {
         label: t('Date Range'),
@@ -3200,8 +3205,10 @@ function buildReportMetrics({
         tone: 'amber',
       },
       {
-        label: t('Items'),
-        value: String(length),
+        label: t('Total Quantity'),
+        value: totalQuantity.toLocaleString(undefined, {
+          maximumFractionDigits: 3,
+        }),
         icon: 'receipt',
         tone: 'green',
       },
@@ -3752,7 +3759,11 @@ function buildProductTransactionsTable(
   };
 }
 
-function buildAccountProductsTable(items, rtl) {
+function buildAccountProductsTable(
+  items,
+  rtl,
+  printableWidth,
+) {
   const headers = [
     '#',
     t('Date'),
@@ -3778,21 +3789,27 @@ function buildAccountProductsTable(items, rtl) {
     return rtl ? [...row].reverse() : row;
   });
 
-  /*
-   * Fill the complete landscape table width.
-   *
-   * A4 landscape width: 297mm
-   * Left and right margins: 9mm + 9mm
-   * Available table width: 279mm
-   */
+  /* Scale the preferred column proportions to the real page width. */
+  const preferredWidths = [10, 34, 40, 89, 32, 32, 42];
+  const preferredTotal = preferredWidths.reduce(
+    (total, width) => total + width,
+    0,
+  );
+  const widthScale =
+    (Number(printableWidth) || preferredTotal) /
+    preferredTotal;
+  const scaledWidths = preferredWidths.map(
+    (width) => width * widthScale,
+  );
+
   const ltrColumnStyles = {
-    0: { cellWidth: 10, halign: 'center' },
-    1: { cellWidth: 34, halign: 'center' },
-    2: { cellWidth: 40, halign: rtl ? 'right' : 'left' },
-    3: { cellWidth: 89, halign: rtl ? 'right' : 'left' },
-    4: { cellWidth: 32, halign: 'center' },
-    5: { cellWidth: 32, halign: 'center' },
-    6: { cellWidth: 42, halign: 'center' },
+    0: { cellWidth: scaledWidths[0], halign: 'center' },
+    1: { cellWidth: scaledWidths[1], halign: 'center' },
+    2: { cellWidth: scaledWidths[2], halign: rtl ? 'right' : 'left' },
+    3: { cellWidth: scaledWidths[3], halign: rtl ? 'right' : 'left' },
+    4: { cellWidth: scaledWidths[4], halign: 'center' },
+    5: { cellWidth: scaledWidths[5], halign: 'center' },
+    6: { cellWidth: scaledWidths[6], halign: 'center' },
   };
 
   const columnStyles = rtl
@@ -3967,7 +3984,11 @@ function buildTableData({
   }
 
   if (type === 'account_products_report') {
-    return buildAccountProductsTable(items, rtl);
+    return buildAccountProductsTable(
+      items,
+      rtl,
+      printableWidth,
+    );
   }
 
   return buildSalesPurchaseTable(
