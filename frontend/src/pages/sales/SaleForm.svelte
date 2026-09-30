@@ -33,6 +33,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   const CUSTOMER_TYPE_ID = 4;
 
   $: enable_due_date = $settings_all.find((s) => s.key === 'enable_due_date')?.value == 1;
+  $: enable_visitor = $settings_all.find((s) => s.key === 'enable_visitor')?.value == 1;
   $: enable_batch_setting = $settings_all.find((s) => s.key === 'enable_batch')?.value == 1;
   $: enable_a4_default_print_mode =
     $settings_all.find((s) => s.key === 'enable_a4_default_print_mode')?.value == 1;
@@ -248,6 +249,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   let modalRef;
   let accounts = [];
   let visitors = [];
+  let originalVisitorAccountId = null;
   let products = [];
   let allAccountTypes = [];
   let treasury_ID = 0;
@@ -353,7 +355,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
        * Visitors are their own role, not customers: they are offered here as
        * an optional share of the sale's benefit.
        */
-      lookupAccounts({ role: 'visitor' }),
+      enable_visitor ? lookupAccounts({ role: 'visitor' }) : Promise.resolve([]),
       accountTypeApi.getAll({ status: 1 }),
       warehouseApi.getAll({ status: 1 }),
       currencyApi.getAll({ status: 1 }),
@@ -451,6 +453,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
         invoice_status: sale.invoice_status,
         status: sale.status,
       };
+      originalVisitorAccountId = sale.visitor_account_id || null;
 
       date = sale.invoice_date.slice(0, 10);
       form.invoice_date = date;
@@ -1271,7 +1274,9 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
          * Sent as null when nobody is selected, which is what keeps an
          * ordinary sale free of any visitor journal.
          */
-        visitor_account_id: form.visitor_account_id || null,
+        visitor_account_id: enable_visitor
+          ? form.visitor_account_id || null
+          : originalVisitorAccountId,
         sale_type: form.sale_type,
         invoice_number: form.invoice_number,
         invoice_date: form.invoice_date,
@@ -1433,6 +1438,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       due_date: null,
       description: $settings_all.find((s) => s.key === 'default_sale_description')?.value || '',
     };
+    originalVisitorAccountId = null;
     items = [];
     paymentAmount = null;
     paymentDescription = '';
@@ -1839,50 +1845,6 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
         </div>
       </div>
 
-      {#if visitors.length > 0}
-        <div class="sale-field sale-field--visitor">
-          <div class="sale-field-label-row">
-            <span class="sale-field-label">
-              <i class="bi bi-person-badge" aria-hidden="true"></i>
-              {t('Visitor (optional)')}
-            </span>
-
-            {#if selectedVisitor}
-              <button
-                type="button"
-                class="sale-visitor-clear"
-                title={t('Clear')}
-                aria-label={t('Clear')}
-                on:click={() => (form.visitor_account_id = '')}>
-                <i class="bi bi-x-lg" aria-hidden="true"></i>
-              </button>
-            {/if}
-          </div>
-
-          <FilterSelect
-            variant="outline"
-            label={t('Visitor (optional)')}
-            icon="bi-person-badge"
-            value={form.visitor_account_id}
-            options={[
-              { value: '', label: t('No visitor') },
-              ...visitors.map((visitor) => ({
-                value: visitor.id,
-                label: visitorOptionLabel(visitor),
-              })),
-            ]}
-            on:change={(event) => (form.visitor_account_id = event.detail)} />
-
-          <small class="sale-visitor-hint">
-            {#if selectedVisitor}
-              {t('This visitor receives their agreed share of the benefit of this sale, not of its total.')}
-            {:else}
-              {t('Leave empty for an ordinary sale: the whole benefit stays with the company.')}
-            {/if}
-          </small>
-        </div>
-      {/if}
-
       <div class="sale-field">
         <span class="sale-field-label">
           <i class="bi bi-receipt" aria-hidden="true"></i>
@@ -1981,6 +1943,42 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
             on:change={handleSaleCurrencyChange} />
         {/if}
       </div>
+
+      {#if enable_visitor && visitors.length > 0}
+        <div class="sale-field sale-field--visitor">
+          <div class="sale-field-label-row">
+            <span class="sale-field-label">
+              <i class="bi bi-person-badge" aria-hidden="true"></i>
+              {t('Visitor (optional)')}
+            </span>
+
+            {#if selectedVisitor}
+              <button
+                type="button"
+                class="sale-visitor-clear"
+                title={t('Clear')}
+                aria-label={t('Clear')}
+                on:click={() => (form.visitor_account_id = '')}>
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+              </button>
+            {/if}
+          </div>
+
+          <FilterSelect
+            variant="outline"
+            label={t('Visitor (optional)')}
+            icon="bi-person-badge"
+            value={form.visitor_account_id}
+            options={[
+              { value: '', label: t('No visitor') },
+              ...visitors.map((visitor) => ({
+                value: visitor.id,
+                label: visitorOptionLabel(visitor),
+              })),
+            ]}
+            on:change={(event) => (form.visitor_account_id = event.detail)} />
+        </div>
+      {/if}
 
       <div class="sale-field sale-field--description">
         {#if enable_smart_description}
@@ -3233,20 +3231,9 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     grid-template-rows: auto;
   }
 
-  /*
-   * The visitor row sits on its own line: it is optional and only renders for
-   * organizations that have visitor accounts, so it must not disturb the
-   * fields above it at any breakpoint.
-   */
   .sale-field--visitor {
     grid-column: 1 / -1;
-    grid-template-rows: auto auto auto;
-  }
-
-  .sale-visitor-hint {
-    color: #7c8798;
-    font-size: 0.75rem;
-    line-height: 1.35;
+    grid-template-rows: 1rem auto;
   }
 
   .sale-visitor-clear {

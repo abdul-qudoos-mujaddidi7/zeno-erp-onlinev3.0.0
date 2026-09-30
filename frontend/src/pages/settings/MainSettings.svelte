@@ -306,6 +306,12 @@ import { settingsApi } from '../../api/settingsApi.js';
       {
         category: 'Sale',
         type: 'boolean',
+        key: 'enable_visitor',
+        value: '0',
+      },
+      {
+        category: 'Sale',
+        type: 'boolean',
         key: 'enable_smart_description',
         value: '0',
       },

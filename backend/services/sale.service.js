@@ -59,9 +59,20 @@ const fiscalPostingGuard =
  */
 const SALE_VISITOR_REFERENCE_TYPE = 'sale_visitor';
 
-/* The system account that gives up the benefit. Same account the exchange
- * benefit journals use, so company benefit is reported in one place. */
-const BENEFITS_ACCOUNT_CODE = 'BENEFITS';
+/*
+ * The account that carries the visitor's cut, as a cost of making the sale.
+ *
+ * Deliberately NOT the BENEFITS account. In this accounting model BENEFITS
+ * holds exchange gain/loss and nothing ever credits it with sale profit, so
+ * debiting it left that account at -10 with no offsetting 100 behind it: the
+ * company looked like it had lost the visitor's share instead of having earned
+ * the rest of the benefit.
+ *
+ * A visitor's commission is a cost of the sale, so EXPENSES carries it. The
+ * company's profit then comes out as the benefit minus that cost (100 - 10 =
+ * 90), the same place a commission belongs in any ordinary books.
+ */
+const VISITOR_COST_ACCOUNT_CODE = 'EXPENSES';
 
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
@@ -473,6 +484,92 @@ async function listSales({
   return result;
 }
 
+/**
+ * The Visitor Report: what each visitor brought, what they were given, and what
+ * the company kept of it.
+ *
+ * The commission comes from the sales themselves (`visitor_benefit`, the amount
+ * actually posted), never from a fresh percentage, so the report always agrees
+ * with the visitor's account and with what the sale wrote to the books.
+ *
+ * Totals are kept per currency: sales carry their own currency and a single
+ * cross-currency figure would be a made-up number.
+ */
+async function getVisitorReport({
+  user,
+  filters = {},
+}) {
+  const {
+    orgId,
+  } = getAuthenticatedIdentity(user);
+
+  const rows = await saleRepository.findVisitorReport(
+    db,
+    {
+      orgId,
+      dateFrom: filters.date_from,
+      dateTo: filters.date_to,
+      currency: filters.currency && filters.currency !== 'all'
+        ? filters.currency
+        : null,
+    },
+  );
+
+  const byCurrency = {};
+  const visitorIds = new Set();
+
+  for (const row of rows || []) {
+    const currency = row.currency || null;
+
+    if (!byCurrency[currency]) {
+      byCurrency[currency] = {
+        currency,
+        visitors: 0,
+        sales_count: 0,
+        total_amount: 0,
+        total_benefit: 0,
+        total_share: 0,
+        company_share: 0,
+        visitorIds: new Set(),
+      };
+    }
+
+    const bucket = byCurrency[currency];
+
+    bucket.sales_count += Number(row.sales_count) || 0;
+    bucket.total_amount += Number(row.total_amount) || 0;
+    bucket.total_benefit += Number(row.total_benefit) || 0;
+    bucket.total_share += Number(row.total_share) || 0;
+    bucket.company_share += Number(row.company_share) || 0;
+    bucket.visitorIds.add(String(row.visitor_account_id));
+
+    visitorIds.add(String(row.visitor_account_id));
+  }
+
+  const totals = Object.values(byCurrency).map((bucket) => {
+    bucket.visitors = bucket.visitorIds.size;
+    delete bucket.visitorIds;
+
+    return {
+      ...bucket,
+      total_amount: roundMoney(bucket.total_amount),
+      total_benefit: roundMoney(bucket.total_benefit),
+      total_share: roundMoney(bucket.total_share),
+      company_share: roundMoney(bucket.company_share),
+    };
+  });
+
+  return {
+    data: rows,
+    meta: {
+      visitors: visitorIds.size,
+      by_currency: Object.fromEntries(
+        totals.map((bucket) => [bucket.currency, bucket]),
+      ),
+    },
+  };
+}
+
 async function getSale({
   user,
   saleId,
@@ -688,7 +785,7 @@ async function clearVisitorBenefit(
  *
  * The double entry is:
  *
- *   BENEFITS   debit   the visitor's share  (the company gives that benefit up)
+ *   EXPENSES   debit   the visitor's share  (a cost of making this sale)
  *   visitor    credit  the visitor's share  (it is now owed to the visitor)
  *
  * and nothing else moves: the sale's own entry still charges the CUSTOMER the
@@ -823,20 +920,20 @@ async function syncVisitorBenefit(
     };
   }
 
-  const benefitsAccount =
+  const costAccount =
     await saleRepository.findAccountByCode(
       connection,
       {
         orgId,
-        code: BENEFITS_ACCOUNT_CODE,
+        code: VISITOR_COST_ACCOUNT_CODE,
       },
     );
 
-  if (!benefitsAccount) {
+  if (!costAccount) {
     throw new AppError(
-      'BENEFITS account not found.',
+      'EXPENSES account not found.',
       500,
-      'BENEFITS_ACCOUNT_NOT_FOUND',
+      'EXPENSES_ACCOUNT_NOT_FOUND',
     );
   }
 
@@ -854,7 +951,7 @@ async function syncVisitorBenefit(
           sale.description ||
           `Visitor benefit for Invoice #${sale.invoice_number || ''}`,
         currency: sale.currency || null,
-        first_entry_account: benefitsAccount.id,
+        first_entry_account: costAccount.id,
         first_entry_debit: share,
         first_entry_credit: 0,
         second_entry_account:
@@ -1124,9 +1221,9 @@ async function createSale({
 
     /*
      * Visitor process: when the sale was brought by a visitor, the agreed
-     * percentage of THIS sale's benefit is moved from BENEFITS to the
-     * visitor's account. The customer entry above is untouched, so the
-     * visitor share never changes what the customer owes.
+     * percentage of THIS sale's benefit is booked as a cost (EXPENSES) owed to
+     * the visitor. The customer entry above is untouched, so the visitor share
+     * never changes what the customer owes.
      */
     if (isConfirmed(data.invoice_status)) {
       await syncVisitorBenefit(
@@ -2124,7 +2221,7 @@ async function deleteSale({
 
     /*
      * The visitor's share dies with the sale: its own journal is removed so
-     * the BENEFITS debit and the visitor's credit both revert. The sale row
+     * the EXPENSES debit and the visitor's credit both revert. The sale row
      * is already soft-deleted, so only the journal is touched.
      */
     await clearVisitorBenefit(
@@ -3005,6 +3102,7 @@ async function deleteReturn({
 
 module.exports = {
   listSales,
+  getVisitorReport,
   getSale,
   createSale,
   updateSale,

@@ -124,6 +124,35 @@ export const saleApi = {
   },
 
   /*
+   * The Visitor Report: one aggregated row per visitor and currency, with the
+   * benefit they brought, the commission the sales posted to them and what the
+   * company kept. A date range and a currency are the only filters; the totals
+   * come back in `meta.by_currency`, one bucket per currency.
+   */
+  getVisitorReport({ date_from, date_to, currency } = {}) {
+    const params = new URLSearchParams();
+
+    if (date_from) {
+      params.set('date_from', String(date_from));
+    }
+
+    if (date_to) {
+      params.set('date_to', String(date_to));
+    }
+
+    if (currency && currency !== 'all') {
+      params.set('currency', String(currency));
+    }
+
+    const query = params.toString();
+
+    return api.get(
+      `${BASE_URL}/visitor-report${query ? `?${query}` : ''}`,
+      { cache: false },
+    );
+  },
+
+  /*
    * The invoice number the backend will stamp on the next confirmed sale.
    * Read-only: fetching it never consumes a number.
    */

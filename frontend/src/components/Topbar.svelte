@@ -26,6 +26,7 @@
   $: enable_generics = $settings_all.find((s) => s.key === 'enable_generics')?.value == 1;
   $: enable_brands = $settings_all.find((s) => s.key === 'enable_brands')?.value == 1;
   $: enable_services = $settings_all.find((s) => s.key === 'enable_services')?.value == 1;
+  $: enable_visitor = $settings_all.find((s) => s.key === 'enable_visitor')?.value == 1;
 
   $: enable_account_groups = $settings_all.find((s) => s.key === 'enable_account_groups')?.value == 1;
 
@@ -151,7 +152,11 @@
   }
   $: locQuery = $querystring || '';
   $: accountViewTab = new URLSearchParams(locQuery).get('tab') || 'info';
-  $: salesTab = new URLSearchParams(locQuery).get('tab') === 'products' ? 'products' : 'sales';
+  $: salesTab = (() => {
+    const tab = new URLSearchParams(locQuery).get('tab');
+
+    return ['products', ...(enable_visitor ? ['visitors'] : [])].includes(tab) ? tab : 'sales';
+  })();
   $: pageKey = (function () {
     // if dashboard/accounts/5, extract accounts part and show "Accounts - View"
     if (locPath.startsWith('/dashboard/account/') && locPath.split('/').length === 4) {
@@ -544,6 +549,10 @@
             <li class="nav-item">
               <a class="nav-link ${salesTab === 'products' ? 'active' : ''} py-0" href="/#/dashboard/sales?tab=products"><small>${t('Products Report')}</small></a>
             </li>
+            ${enable_visitor ? `<li class="nav-item d-flex align-items-center"><div class="nav-divider"></div></li>
+            <li class="nav-item">
+              <a class="nav-link ${salesTab === 'visitors' ? 'active' : ''} py-0" href="/#/dashboard/sales?tab=visitors"><small>${t('Visitor Report')}</small></a>
+            </li>` : ''}
           </ul>`;
       }
       case '/dashboard/prescriptions':

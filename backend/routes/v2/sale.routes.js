@@ -14,6 +14,7 @@ const {
   updateSaleSchema,
   saleIdParamsSchema,
   saleListQuerySchema,
+  visitorReportQuerySchema,
   nextInvoiceNumberQuerySchema,
   createPaymentSchema,
   paymentIdParamsSchema,
@@ -34,7 +35,8 @@ router.get(
 );
 
 /*
- * Registered before '/:id' so "next-number" is not parsed as a sale id.
+ * Registered before '/:id' so "next-number" and "visitor-report" are not
+ * parsed as sale ids.
  */
 router.get(
   '/next-number',
@@ -43,6 +45,16 @@ router.get(
   }),
   asyncHandler(
     saleController.nextNumber,
+  ),
+);
+
+router.get(
+  '/visitor-report',
+  validate({
+    query: visitorReportQuerySchema,
+  }),
+  asyncHandler(
+    saleController.visitorReport,
   ),
 );
 

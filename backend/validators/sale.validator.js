@@ -303,6 +303,26 @@ const updatePaymentSchema =
   paymentBodySchema.partial();
 
 /*
+ * Used by GET /sales/visitor-report. A report is a whole-table aggregate, so it
+ * takes a date range and an optional currency and nothing else: no pagination,
+ * no search, no sort. `currency=all` (or an empty value) means every currency,
+ * in which case the report groups its rows per currency.
+ */
+const visitorReportQuerySchema = z.object({
+  date_from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'date_from must be YYYY-MM-DD')
+    .optional(),
+
+  date_to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'date_to must be YYYY-MM-DD')
+    .optional(),
+
+  currency: z.string().trim().max(50).optional().default('all'),
+});
+
+/*
  * Used by GET /sales/next-number. `sale_type` decides which prefix the
  * counter is published under (POS- vs INV-).
  */
@@ -320,6 +340,7 @@ module.exports = {
   updateSaleSchema,
   saleIdParamsSchema: idParamsSchema,
   saleListQuerySchema,
+  visitorReportQuerySchema,
   nextInvoiceNumberQuerySchema,
   createPaymentSchema: paymentBodySchema,
   updatePaymentSchema,

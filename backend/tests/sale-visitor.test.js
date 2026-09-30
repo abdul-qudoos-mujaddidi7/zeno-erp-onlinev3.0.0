@@ -11,9 +11,12 @@
  *      visitor 50, never 1,000. The benefit is the sale's own stored figure,
  *      so a sale in an organization that does not use FIFO/LIFO layers (where
  *      `sale_items.profit` is never written) still pays its visitor.
- *   2. The share is posted as its own double entry, BENEFITS debit / visitor
+ *   2. The share is posted as its own double entry, EXPENSES debit / visitor
  *      credit, under reference_type 'sale_visitor' so the sale's own customer
- *      entry can never remove it by accident.
+ *      entry can never remove it by accident. It is a cost of the sale, so it
+ *      lands in EXPENSES and NOT in BENEFITS: debiting BENEFITS left that
+ *      account negative with no profit ever credited to it, while the company
+ *      had in fact kept the rest of the benefit (100 - 10 = 90).
  *   3. Only a confirmed sale with a visitor and a positive benefit posts
  *      anything; every other combination posts nothing at all and never
  *      charges the visitor for a loss.
@@ -56,7 +59,7 @@ const SALE_ID = 'SALE-1';
 const VISITOR_ACCOUNT_ID = '8841000000001';
 const VISITOR_TYPE_ID = 9;
 const CUSTOMER_TYPE_ID = 4;
-const BENEFITS_ACCOUNT_ID = '8841000000002';
+const EXPENSES_ACCOUNT_ID = '8841000000002';
 
 const REQUEST_CONTEXT = {
   ipAddress: '127.0.0.1',
@@ -137,11 +140,11 @@ function installStubs() {
   saleRepository.findItemsBySale = async () => state.items;
 
   saleRepository.findAccountByCode = async (conn, { code }) =>
-    code === 'BENEFITS'
+    code === 'EXPENSES'
       ? {
-          id: BENEFITS_ACCOUNT_ID,
-          local_id: BENEFITS_ACCOUNT_ID,
-          code: 'BENEFITS',
+          id: EXPENSES_ACCOUNT_ID,
+          local_id: EXPENSES_ACCOUNT_ID,
+          code: 'EXPENSES',
           status: 1,
         }
       : null;
@@ -226,7 +229,7 @@ test('the visitor gets its percentage of the benefit, not of the invoice', async
 
   assert.equal(journal.reference_id, SALE_ID);
   assert.equal(journal.reference_type, 'sale_visitor');
-  assert.equal(journal.first_entry_account, BENEFITS_ACCOUNT_ID);
+  assert.equal(journal.first_entry_account, EXPENSES_ACCOUNT_ID);
   assert.equal(journal.first_entry_debit, 50);
   assert.equal(journal.first_entry_credit, 0);
   assert.equal(

@@ -1253,8 +1253,93 @@ async function updateItemCosts(
   );
 }
 
+/*
+ * Per-visitor totals for the Visitor Report: one row per visitor account per
+ * currency, over the sales that visitor actually brought.
+ *
+ * Only confirmed, live sales count. The commission is `visitor_benefit` -- the
+ * amount the sale really posted to the visitor -- not a fresh percentage of the
+ * benefit, so a sale whose share was never posted (or was reversed) is reported
+ * as it stands in the books. `company_share` is what the company kept: the
+ * benefit minus that commission.
+ *
+ * Currency is part of the grouping because sales carry their own currency and
+ * adding different currencies together would be meaningless.
+ */
+async function findVisitorReport(
+  executor,
+  {
+    orgId,
+    dateFrom,
+    dateTo,
+    currency,
+  },
+) {
+  const conditions = [
+    's.org_id = ?',
+    's.status = 1',
+    "s.invoice_status = 'confirmed'",
+    's.visitor_account_id IS NOT NULL',
+  ];
+
+  const values = [
+    orgId,
+  ];
+
+  if (currency) {
+    conditions.push('s.currency = ?');
+    values.push(currency);
+  }
+
+  if (dateFrom) {
+    conditions.push('(s.invoice_date >= ? OR (s.invoice_date IS NULL AND s.created_at >= ?))');
+    values.push(dateFrom, kabulDateBoundaryUtc(dateFrom));
+  }
+
+  if (dateTo) {
+    conditions.push('(s.invoice_date < DATE_ADD(?, INTERVAL 1 DAY) OR (s.invoice_date IS NULL AND s.created_at < ?))');
+    values.push(dateTo, kabulDateBoundaryUtc(dateTo, true));
+  }
+
+  const [rows] = await executor.execute(
+    `
+      SELECT
+        s.visitor_account_id,
+        s.currency,
+        a.name AS visitor_name,
+        a.name_fa AS visitor_name_fa,
+        a.name_ps AS visitor_name_ps,
+        a.code AS visitor_code,
+        a.percentage AS visitor_percentage,
+        COUNT(*) AS sales_count,
+        SUM(COALESCE(s.total_amount, 0)) AS total_amount,
+        SUM(COALESCE(s.benefit, 0)) AS total_benefit,
+        SUM(COALESCE(s.visitor_benefit, 0)) AS total_share,
+        SUM(COALESCE(s.benefit, 0)) - SUM(COALESCE(s.visitor_benefit, 0)) AS company_share
+      FROM sales s
+      LEFT JOIN accounts a
+        ON a.org_id = s.org_id
+       AND a.local_id = s.visitor_account_id
+      WHERE ${conditions.join(' AND ')}
+      GROUP BY
+        s.visitor_account_id,
+        s.currency,
+        a.name,
+        a.name_fa,
+        a.name_ps,
+        a.code,
+        a.percentage
+      ORDER BY company_share DESC, s.currency ASC, s.visitor_account_id ASC
+    `,
+    values,
+  );
+
+  return rows;
+}
+
 module.exports = {
   findAll,
+  findVisitorReport,
   findByLocalId,
   findByInvoiceNumber,
   create,

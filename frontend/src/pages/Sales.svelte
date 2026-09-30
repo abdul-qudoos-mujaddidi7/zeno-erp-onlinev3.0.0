@@ -12,6 +12,7 @@
   import { applyCurrentFiscalYearRange } from '../utils/currentFiscalYear.js';
   import SaleReceiptModal from './sales/SaleReceiptModal.svelte';
   import ProductsReport from './accounts/ProductsReport.svelte';
+  import VisitorReport from './sales/VisitorReport.svelte';
   import SummaryCard from '../components/common/SummaryCard.svelte';
   import FilterSelect from '../components/common/FilterSelect.svelte';
   import FilterToolbar from '../components/common/FilterToolbar.svelte';
@@ -33,6 +34,7 @@ import { saleApi } from '../api/saleApi.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   $: enable_due_date = $settings_all.find((s) => s.key === 'enable_due_date')?.value == 1;
+  $: enable_visitor = $settings_all.find((s) => s.key === 'enable_visitor')?.value == 1;
   $: enable_a4_default_print_mode =
     $settings_all.find((s) => s.key === 'enable_a4_default_print_mode')?.value == 1;
   $: showBenefit = permissions?.some((p) => p.code === 'Benefit' && p.view);
@@ -87,15 +89,18 @@ import { saleApi } from '../api/saleApi.js';
 
   /*
    * The page shares the account-view tab convention: ?tab=products
-   * shows the Products Report (for the selected customer, if any).
+   * shows the Products Report (for the selected customer, if any) and
+   * ?tab=visitors shows the Visitor Report.
    */
+  $: SALES_TABS = enable_visitor ? ['sales', 'products', 'visitors'] : ['sales', 'products'];
   let activeTab = 'sales';
   let salesLoaded = false;
 
   function syncTabFromHash() {
     const hash = window.location.hash || '';
     const query = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '';
-    activeTab = new URLSearchParams(query).get('tab') === 'products' ? 'products' : 'sales';
+    const tab = new URLSearchParams(query).get('tab');
+    activeTab = SALES_TABS.includes(tab) ? tab : 'sales';
   }
   
   let searchTerm = '';
@@ -577,6 +582,8 @@ import { saleApi } from '../api/saleApi.js';
   <h3 class="permission-denied"><i class="bi bi-exclamation-triangle"></i>{t('No access allowed')}</h3>
 {:else if activeTab === 'products'}
   <ProductsReport account_id={account_id} itemType="sale" bind:selectedCurrency {currencies} />
+{:else if enable_visitor && activeTab === 'visitors'}
+  <VisitorReport {currencies} />
 {:else}
   <IndexPageLayout
     dir={t('dir')}

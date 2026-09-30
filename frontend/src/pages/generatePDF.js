@@ -972,6 +972,7 @@ function resolveReportTitle(type) {
     exchanges_report: t('Exchanges Report'),
     product_transactions: t('Product Transactions Report'),
     account_products_report: t('Account Products Report'),
+    visitor_report: t('Visitor Report'),
   };
 
   return titles[type] || t('Report');
@@ -3220,6 +3221,73 @@ function buildReportMetrics({
     ];
   }
 
+  if (type === 'visitor_report') {
+    /*
+     * The summary mirrors the four cards on the screen plus the date range.
+     * Every figure is summed per currency here from the rows themselves: a
+     * cross-currency total would be a made-up number.
+     */
+    const visitorRows = normalizeItems(filteredItems);
+
+    const sumByCurrency = (key) => visitorRows.reduce(
+      (totals, row) => {
+        const currency = row.currency || 'AFN';
+
+        totals[currency] =
+          (totals[currency] || 0) +
+          Number(row[key] || 0);
+
+        return totals;
+      },
+      {},
+    );
+
+    const visitorCount = new Set(
+      visitorRows.map((row) => String(row.visitor_account_id)),
+    ).size;
+
+    return [
+      {
+        label: t('Date Range'),
+        value: dateRange,
+        icon: 'calendar',
+        tone: 'amber',
+      },
+      {
+        label: t('Visitors'),
+        value: String(
+          extraInfo?.visitors ?? visitorCount,
+        ),
+        icon: 'user',
+        tone: 'blue',
+      },
+      {
+        label: t('Total Sales'),
+        value: formatCurrencyMap(sumByCurrency('total_amount'), ' | ') || '0',
+        icon: 'chart',
+        tone: 'blue',
+      },
+      {
+        label: t('Benefit'),
+        value: formatCurrencyMap(sumByCurrency('total_benefit'), ' | ') || '0',
+        icon: 'wallet',
+        tone: 'green',
+      },
+      {
+        label: t('Visitor Share'),
+        value: formatCurrencyMap(sumByCurrency('total_share'), ' | ') || '0',
+        icon: 'receipt',
+        tone: 'amber',
+      },
+      {
+        label: t('Company Share'),
+        value: formatCurrencyMap(sumByCurrency('company_share'), ' | ') || '0',
+        icon: 'coin',
+        tone: 'green',
+      },
+    ];
+  }
+
   if (type === 'sales') {
     return [
       {
@@ -3830,6 +3898,87 @@ function buildAccountProductsTable(
   };
 }
 
+/*
+ * Visitor Report table: one row per visitor per currency, exactly as the
+ * on-screen report shows it. The commission column is the amount the sales
+ * actually posted to the visitor and the company column is what was left of
+ * the benefit, so a reader of the PDF gets the same 100 - 10 = 90 the app
+ * reports.
+ */
+function buildVisitorReportTable(
+  items,
+  rtl,
+  printableWidth,
+) {
+  const headers = [
+    '#',
+    t('Visitor'),
+    t('Rate'),
+    t('Sales Count'),
+    t('Total Sales'),
+    t('Benefit'),
+    t('Visitor Share'),
+    t('Company Share'),
+  ];
+
+  const body = items.map((item, index) => {
+    const currency = item.currency || 'AFN';
+    const row = [
+      index + 1,
+      stripTags(item.visitor_display_name || item.visitor_name || '—'),
+      `${formatNumber(item.visitor_percentage, { maximumFractionDigits: 4 })}%`,
+      formatNumber(item.sales_count),
+      createMoneyCell(item.total_amount, currency),
+      createMoneyCell(item.total_benefit, currency),
+      createMoneyCell(item.total_share, currency),
+      createMoneyCell(item.company_share, currency),
+    ];
+
+    return rtl ? [...row].reverse() : row;
+  });
+
+  /* Scale the preferred column proportions to the real page width. */
+  const preferredWidths = [8, 34, 18, 20, 34, 34, 36, 36];
+  const preferredTotal = preferredWidths.reduce(
+    (total, width) => total + width,
+    0,
+  );
+  const widthScale =
+    (Number(printableWidth) || preferredTotal) /
+    preferredTotal;
+  const scaledWidths = preferredWidths.map(
+    (width) => width * widthScale,
+  );
+
+  const ltrColumnStyles = {
+    0: { cellWidth: scaledWidths[0], halign: 'center' },
+    1: { cellWidth: scaledWidths[1], halign: rtl ? 'right' : 'left' },
+    2: { cellWidth: scaledWidths[2], halign: 'center' },
+    3: { cellWidth: scaledWidths[3], halign: 'center' },
+    4: { cellWidth: scaledWidths[4], halign: 'center' },
+    5: { cellWidth: scaledWidths[5], halign: 'center' },
+    6: { cellWidth: scaledWidths[6], halign: 'center' },
+    7: { cellWidth: scaledWidths[7], halign: 'center' },
+  };
+
+  const columnStyles = rtl
+    ? Object.fromEntries(
+        Object.entries(ltrColumnStyles).map(
+          ([columnIndex, style]) => [
+            headers.length - 1 - Number(columnIndex),
+            style,
+          ],
+        ),
+      )
+    : ltrColumnStyles;
+
+  return {
+    head: [rtl ? [...headers].reverse() : headers],
+    body,
+    columnStyles,
+  };
+}
+
 function buildSalesPurchaseTable(
   type,
   items,
@@ -3985,6 +4134,14 @@ function buildTableData({
 
   if (type === 'account_products_report') {
     return buildAccountProductsTable(
+      items,
+      rtl,
+      printableWidth,
+    );
+  }
+
+  if (type === 'visitor_report') {
+    return buildVisitorReportTable(
       items,
       rtl,
       printableWidth,

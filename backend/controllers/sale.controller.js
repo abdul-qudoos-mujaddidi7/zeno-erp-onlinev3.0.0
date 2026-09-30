@@ -21,6 +21,24 @@ async function list(req, res) {
   return sendListResponse(res, result);
 }
 
+/*
+ * The Visitor Report behind the Visitors tab of the sales page: what each
+ * visitor brought, what they were given and what the company kept.
+ */
+async function visitorReport(req, res) {
+  const result =
+    await saleService.getVisitorReport({
+      user: req.user,
+      filters: req.validated.query,
+    });
+
+  res.status(200).json({
+    success: true,
+    data: result.data,
+    meta: result.meta,
+  });
+}
+
 async function getById(req, res) {
   const sale =
     await saleService.getSale({
@@ -180,6 +198,7 @@ async function removeReturn(req, res) {
 
 module.exports = {
   list,
+  visitorReport,
   getById,
   nextNumber,
   create,
