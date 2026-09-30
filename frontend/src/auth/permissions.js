@@ -80,6 +80,7 @@ export const DASHBOARD_CARDS = [
   { key: 'treasury', code: 'Dashboard Treasury', modules: ['Accounts'] },
   { key: 'topProducts', code: 'Dashboard Top Products', modules: ['Sales'] },
   { key: 'stockAlerts', code: 'Dashboard Stock Alerts', modules: ['Products'] },
+  { key: 'debtors', code: 'Dashboard Debtors', modules: ['Accounts', 'Sales'] },
 ];
 
 export const DASHBOARD_CARD_CODES = DASHBOARD_CARDS.map((card) => card.code);

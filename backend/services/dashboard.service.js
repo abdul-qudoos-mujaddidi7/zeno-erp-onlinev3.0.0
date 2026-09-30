@@ -12,8 +12,14 @@ const currencyRepository =
 const ttlCache =
   require('../utils/ttlCache');
 
+const {
+  buildTopDebtors,
+  convertAmount,
+} = require('../utils/topDebtors');
+
 const SUMMARY_CACHE_TTL_MS = 30000;
 const OVERVIEW_CACHE_TTL_MS = 45000;
+const TOP_DEBTORS_LIMIT = 8;
 
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
@@ -73,17 +79,6 @@ function collapseCurrencyRows(rows, {
   };
 }
 
-function convertAmount(amount, fromCode, toCode, rateMap) {
-  if (!fromCode || !toCode || fromCode === toCode) {
-    return Number(amount) || 0;
-  }
-
-  const fromRate = rateMap[fromCode] || 1;
-  const toRate = rateMap[toCode] || 1;
-
-  return ((Number(amount) || 0) / toRate) * fromRate;
-}
-
 function sumConverted(byCurrency, defaultCurrency, rateMap) {
   return Object.entries(byCurrency || {}).reduce(
     (sum, [currency, amount]) =>
@@ -127,6 +122,7 @@ function buildOverview({
   expiringCount,
   defaultCurrency,
   rateMap,
+  topDebtors,
 }) {
   const treasuryBalances = {};
   const customerBalances = {};
@@ -202,6 +198,7 @@ function buildOverview({
         remaining_days: Number(row.remaining_days) || 0,
       })),
     },
+    top_debtors: topDebtors,
   };
 }
 
@@ -442,11 +439,13 @@ async function buildOverviewPayload({
     inventoryRows,
     lowStockRows,
     expiringRows,
+    debtorRows,
   ] = await Promise.all([
     dashboardRepository.sumBenefitBalancesByBucket(db, orgId),
     dashboardRepository.findInventoryValueByCurrency(db, orgId),
     dashboardRepository.findLowStockProducts(db, orgId, 10),
     dashboardRepository.findExpiringProducts(db, orgId, 10),
+    dashboardRepository.findTopDebtors(db, orgId),
   ]);
 
   const lowStockCount =
@@ -463,6 +462,11 @@ async function buildOverviewPayload({
     expiringCount,
     defaultCurrency,
     rateMap,
+    topDebtors: buildTopDebtors(debtorRows, {
+      defaultCurrency,
+      rateMap,
+      limit: TOP_DEBTORS_LIMIT,
+    }),
   });
 }
 

@@ -36,6 +36,7 @@
   $: cardTreasury = canViewDashboardCard(permissions, 'treasury');
   $: cardTopProducts = canViewDashboardCard(permissions, 'topProducts');
   $: cardStockAlerts = canViewDashboardCard(permissions, 'stockAlerts');
+  $: cardDebtors = canViewDashboardCard(permissions, 'debtors');
 
   let loading = true;
   let loadingMetricData = true;
@@ -53,6 +54,7 @@
   let expiringProducts = [];
   let expiringTotal = 0;
   let plainTopProducts = [];
+  let topDebtors = { total: 0, sum: 0, default_currency: 'AFN', items: [] };
 
   let activePeriod = 'today';
   let showPeriodMenu = false;
@@ -187,6 +189,10 @@
     benefitTotal + expenseTotal > 0 ? Math.round((benefitTotal / (benefitTotal + expenseTotal)) * 100) : 0;
   $: maxTopProductRevenue = Math.max(1, ...plainTopProducts.map((product) => Number(product.rev) || 0));
 
+  // The combined stock panel already claims two of the four support columns, so
+  // the row only widens to five when the debtors card really needs the seat.
+  $: denseSupportGrid = enable_expiry_date && cardStockAlerts && cardDebtors;
+
   $: if (!loading && salesTrendCanvas && trendData.labels.length && currentTheme) {
     renderTrendChart();
   }
@@ -317,6 +323,7 @@
           metricDataTotal,
           metricDataCount,
           plainTopProducts,
+          topDebtors,
           trendData,
           savedAt: Date.now(),
         }),
@@ -341,6 +348,7 @@
     metricDataTotal = snapshot.metricDataTotal || metricDataTotal;
     metricDataCount = snapshot.metricDataCount || metricDataCount;
     plainTopProducts = snapshot.plainTopProducts || [];
+    topDebtors = snapshot.topDebtors || topDebtors;
     trendData = snapshot.trendData || trendData;
   }
 
@@ -360,6 +368,31 @@
     lowStockTotal = Number(overview.low_stock?.total) || lowStockProducts.length;
     expiringProducts = overview.expiring?.items || [];
     expiringTotal = Number(overview.expiring?.total) || expiringProducts.length;
+
+    topDebtors = {
+      total: Number(overview.top_debtors?.total) || 0,
+      sum: Number(overview.top_debtors?.sum) || 0,
+      default_currency: overview.top_debtors?.default_currency || defaultCurrency,
+      items: overview.top_debtors?.items || [],
+    };
+  }
+
+  function debtorName(debtor) {
+    return debtor?.name || debtor?.code || `#${debtor?.account_id}`;
+  }
+
+  /*
+   * A debtor is ranked in the default currency, so any other currency that
+   * customer also owes is spelled out beside the ranked total instead of being
+   * hidden inside it.
+   */
+  function otherCurrencyLines(debtor) {
+    const ranked = debtor?.currency || defaultCurrency;
+
+    return Object.entries(debtor?.by_currency || {})
+      .filter(([currency]) => currency !== ranked)
+      .sort((a, b) => Number(b[1]) - Number(a[1]))
+      .map(([currency, amount]) => `${fmt(amount)} ${t(currency)}`);
   }
 
   function getPeriodRange(period) {
@@ -1001,7 +1034,7 @@
 
     </section>
 
-    <section class="support-grid">
+    <section class="support-grid" class:dense={denseSupportGrid}>
       {#if cardTreasury}
       <article class="panel compact-panel">
         <header class="panel-header">
@@ -1058,6 +1091,50 @@
                   <span class="product-bar" style={`--bar-width: ${Math.max(6, (Number(product.rev) || 0) / maxTopProductRevenue * 100)}%;`}></span>
                 </div>
               </div>
+            {/each}
+          {/if}
+        </div>
+      </article>
+      {/if}
+
+      {#if cardDebtors}
+      <article class="panel compact-panel debtors-panel">
+        <header class="panel-header">
+          <div>
+            <h2>{t('Top Debtors')}</h2>
+            <span>
+              {t('Outstanding receivable')}:
+              {fmt(topDebtors.sum)} {t(topDebtors.default_currency || defaultCurrency)}
+            </span>
+          </div>
+          <i class="bi bi-person-exclamation panel-mark danger"></i>
+        </header>
+
+        <div class="debtor-list">
+          {#if topDebtors.items.length === 0}
+            <div class="empty-state success">{t('No outstanding receivables')}</div>
+          {:else}
+            {#each topDebtors.items as debtor (debtor.account_id)}
+              <a
+                class="debtor-row"
+                href={`/#/dashboard/account/${debtor.account_id}`}
+                aria-label={`${t('Open account')}: ${debtorName(debtor)} — ${fmt(debtor.amount)} ${t(debtor.currency)}`}>
+                <span class="debtor-main">
+                  <strong>{debtorName(debtor)}</strong>
+                  {#if debtor.name && debtor.code}<small>{debtor.code}</small>{/if}
+                </span>
+                <span class="debtor-value">
+                  <strong dir="ltr">{fmt(debtor.amount)} <small>{t(debtor.currency)}</small></strong>
+                  {#if otherCurrencyLines(debtor).length}
+                    <small class="debtor-other" dir="ltr">
+                      {otherCurrencyLines(debtor).join(' · ')}
+                    </small>
+                  {/if}
+                </span>
+                <i
+                  class={`bi ${_lang === 'en' ? 'bi-chevron-right' : 'bi-chevron-left'} debtor-arrow`}
+                  aria-hidden="true"></i>
+              </a>
             {/each}
           {/if}
         </div>
@@ -2165,6 +2242,7 @@
 
   .support-grid .product-list,
   .support-grid .treasury-list,
+  .support-grid .debtor-list,
   .support-grid .alert-sections {
     min-height: 0;
     flex: 1 1 auto;
@@ -2207,6 +2285,78 @@
 
   .compact-panel {
     min-height: 0;
+  }
+
+  .debtor-list {
+    align-content: start;
+    gap: 0.3rem;
+    padding: 0.5rem 0.6rem 0.65rem;
+  }
+
+  .debtor-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 12px;
+    gap: 0.5rem;
+    align-items: center;
+    min-width: 0;
+    padding: 0.42rem 0.5rem;
+    border-radius: 8px;
+    background: #f7faff;
+    color: inherit;
+    text-decoration: none;
+    transition: background 0.18s ease;
+  }
+
+  .debtor-row:hover {
+    background: #eef5ff;
+  }
+
+  .debtor-row:focus-visible {
+    outline: 2px solid #0f6efd;
+    outline-offset: 2px;
+  }
+
+  .debtor-main {
+    min-width: 0;
+  }
+
+  .debtor-main strong,
+  .debtor-value strong {
+    display: block;
+    overflow: hidden;
+    color: #172033;
+    font-size: 0.8rem;
+    font-weight: 900;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debtor-main small,
+  .debtor-value small {
+    display: block;
+    overflow: hidden;
+    color: #8b99b5;
+    font-size: 0.68rem;
+    font-weight: 750;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .debtor-value {
+    min-width: 0;
+    max-width: 118px;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .debtor-value strong small {
+    display: inline;
+    font-size: 0.66rem;
+  }
+
+  .debtor-arrow {
+    color: #9aa8c2;
+    font-size: 0.72rem;
   }
 
   .combined-alert-panel {
@@ -2559,16 +2709,24 @@
       height: 100%;
       max-height: 100%;
     }
+
+    /* The combined stock panel spans two of the four columns; the debtors card
+       only fits beside it when the row grows to five. */
+    .support-grid.dense {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
   }
 
   .support-grid .product-list,
   .support-grid .treasury-list,
+  .support-grid .debtor-list,
   .support-grid .alert-sections {
     scrollbar-width: none;
   }
 
   .support-grid .product-list::-webkit-scrollbar,
   .support-grid .treasury-list::-webkit-scrollbar,
+  .support-grid .debtor-list::-webkit-scrollbar,
   .support-grid .alert-sections::-webkit-scrollbar {
     display: none;
   }
@@ -2661,6 +2819,8 @@
   :global(html.dark) .alert-list strong,
   :global(html.dark) .product-value strong,
   :global(html.dark) .treasury-list strong,
+  :global(html.dark) .debtor-main strong,
+  :global(html.dark) .debtor-value strong,
   :global(html.dark) .alert-section-head strong,
   :global(html.dark) .alert-list em {
     color: var(--erp-text);
@@ -2683,6 +2843,9 @@
   :global(html.dark) .alert-list small,
   :global(html.dark) .product-value small,
   :global(html.dark) .treasury-list span,
+  :global(html.dark) .debtor-main small,
+  :global(html.dark) .debtor-value small,
+  :global(html.dark) .debtor-arrow,
   :global(html.dark) .alert-section-head {
     color: var(--erp-text-soft);
   }
@@ -2770,8 +2933,13 @@
   }
 
   :global(html.dark) .treasury-list > div,
+  :global(html.dark) .debtor-row,
   :global(html.dark) .alert-list > div {
     background: var(--erp-surface-soft);
+  }
+
+  :global(html.dark) .debtor-row:hover {
+    background: rgba(96, 165, 250, 0.14);
   }
 
   :global(html.dark) .alert-panel .alert-list > div {
@@ -2792,6 +2960,7 @@
 
   :global(html.dark) .support-grid .product-list,
   :global(html.dark) .support-grid .treasury-list,
+  :global(html.dark) .support-grid .debtor-list,
   :global(html.dark) .support-grid .alert-sections {
     scrollbar-color: #526176 transparent;
   }

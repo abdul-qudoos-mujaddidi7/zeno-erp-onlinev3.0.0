@@ -537,6 +537,44 @@ async function sumBenefitBalancesByBucket(executor, orgId) {
   return rows.map((row) => ({ ...row, currency: row.currency || 'AFN', balance: Number(row.balance) || 0 }));
 }
 
+/**
+ * Customers who still owe money, one row per account and currency.
+ * This deliberately uses every active journal entry on each customer account,
+ * matching the account profile's balance (debit - credit). Limiting the query
+ * to sale references would ignore manual adjustments and other valid postings,
+ * causing the dashboard and profile to disagree.
+ */
+async function findTopDebtors(executor, orgId) {
+  const [rows] = await executor.execute(
+    `SELECT a.local_id AS account_id, a.name, a.code, e.currency,
+       SUM(e.debit - e.credit) AS receivable
+     FROM (
+       SELECT org_id, first_entry_account account_id, currency,
+         COALESCE(first_entry_credit,0) credit, COALESCE(first_entry_debit,0) debit
+       FROM journals WHERE org_id = ? AND status = 1
+       UNION ALL
+       SELECT org_id, second_entry_account account_id, currency,
+         COALESCE(second_entry_credit,0) credit, COALESCE(second_entry_debit,0) debit
+       FROM journals WHERE org_id = ? AND status = 1
+     ) e
+     JOIN accounts a ON a.org_id = e.org_id AND a.local_id = e.account_id AND a.status = 1
+     LEFT JOIN account_types at ON at.org_id = a.org_id AND at.local_id = a.account_type_id AND at.status = 1
+     WHERE (a.account_type_id = 4 OR COALESCE(at.can_be_customer,0) = 1)
+     GROUP BY a.local_id, a.name, a.code, e.currency
+     HAVING receivable > 0
+     ORDER BY receivable DESC`,
+    [orgId, orgId],
+  );
+
+  return rows.map((row) => ({
+    account_id: Number(row.account_id),
+    name: row.name || '',
+    code: row.code || '',
+    currency: row.currency || 'AFN',
+    receivable: Number(row.receivable) || 0,
+  }));
+}
+
 module.exports = {
   findExpensesAccountId,
   sumSales,
@@ -554,4 +592,5 @@ module.exports = {
   findExpiringProducts,
   findBenefitAccounts,
   sumBenefitBalancesByBucket,
+  findTopDebtors,
 };
