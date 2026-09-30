@@ -47,6 +47,10 @@ const productUnitBodySchema = z.object({
 
   subunit_multiple: nullableNumber(),
 
+  /* Left optional so callers that never heard of categories keep working:
+   * the service then falls back to the organization's default category. */
+  unit_category_id: nullableNumber().optional(),
+
   status: z
     .coerce
     .number()
@@ -79,6 +83,8 @@ const productUnitListQuerySchema = z.object({
     .trim()
     .max(255)
     .optional(),
+
+  unit_category_id: nullableNumber().optional(),
 });
 
 module.exports = {

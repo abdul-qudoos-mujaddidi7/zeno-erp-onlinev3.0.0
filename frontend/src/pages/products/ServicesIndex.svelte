@@ -4,6 +4,7 @@ import { productImageApi } from '../../api/productImageApi.js';
 import { departmentApi } from '../../api/departmentApi.js';
 import { productCategoryApi } from '../../api/productCategoryApi.js';
 import { productUnitApi } from '../../api/productUnitApi.js';
+  import { unitCategoryApi } from '../../api/unitCategoryApi.js';
   import { productApi } from '../../api/productApi.js';
   import { stockTransactionApi } from '../../api/stockTransactionApi.js';
   import { productBrandApi } from '../../api/productBrandApi.js';
@@ -59,6 +60,7 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
   let departments = [];
   let users = [];
   let units = [];
+  let unitCategories = [];
   let currencies = [];
   let warehouses = [];
   let warehouse_products = [];
@@ -182,6 +184,7 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
       generics = genericResponse?.data || [];
       departments = (await departmentApi.getAll({ status: 1 }))?.data || [];
       units = (await productUnitApi.getAll({ status: 1 }))?.data || [];
+      unitCategories = (await unitCategoryApi.getAll({ status: 1 }))?.data || [];
       currencies = (await currencyApi.getAll({ status: 1 }))?.data || [];
       warehouses = (await warehouseApi.getAll({ status: 1 }))?.data || [];
       warehouse_products = (await warehouseProductApi.getAll({ status: 1 }))?.data || [];
@@ -867,6 +870,7 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
   bind:this={goodModal}
   {categories}
   {units}
+  {unitCategories}
   {warehouses}
   type="product"
   defaultCurrency="AFN"
@@ -877,6 +881,7 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
   bind:this={serviceModal}
   {categories}
   {units}
+  {unitCategories}
   {warehouses}
   type="service"
   defaultCurrency="AFN"

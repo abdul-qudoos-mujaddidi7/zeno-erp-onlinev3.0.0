@@ -1121,7 +1121,6 @@
                 aria-label={`${t('Open account')}: ${debtorName(debtor)} — ${fmt(debtor.amount)} ${t(debtor.currency)}`}>
                 <span class="debtor-main">
                   <strong>{debtorName(debtor)}</strong>
-                  {#if debtor.name && debtor.code}<small>{debtor.code}</small>{/if}
                 </span>
                 <span class="debtor-value">
                   <strong dir="ltr">{fmt(debtor.amount)} <small>{t(debtor.currency)}</small></strong>
@@ -2331,7 +2330,6 @@
     white-space: nowrap;
   }
 
-  .debtor-main small,
   .debtor-value small {
     display: block;
     overflow: hidden;
@@ -2843,7 +2841,6 @@
   :global(html.dark) .alert-list small,
   :global(html.dark) .product-value small,
   :global(html.dark) .treasury-list span,
-  :global(html.dark) .debtor-main small,
   :global(html.dark) .debtor-value small,
   :global(html.dark) .debtor-arrow,
   :global(html.dark) .alert-section-head {

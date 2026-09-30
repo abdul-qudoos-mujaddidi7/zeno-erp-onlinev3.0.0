@@ -34,6 +34,11 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { t, lang, translate_org_type, settings_all } from '../../i18n/i18n';
   import { push } from 'svelte-spa-router';
   import FilterSelect from '../../components/common/FilterSelect.svelte';
+  import {
+    categoryIdOfUnit,
+    unitBelongsToCategory,
+    unitOptionsFor,
+  } from './unitCategoryFilter.js';
   import { setDatePickers } from '../../calendar.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -269,6 +274,7 @@ import { userApi } from '../../api/userApi.js';
   export let brands = [];
   export let generics = [];
   export let units = [];
+  export let unitCategories = [];
   export let warehouses = [];
   let currencies = [];
   let defaultCurrency = 'AFN';
@@ -624,6 +630,10 @@ import { userApi } from '../../api/userApi.js';
     service_duration = 0;
     service_duration_unit = 'minute';
     product_unit_id = type == 'service' ? 1 : '';
+    unit_category_id = '';
+    if (product_unit_id) {
+      applyUnitCategoryFromUnit(product_unit_id);
+    }
     name = '';
     code = _translate_org_type == 'exchange' ? generateEAN13() : '';
     description = '';
@@ -667,6 +677,7 @@ import { userApi } from '../../api/userApi.js';
     brand_id = product.brand_id;
     generic_id = product.generic_id;
     product_unit_id = product.product_unit_id;
+    applyUnitCategoryFromUnit(product_unit_id);
     name = product.name;
     code = product.code;
     description = product.description;
@@ -1087,6 +1098,52 @@ import { userApi } from '../../api/userApi.js';
   let filteredUnits = units;
   let form_unit_search_input = null;
 
+  /* Empty means "every category", so the unit picker keeps showing all units
+   * until a category is chosen. */
+  let unit_category_id = '';
+  $: unitCategoryOptions = [
+    { value: '', label: t('All Units') },
+    ...unitCategories.map((category) => ({
+      value: category.id,
+      label: category.name,
+    })),
+  ];
+
+  /*
+   * The unit picker is narrowed by the chosen category first and by the typed
+   * search second. Those rules live in unitCategoryFilter.js so they can be
+   * tested against realistic data; every search/focus handler below goes
+   * through this one wrapper.
+   */
+  function listUnits(search = unit_search) {
+    return unitOptionsFor(units, unit_category_id, search);
+  }
+
+  function selectUnitCategory(categoryId) {
+    unit_category_id = categoryId === '' || categoryId == null ? '' : categoryId;
+
+    /* The selected unit cannot belong to the newly chosen category, so the
+     * picker starts from an empty selection rather than keeping a unit the
+     * list no longer shows. */
+    if (
+      product_unit_id &&
+      !unitBelongsToCategory(units, product_unit_id, unit_category_id)
+    ) {
+      product_unit_id = '';
+      unit_search = '';
+    }
+
+    filteredUnits = listUnits('');
+  }
+
+  /* Keeps the category in step with whichever unit is already selected:
+   * opening a product selects its unit's category, and a unit created from
+   * this form brings its own category along. */
+  function applyUnitCategoryFromUnit(unitId) {
+    unit_category_id = categoryIdOfUnit(units, unitId);
+    filteredUnits = listUnits();
+  }
+
   let brand_search = '';
   let showBrandDropdown = false;
   let filteredBrands = brands;
@@ -1413,6 +1470,32 @@ import { userApi } from '../../api/userApi.js';
             </div>
           </div>
 
+          {#if unitCategories.length > 0}
+          <div class="field col-md-6 mb-3 product-span-2 product-main-row">
+            {#if asPage}
+              <FilterSelect
+                label={t('Unit Category')}
+                value={unit_category_id ?? ''}
+                options={unitCategoryOptions}
+                on:change={(e) => selectUnitCategory(e.detail)} />
+            {:else}
+              <div class="form-outline" data-mdb-input-init>
+                <select
+                  id="c-unit-category"
+                  class="form-select form-select-sm"
+                  bind:value={unit_category_id}
+                  on:change={() => selectUnitCategory(unit_category_id)}>
+                  <option value="">{t('All Units')}</option>
+                  {#each unitCategories as category}
+                    <option value={category.id}>{category.name}</option>
+                  {/each}
+                </select>
+                <label class="form-label" for="c-unit-category">{t('Unit Category')}</label>
+              </div>
+            {/if}
+          </div>
+          {/if}
+
           <div class="field col-md-6 mb-3 product-span-2 product-main-row">
             {#if asPage}
               <label class="field-label">
@@ -1434,7 +1517,7 @@ import { userApi } from '../../api/userApi.js';
                       product_unit_id = '';
                       unit_search = '';
                       showUnitDropdown = true;
-                      filteredUnits = units;
+                      filteredUnits = listUnits('');
                       await tick();
                       form_unit_search_input?.focus();
                       if (window.mdb) {
@@ -1458,7 +1541,7 @@ import { userApi } from '../../api/userApi.js';
                       product_unit_id = '';
                       unit_search = '';
                       showUnitDropdown = true;
-                      filteredUnits = units;
+                      filteredUnits = listUnits('');
                       await tick();
                       form_unit_search_input?.focus();
                       if (window.mdb) {
@@ -1478,21 +1561,11 @@ import { userApi } from '../../api/userApi.js';
                     bind:value={unit_search}
                     on:input={() => {
                       showUnitDropdown = true;
-                      filteredUnits = units.filter((unit) => {
-                        const name = unit.name;
-                        return name && name.toLowerCase().includes(unit_search.trim().toLowerCase());
-                      });
+                      filteredUnits = listUnits();
                     }}
                     on:focus={() => {
                       showUnitDropdown = true;
-                      if (unit_search.trim()) {
-                        filteredUnits = units.filter((unit) => {
-                          const name = unit.name;
-                          return name && name.toLowerCase().includes(unit_search.trim().toLowerCase());
-                        });
-                      } else {
-                        filteredUnits = units;
-                      }
+                      filteredUnits = listUnits();
                     }}
                     on:blur={() => setTimeout(() => (showUnitDropdown = false), 150)}
                     autocomplete="off" />
@@ -1519,21 +1592,11 @@ import { userApi } from '../../api/userApi.js';
                         bind:value={unit_search}
                         on:input={() => {
                           showUnitDropdown = true;
-                          filteredUnits = units.filter((unit) => {
-                            const name = unit.name;
-                            return name && name.toLowerCase().includes(unit_search.trim().toLowerCase());
-                          });
+                          filteredUnits = listUnits();
                         }}
                         on:focus={() => {
                           showUnitDropdown = true;
-                          if (unit_search.trim()) {
-                            filteredUnits = units.filter((unit) => {
-                              const name = unit.name;
-                              return name && name.toLowerCase().includes(unit_search.trim().toLowerCase());
-                            });
-                          } else {
-                            filteredUnits = units;
-                          }
+                          filteredUnits = listUnits();
                         }}
                         on:blur={() => setTimeout(() => (showUnitDropdown = false), 150)}
                         autocomplete="off" />
@@ -2970,6 +3033,9 @@ import { userApi } from '../../api/userApi.js';
   on:saved={async (e) => {
     units = (await productUnitApi.getAll({ status: 1 }))?.data || [];
     product_unit_id = e.detail.id;
+    /* A unit created from here may belong to a category this form is not
+     * filtering by, so follow it to its own category. */
+    applyUnitCategoryFromUnit(product_unit_id);
   }} />
 
 <BrandModal

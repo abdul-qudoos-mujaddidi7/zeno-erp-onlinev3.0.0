@@ -6,6 +6,7 @@ const PRODUCT_UNIT_COLUMNS = `
   description,
   subunit_id,
   subunit_multiple,
+  unit_category_id,
   status,
   COALESCE(version, 1) AS version,
   created_by,
@@ -22,6 +23,7 @@ async function findAll(
     orgId,
     status = 1,
     search = '',
+    unitCategoryId = null,
   },
 ) {
   const conditions = [
@@ -33,6 +35,12 @@ async function findAll(
     orgId,
     status,
   ];
+
+  if (unitCategoryId) {
+    conditions.push('unit_category_id = ?');
+
+    values.push(unitCategoryId);
+  }
 
   if (search) {
     const searchPattern = `%${search}%`;
@@ -112,6 +120,7 @@ async function create(
         description,
         subunit_id,
         subunit_multiple,
+        unit_category_id,
         status,
         version,
         created_by,
@@ -120,7 +129,7 @@ async function create(
         updated_at
       )
       VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NOW(3), NOW(3)
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NOW(3), NOW(3)
       )
     `,
     [
@@ -131,6 +140,7 @@ async function create(
       data.description ?? null,
       data.subunit_id ?? null,
       data.subunit_multiple ?? null,
+      data.unit_category_id ?? null,
       data.status ?? null,
       userId,
       userId,
@@ -164,6 +174,7 @@ async function update(
         description = ?,
         subunit_id = ?,
         subunit_multiple = ?,
+        unit_category_id = ?,
         status = ?,
         version = COALESCE(version, 0) + 1,
         updated_by = ?,
@@ -177,6 +188,7 @@ async function update(
       data.description ?? null,
       data.subunit_id ?? null,
       data.subunit_multiple ?? null,
+      data.unit_category_id ?? null,
       data.status ?? null,
       userId,
       orgId,
@@ -236,10 +248,35 @@ async function softDelete(
   );
 }
 
+async function countActiveByCategory(
+  executor,
+  {
+    orgId,
+    unitCategoryId,
+  },
+) {
+  const [rows] = await executor.execute(
+    `
+      SELECT COUNT(*) AS total
+      FROM product_units
+      WHERE org_id = ?
+        AND unit_category_id = ?
+        AND status = 1
+    `,
+    [
+      orgId,
+      unitCategoryId,
+    ],
+  );
+
+  return Number(rows[0]?.total || 0);
+}
+
 module.exports = {
   findAll,
   findByLocalId,
   create,
   update,
   softDelete,
+  countActiveByCategory,
 };

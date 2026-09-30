@@ -1,5 +1,6 @@
 <script>
     import { productUnitApi } from "../../api/productUnitApi.js";
+    import { unitCategoryApi } from "../../api/unitCategoryApi.js";
     import { onMount } from "svelte";
     import UnitModal from "./UnitModal.svelte";
     import PaginationBar from "../../components/common/PaginationBar.svelte";
@@ -10,7 +11,15 @@
     $: _translate_org_type = $translate_org_type;
 
     let units = [];
+    let unitCategories = [];
     let loading = true;
+
+    function categoryName(categoryId) {
+        return (
+            unitCategories.find((category) => Number(category.id) === Number(categoryId))
+                ?.name || "-"
+        );
+    }
 
     let unitModalRef = null;
     let currentPage = 1;
@@ -19,8 +28,13 @@
     async function loadUnits() {
         loading = true;
         try {
-            units = (await productUnitApi.getAll({ status: 1 }))?.data || [];
-            console.log(units);
+            const [unitsResponse, categoriesResponse] = await Promise.all([
+                productUnitApi.getAll({ status: 1 }),
+                unitCategoryApi.getAll({ status: 1 }),
+            ]);
+
+            units = unitsResponse?.data || [];
+            unitCategories = categoriesResponse?.data || [];
         } catch (err) {
             console.error("Failed to load:", err);
         } finally {
@@ -76,6 +90,7 @@
                             <th>{t("ID")}</th>
                             <th>{t("Name")}</th>
                             <th>{t("Code")}</th>
+                            <th>{t("Unit Category")}</th>
                             <th>{t("Subunit")}</th>
                             <th>{t("Actions")}</th>
                         </tr>
@@ -86,6 +101,7 @@
                                 <td>{shortID(unit.id)}</td>
                                 <td>{unit.name}</td>
                                 <td><strong>{unit.code}</strong></td>
+                                <td>{categoryName(unit.unit_category_id)}</td>
                                 <td>
                                     {#if unit.subunit_id}
                                 {Number(unit.subunit_multiple||0).toLocaleString(undefined,{maximumFractionDigits:6})}

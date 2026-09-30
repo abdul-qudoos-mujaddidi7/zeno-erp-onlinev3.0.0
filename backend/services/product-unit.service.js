@@ -6,6 +6,9 @@ const AppError =
 const productUnitRepository =
   require('../repositories/product-unit.repository');
 
+const unitCategoryRepository =
+  require('../repositories/unit-category.repository');
+
 const activityRepository =
   require('../repositories/activity.repository');
 
@@ -59,7 +62,71 @@ async function listProductUnits({
       orgId,
       status: filters.status,
       search: filters.search,
+      unitCategoryId: filters.unit_category_id,
     },
+  );
+}
+
+/**
+ * Every unit belongs to a category. A caller-supplied category must belong to
+ * the organization, otherwise the unit falls back to the organization's
+ * default "General" category, which is created on first use.
+ *
+ * This is what keeps a newly created unit from ever being category-less even
+ * though `product_units.unit_category_id` stays nullable for legacy callers.
+ */
+async function resolveUnitCategoryId(
+  connection,
+  {
+    orgId,
+    userId,
+    unitCategoryId,
+    fallbackUnitCategoryId = null,
+  },
+) {
+  const requestedUnitCategoryId =
+    Number(unitCategoryId) || 0;
+
+  if (requestedUnitCategoryId) {
+    const unitCategory =
+      await unitCategoryRepository.findByLocalId(
+        connection,
+        {
+          orgId,
+          localId: requestedUnitCategoryId,
+        },
+      );
+
+    if (!unitCategory) {
+      throw new AppError(
+        'Unit category not found.',
+        400,
+        'UNIT_CATEGORY_NOT_FOUND',
+      );
+    }
+
+    return requestedUnitCategoryId;
+  }
+
+  /* Updating a unit without sending a category must not clear the one it
+   * already has. */
+  if (Number(fallbackUnitCategoryId)) {
+    return Number(fallbackUnitCategoryId);
+  }
+
+  const defaultUnitCategory =
+    await unitCategoryRepository.ensureDefault(
+      connection,
+      {
+        orgId,
+        userId,
+        localId: generateLocalId(),
+      },
+    );
+
+  return Number(
+    defaultUnitCategory.local_id ??
+    defaultUnitCategory.id,
   );
 }
 
@@ -109,6 +176,16 @@ async function createProductUnit({
 
     const localId = generateLocalId();
 
+    const unitCategoryId =
+      await resolveUnitCategoryId(
+        connection,
+        {
+          orgId,
+          userId,
+          unitCategoryId: data.unit_category_id,
+        },
+      );
+
     const productUnit =
       await productUnitRepository.create(
         connection,
@@ -116,7 +193,10 @@ async function createProductUnit({
           orgId,
           localId,
           userId,
-          data,
+          data: {
+            ...data,
+            unit_category_id: unitCategoryId,
+          },
         },
       );
 
@@ -193,6 +273,18 @@ async function updateProductUnit({
       );
     }
 
+    const unitCategoryId =
+      await resolveUnitCategoryId(
+        connection,
+        {
+          orgId,
+          userId,
+          unitCategoryId: data.unit_category_id,
+          fallbackUnitCategoryId:
+            oldProductUnit.unit_category_id,
+        },
+      );
+
     const updatedProductUnit =
       await productUnitRepository.update(
         connection,
@@ -200,7 +292,10 @@ async function updateProductUnit({
           orgId,
           localId: productUnitId,
           userId,
-          data,
+          data: {
+            ...data,
+            unit_category_id: unitCategoryId,
+          },
         },
       );
 

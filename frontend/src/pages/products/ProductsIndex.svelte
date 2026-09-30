@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
 import { productImageApi } from '../../api/productImageApi.js';
 import { productUnitApi } from '../../api/productUnitApi.js';
+  import { unitCategoryApi } from '../../api/unitCategoryApi.js';
   import { productApi } from '../../api/productApi.js';
   import { stockTransactionApi } from '../../api/stockTransactionApi.js';
   import { productBrandApi } from '../../api/productBrandApi.js';
@@ -74,6 +75,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   let brands = [];
   let generics = [];
   let units = [];
+  let unitCategories = [];
   let currencies = [];
   let warehouses = [];
   let warehouse_products = [];
@@ -269,6 +271,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
       brandResponse,
       genericResponse,
       unitsRes,
+      unitCategoriesRes,
       currenciesRes,
       warehousesRes,
     ] = await Promise.all([
@@ -276,6 +279,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
       productBrandApi.getAll({ status: 1 }),
       productGenericApi.getAll({ status: 1 }),
       productUnitApi.getAll({ status: 1 }),
+      unitCategoryApi.getAll({ status: 1 }),
       currencyApi.getAll({ status: 1 }),
       warehouseApi.getAll({ status: 1 }),
     ]);
@@ -283,6 +287,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     brands = brandResponse?.data || [];
     generics = genericResponse?.data || [];
     units = unitsRes?.data || [];
+    unitCategories = unitCategoriesRes?.data || [];
     currencies = currenciesRes?.data || [];
     warehouses = warehousesRes?.data || [];
     warehouse_products = [];
@@ -1203,6 +1208,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   bind:this={goodModal}
   {categories}
   {units}
+  {unitCategories}
   {warehouses}
   type="product"
   defaultCurrency="AFN"
@@ -1215,6 +1221,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   bind:this={serviceModal}
   {categories}
   {units}
+  {unitCategories}
   {warehouses}
   type="service"
   defaultCurrency="AFN"

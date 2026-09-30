@@ -72,6 +72,9 @@ const wasteRoutes =
 const productUnitRoutes =
   require('./product-unit.routes');
 
+const unitCategoryRoutes =
+  require('./unit-category.routes');
+
 const departmentRoutes =
   require('./department.routes');
 
@@ -371,6 +374,11 @@ router.use(
 router.use(
   '/product-units',
   productUnitRoutes,
+);
+
+router.use(
+  '/unit-categories',
+  unitCategoryRoutes,
 );
 
 router.use(

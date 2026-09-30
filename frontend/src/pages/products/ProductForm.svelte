@@ -1,6 +1,7 @@
 <script>
   import { onMount, tick } from 'svelte';
 import { productUnitApi } from '../../api/productUnitApi.js';
+  import { unitCategoryApi } from '../../api/unitCategoryApi.js';
   import { push } from 'svelte-spa-router';
   import { productApi } from '../../api/productApi.js';
   import { warehouseApi } from '../../api/warehouseApi.js';
@@ -13,6 +14,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 
   let categories = [];
   let units = [];
+  let unitCategories = [];
   let warehouses = [];
   let warehouse_products = [];
   let products = [];
@@ -145,6 +147,8 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     categories = categoryResponse?.data || [];
 
     units = (await productUnitApi.getAll({ status: 1 }))?.data || [];
+
+    unitCategories = (await unitCategoryApi.getAll({ status: 1 }))?.data || [];
 
     warehouses = (await warehouseApi.getAll({ status: 1 }))?.data || [];
 
@@ -295,6 +299,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
         asPage={true}
         {categories}
         {units}
+        {unitCategories}
         {warehouses}
         {warehouse_products}
         {previousProductId}

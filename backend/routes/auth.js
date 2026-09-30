@@ -3,6 +3,8 @@ const router = express.Router();
 const db = require("../db");
 const { generateToken } = require("../utils/token");
 const crypto = require("crypto");
+const unitCategoryRepository = require("../repositories/unit-category.repository");
+const { generateLocalId } = require("../utils/generateLocalId");
 
 let last = 0;
 let counter = 0;
@@ -2063,6 +2065,24 @@ router.post("/register", async (req, res) => {
           ],
         );
       }
+
+      // Every unit belongs to a unit category. A brand-new organization gets
+      // the same default "General" category that
+      // scripts/backfill-unit-categories.js gives existing organizations, so
+      // its seeded units are never category-less.
+      const defaultUnitCategory = await unitCategoryRepository.ensureDefault(
+        db,
+        {
+          orgId: org_id,
+          userId: null,
+          localId: generateLocalId(),
+        },
+      );
+
+      await db.execute(
+        "UPDATE product_units SET unit_category_id = ? WHERE org_id = ? AND unit_category_id IS NULL",
+        [defaultUnitCategory.local_id, org_id],
+      );
     } catch (seedErr) {
       console.warn(
         "Failed to insert seed data for org",

@@ -17,6 +17,7 @@
   import Currencies from './settings/Currencies.svelte';
   import MainSettings from './settings/MainSettings.svelte';
   import Units from './products/Units.svelte';
+  import UnitCategories from './products/UnitCategories.svelte';
   import Categories from './products/Categories.svelte';
   import AccountGroups from './accounts/AccountGroups.svelte';
   import Brands from './settings/Brands.svelte';
@@ -50,6 +51,8 @@
       <a use:link
         href="/dashboard/settings/units" class="list-group-item list-group-item-action p-2" class:active={page === 'units'} on:click={() => page = 'units'}><i class="bi bi-rulers"></i>{t('Units')}</a>
       <a use:link
+        href="/dashboard/settings/unit-categories" class="list-group-item list-group-item-action p-2" class:active={page === 'unit-categories'} on:click={() => page = 'unit-categories'}><i class="bi bi-diagram-2"></i>{t('Unit Categories')}</a>
+      <a use:link
         href="/dashboard/settings/categories" class="list-group-item list-group-item-action p-2" class:active={page === 'categories'} on:click={() => page = 'categories'}><i class="bi bi-tags"></i>{t('Categories')}</a>
      
      {#if enable_account_groups}
@@ -79,6 +82,8 @@
   <Currencies />
 {:else if page === 'units'}
   <Units />
+{:else if page === 'unit-categories'}
+  <UnitCategories />
 {:else if page === 'categories'}
   <Categories />
 {:else if page === 'groups'}
