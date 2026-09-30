@@ -66,6 +66,13 @@ const saleItemSchema = z.object({
 const saleBodySchema = z.object({
   warehouse_id: nullableNumber(),
   account_id: nullableNumber(),
+  /*
+   * Optional visitor. When it is omitted or null the sale behaves exactly as
+   * before: no visitor journal, no benefit split. visitor_percentage and
+   * visitor_benefit are never accepted from the client — the server reads the
+   * account's percentage and computes the amount from the sale's benefit.
+   */
+  visitor_account_id: nullableNumber(),
   sale_type: nullableString(50),
   invoice_number: nullableString(255),
   invoice_date: nullableString(50),

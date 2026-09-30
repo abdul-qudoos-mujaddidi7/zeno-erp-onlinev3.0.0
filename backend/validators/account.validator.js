@@ -184,7 +184,7 @@ const accountListQuerySchema = z.object({
     .positive()
     .optional(),
 
-  role: z.enum(['customer', 'supplier']).optional(),
+  role: z.enum(['customer', 'supplier', 'visitor']).optional(),
 
   account_group_id: z
     .coerce

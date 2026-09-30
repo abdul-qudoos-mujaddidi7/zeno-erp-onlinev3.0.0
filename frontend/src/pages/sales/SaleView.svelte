@@ -43,6 +43,11 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   let showWarehouseReceipt = false;
   let selectedItem = null;
   let customer = null;
+  /*
+   * The visitor a sale was brought by, when there was one. It is optional, so
+   * every screen has to cope with it being absent.
+   */
+  let visitorAccount = null;
   let units = [];
   let showReturn = false;
   let showDelete = false;
@@ -125,6 +130,10 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
             account_ids: String(sale.account_id),
           }),
         ]);
+
+      visitorAccount = sale.visitor_account_id
+        ? (await accountApi.getById(sale.visitor_account_id))?.data || null
+        : null;
 
       products = scopedProducts;
       units = unitRows?.data || [];
@@ -372,6 +381,28 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                 {/if}
               </dd>
             </div>
+            {#if visitorAccount}
+              <div class="pd-header-meta__item">
+                <dt>{t('Visitor')}</dt>
+                <dd>
+                  <button
+                    type="button"
+                    class="pd-link"
+                    on:click={() => push(`/dashboard/account/${visitorAccount.id}`)}>
+                    {customerName(visitorAccount)}
+                  </button>
+                  {#if Number(sale?.visitor_benefit) > 0}
+                    <span class="pd-header-meta__share">
+                      {formatAmount(sale.visitor_benefit)}
+                      {t(sale.currency)}
+                      {#if Number(sale?.visitor_percentage) > 0}
+                        · {formatAmount(sale.visitor_percentage)}%
+                      {/if}
+                    </span>
+                  {/if}
+                </dd>
+              </div>
+            {/if}
             <div class="pd-header-meta__item">
               <dt>{t('Invoice Date')}</dt>
               <dd>{@html sale?.invoice_date ? showDate(sale.invoice_date) : '-'}</dd>
@@ -759,6 +790,21 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
   .pd-header-meta__item {
     margin: 0;
+  }
+
+  /* The visitor's share, shown quietly beside their name. */
+  .pd-header-meta__share {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-inline-start: 0.35rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background: rgba(13, 110, 253, 0.1);
+    color: #0d6efd;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   .pd-header-meta__desc :global(p) {

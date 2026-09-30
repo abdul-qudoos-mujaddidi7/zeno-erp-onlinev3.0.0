@@ -33,6 +33,10 @@ const fiscalPostingGuard =
 const accountTypeRepository =
   require('../repositories/account-type.repository');
 
+const {
+  isVisitorAccountType,
+} = require('../constants/accountTypes');
+
 const accountGroupRepository =
   require('../repositories/account-group.repository');
 
@@ -470,6 +474,64 @@ async function createInitialBalanceJournals({
   }
 }
 
+/**
+ * A visitor earns an agreed share of the benefit of the sales it brings, so the
+ * rate is part of what makes the account usable: sale.service.js cannot compute
+ * a share without it. Only visitor accounts are asked for a percentage, so
+ * every other account type keeps working exactly as before.
+ */
+async function assertVisitorPercentage(
+  connection,
+  {
+    orgId,
+    accountTypeId,
+    percentage,
+  },
+) {
+  if (
+    accountTypeId === null ||
+    accountTypeId === undefined ||
+    accountTypeId === ''
+  ) {
+    return;
+  }
+
+  const type = await accountTypeRepository.findByLocalId(
+    connection,
+    {
+      orgId,
+      localId: Number(accountTypeId),
+    },
+  );
+
+  if (!isVisitorAccountType(type)) {
+    return;
+  }
+
+  const value = Number(percentage);
+
+  if (
+    percentage === null ||
+    percentage === undefined ||
+    percentage === '' ||
+    !Number.isFinite(value)
+  ) {
+    throw new AppError(
+      'A visitor account needs a benefit percentage, for example 10.',
+      400,
+      'VISITOR_PERCENTAGE_REQUIRED',
+    );
+  }
+
+  if (value <= 0 || value > 100) {
+    throw new AppError(
+      'The visitor benefit percentage must be greater than 0 and at most 100.',
+      400,
+      'VISITOR_PERCENTAGE_INVALID',
+    );
+  }
+}
+
 async function createAccount({
   user,
   data,
@@ -513,6 +575,16 @@ async function createAccount({
         );
       }
     }
+
+    /* Visitor accounts must carry the rate their sales are shared at. */
+    await assertVisitorPercentage(
+      connection,
+      {
+        orgId,
+        accountTypeId: data.account_type_id,
+        percentage: data.percentage,
+      },
+    );
 
     const localId = generateLocalId();
 
@@ -671,6 +743,27 @@ async function updateAccount({
         );
       }
     }
+
+    /*
+     * Checked against the type the account is about to have, and the rate it
+     * already had: an edit that renames a visitor without resending the
+     * percentage is still valid, while turning a plain account into a visitor
+     * without a rate is rejected.
+     */
+    await assertVisitorPercentage(
+      connection,
+      {
+        orgId,
+        accountTypeId:
+          data.account_type_id !== undefined
+            ? data.account_type_id
+            : oldAccount.account_type_id,
+        percentage:
+          data.percentage !== undefined
+            ? data.percentage
+            : oldAccount.percentage,
+      },
+    );
 
     const updatedAccount =
       await accountRepository.update(

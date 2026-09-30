@@ -180,6 +180,12 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   let form = {
     warehouse_id: '',
     account_id: '',
+    /*
+     * Optional visitor: the account that receives an agreed share of this
+     * sale's benefit. Empty means the sale behaves exactly as before and the
+     * whole benefit stays with the company.
+     */
+    visitor_account_id: '',
     sale_type: '',
     invoice_number: '',
     invoice_date: getKabulDate(),
@@ -241,6 +247,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 
   let modalRef;
   let accounts = [];
+  let visitors = [];
   let products = [];
   let allAccountTypes = [];
   let treasury_ID = 0;
@@ -272,6 +279,31 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     out = out || 'Unknown';
     return out;
   }
+
+  /*
+   * The rate is shown next to each name because it is what decides the share,
+   * and it is the one thing that tells one visitor account from another.
+   */
+  function visitorOptionLabel(visitor) {
+    const lang = t('Lang');
+    const name =
+      lang === 'fa'
+        ? visitor.name_fa || visitor.name
+        : lang === 'ps'
+          ? visitor.name_ps || visitor.name
+          : visitor.name;
+
+    const rate = Number(visitor.percentage);
+
+    return Number.isFinite(rate) && rate > 0
+      ? `${name || ''} (${rate}%)`
+      : name || '';
+  }
+
+  $: selectedVisitor =
+    visitors.find(
+      (visitor) => String(visitor.id) === String(form.visitor_account_id),
+    ) || null;
   let WALKIN = null;
   let units = [];
 
@@ -308,6 +340,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
       notrackAccount,
       walkinAccount,
       customerRows,
+      visitorRows,
       accountTypesResponse,
       warehousesResponse,
       currenciesResponse,
@@ -316,6 +349,11 @@ import { productUnitApi } from '../../api/productUnitApi.js';
       lookupAccountByCode('NOTRACK'),
       lookupAccountByCode('WALKIN'),
       lookupAccounts({ role: 'customer' }),
+      /*
+       * Visitors are their own role, not customers: they are offered here as
+       * an optional share of the sale's benefit.
+       */
+      lookupAccounts({ role: 'visitor' }),
       accountTypeApi.getAll({ status: 1 }),
       warehouseApi.getAll({ status: 1 }),
       currencyApi.getAll({ status: 1 }),
@@ -327,6 +365,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     allAccountTypes = accountTypesResponse?.data || [];
     warehouses = warehousesResponse?.data || [];
     customers = mergeById(customerRows, walkinAccount ? [walkinAccount] : []);
+    visitors = visitorRows || [];
     WALKIN = customers.find((customer) => customer.code === 'WALKIN') || walkinAccount || null;
     if (accountId) {
       form.account_id = Number(accountId);
@@ -402,6 +441,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       form = {
         warehouse_id: sale.warehouse_id,
         account_id: sale.account_id,
+        visitor_account_id: sale.visitor_account_id || '',
         sale_type: sale.sale_type,
         invoice_number: sale.invoice_number,
         due_date: sale.due_date,
@@ -1227,6 +1267,11 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       const payload = {
         warehouse_id: form.warehouse_id,
         account_id: form.account_id,
+        /*
+         * Sent as null when nobody is selected, which is what keeps an
+         * ordinary sale free of any visitor journal.
+         */
+        visitor_account_id: form.visitor_account_id || null,
         sale_type: form.sale_type,
         invoice_number: form.invoice_number,
         invoice_date: form.invoice_date,
@@ -1381,6 +1426,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       ...form,
       warehouse_id: '',
       account_id: '',
+      visitor_account_id: '',
       sale_type: '',
       invoice_number: '',
       invoice_date: getKabulDate(),
@@ -1792,6 +1838,50 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
           {/if}
         </div>
       </div>
+
+      {#if visitors.length > 0}
+        <div class="sale-field sale-field--visitor">
+          <div class="sale-field-label-row">
+            <span class="sale-field-label">
+              <i class="bi bi-person-badge" aria-hidden="true"></i>
+              {t('Visitor (optional)')}
+            </span>
+
+            {#if selectedVisitor}
+              <button
+                type="button"
+                class="sale-visitor-clear"
+                title={t('Clear')}
+                aria-label={t('Clear')}
+                on:click={() => (form.visitor_account_id = '')}>
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+              </button>
+            {/if}
+          </div>
+
+          <FilterSelect
+            variant="outline"
+            label={t('Visitor (optional)')}
+            icon="bi-person-badge"
+            value={form.visitor_account_id}
+            options={[
+              { value: '', label: t('No visitor') },
+              ...visitors.map((visitor) => ({
+                value: visitor.id,
+                label: visitorOptionLabel(visitor),
+              })),
+            ]}
+            on:change={(event) => (form.visitor_account_id = event.detail)} />
+
+          <small class="sale-visitor-hint">
+            {#if selectedVisitor}
+              {t('This visitor receives their agreed share of the benefit of this sale, not of its total.')}
+            {:else}
+              {t('Leave empty for an ordinary sale: the whole benefit stays with the company.')}
+            {/if}
+          </small>
+        </div>
+      {/if}
 
       <div class="sale-field">
         <span class="sale-field-label">
@@ -3141,6 +3231,34 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   .sale-field--description {
     grid-column: 1 / -1;
     grid-template-rows: auto;
+  }
+
+  /*
+   * The visitor row sits on its own line: it is optional and only renders for
+   * organizations that have visitor accounts, so it must not disturb the
+   * fields above it at any breakpoint.
+   */
+  .sale-field--visitor {
+    grid-column: 1 / -1;
+    grid-template-rows: auto auto auto;
+  }
+
+  .sale-visitor-hint {
+    color: #7c8798;
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .sale-visitor-clear {
+    background: none;
+    border: 0;
+    padding: 0 0.15rem;
+    color: #7c8798;
+    line-height: 1;
+  }
+
+  .sale-visitor-clear:hover {
+    color: #dc3545;
   }
 
   .sale-field-label-row {

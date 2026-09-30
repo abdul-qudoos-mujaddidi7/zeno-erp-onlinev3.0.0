@@ -1604,6 +1604,23 @@ router.post("/register", async (req, res) => {
           description: "",
           status: 1,
         },
+        {
+          /*
+           * A visitor is neither a customer nor a supplier: it is the
+           * account that receives an agreed share of a sale's benefit.
+           * `code` is what services/account-role.service.js checks, so the
+           * behaviour survives the organization renaming this type.
+           */
+          id: 9,
+          name: "Visitor",
+          name_fa: "ویزیتور",
+          name_ps: "ویزیتور",
+          code: "VISITOR",
+          can_be_customer: 0,
+          can_be_supplier: 0,
+          description: "",
+          status: 1,
+        },
       ];
       let patient_types = [];
       if (type && type == "hospital") {

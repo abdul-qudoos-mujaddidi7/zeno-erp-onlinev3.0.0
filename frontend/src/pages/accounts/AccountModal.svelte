@@ -246,7 +246,11 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
       name_ps = name_fa;
       account_status = 'active';
       balance = 0;
-      percentage = 0;
+      /*
+       * A visitor has no meaningful default rate, so the field starts empty
+       * and the form asks for one instead of saving a silent 0.
+       */
+      percentage = isVisitorAccountType(account_type_id) ? '' : 0;
       currency = defaultCurrency;
       description = '';
       phone = '';
@@ -368,6 +372,40 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
     );
   }
 
+  /*
+   * A visitor is the account that receives an agreed share of the benefit of
+   * the sales it brings. Like the backend, this is decided by the type's
+   * `code` and not by its name, so translating or renaming the type in
+   * Settings never changes which accounts may receive a share.
+   *
+   * `types` is a parameter so callers can pass the list they mean, which is
+   * what lets the reactive statement below depend on it (see the note there).
+   */
+  function isVisitorAccountType(typeId = account_type_id, types = accountTypes) {
+    const selectedType = (types || []).find(
+      (item) => String(item.id) === String(typeId),
+    );
+
+    return (
+      String(selectedType?.code || '')
+        .trim()
+        .toUpperCase() === 'VISITOR'
+    );
+  }
+
+  /*
+   * The percentage field is shared: shareholders split the company between
+   * them (hence the 100% total), while a visitor's rate is just its share of
+   * each sale's benefit and has no such total.
+   *
+   * Both the chosen id and the type list are named here on purpose. Svelte
+   * collects reactive dependencies from what the statement reads, so a bare
+   * isVisitorAccountType() call would be tracked to nothing: the field would
+   * never appear when a visitor type is picked, nor once the types load.
+   */
+  $: isVisitorType = isVisitorAccountType(account_type_id, accountTypes);
+  $: isShareholderType = Number(account_type_id) === 7;
+
   function getCreatedAccountWhatsappTemplate(typeId = account_type_id) {
     /*
      * Customer/general accounts use the existing Settings key:
@@ -402,6 +440,24 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
     if (enable_account_groups && !account_group_id) {
       toast.error(t('Error'), t('Please select an account group'));
       return;
+    }
+
+    /*
+     * The backend refuses a visitor without a usable rate, so it is caught
+     * here first rather than as a failed request.
+     */
+    if (isVisitorType) {
+      const rate = Number(percentage);
+
+      if (percentage === '' || !Number.isFinite(rate) || rate <= 0) {
+        toast.error(t('Error'), t('Please enter the visitor percentage'));
+        return;
+      }
+
+      if (rate > 100) {
+        toast.error(t('Error'), t('The visitor percentage cannot be more than 100'));
+        return;
+      }
     }
 
     if (!codeTrimmed || !nameTrimmed) {
@@ -550,6 +606,13 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
   }
 
   function getTypeLabel(type) {
+    /*
+     * Called before the type list has loaded (and by the reactive checks in
+     * this component), so a missing type must read as "no label" rather than
+     * throw.
+     */
+    if (!type) return '';
+
     if (t('Lang') === 'en') return type.name || '';
     if (t('Lang') === 'fa') return type.name_fa || type.name || '';
     if (t('Lang') === 'ps') return type.name_ps || type.name || '';
@@ -703,7 +766,7 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
               </div>
             {/if}
 
-            {#if account_type_id == 7}
+            {#if isShareholderType || isVisitorType}
               <label class="account-modal__field account-modal__field--full">
                 <span class="account-modal__label">{t('Percentage')}</span>
                 <div class="account-modal__input-wrap">
@@ -724,24 +787,35 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
                       }
                       let num = parseFloat(value);
                       if (!isNaN(num)) {
-                        if (num > 100 - (account?.id ? totalPercentage : totalPercentage))
+                        /* Only shareholders share a 100% total between them. */
+                        if (
+                          isShareholderType &&
+                          num > 100 - (account?.id ? totalPercentage : totalPercentage)
+                        )
                           value =
                             Number(100 - (account?.id ? totalPercentage : totalPercentage)).toLocaleString(undefined, {
                               maximumFractionDigits: 3,
                             }) + '';
+                        if (num > 100) value = '100';
                         if (num < 0) value = '0';
                       }
                       percentage = value;
                     }} />
                 </div>
-                <small class="account-modal__hint">
-                  {t('Total')}:
-                  <span dir="ltr"
-                    >{(account?.id
-                      ? Number(totalPercentage) + Number(percentage)
-                      : Number(totalPercentage) + Number(percentage)
-                    ).toLocaleString(undefined, { maximumFractionDigits: 3 })}%</span>
-                </small>
+                {#if isShareholderType}
+                  <small class="account-modal__hint">
+                    {t('Total')}:
+                    <span dir="ltr"
+                      >{(account?.id
+                        ? Number(totalPercentage) + Number(percentage)
+                        : Number(totalPercentage) + Number(percentage)
+                      ).toLocaleString(undefined, { maximumFractionDigits: 3 })}%</span>
+                  </small>
+                {:else}
+                  <small class="account-modal__hint">
+                    {t('Share of the benefit of each sale this visitor brings')}
+                  </small>
+                {/if}
               </label>
             {/if}
 

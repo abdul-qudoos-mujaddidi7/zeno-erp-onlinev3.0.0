@@ -3,6 +3,9 @@ const SALE_COLUMNS = `
   local_id,
   warehouse_id,
   account_id,
+  visitor_account_id,
+  visitor_percentage,
+  visitor_benefit,
   sale_type,
   invoice_number,
   invoice_date,
@@ -322,6 +325,9 @@ async function create(
         local_id,
         warehouse_id,
         account_id,
+        visitor_account_id,
+        visitor_percentage,
+        visitor_benefit,
         sale_type,
         invoice_number,
         invoice_date,
@@ -345,8 +351,8 @@ async function create(
         updated_at
       )
       VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         1, ?, ?, NOW(3), NOW(3)
       )
     `,
@@ -355,6 +361,9 @@ async function create(
       localId,
       data.warehouse_id ?? null,
       data.account_id ?? null,
+      data.visitor_account_id ?? null,
+      data.visitor_percentage ?? null,
+      data.visitor_benefit ?? null,
       data.sale_type ?? null,
       data.invoice_number ?? null,
       data.invoice_date ?? null,
@@ -388,6 +397,9 @@ async function create(
 const SALE_UPDATE_COLUMNS = [
   'warehouse_id',
   'account_id',
+  'visitor_account_id',
+  'visitor_percentage',
+  'visitor_benefit',
   'sale_type',
   'invoice_number',
   'invoice_date',

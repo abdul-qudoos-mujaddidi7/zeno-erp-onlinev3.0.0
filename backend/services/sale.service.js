@@ -51,6 +51,18 @@ const accountRole = require('./account-role.service');
 const fiscalPostingGuard =
   require('./fiscal-posting-guard.service');
 
+/*
+ * The visitor's benefit share is its own journal type, not 'sale'. That keeps
+ * it independent of the customer entry: the sale's own journal is refreshed,
+ * replaced or removed by the sale flows, and none of that should silently
+ * drop (or duplicate) what the visitor is owed.
+ */
+const SALE_VISITOR_REFERENCE_TYPE = 'sale_visitor';
+
+/* The system account that gives up the benefit. Same account the exchange
+ * benefit journals use, so company benefit is reported in one place. */
+const BENEFITS_ACCOUNT_CODE = 'BENEFITS';
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -573,6 +585,309 @@ async function getSale({
   };
 }
 
+/**
+ * Storage precision of the money columns (DECIMAL(20,6)). Rounding here keeps
+ * float noise such as 33.333333333333336 out of the ledger.
+ */
+function roundMoney(amount) {
+  return Number(Number(amount || 0).toFixed(6));
+}
+
+/**
+ * The benefit a sale shares with its visitor.
+ *
+ * The authoritative figure is the sale's own stored `benefit`: what the
+ * application itself computes and shows (the charge of every line minus its
+ * cost basis, less any sale discount).
+ *
+ * That is also the only figure that exists for the majority of organizations.
+ * `sale_items.profit` is written by the FIFO/LIFO batch ledger alone, so in an
+ * organization that does not use inventory layers it stays 0 forever, and a
+ * share computed from it silently pays the visitor nothing even though the
+ * sale plainly shows a benefit.
+ *
+ * `sale_items.profit` is therefore only the fallback, for a sale whose benefit
+ * has not been calculated yet.
+ */
+async function saleBenefit(
+  connection,
+  {
+    orgId,
+    saleId,
+    sale,
+  },
+) {
+  const storedBenefit = sale?.benefit;
+
+  if (
+    storedBenefit !== null &&
+    storedBenefit !== undefined &&
+    storedBenefit !== '' &&
+    Number.isFinite(Number(storedBenefit))
+  ) {
+    return Number(storedBenefit);
+  }
+
+  const items = await saleRepository.findItemsBySale(
+    connection,
+    {
+      orgId,
+      saleId,
+    },
+  );
+
+  return (items || []).reduce(
+    (total, item) => total + (Number(item.profit) || 0),
+    0,
+  );
+}
+
+/**
+ * Removes any visitor benefit posted for this sale.
+ *
+ * Used when the sale loses its visitor or stops being confirmed, so the visitor
+ * balance always follows the sale that created it.
+ */
+async function clearVisitorBenefit(
+  connection,
+  {
+    orgId,
+    userId,
+    saleId,
+    resetAmounts = true,
+  },
+) {
+  await journalRepository.softDeleteByReference(
+    connection,
+    {
+      orgId,
+      referenceId: saleId,
+      referenceType: SALE_VISITOR_REFERENCE_TYPE,
+      userId,
+    },
+  );
+
+  if (resetAmounts) {
+    await saleRepository.update(
+      connection,
+      {
+        orgId,
+        localId: saleId,
+        userId,
+        data: {
+          visitor_percentage: null,
+          visitor_benefit: null,
+        },
+      },
+    );
+  }
+}
+
+/**
+ * Posts (or re-posts) the benefit share that a sale owes its visitor.
+ *
+ * The double entry is:
+ *
+ *   BENEFITS   debit   the visitor's share  (the company gives that benefit up)
+ *   visitor    credit  the visitor's share  (it is now owed to the visitor)
+ *
+ * and nothing else moves: the sale's own entry still charges the CUSTOMER the
+ * full invoice amount through RECEIVABLE. Choosing a visitor never changes what
+ * the customer owes.
+ *
+ * Because it is called on every confirmed sale save, it is idempotent: any
+ * previous visitor journal for the sale is dropped first.
+ *
+ * A sale with no visitor, no benefit, or a loss posts nothing at all — there is
+ * no benefit to share, and the visitor is never charged for a loss.
+ */
+async function syncVisitorBenefit(
+  connection,
+  {
+    orgId,
+    userId,
+    requestContext,
+    saleId,
+  },
+) {
+  const sale = await saleRepository.findByLocalId(
+    connection,
+    {
+      orgId,
+      localId: saleId,
+    },
+  );
+
+  if (!sale) {
+    return null;
+  }
+
+  const visitorAccountId =
+    Number(sale.visitor_account_id) || 0;
+
+  if (!visitorAccountId) {
+    await clearVisitorBenefit(
+      connection,
+      {
+        orgId,
+        userId,
+        saleId,
+      },
+    );
+
+    return null;
+  }
+
+  /* Locked and validated: the account must still be an active visitor. */
+  const visitorAccount =
+    await accountRole.assertAccountRole(
+      connection,
+      {
+        orgId,
+        accountId: visitorAccountId,
+        role: 'visitor',
+      },
+    );
+
+  const percentage =
+    Number(visitorAccount.percentage);
+
+  /*
+   * The same two rules services/account.service.js enforces when the account
+   * is saved, re-checked here because a sale must never post against a rate
+   * that was cleared or corrupted after the fact.
+   */
+  if (
+    visitorAccount.percentage === null ||
+    visitorAccount.percentage === undefined ||
+    visitorAccount.percentage === '' ||
+    !Number.isFinite(percentage)
+  ) {
+    throw new AppError(
+      'The selected visitor has no benefit percentage, so a share cannot be calculated. Set a percentage above zero on the visitor account first.',
+      400,
+      'VISITOR_PERCENTAGE_REQUIRED',
+    );
+  }
+
+  if (percentage <= 0 || percentage > 100) {
+    throw new AppError(
+      'The visitor benefit percentage must be greater than 0 and at most 100.',
+      400,
+      'VISITOR_PERCENTAGE_INVALID',
+    );
+  }
+
+  const benefit = await saleBenefit(
+    connection,
+    {
+      orgId,
+      saleId,
+      sale,
+    },
+  );
+
+  const share = roundMoney(
+    (benefit * percentage) / 100,
+  );
+
+  /* Drop whatever was posted before, then write the current figure. */
+  await clearVisitorBenefit(
+    connection,
+    {
+      orgId,
+      userId,
+      saleId,
+      resetAmounts: false,
+    },
+  );
+
+  if (share <= 0) {
+    await saleRepository.update(
+      connection,
+      {
+        orgId,
+        localId: saleId,
+        userId,
+        data: {
+          visitor_percentage: percentage,
+          visitor_benefit: 0,
+        },
+      },
+    );
+
+    return {
+      percentage,
+      benefit,
+      share: 0,
+    };
+  }
+
+  const benefitsAccount =
+    await saleRepository.findAccountByCode(
+      connection,
+      {
+        orgId,
+        code: BENEFITS_ACCOUNT_CODE,
+      },
+    );
+
+  if (!benefitsAccount) {
+    throw new AppError(
+      'BENEFITS account not found.',
+      500,
+      'BENEFITS_ACCOUNT_NOT_FOUND',
+    );
+  }
+
+  await createJournalEntry(
+    connection,
+    {
+      orgId,
+      userId,
+      requestContext,
+      data: {
+        date: sale.invoice_date || null,
+        reference_id: saleId,
+        reference_type: SALE_VISITOR_REFERENCE_TYPE,
+        description:
+          sale.description ||
+          `Visitor benefit for Invoice #${sale.invoice_number || ''}`,
+        currency: sale.currency || null,
+        first_entry_account: benefitsAccount.id,
+        first_entry_debit: share,
+        first_entry_credit: 0,
+        second_entry_account:
+          visitorAccount.local_id ?? visitorAccountId,
+        second_entry_debit: 0,
+        second_entry_credit: share,
+        status: 1,
+      },
+      description:
+        `Created visitor benefit journal for sale ${saleId}`,
+    },
+  );
+
+  await saleRepository.update(
+    connection,
+    {
+      orgId,
+      localId: saleId,
+      userId,
+      data: {
+        visitor_percentage: percentage,
+        visitor_benefit: share,
+      },
+    },
+  );
+
+  return {
+    percentage,
+    benefit,
+    share,
+  };
+}
+
 async function createSale({
   user,
   data,
@@ -803,6 +1118,24 @@ async function createSale({
           },
           description:
             `Created sale journal for sale ${sale.id}`,
+        },
+      );
+    }
+
+    /*
+     * Visitor process: when the sale was brought by a visitor, the agreed
+     * percentage of THIS sale's benefit is moved from BENEFITS to the
+     * visitor's account. The customer entry above is untouched, so the
+     * visitor share never changes what the customer owes.
+     */
+    if (isConfirmed(data.invoice_status)) {
+      await syncVisitorBenefit(
+        connection,
+        {
+          orgId,
+          userId,
+          requestContext,
+          saleId: localId,
         },
       );
     }
@@ -1566,10 +1899,36 @@ async function updateSale({
             requestContext.ipAddress,
 
           sessionId:
-            requestContext.sessionId,
+            requestContext.sessionId,            deviceInfo:
+              requestContext.deviceInfo,
+        },
+      );
+    }
 
-          deviceInfo:
-            requestContext.deviceInfo,
+    /*
+     * Visitor process, deliberately last: the share is a percentage of the
+     * freshly stored benefit, so the sale row must already be final.
+     * Re-posting is safe because the previous entry for
+     * this sale is dropped first, and a sale that lost its visitor (or is
+     * no longer confirmed) gets its visitor entry cleared instead.
+     */
+    if (isConfirmed(nextStatus)) {
+      await syncVisitorBenefit(
+        connection,
+        {
+          orgId,
+          userId,
+          requestContext,
+          saleId,
+        },
+      );
+    } else {
+      await clearVisitorBenefit(
+        connection,
+        {
+          orgId,
+          userId,
+          saleId,
         },
       );
     }
@@ -1760,6 +2119,21 @@ async function deleteSale({
         referenceId: saleId,
         referenceType: 'sale',
         userId,
+      },
+    );
+
+    /*
+     * The visitor's share dies with the sale: its own journal is removed so
+     * the BENEFITS debit and the visitor's credit both revert. The sale row
+     * is already soft-deleted, so only the journal is touched.
+     */
+    await clearVisitorBenefit(
+      connection,
+      {
+        orgId,
+        userId,
+        saleId,
+        resetAmounts: false,
       },
     );
 
@@ -2644,4 +3018,7 @@ module.exports = {
   allocateInvoiceNumber,
   /* Exported for the Step 2.7 inventory-costing regression tests. */
   persistSaleBatchCosts,
+  /* Exported for the visitor-benefit regression tests. */
+  syncVisitorBenefit,
+  clearVisitorBenefit,
 };

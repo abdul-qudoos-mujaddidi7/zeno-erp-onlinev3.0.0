@@ -107,6 +107,23 @@ async function findAll(
     values.push(accountTypeId);
   }
 
+  if (role === 'visitor') {
+    /*
+     * A visitor is identified by its type's `code`, not by a capability flag,
+     * matching services/account-role.service.js. The code is the stable name
+     * of a type, so this keeps working after a rename.
+     */
+    conditions.push(`
+      EXISTS (
+        SELECT 1 FROM account_types at_role
+        WHERE at_role.org_id = accounts.org_id
+          AND at_role.local_id = accounts.account_type_id
+          AND at_role.status = 1
+          AND UPPER(TRIM(at_role.code)) = 'VISITOR'
+      )
+    `);
+  }
+
   if (role === 'customer' || role === 'supplier') {
     const capability = role === 'customer' ? 'can_be_customer' : 'can_be_supplier';
     const legacyType = role === 'customer' ? 4 : 3;
