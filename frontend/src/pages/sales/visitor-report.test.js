@@ -137,7 +137,9 @@ describe('the visitor report is downloadable', () => {
 
 describe('the visitor report is reachable from the sales page', () => {
   test('the sales page knows the visitors tab', () => {
-    expect(SALES_SOURCE).toMatch(/enable_visitor \? \['sales', 'products', 'visitors'\]/);
+    expect(SALES_SOURCE).toMatch(
+      /\? \['sales', 'benefit', 'products', 'visitors'\]/,
+    );
     expect(SALES_SOURCE).toMatch(/enable_visitor && activeTab === 'visitors'/);
     expect(SALES_SOURCE).toMatch(/import VisitorReport from '\.\/sales\/VisitorReport\.svelte'/);
     expect(SALES_SOURCE).toMatch(/activeTab === 'visitors'/);

@@ -57,7 +57,7 @@ import { saleApi } from '../api/saleApi.js';
   let lookupsLoaded = false;
 
   function getSalesQueryKey() {
-    return `${currentPage}|${itemsPerPage}|${account_id || ''}|${filterStatus}|${filterPaymentStatus}|${selectedCurrency}|${fromDate}|${toDate}`;
+    return `${activeTab}|${currentPage}|${itemsPerPage}|${account_id || ''}|${filterStatus}|${filterPaymentStatus}|${selectedCurrency}|${fromDate}|${toDate}`;
   }
 
   let shiftPressed = false;
@@ -92,9 +92,17 @@ import { saleApi } from '../api/saleApi.js';
    * shows the Products Report (for the selected customer, if any) and
    * ?tab=visitors shows the Visitor Report.
    */
-  $: SALES_TABS = enable_visitor ? ['sales', 'products', 'visitors'] : ['sales', 'products'];
+  $: SALES_TABS = enable_visitor
+    ? ['sales', 'benefit', 'products', 'visitors']
+    : ['sales', 'benefit', 'products'];
   let activeTab = 'sales';
+  $: isSalesListTab = activeTab === 'sales' || activeTab === 'benefit';
   let salesLoaded = false;
+  let reportBenefitTotals = {};
+  let reportVisitorTotals = {};
+  let reportCompanyTotals = {};
+  let reportConfirmedSales = 0;
+  let reportTotalsLoading = false;
 
   function syncTabFromHash() {
     const hash = window.location.hash || '';
@@ -203,7 +211,12 @@ import { saleApi } from '../api/saleApi.js';
         status: 1,
         search: searchTerm.trim(),
         account_id: account_id || undefined,
-        invoice_status: filterStatus !== 'all' ? filterStatus : undefined,
+        invoice_status:
+          activeTab === 'benefit'
+            ? 'confirmed'
+            : filterStatus !== 'all'
+              ? filterStatus
+              : undefined,
         payment_status: filterPaymentStatus !== 'all' ? filterPaymentStatus : undefined,
         currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
         page,
@@ -223,6 +236,35 @@ import { saleApi } from '../api/saleApi.js';
     }
 
     return all;
+  }
+
+  async function loadBenefitTotals(requestId) {
+    reportTotalsLoading = true;
+    try {
+      const rows = await fetchAllSalesForExport();
+      if (requestId !== loadRequestId || activeTab !== 'benefit') return;
+
+      const gross = {};
+      const visitor = {};
+      for (const sale of rows) {
+        if (sale.invoice_status !== 'confirmed') continue;
+        const currency = sale.currency || 'AFN';
+        gross[currency] = (gross[currency] || 0) + Number(sale.benefit || 0);
+        visitor[currency] = (visitor[currency] || 0) + Number(sale.visitor_benefit || 0);
+      }
+
+      reportBenefitTotals = gross;
+      reportVisitorTotals = visitor;
+      reportCompanyTotals = Object.fromEntries(
+        Object.keys(gross).map((currency) => [
+          currency,
+          Number(gross[currency] || 0) - Number(visitor[currency] || 0),
+        ]),
+      );
+      reportConfirmedSales = rows.length;
+    } finally {
+      if (requestId === loadRequestId) reportTotalsLoading = false;
+    }
   }
 
   async function exportSales(format) {
@@ -305,7 +347,7 @@ import { saleApi } from '../api/saleApi.js';
   }
 
   async function load() {
-    if (activeTab !== 'sales') return;
+    if (!isSalesListTab) return;
     const requestId = ++loadRequestId;
     lastPageKey = getSalesQueryKey();
     loading = true;
@@ -317,7 +359,12 @@ import { saleApi } from '../api/saleApi.js';
             status: 1,
             search: searchTerm.trim(),
             account_id: account_id || undefined,
-            invoice_status: filterStatus !== 'all' ? filterStatus : undefined,
+            invoice_status:
+              activeTab === 'benefit'
+                ? 'confirmed'
+                : filterStatus !== 'all'
+                  ? filterStatus
+                  : undefined,
             payment_status: filterPaymentStatus !== 'all' ? filterPaymentStatus : undefined,
             currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
             page: currentPage,
@@ -346,6 +393,8 @@ import { saleApi } from '../api/saleApi.js';
           totalPages = hasMore
             ? Math.max(currentPage + 1, Math.ceil(totalItems / itemsPerPage) || 0)
             : Math.max(currentPage, Math.ceil(totalItems / itemsPerPage) || 0);
+
+          if (activeTab === 'benefit') void loadBenefitTotals(requestId);
         })(),
       ]);
     } finally {
@@ -405,7 +454,7 @@ import { saleApi } from '../api/saleApi.js';
   }
 
   /* First arrival on the sales tab; the products tab skips the sales load. */
-  $: if (bootstrapped && activeTab === 'sales' && !salesLoaded) {
+  $: if (bootstrapped && isSalesListTab && !salesLoaded) {
     salesLoaded = true;
     load();
   }
@@ -556,7 +605,7 @@ import { saleApi } from '../api/saleApi.js';
       visible: !scopedAccountId,
       options: [{ value: 'all', label: t('All') }, ...accounts.map((account) => ({ value: account.id, label: getAccountName(account) }))],
     },
-    { key: 'status', label: t('Status'), value: filterStatus, icon: 'bi-activity', options: statusFilterOptions },
+    { key: 'status', label: t('Status'), value: filterStatus, icon: 'bi-activity', visible: activeTab !== 'benefit', options: statusFilterOptions },
     { key: 'payment', label: t('Payment'), value: filterPaymentStatus, icon: 'bi-wallet2', options: paymentStatusFilterOptions },
     { key: 'currency', label: t('Currency'), value: selectedCurrency, icon: 'bi-cash-stack', options: [{ value: 'all', label: t('All') }, ...currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))] },
     { key: 'fromDate', label: t('From Date'), value: fromDate, icon: 'bi-calendar3', type: 'date' },
@@ -578,7 +627,7 @@ import { saleApi } from '../api/saleApi.js';
   }
 </script>
 
-{#if !permissions?.some((p) => p.code === 'Sales' && p.view)}
+{#if !permissions?.some((p) => p.code === 'Sales' && p.view) || (activeTab === 'benefit' && !showBenefit)}
   <h3 class="permission-denied"><i class="bi bi-exclamation-triangle"></i>{t('No access allowed')}</h3>
 {:else if activeTab === 'products'}
   <ProductsReport account_id={account_id} itemType="sale" bind:selectedCurrency {currencies} />
@@ -589,7 +638,7 @@ import { saleApi } from '../api/saleApi.js';
     dir={t('dir')}
     ariaLabel={t('Sales')}
     toolbarWidth="25rem"
-    showStats={showSummaryCards}
+    showStats={activeTab === 'benefit' || showSummaryCards}
     showExtra={(shiftPressed && ctrlPressed) || calculatingAll}
     showFooter={!loading && totalItems > 0}
     dense={true}
@@ -597,10 +646,11 @@ import { saleApi } from '../api/saleApi.js';
     contentClass="sales-index-content"
     tablePadding={true}>
     <svelte:fragment slot="actions">
-      {#if permissions?.some((p) => p.code === 'Sales' && p.create)}
+      {#if activeTab === 'sales' && permissions?.some((p) => p.code === 'Sales' && p.create)}
         <ActionButton icon="bi-plus-lg" label={t('New Sale')} on:click={openNewSale} />
       {/if}
 
+      {#if activeTab === 'sales'}
       <ActionButton
         variant="secondary"
         icon="bi-file-earmark"
@@ -614,6 +664,7 @@ import { saleApi } from '../api/saleApi.js';
             showReceipt = true;
           }
         }} />
+      {/if}
 
       <ExportMenu
         extraClass="pdf-btn"
@@ -621,6 +672,7 @@ import { saleApi } from '../api/saleApi.js';
         disabled={exportingReport || filteredSales.length === 0}
         on:export={(event) => exportSales(event.detail)}
       />
+      {#if activeTab === 'sales'}
       <button
         type="button"
         class="index-settings-button"
@@ -631,9 +683,26 @@ import { saleApi } from '../api/saleApi.js';
         on:click={() => (showSummaryCards = !showSummaryCards)}>
         <i class="bi {showSummaryCards ? 'bi-x-lg' : 'bi-cart-check'}" aria-hidden="true"></i>
       </button>
+      {/if}
     </svelte:fragment>
 
     <svelte:fragment slot="stats">
+      {#if activeTab === 'benefit'}
+      <div class="index-summary-grid sales-summary-grid sales-summary-grid--benefit" aria-busy={reportTotalsLoading}>
+        <SummaryCard label={t('Confirmed Sales')} icon="bi-receipt" tone="green">
+          {reportTotalsLoading ? '…' : reportConfirmedSales.toLocaleString()}
+        </SummaryCard>
+        <SummaryCard label={t('Total Benefit Amount')} icon="bi-graph-up-arrow" tone="cyan">
+          {@html reportTotalsLoading ? '…' : formatValueObj(reportBenefitTotals)}
+        </SummaryCard>
+        <SummaryCard label={t('Visitor Share')} icon="bi-person-check" tone="amber">
+          {@html reportTotalsLoading ? '…' : formatValueObj(reportVisitorTotals)}
+        </SummaryCard>
+        <SummaryCard label={t('Company Share')} icon="bi-building-check" tone="purple">
+          {@html reportTotalsLoading ? '…' : formatValueObj(reportCompanyTotals)}
+        </SummaryCard>
+      </div>
+      {:else}
       <div class="index-summary-grid sales-summary-grid">
         <SummaryCard label={t('Sales Count')} icon="bi-cart-check" tone="green">
           {salesCountLabel}
@@ -642,6 +711,7 @@ import { saleApi } from '../api/saleApi.js';
           {@html formatValueObj(totalSalesAmount)}
         </SummaryCard>
       </div>
+      {/if}
     </svelte:fragment>
 
     
