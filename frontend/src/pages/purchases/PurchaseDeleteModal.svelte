@@ -67,21 +67,20 @@
         }
 
         // append purchase_return/payment journals for unified display
-        const purchaseRefs = new Set([
+        const purchaseRefs = [
             ...purchase_returns.map((r) => r.id),
             ...purchase_payments.map((p) => p.id),
-        ]);
+        ];
 
-        if (purchaseRefs.size > 0) {
+        if (purchaseRefs.length > 0) {
             const refJournalResponse =
-                await journalApi.getAll({ status: 1 });
+                await journalApi.getAll({ status: 1, reference_ids: purchaseRefs });
 
             purchase_journals = purchase_journals.concat(
                 (refJournalResponse?.data || []).filter(
                     (j) =>
-                        (j.reference_type === "purchase_return" ||
-                            j.reference_type === "purchase_payment") &&
-                        purchaseRefs.has(Number(j.reference_id)),
+                        j.reference_type === "purchase_return" ||
+                        j.reference_type === "purchase_payment",
                 ),
             );
         }

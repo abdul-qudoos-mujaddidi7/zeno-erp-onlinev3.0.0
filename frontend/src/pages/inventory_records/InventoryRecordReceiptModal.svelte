@@ -23,7 +23,6 @@ import { settingsApi } from '../../api/settingsApi.js';
 import { currencyApi } from '../../api/currencyApi.js';
 import { accountApi } from '../../api/accountApi.js';
 import { productApi } from '../../api/productApi.js';
-import { journalApi } from '../../api/journalApi.js';
 import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
 
   export let inventory_record = {};
@@ -45,7 +44,7 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
     dispatch('showA4');
   }
 
-  let allJournals = [];
+  let accountBalances = {};
   async function loadItems() {
     // load inventory_record items and attach product names
     
@@ -66,7 +65,7 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
       };
     });
     settings = (await settingsApi.getAll({ status: 1 }))?.data || [];
-    allJournals = (await journalApi.getAll({ status: 1 }))?.data || [];
+    accountBalances = (await accountApi.getBalances({ status: 1 }))?.data || {};
   }
 
   async function loadPayments() {
@@ -295,20 +294,8 @@ td {
   let balance = {};
 
   function calculateAccountBalance(accountId, currency) {
-    balance = {};
-    allJournals.forEach((j) => {
-      if (j.first_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.first_entry_credit || 0) - Number(j.first_entry_debit || 0));
-      }
-      if (j.second_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.second_entry_credit || 0) - Number(j.second_entry_debit || 0));
-      }
-    });
-    console.log('Calculated balance for account', accountId, balance, allJournals.length);
+    balance = accountBalances[accountId] || accountBalances[String(accountId)] || {};
+    console.log('Calculated balance for account', accountId, balance);
     return balance.toString
       ? Object.entries(balance)
           .map(

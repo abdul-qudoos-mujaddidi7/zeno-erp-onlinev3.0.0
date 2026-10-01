@@ -35,25 +35,22 @@ import { saleApi } from '../api/saleApi.js';
     dataUsage['Treasury'] = await (await accountApi.getAll({ status: 1, code: 'TREASURY' }))?.data || [];
     dataUsage['Shareholder Account'] = await (await accountApi.getAll({ status: 1, account_type_id: 7 }))?.data || [];
     dataUsage['Warehouse'] = (await warehouseApi.getAll({ status: 1 }))?.data || [];
-    dataUsage['Journal'] = (await journalApi.getAll({ status: 1 }))?.data || [];
+    /*
+     * The usage bars only read `.length`, so ask the API for the count
+     * (page size 1 + meta.total) instead of downloading every journal
+     * and sale row just to measure them.
+     */
+    const journalUsage = await journalApi.getAll({ status: 1, page: 1, limit: 1 });
+    dataUsage['Journal'] = { length: Number(journalUsage?.meta?.total) || 0 };
 
-    // get today's sales from created_at
-    //
-    //
-    let sales = (await saleApi.getAll({ status: 1 }))?.data || [];
-    let result = sales.filter((s) => {
-      const invoiceDate = new Date(s.created_at);
-      const from = fromDate ? new Date(fromDate) : null;
-      const to = toDate ? new Date(toDate) : null;
-      // If both dates are same, show that day's sales
-      if (from && to && from.getTime() === to.getTime()) {
-        return invoiceDate.toDateString() === from.toDateString();
-      }
-      if (from && invoiceDate < from) return false;
-      if (to && invoiceDate > to) return false;
-      return true;
+    const salesUsage = await saleApi.getAll({
+      status: 1,
+      page: 1,
+      limit: 1,
+      date_from: fromDate || undefined,
+      date_to: toDate || undefined,
     });
-    dataUsage['Daily Sales'] = result;
+    dataUsage['Daily Sales'] = { length: Number(salesUsage?.meta?.total) || 0 };
   });
 
   function formatDate(date) {

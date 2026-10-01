@@ -109,12 +109,20 @@ async function listJournals({
     dateTo = fiscalYear.end_date;
   }
 
+  const referenceIds = String(filters.reference_ids || '')
+    .split(',')
+    .map((part) => Number(String(part).trim()))
+    .filter((id) => Number.isSafeInteger(id) && id > 0);
+
   const listParams = {
     orgId,
     status: filters.status,
     search: filters.search,
     referenceId: filters.reference_id,
     referenceType: filters.reference_type,
+    referenceIds: referenceIds.length
+      ? referenceIds
+      : null,
     dateFrom,
     dateTo,
     accountId: filters.account_id,

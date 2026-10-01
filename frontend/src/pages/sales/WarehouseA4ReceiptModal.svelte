@@ -8,7 +8,6 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { saleApi } from '../../api/saleApi.js';
   import { productApi } from '../../api/productApi.js';
   import { accountApi } from '../../api/accountApi.js';
-  import { journalApi } from '../../api/journalApi.js';
   import { t, lang, translate_org_type, settings_all, shortID } from '../../i18n/i18n.js';
   import { showDate } from '../../calendar.js';
   import { push } from 'svelte-spa-router';
@@ -74,7 +73,6 @@ import { productBrandApi } from '../../api/productBrandApi.js';
   let categories = [];
   let saleItems = [];
   let warehouses = [];
-  let allJournals = [];
   async function loadItems() {
     if (sale) {
       const saleResponse = await saleApi.getById(Number(sale.id));
@@ -107,7 +105,6 @@ import { productBrandApi } from '../../api/productBrandApi.js';
 
     settings = (await settingsApi.getAll({ status: 1 }))?.data || [];
 
-    allJournals = (await journalApi.getAll({ status: 1 }))?.data || [];
   }
 
   async function loadPayments() {

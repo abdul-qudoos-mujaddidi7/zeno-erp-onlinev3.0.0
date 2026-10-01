@@ -138,7 +138,6 @@ import { apartmentApi } from '../../api/apartmentApi.js';
     return result;
   }
 
-  let allJournals = [];
   onMount(async () => {
     units = (await productUnitApi.getAll({ status: 1 }))?.data || [];
     accounts = await (await accountApi.getAll({ status: 1 }))?.data || [];
@@ -146,7 +145,6 @@ import { apartmentApi } from '../../api/apartmentApi.js';
 
     products = (await productApi.getAll({ status: 1 }))?.data || [];
 
-    allJournals = (await journalApi.getAll({ status: 1 }))?.data || [];
     accounts.forEach((acc) => {
       if (acc.code === 'TREASURY') {
         second_entry_account = acc.id;
@@ -202,7 +200,6 @@ import { apartmentApi } from '../../api/apartmentApi.js';
 import { currencyApi } from '../../api/currencyApi.js';
 import { accountApi } from '../../api/accountApi.js';
 import { productApi } from '../../api/productApi.js';
-import { journalApi } from '../../api/journalApi.js';
 import { accountTypeApi } from '../../api/accountTypeApi.js';
 import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
   let componentRoot;

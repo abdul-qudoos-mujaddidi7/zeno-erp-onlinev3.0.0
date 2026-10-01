@@ -1,19 +1,12 @@
 ;
 import { currencyApi } from '../../api/currencyApi.js';
-import { journalApi } from '../../api/journalApi.js';
 import { accountApi } from '../../api/accountApi.js';
 import { productApi } from '../../api/productApi.js';
 import { warehouseProductApi } from '../../api/warehouseProductApi.js';
 
 let accounts = [];
-let journals = [];
 let accountTypes = [];
 let accountGroups = [];
-
-async function loadJournals() {
-  const response = await journalApi.getAll({ status: 1 });
-  return response?.data || [];
-}
 
 export async function calculateBalancesOfAllAccounts({ status = 1, account_ids = '' } = {}) {
     let startTime = Date.now();
@@ -164,24 +157,19 @@ export async function getGeneralBenefit() {
     return[defaultCurrency,defaultCurrencyProfit,accountBalances,totalPurchaseCostMap];
 }
 
+/*
+ * Balances come from the SQL aggregate endpoint (/accounts/balances).
+ * Downloading every journal row to add two columns client-side cost
+ * hundreds of ms and tens of MB once an org passed a few thousand
+ * entries; the aggregate answers the same question in a few ms.
+ */
 export async function calculateBalanceOfAccount(id) {
     let startTime = Date.now();
-    const journals = await loadJournals();
-
-    let balance = {};
-
-    for (let i = 0; i < journals.length; i++) {
-        let j = journals[i];
-        if (Number(j.first_entry_account) === Number(id)) {
-            let amount = Number(j.first_entry_credit) - Number(j.first_entry_debit);
-            balance[j.currency] = (balance[j.currency] || 0) + amount;
-        }
-        if (Number(j.second_entry_account) === Number(id)) {
-            let amount = Number(j.second_entry_credit) - Number(j.second_entry_debit);
-            balance[j.currency] = (balance[j.currency] || 0) + amount;
-        }
-    }
-    console.log(`Calculated Balance of Account with ID (${id}) and took ${Date.now()-startTime}ms`,balance);
+    const accountId = Number(id);
+    const response = await accountApi.getBalances({ status: 1, account_ids: String(accountId) });
+    const allBalances = response?.data || {};
+    const balance = allBalances[accountId] || allBalances[String(accountId)] || {};
+    console.log(`Calculated Balance of Account with ID (${id}) via /accounts/balances in ${Date.now()-startTime}ms`, balance);
     return balance;
 }
 
@@ -191,21 +179,12 @@ export async function calculateBalanceOfTreasury() {
     const accountsResponse = await accountApi.getAll({ status: 1 });
     const allAccounts = accountsResponse?.data || [];
     let treasuryAccount = allAccounts.find((a) => a.code === 'TREASURY' && a.status === 1) || null;
-    const journals = await loadJournals();
+    if (!treasuryAccount) return {};
 
-    let balance = {};
+    const response = await accountApi.getBalances({ status: 1, account_ids: String(treasuryAccount.id) });
+    const allBalances = response?.data || {};
+    const balance = allBalances[treasuryAccount.id] || allBalances[String(treasuryAccount.id)] || {};
 
-    for (let i = 0; i < journals.length; i++) {
-        let j = journals[i];
-        if (Number(j.first_entry_account) === Number(treasuryAccount.id)) {
-            let amount = Number(j.first_entry_credit) - Number(j.first_entry_debit);
-            balance[j.currency] = (balance[j.currency] || 0) + amount;
-        }
-        if (Number(j.second_entry_account) === Number(treasuryAccount.id)) {
-            let amount = Number(j.second_entry_credit) - Number(j.second_entry_debit);
-            balance[j.currency] = (balance[j.currency] || 0) + amount;
-        }
-    }
-    console.log(`Calculated Balance of TREASURY with ID (${treasuryAccount.id}) and took ${Date.now()-startTime}ms`,balance);
+    console.log(`Calculated Balance of TREASURY with ID (${treasuryAccount.id}) via /accounts/balances in ${Date.now()-startTime}ms`, balance);
     return balance;
 }

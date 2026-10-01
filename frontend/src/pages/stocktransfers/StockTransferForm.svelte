@@ -133,12 +133,13 @@ import { journalApi } from '../../api/journalApi.js';
         };
       });
 
-      const journals = (await journalApi.getAll({ status: 1 }))?.data || [];
+      const journals = (await journalApi.getAll({
+        status: 1,
+        reference_type: 'stock_transfer',
+        reference_id: Number(stocktransfer.id),
+      }))?.data || [];
       const transferJournal = journals.find(
-        (journal) =>
-          journal.reference_type === 'stock_transfer' &&
-          Number(journal.reference_id) === Number(stocktransfer.id) &&
-          Number(journal.status) === 1,
+        (journal) => Number(journal.status) === 1,
       );
       paymentAmount = transferJournal ? Number(transferJournal.first_entry_credit || 0) : 0;
       paymentCurrency = transferJournal?.currency || stocktransfer.currency || paymentCurrency;

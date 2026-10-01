@@ -19,7 +19,6 @@ import { settingsApi } from '../../../api/settingsApi.js';
 import { currencyApi } from '../../../api/currencyApi.js';
 import { accountApi } from '../../../api/accountApi.js';
 import { productApi } from '../../../api/productApi.js';
-import { journalApi } from '../../../api/journalApi.js';
 
   export let production = {};
   let items = [];
@@ -40,7 +39,7 @@ import { journalApi } from '../../../api/journalApi.js';
     dispatch('showA4');
   }
 
-  let allJournals = [];
+  let accountBalances = {};
   async function loadItems() {
     const full = (await productionApi.getById(production.id))?.data || production;
     const productionItems = (full.items || []).filter((s) => Number(s.status) === 1);
@@ -56,7 +55,7 @@ import { journalApi } from '../../../api/journalApi.js';
     });
     payments = (full.payments || []).filter((s) => Number(s.status) === 1);
     settings = (await settingsApi.getAll({ status: 1 }))?.data || [];
-    allJournals = (await journalApi.getAll({ status: 1 }))?.data || [];
+    accountBalances = (await accountApi.getBalances({ status: 1 }))?.data || {};
   }
 
   async function loadPayments() {
@@ -239,20 +238,8 @@ let showAccountBalance = "-";
     let balance = {};
 
   function calculateAccountBalance(accountId, currency) {
-    balance = {};
-    allJournals.forEach((j) => {
-      if (j.first_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.first_entry_credit || 0) - Number(j.first_entry_debit || 0));
-      }
-      if (j.second_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.second_entry_credit || 0) - Number(j.second_entry_debit || 0));
-      }
-    });
-    console.log('Calculated balance for account', accountId, balance, allJournals.length);
+    balance = accountBalances[accountId] || accountBalances[String(accountId)] || {};
+    console.log('Calculated balance for account', accountId, balance);
     return balance.toString
       ? Object.entries(balance)
           .map(([cur, amt]) => `<span dir='ltr'>${amt.toLocaleString(undefined,{maximumFractionDigits: 3})}</span> ${t(cur)}`

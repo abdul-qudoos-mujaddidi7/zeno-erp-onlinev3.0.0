@@ -5,7 +5,6 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { productGenericApi } from '../../api/productGenericApi.js';
   import { saleApi } from '../../api/saleApi.js';
   import { accountApi } from '../../api/accountApi.js';
-  import { journalApi } from '../../api/journalApi.js';
   import AppModal from '../../components/common/AppModal.svelte';
   import WhatsappModal from '../WhatsappModal.svelte';
 
@@ -143,32 +142,20 @@ import { currencyApi } from '../../api/currencyApi.js';
     );
   }
 
-  let allJournals = [];
+  let accountBalances = {};
 
   /*
-   * Loads every journal that touches the customer account (first or
-   * second entry) so the receipt can show the previous/current balance.
+   * The receipt only needs the customer's current per-currency balance.
+   * The SQL aggregate endpoint answers that directly — paging through the
+   * account's journals both cost more and reported a wrong balance once an
+   * account passed the page size.
    */
   async function loadJournals() {
     if (!sale?.account_id) return;
-    const all = [];
-    let page = 1;
-    const limit = 200;
-    for (;;) {
-      const response = await journalApi.getAll({
-        status: 1,
-        account_id: sale.account_id,
-        limit,
-        page,
-        skip_count: 1,
-      });
-      const rows = response?.data || [];
-      all.push(...rows);
-      const meta = response?.meta || {};
-      if (!meta.hasMore || rows.length < limit) break;
-      page += 1;
-    }
-    allJournals = all;
+    accountBalances = (await accountApi.getBalances({
+      status: 1,
+      account_ids: String(sale.account_id),
+    }))?.data || {};
   }
 
   async function loadItems() {
@@ -234,7 +221,7 @@ import { currencyApi } from '../../api/currencyApi.js';
       if (!payments?.length) tasks.push(loadPayments());
     }
     if (!customer?.id && sale?.account_id) tasks.push(loadCustomer());
-    if (!allJournals.length && sale?.account_id) tasks.push(loadJournals());
+    if (!Object.keys(accountBalances).length && sale?.account_id) tasks.push(loadJournals());
     if (tasks.length) await Promise.all(tasks);
 
     items = (items || []).map((it) => ({
@@ -246,7 +233,7 @@ import { currencyApi } from '../../api/currencyApi.js';
         '',
     }));
 
-    if (allJournals.length) {
+    if (Object.keys(accountBalances).length) {
       showAccountBalance = calculateAccountBalance(sale.account_id, sale.currency);
     }
 
@@ -752,20 +739,8 @@ td {
   let balance = {};
 
   function calculateAccountBalance(accountId, currency) {
-    balance = {};
-    allJournals.forEach((j) => {
-      if (j.first_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.first_entry_credit || 0) - Number(j.first_entry_debit || 0));
-      }
-      if (j.second_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.second_entry_credit || 0) - Number(j.second_entry_debit || 0));
-      }
-    });
-    console.log('Calculated balance for account', accountId, balance, allJournals.length);
+    balance = accountBalances[accountId] || accountBalances[String(accountId)] || {};
+    console.log('Calculated balance for account', accountId, balance);
     return balance.toString
       ? Object.entries(balance)
           .map(

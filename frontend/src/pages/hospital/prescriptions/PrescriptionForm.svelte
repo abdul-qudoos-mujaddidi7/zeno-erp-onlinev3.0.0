@@ -18,7 +18,6 @@ import { settingsApi } from '../../../api/settingsApi.js';
 import { accountApi } from '../../../api/accountApi.js';
 import { userApi } from '../../../api/userApi.js';
 import { productApi } from '../../../api/productApi.js';
-import { journalApi } from '../../../api/journalApi.js';
 import { accountTypeApi } from '../../../api/accountTypeApi.js';
 import { appointmentApi } from '../../../api/appointmentApi.js';
 import { prescriptionApi } from '../../../api/prescriptionApi.js';
@@ -114,11 +113,9 @@ import { prescriptionApi } from '../../../api/prescriptionApi.js';
   }
   let WALKIN = null;
 
-  let allJournals = [];
   onMount(async () => {
     accounts = await (await accountApi.getAll({ status: 1 }))?.data || [];
 
-    allJournals = (await journalApi.getAll({ status: 1 }))?.data || [];
     accounts.forEach((acc) => {
       if (acc.code === 'TREASURY') {
         second_entry_account = acc.id;

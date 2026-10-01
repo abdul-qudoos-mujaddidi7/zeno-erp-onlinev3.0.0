@@ -33,9 +33,13 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     await loadJournals();
   }
   async function loadJournals() {
-    const response = await journalApi.getAll({ status: 1 });
+    const response = await journalApi.getAll({
+      status: 1,
+      reference_type: 'stock_transfer',
+      reference_id: Number(stocktransferId),
+    });
     journals = (response?.data || []).filter(
-      (j) => j.reference_type === 'stock_transfer' && Number(j.reference_id) === Number(stocktransferId) && j.status === 1,
+      (j) => j.status === 1,
     );
   }
   onMount(async () => {

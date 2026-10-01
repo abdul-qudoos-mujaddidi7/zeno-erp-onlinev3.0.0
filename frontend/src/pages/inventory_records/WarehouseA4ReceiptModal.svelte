@@ -12,7 +12,6 @@ import { currencyApi } from '../../api/currencyApi.js';
 import { warehouseApi } from '../../api/warehouseApi.js';
 import { accountApi } from '../../api/accountApi.js';
 import { productApi } from '../../api/productApi.js';
-import { journalApi } from '../../api/journalApi.js';
 import { productBrandApi } from '../../api/productBrandApi.js';
 import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
 
@@ -73,7 +72,6 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
   let categories = [];
   let inventory_recordItems = [];
   let warehouses = [];
-  let allJournals = [];
   async function loadItems() {
     if (inventory_record) {
       const inventory_recordResponse = await inventoryRecordApi.getById(Number(inventory_record.id));
@@ -108,7 +106,6 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
 
     settings = (await settingsApi.getAll({ status: 1 }))?.data || [];
 
-    allJournals = (await journalApi.getAll({ status: 1 }))?.data || [];
   }
 
   async function loadPayments() {

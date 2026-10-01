@@ -8,6 +8,7 @@ export const journalApi = {
     status = 1,
     search = '',
     reference_id,
+    reference_ids,
     reference_type,
     currency,
     date_from,
@@ -34,6 +35,10 @@ export const journalApi = {
 
     if (reference_type) {
       params.set('reference_type', String(reference_type));
+    }
+
+    if (Array.isArray(reference_ids) && reference_ids.length) {
+      params.set('reference_ids', reference_ids.join(','));
     }
 
     if (currency && currency !== 'all') params.set('currency', String(currency));

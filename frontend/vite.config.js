@@ -103,6 +103,15 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
+            /*
+             * Vite's dynamic-import preload helper is used by every lazy
+             * route, and Rollup likes to park it in the 'pdf' chunk. That
+             * made the app shell statically fetch jsPDF + html2canvas
+             * (~570 kB) on every page load just to reach the helper.
+             * Pin it next to the other always-loaded code instead.
+             */
+            if (id.includes('vite/preload-helper')) return 'vendor';
+
             if (!id.includes('node_modules')) return;
 
             if (id.includes('chart.js')) return 'chart';

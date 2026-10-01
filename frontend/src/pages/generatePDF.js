@@ -18,8 +18,26 @@ const systemLogoPNG = '/img/logo.png';
 
 import { showDate } from '../calendar.js';
 
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+/*
+ * jsPDF + jspdf-autotable are ~570 kB of JavaScript and are only needed
+ * when a report is actually exported. Loading them lazily keeps that
+ * weight out of every list page that merely offers a PDF button.
+ */
+let pdfLibsPromise = null;
+
+function loadPdfLibs() {
+  if (!pdfLibsPromise) {
+    pdfLibsPromise = Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]).then(([jsPdfModule, autoTableModule]) => ({
+      jsPDF: jsPdfModule.jsPDF || jsPdfModule.default,
+      autoTable: autoTableModule.autoTable || autoTableModule.default,
+    }));
+  }
+
+  return pdfLibsPromise;
+}
 
 import { t, shortID } from '../i18n/i18n';
 import { accountApi } from '../api/accountApi.js';
@@ -4368,7 +4386,10 @@ export async function generatePDF(
   generatingPDF = true;
 
   try {
-    await loadThings();
+    const [{ jsPDF, autoTable }] = await Promise.all([
+      loadPdfLibs(),
+      loadThings(),
+    ]);
 
     const rtl = t('dir') === 'rtl';
     const orientation = resolveOrientation();

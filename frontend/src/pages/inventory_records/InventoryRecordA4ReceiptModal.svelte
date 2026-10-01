@@ -32,7 +32,6 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 import { currencyApi } from '../../api/currencyApi.js';
 import { accountApi } from '../../api/accountApi.js';
 import { productApi } from '../../api/productApi.js';
-import { journalApi } from '../../api/journalApi.js';
 import { productBrandApi } from '../../api/productBrandApi.js';
 import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
   let dataUrl = '';
@@ -81,7 +80,7 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
   let brands = [];
   let categories = [];
   let inventory_recordItems = [];
-  let allJournals = [];
+  let accountBalances = {};
   async function loadItems() {
     if (inventory_record) {
            const inventory_recordResponse = await inventoryRecordApi.getById(Number(inventory_record.id));
@@ -116,7 +115,7 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
 
     settings = (await settingsApi.getAll({ status: 1 }))?.data || [];
 
-    allJournals = (await journalApi.getAll({ status: 1 }))?.data || [];
+    accountBalances = (await accountApi.getBalances({ status: 1 }))?.data || {};
   }
 
 
@@ -240,20 +239,8 @@ import { inventoryRecordApi } from '../../api/inventoryRecordApi.js';
   let balance = {};
 
   function calculateAccountBalance(accountId, currency) {
-    balance = {};
-    allJournals.forEach((j) => {
-      if (j.first_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.first_entry_credit || 0) - Number(j.first_entry_debit || 0));
-      }
-      if (j.second_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.second_entry_credit || 0) - Number(j.second_entry_debit || 0));
-      }
-    });
-    console.log('Calculated balance for account', accountId, balance, allJournals.length);
+    balance = accountBalances[accountId] || accountBalances[String(accountId)] || {};
+    console.log('Calculated balance for account', accountId, balance);
     return balance.toString
       ? Object.entries(balance)
           .map(

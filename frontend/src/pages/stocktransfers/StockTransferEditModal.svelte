@@ -66,9 +66,13 @@ import { warehouseApi } from '../../api/warehouseApi.js';
       if (!data) return;
       stocktransfer = data;
       stocktransfer_items = (data.items || []).filter((item) => item.status === 1);
-      const journalsResponse = await journalApi.getAll({ status: 1 });
+      const journalsResponse = await journalApi.getAll({
+        status: 1,
+        reference_type: 'stock_transfer',
+        reference_id: Number(stocktransfer.id),
+      });
       stocktransfer_journals = (journalsResponse?.data || []).filter(
-        (j) => j.reference_type === 'stock_transfer' && Number(j.reference_id) === Number(stocktransfer.id) && j.status === 1,
+        (j) => j.status === 1,
       );
       if (stocktransfer_journals.length == 1) {
         paymentAmount = stocktransfer_journals[0].first_entry_credit;

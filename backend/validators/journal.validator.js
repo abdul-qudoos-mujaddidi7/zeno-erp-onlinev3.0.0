@@ -90,6 +90,19 @@ const journalListQuerySchema = z.object({
     .max(50)
     .optional(),
 
+  /*
+   * Comma separated list of reference ids. Edit/delete modals need the
+   * journals of a document plus those of its payments/returns; without
+   * this they downloaded the whole journals table and filtered in the
+   * browser.
+   */
+  reference_ids: z
+    .string()
+    .trim()
+    .max(5000)
+    .optional()
+    .default(''),
+
   currency: z.string().trim().max(50).optional(),
 
   date_from: z

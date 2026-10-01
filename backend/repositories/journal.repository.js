@@ -37,6 +37,7 @@ async function findAll(
     status = 1,
     search = '',
     referenceId,
+    referenceIds = null,
     referenceType,
     dateFrom,
     dateTo,
@@ -90,6 +91,13 @@ async function findAll(
   if (referenceId !== undefined && referenceId !== null) {
     conditions.push('reference_id = ?');
     values.push(referenceId);
+  }
+
+  if (Array.isArray(referenceIds) && referenceIds.length) {
+    conditions.push(
+      `reference_id IN (${referenceIds.map(() => '?').join(', ')})`,
+    );
+    values.push(...referenceIds);
   }
 
   if (referenceType) {
@@ -192,6 +200,7 @@ async function findSummary(
     status = 1,
     search = '',
     referenceId,
+    referenceIds = null,
     referenceType,
     dateFrom,
     dateTo,
@@ -234,6 +243,13 @@ async function findSummary(
   if (referenceId !== undefined && referenceId !== null) {
     conditions.push('j.reference_id = ?');
     values.push(referenceId);
+  }
+
+  if (Array.isArray(referenceIds) && referenceIds.length) {
+    conditions.push(
+      `j.reference_id IN (${referenceIds.map(() => '?').join(', ')})`,
+    );
+    values.push(...referenceIds);
   }
 
   if (referenceType) {

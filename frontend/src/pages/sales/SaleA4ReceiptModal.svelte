@@ -8,7 +8,6 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { saleApi } from '../../api/saleApi.js';
   import { productApi } from '../../api/productApi.js';
   import { accountApi } from '../../api/accountApi.js';
-  import { journalApi } from '../../api/journalApi.js';
   import AppModal from '../../components/common/AppModal.svelte';
   import { t, lang, translate_org_type, settings_all } from '../../i18n/i18n.js';
   import { showDate } from '../../calendar.js';
@@ -90,7 +89,7 @@ import { productBrandApi } from '../../api/productBrandApi.js';
   let brands = [];
   let categories = [];
   let saleItems = [];
-  let allJournals = [];
+  let accountBalances = {};
   async function loadItems() {
     if (sale) {
            const saleResponse = await saleApi.getById(Number(sale.id));
@@ -129,24 +128,10 @@ import { productBrandApi } from '../../api/productBrandApi.js';
    */
   async function loadJournals() {
     if (!sale?.account_id) return;
-    const all = [];
-    let page = 1;
-    const limit = 200;
-    for (;;) {
-      const response = await journalApi.getAll({
-        status: 1,
-        account_id: sale.account_id,
-        limit,
-        page,
-        skip_count: 1,
-      });
-      const rows = response?.data || [];
-      all.push(...rows);
-      const meta = response?.meta || {};
-      if (!meta.hasMore || rows.length < limit) break;
-      page += 1;
-    }
-    allJournals = all;
+    accountBalances = (await accountApi.getBalances({
+      status: 1,
+      account_ids: String(sale.account_id),
+    }))?.data || {};
   }
 
   async function loadPayments() {
@@ -190,10 +175,10 @@ import { productBrandApi } from '../../api/productBrandApi.js';
       if (!payments?.length) tasks.push(loadPayments());
     }
     if (!customer?.id && sale?.account_id) tasks.push(loadCustomer());
-    if (!allJournals.length && sale?.account_id) tasks.push(loadJournals());
+    if (!Object.keys(accountBalances).length && sale?.account_id) tasks.push(loadJournals());
     if (tasks.length) await Promise.all(tasks);
 
-    if (sale?.account_id && allJournals.length) {
+    if (sale?.account_id && Object.keys(accountBalances).length) {
       showAccountBalance = calculateAccountBalance(sale.account_id, sale.currency);
     }
     items = (items || []).map((it) => ({
@@ -362,20 +347,8 @@ import { productBrandApi } from '../../api/productBrandApi.js';
   let balance = {};
 
   function calculateAccountBalance(accountId, currency) {
-    balance = {};
-    allJournals.forEach((j) => {
-      if (j.first_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.first_entry_credit || 0) - Number(j.first_entry_debit || 0));
-      }
-      if (j.second_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.second_entry_credit || 0) - Number(j.second_entry_debit || 0));
-      }
-    });
-    console.log('Calculated balance for account', accountId, balance, allJournals.length);
+    balance = accountBalances[accountId] || accountBalances[String(accountId)] || {};
+    console.log('Calculated balance for account', accountId, balance);
     return balance.toString
       ? Object.entries(balance)
           .map(
