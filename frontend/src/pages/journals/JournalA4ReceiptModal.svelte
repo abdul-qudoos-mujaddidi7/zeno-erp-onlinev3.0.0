@@ -8,6 +8,7 @@
 
   import { t, lang, translate_org_type, shortID,settings_all } from '../../i18n/i18n.js';
   import { amountInWords } from '../../utils/amountInWords.js';
+  import { localizeDescription } from '../../utils/localizedDescription.js';
   import { currencyLabels } from '../../utils/currencyLabel.js';
 
   /* The payable amount, spelled out under the figures. */
@@ -384,7 +385,7 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
             {#if journal?.description && journal?.description !== ''}
               <hr class="my-1" />
               <div>
-                {t('Description')}: <span>{t(journal.description)}</span>
+                {t('Description')}: <span>{localizeDescription(journal.description, $lang, t)}</span>
               </div>
             {/if}
             <div class="footer small text-primary">

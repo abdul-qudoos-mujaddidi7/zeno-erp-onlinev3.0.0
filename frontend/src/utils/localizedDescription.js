@@ -26,6 +26,28 @@ export function localizeDescription(description, language = 'en', translate = (v
 
   const lang = ['fa', 'ps'].includes(String(language)) ? String(language) : 'en';
   let localized = source;
+  /*
+   * "Visitor benefit for Invoice #INV-9" is written once, in English, when the
+   * visitor benefit journal is posted, so stored rows keep the English
+   * wording; only the surrounding text is translated, the number is kept.
+   */
+  localized = localized.replace(
+    /^Visitor benefit for Invoice\s*#?\s*([^/|\n]*)$/i,
+    (_full, rawReference) => {
+      const reference = rawReference.trim();
+      if (lang === 'fa') {
+        return reference
+          ? `مفاد ویزیتور برای بل شماره ${reference}`
+          : 'مفاد ویزیتور برای فروش';
+      }
+      if (lang === 'ps') {
+        return reference
+          ? `د ویزیتور ګټه د بل #${reference} لپاره`
+          : 'د ویزیتور ګټه د پلور لپاره';
+      }
+      return reference ? `Visitor benefit for Invoice #${reference}` : 'Visitor benefit for sale';
+    },
+  );
   localized = localized.replace(
     /Payment via journal:([^\s/|]+)\s+for\s+(Sale|Purchase)\s+#([^/|]+?)(?=\s*(?:\/|\||$))/gi,
     (_full, journalId, type, rawReference) => {

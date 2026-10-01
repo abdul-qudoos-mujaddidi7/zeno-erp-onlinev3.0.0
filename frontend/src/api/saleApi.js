@@ -129,7 +129,7 @@ export const saleApi = {
    * company kept. A date range and a currency are the only filters; the totals
    * come back in `meta.by_currency`, one bucket per currency.
    */
-  getVisitorReport({ date_from, date_to, currency, product_ids = [] } = {}) {
+  getVisitorReport({ date_from, date_to, currency, product_ids = [], visitor_ids = [] } = {}) {
     const params = new URLSearchParams();
 
     if (date_from) {
@@ -146,6 +146,10 @@ export const saleApi = {
 
     if (Array.isArray(product_ids) && product_ids.length) {
       params.set('product_ids', product_ids.map(Number).filter(Number.isFinite).join(','));
+    }
+
+    if (Array.isArray(visitor_ids) && visitor_ids.length) {
+      params.set('visitor_ids', visitor_ids.map(Number).filter(Number.isFinite).join(','));
     }
 
     const query = params.toString();

@@ -16,9 +16,18 @@
  *   4. It is downloadable: the PDF/Excel export carries the same columns and
  *      the same four figures the screen shows.
  */
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { compile } from 'svelte/compiler';
+
+vi.mock('../../api/apiClient.js', () => ({
+  api: {
+    get: vi.fn(async (url) => ({ success: true, data: [], meta: {}, url })),
+  },
+}));
+
+const { saleApi } = await import('../../api/saleApi.js');
+const { api } = await import('../../api/apiClient.js');
 
 const read = (relativePath) =>
   readFileSync(new URL(relativePath, import.meta.url), 'utf8');
@@ -46,6 +55,24 @@ describe('visitor report component', () => {
     expect(REPORT_SOURCE).toMatch(/multiple: true/);
   });
 
+  test('it offers a visitor-account filter built from the visitor accounts', () => {
+    expect(REPORT_SOURCE).toMatch(/lookupAccounts\(\{ role: 'visitor'/);
+    expect(REPORT_SOURCE).toMatch(/key: 'visitor'/);
+    expect(REPORT_SOURCE).toMatch(/if \(key === 'visitor'\) selectedVisitors =/);
+  });
+
+  test('the visitor filter is applied by the endpoint, not by hiding rows locally', () => {
+    expect(REPORT_SOURCE).toMatch(/visitor_ids: selectedVisitors/);
+    /* visibleRows only narrows the free-text search. */
+    expect(REPORT_SOURCE).toMatch(/\$: visibleRows = \(rows \|\| \[\]\)\.filter/);
+  });
+
+  test('clearing the filters drops the chosen visitors too', () => {
+    const reset = REPORT_SOURCE.match(/function resetReportFilters\(\) \{[\s\S]*?\n  \}/)?.[0] || '';
+
+    expect(reset).toContain('selectedVisitors = [];');
+  });
+
   test('it shows the benefit, the visitor share and the company share', () => {
     expect(REPORT_SOURCE).toMatch(/t\('Benefit'\)/);
     expect(REPORT_SOURCE).toMatch(/t\('Visitor Share'\)/);
@@ -70,6 +97,31 @@ describe('visitor report component', () => {
 
   test('it defaults to the working fiscal year like the sales list does', () => {
     expect(REPORT_SOURCE).toMatch(/applyCurrentFiscalYearRange\(/);
+  });
+});
+
+describe('the visitor filter reaches the endpoint', () => {
+  test('the chosen visitor accounts are sent as comma-separated IDs', async () => {
+    api.get.mockClear();
+
+    await saleApi.getVisitorReport({
+      visitor_ids: ['10995116277761', 22],
+      product_ids: [5],
+    });
+
+    const [url] = api.get.mock.calls[0];
+
+    expect(url).toContain('/api/v2/sales/visitor-report?');
+    expect(url).toContain('visitor_ids=10995116277761%2C22');
+    expect(url).toContain('product_ids=5');
+  });
+
+  test('an unfiltered report carries no visitor_ids parameter', async () => {
+    api.get.mockClear();
+
+    await saleApi.getVisitorReport({});
+
+    expect(api.get.mock.calls[0][0]).not.toContain('visitor_ids');
   });
 });
 

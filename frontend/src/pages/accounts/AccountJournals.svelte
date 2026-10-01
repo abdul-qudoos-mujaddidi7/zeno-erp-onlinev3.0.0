@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
 
   import { t, lang, translate_org_type, shortID } from '../../i18n/i18n';
+  import { localizeDescription } from '../../utils/localizedDescription.js';
 
   import { toast } from '../../ToastUI/toast.js';
   $: _lang = $lang;
@@ -312,7 +313,7 @@ import { currencyApi } from '../../api/currencyApi.js';
                         : getAccountName(j.first_entry_account)}</span>
                   {/if}
                 </td>
-                <td class="text-center">{j.description}</td>
+                <td class="text-center">{localizeDescription(j.description, $lang, t) || '-'}</td>
                 <td class="text-center"
                   ><span class="badge badge-danger"
                     >{j.first_entry_debit != 0

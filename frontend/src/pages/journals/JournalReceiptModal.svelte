@@ -7,6 +7,7 @@
   let WhatsappModalRef = null;
   import { t, lang, translate_org_type, shortID } from '../../i18n/i18n.js';
   import { amountInWords } from '../../utils/amountInWords.js';
+  import { localizeDescription } from '../../utils/localizedDescription.js';
   import { currencyLabels } from '../../utils/currencyLabel.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -408,7 +409,7 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
             {#if journal?.description && journal?.description !== ''}
               <div class="divider"></div>
               <div>
-                {t('Description')}: <span>{journal.description}</span>
+                {t('Description')}: <span>{localizeDescription(journal.description, $lang, t)}</span>
               </div>
             {/if}
             <div class="divider"></div>

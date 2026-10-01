@@ -304,8 +304,9 @@ const updatePaymentSchema =
 
 /*
  * Used by GET /sales/visitor-report. A report is a whole-table aggregate, so it
- * takes a date range, optional currency and optional comma-separated product
- * IDs. There is no pagination, search or sort because the result is grouped.
+ * takes a date range, optional currency and optional comma-separated product or
+ * visitor account IDs. There is no pagination, search or sort because the
+ * result is grouped.
  */
 const visitorReportQuerySchema = z.object({
   date_from: z
@@ -325,6 +326,13 @@ const visitorReportQuerySchema = z.object({
     .trim()
     .max(4000)
     .regex(/^\d+(,\d+)*$/, 'product_ids must be comma-separated IDs')
+    .optional(),
+
+  visitor_ids: z
+    .string()
+    .trim()
+    .max(4000)
+    .regex(/^\d+(,\d+)*$/, 'visitor_ids must be comma-separated IDs')
     .optional(),
 });
 

@@ -485,6 +485,18 @@ async function listSales({
 }
 
 /**
+ * Comma-separated IDs as they arrive from a query string, reduced to positive
+ * safe integers. Anything malformed is dropped rather than turned into a filter
+ * that matches nothing.
+ */
+function parseCsvIds(value) {
+  return String(value || '')
+    .split(',')
+    .map(Number)
+    .filter((id) => Number.isSafeInteger(id) && id > 0);
+}
+
+/**
  * The Visitor Report: what each visitor brought, what they were given, and what
  * the company kept of it.
  *
@@ -512,10 +524,8 @@ async function getVisitorReport({
       currency: filters.currency && filters.currency !== 'all'
         ? filters.currency
         : null,
-      productIds: String(filters.product_ids || '')
-        .split(',')
-        .map(Number)
-        .filter((id) => Number.isSafeInteger(id) && id > 0),
+      productIds: parseCsvIds(filters.product_ids),
+      visitorIds: parseCsvIds(filters.visitor_ids),
     },
   );
 

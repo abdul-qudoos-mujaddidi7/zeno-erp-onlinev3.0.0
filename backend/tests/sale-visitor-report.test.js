@@ -35,6 +35,12 @@ const USER = {
   local_id: 7,
 };
 
+/*
+ * Captured before the per-test stub replaces it, so the query the report really
+ * builds can be inspected without a database.
+ */
+const realFindVisitorReport = saleRepository.findVisitorReport;
+
 let state;
 
 beforeEach(() => {
@@ -167,6 +173,7 @@ test('the date range and a chosen currency reach the query', async () => {
     dateTo: '2026-09-30',
     currency: 'AFN',
     productIds: [],
+    visitorIds: [],
   });
 });
 
@@ -174,6 +181,83 @@ test('multiple selected products reach the report query', async () => {
   await report({ product_ids: '11,22,33' });
 
   assert.deepEqual(state.received.productIds, [11, 22, 33]);
+});
+
+test('multiple selected visitor accounts reach the report query', async () => {
+  await report({ visitor_ids: '10995116277761,22' });
+
+  assert.deepEqual(state.received.visitorIds, [10995116277761, 22]);
+});
+
+test('junk in the visitor filter is dropped, never fatal', async () => {
+  const result = await report({ visitor_ids: '11,abc,-4,0,nan,22' });
+
+  assert.deepEqual(state.received.visitorIds, [11, 22]);
+  assert.deepEqual(result.meta.by_currency, {});
+});
+
+test('no visitor filter means every visitor is reported', async () => {
+  await report();
+
+  assert.deepEqual(state.received.visitorIds, []);
+});
+
+/*
+ * The visitor filter is pushed into SQL, not applied to the returned rows: the
+ * report is an aggregate, so hiding rows afterwards would leave the totals
+ * (and the summary cards) counting visitors the user filtered out.
+ */
+test('the visitor filter becomes an IN clause and keeps every other filter', async () => {
+  let sql = '';
+  let values = [];
+
+  await realFindVisitorReport(
+    {
+      execute: async (statement, bound) => {
+        sql = statement;
+        values = bound;
+
+        return [[], []];
+      },
+    },
+    {
+      orgId: ORG_ID,
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
+      currency: 'AFN',
+      visitorIds: [11, 22],
+      productIds: [5],
+    },
+  );
+
+  assert.match(sql, /s\.visitor_account_id IN \(\?, \?\)/);
+  assert.match(sql, /s\.currency = \?/);
+  assert.match(sql, /s\.invoice_date >= \?/);
+  assert.match(sql, /visitor_filter_items\.product_id IN \(\?\)/);
+  /* The ids sit in their own IN clause, next to the currency and product binds. */
+  assert.deepEqual(values.slice(0, 5), [ORG_ID, 'AFN', 11, 22, 5]);
+  assert.equal(values.length, 9);
+  assert.ok(values.includes('2026-09-01') && values.includes('2026-09-30'));
+});
+
+test('without a visitor filter the report still covers every visitor', async () => {
+  let sql = '';
+  let values = [];
+
+  await realFindVisitorReport(
+    {
+      execute: async (statement, bound) => {
+        sql = statement;
+        values = bound;
+
+        return [[], []];
+      },
+    },
+    { orgId: ORG_ID },
+  );
+
+  assert.equal(/s\.visitor_account_id IN/.test(sql), false);
+  assert.deepEqual(values, [ORG_ID]);
 });
 
 test('"all" means every currency, so no currency filter is sent', async () => {
@@ -206,4 +290,7 @@ test('the report query takes a date range and defaults the currency to all', () 
   assert.equal(visitorReportQuerySchema.safeParse({ date_to: '2026/09/30' }).success, false);
   assert.equal(visitorReportQuerySchema.safeParse({ product_ids: '11,22,33' }).success, true);
   assert.equal(visitorReportQuerySchema.safeParse({ product_ids: '11,nope' }).success, false);
+  assert.equal(visitorReportQuerySchema.safeParse({ visitor_ids: '11,22,33' }).success, true);
+  assert.equal(visitorReportQuerySchema.safeParse({ visitor_ids: '11,nope' }).success, false);
+  assert.equal(visitorReportQuerySchema.safeParse({ visitor_ids: '' }).success, false);
 });

@@ -1264,7 +1264,9 @@ async function updateItemCosts(
  * benefit minus that commission.
  *
  * Currency is part of the grouping because sales carry their own currency and
- * adding different currencies together would be meaningless.
+ * adding different currencies together would be meaningless. The product and
+ * visitor filters only narrow which sales are counted; the grouping and the
+ * commission figures are untouched by them.
  */
 async function findVisitorReport(
   executor,
@@ -1274,6 +1276,7 @@ async function findVisitorReport(
     dateTo,
     currency,
     productIds = [],
+    visitorIds = [],
   },
 ) {
   const conditions = [
@@ -1290,6 +1293,11 @@ async function findVisitorReport(
   if (currency) {
     conditions.push('s.currency = ?');
     values.push(currency);
+  }
+
+  if (visitorIds.length) {
+    conditions.push(`s.visitor_account_id IN (${visitorIds.map(() => '?').join(', ')})`);
+    values.push(...visitorIds);
   }
 
   if (productIds.length) {

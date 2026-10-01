@@ -18,6 +18,7 @@
   import { productApi } from '../../api/productApi.js';
   import { applyCurrentFiscalYearRange } from '../../utils/currentFiscalYear.js';
   import { oneMonthDateWindow } from '../accounts/reportDateRange.js';
+  import { lookupAccounts } from '../../lib/formLookups.js';
 
   $: _lang = $lang;
 
@@ -37,6 +38,8 @@
   let searchTerm = '';
   let products = [];
   let selectedProducts = [];
+  let visitors = [];
+  let selectedVisitors = [];
 
   /*
    * A visitor's name is translated on the account, so the report reads the
@@ -50,6 +53,24 @@
     if (language === 'ps') return row.visitor_name_ps || row.visitor_name || '—';
 
     return row.visitor_name || '—';
+  }
+
+  /*
+   * The dropdown shows one line per visitor account. Like the report itself, it
+   * prefers the name in the active language, and keeps the account code so two
+   * visitors with the same name stay tellable apart.
+   */
+  function visitorOptionLabel(account) {
+    const language = t('Lang');
+
+    const name =
+      language === 'fa'
+        ? account.name_fa || account.name
+        : language === 'ps'
+          ? account.name_ps || account.name
+          : account.name;
+
+    return account.code ? `${name || '—'} (${account.code})` : name || '—';
   }
 
   function amountText(value) {
@@ -72,6 +93,7 @@
         date_to: toDate || undefined,
         currency: selectedCurrency,
         product_ids: selectedProducts,
+        visitor_ids: selectedVisitors,
       });
 
       if (requestId !== loadRequestId) return;
@@ -152,6 +174,7 @@
 
     if (key === 'currency') selectedCurrency = value;
     if (key === 'product') selectedProducts = Array.isArray(value) ? value : [];
+    if (key === 'visitor') selectedVisitors = Array.isArray(value) ? value : [];
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
 
@@ -162,6 +185,7 @@
     searchTerm = '';
     selectedCurrency = 'all';
     selectedProducts = [];
+    selectedVisitors = [];
 
     const window = oneMonthDateWindow();
     fromDate = window.from;
@@ -176,6 +200,17 @@
     } catch (error) {
       console.error('Failed to load products for the visitor report:', error);
       products = [];
+    }
+
+    /*
+     * The visitor filter is server-side, so the dropdown only needs the active
+     * visitor accounts; the report itself decides which of them have sales.
+     */
+    try {
+      visitors = await lookupAccounts({ role: 'visitor', limit: 200 });
+    } catch (error) {
+      console.error('Failed to load visitors for the visitor report:', error);
+      visitors = [];
     }
 
     /*
@@ -269,6 +304,21 @@
         ...products.map((product) => ({
           value: String(product.id),
           label: product.name || product.code || String(product.id),
+        })),
+      ],
+    },
+    {
+      key: 'visitor',
+      label: t('Visitor'),
+      value: selectedVisitors,
+      icon: 'bi-person-badge',
+      multiple: true,
+      visible: visitors.length > 0,
+      options: [
+        { value: 'all', label: t('All') },
+        ...visitors.map((visitor) => ({
+          value: String(visitor.id),
+          label: visitorOptionLabel(visitor),
         })),
       ],
     },
