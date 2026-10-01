@@ -173,6 +173,22 @@ export async function calculateBalanceOfAccount(id) {
     return balance;
 }
 
+/*
+ * The account behind the dashboard Treasury card.
+ *
+ * Treasury balances arrive as a currency map, which carries no account id, so
+ * the id is read back from the same system code those balances belong to
+ * (`TREASURY`). Returns null when the org has no active treasury account, or
+ * when the lookup is not allowed, so callers can keep an aggregate fallback.
+ */
+export async function findTreasuryAccountId() {
+    const response = await accountApi.getAll({ status: 1, code: 'TREASURY' });
+    const rows = response?.data || [];
+    const treasury = rows.find((a) => a.code === 'TREASURY') || rows[0];
+
+    return treasury?.id != null ? Number(treasury.id) : null;
+}
+
 export async function calculateBalanceOfTreasury() {
     let startTime = Date.now();
 

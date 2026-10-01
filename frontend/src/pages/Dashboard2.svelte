@@ -4,11 +4,12 @@
 <script>
   import { onMount, onDestroy, tick } from 'svelte';
   import Chart from 'chart.js/auto';
+  import { link } from 'svelte-spa-router';
   import { t, lang, translate_org_type } from "../i18n/i18n.js";
 
   import {calculateBalancesOfAllAccounts} from "./accounts/AccountsHelper.js"
 
-  import {getGeneralBenefit,calculateBalanceOfTreasury} from "./accounts/AccountsHelper.js";
+  import {getGeneralBenefit,calculateBalanceOfTreasury,findTreasuryAccountId} from "./accounts/AccountsHelper.js";
 
 
 
@@ -300,11 +301,16 @@ import { saleItemApi } from '../api/saleItemApi.js';
 
   let netBenefit = ['-',0]
   let treasuryBalance = {};
+  let treasuryAccountId = $state(null);
+  // Treasury card target: the treasury account profile, with the aggregate
+  // treasury page as the fallback while the account id is unknown.
+  let treasuryHref = $derived(treasuryAccountId ? `/dashboard/account/${treasuryAccountId}` : '/dashboard/treasury');
   // ─── Lifecycle ───────────────────────────────────────────────────
   onMount(async () => {
 
     netBenefit = await getGeneralBenefit();
     treasuryBalance =  await calculateBalanceOfTreasury();
+    treasuryAccountId = await findTreasuryAccountId().catch(() => null);
     console.log("Net Benefit",netBenefit);
     let accountBalances = await calculateBalancesOfAllAccounts();
     console.log(accountBalances);
@@ -453,14 +459,24 @@ import { saleItemApi } from '../api/saleItemApi.js';
       loading = false;
     }
   }
-  // Metric card definitions
+  // Metric card definitions. Every card is a link into the section that owns
+  // the figure it shows, so the dashboard doubles as a launcher.
   const metrics = [
-    { key: 'sales', label: t('Sales'), icon: 'bi-graph-up', color: 'primary', border: 'border-primary', bgLight: 'bg-primary bg-opacity-10' },
-    { key: 'purchases', label: t('Purchases'), icon: 'bi-cart', color: 'danger', border: 'border-danger', bgLight: 'bg-danger bg-opacity-10' },
-    { key: 'saleReturns', label: t('Sale Returns'), icon: 'bi-arrow-counterclockwise', color: 'warning', border: 'border-warning', bgLight: 'bg-warning bg-opacity-10' },
-    { key: 'purchaseReturns', label: t('Purchase Returns'), icon: 'bi-arrow-repeat', color: 'info', border: 'border-info', bgLight: 'bg-info bg-opacity-10' },
-    { key: 'wastes', label: t('Wastes'), icon: 'bi-trash', color: 'dark', border: 'border-dark', bgLight: 'bg-dark bg-opacity-10' }
+    { key: 'sales', label: t('Sales'), icon: 'bi-graph-up', color: 'primary', border: 'border-primary', bgLight: 'bg-primary bg-opacity-10', href: '/dashboard/sales' },
+    { key: 'purchases', label: t('Purchases'), icon: 'bi-cart', color: 'danger', border: 'border-danger', bgLight: 'bg-danger bg-opacity-10', href: '/dashboard/purchases' },
+    { key: 'saleReturns', label: t('Sale Returns'), icon: 'bi-arrow-counterclockwise', color: 'warning', border: 'border-warning', bgLight: 'bg-warning bg-opacity-10', href: '/dashboard/stock/returns' },
+    { key: 'purchaseReturns', label: t('Purchase Returns'), icon: 'bi-arrow-repeat', color: 'info', border: 'border-info', bgLight: 'bg-info bg-opacity-10', href: '/dashboard/stock/returns' },
+    { key: 'wastes', label: t('Wastes'), icon: 'bi-trash', color: 'dark', border: 'border-dark', bgLight: 'bg-dark bg-opacity-10', href: '/dashboard/wastes' }
   ];
+
+  // Quick stats bar: same idea, each tile opens its own section.
+  const quickStats = $derived([
+    { label: t('Products'), val: fmt(totalProducts), icon: 'bi-box-seam', color: 'primary', href: '/dashboard/stock/products' },
+    { label: t('Accounts'), val: fmt(totalAccounts), icon: 'bi-people', color: 'success', href: '/dashboard/accounts/list' },
+    { label: t('Warehouses'), val: fmt(totalWarehouses), icon: 'bi-building', color: 'info', href: '/dashboard/stock/warehouses' },
+    { label: t('Inventory Value'), val: `${defaultCurrency.symbol}${fmt(totalInventoryValue)}`, icon: 'bi-cash-stack', color: 'warning', href: '/dashboard/stock/products' },
+    { label: t('Stock Alerts'), val: fmt(stockAlertCount), icon: 'bi-exclamation-triangle', color: stockAlertCount > 0 ? 'danger' : 'success', href: '/dashboard/product-alerts?tab=quantity' }
+  ]);
 
 
   let ns = $derived(primaryAmt(activeSummary.sales));
@@ -483,6 +499,10 @@ let npp = $derived(primaryAmt(activeSummary.purchasePayments));
     .badge { font-weight: 500; letter-spacing: 0.3px; }
     .shadow-sm { box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,0.08) !important; }
     .btn-rounded { border-radius: 50rem; }
+    /* Cards that open a section behave like links but keep the card look. */
+    .dashboard-card { display: flex; flex-direction: column; color: inherit; text-decoration: none; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+    .dashboard-card:hover { transform: translateY(-2px); border-color: #cfe0ff !important; box-shadow: 0 0.6rem 1.4rem rgba(15, 23, 42, 0.14) !important; }
+    .dashboard-card:focus-visible { outline: 2px solid #0d6efd; outline-offset: 2px; }
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #dee2e6; border-radius: 4px; }
@@ -532,21 +552,20 @@ let npp = $derived(primaryAmt(activeSummary.purchasePayments));
 
     <!-- ═══════════ QUICK STATS BAR ═══════════ -->
     <div class="row g-3 mb-4">
-      {#each [
-        { label: t('Products'), val: fmt(totalProducts), icon: 'bi-box-seam', color: 'primary' },
-        { label: t('Accounts'), val: fmt(totalAccounts), icon: 'bi-people', color: 'success' },
-        { label: t('Warehouses'), val: fmt(totalWarehouses), icon: 'bi-building', color: 'info' },
-        { label: t('Inventory Value'), val: `${defaultCurrency.symbol}${fmt(totalInventoryValue)}`, icon: 'bi-cash-stack', color: 'warning' },
-        { label: t('Stock Alerts'), val: fmt(stockAlertCount), icon: 'bi-exclamation-triangle', color: stockAlertCount > 0 ? 'danger' : 'success' }
-      ] as item, i}
+      {#each quickStats as item, i}
         <div class="col-6 col-md animate__animated animate__fadeInUp" style="animation-delay:{0.05 * i}s">
-          <div class="card border-0 shadow-sm">
+          <a
+            class="card border-0 shadow-sm dashboard-card h-100"
+            href={item.href}
+            use:link
+            title={item.label}
+            aria-label={`${t('Open')} ${item.label}`}>
             <div class="card-body text-center py-3">
               <div class="text-{item.color} mb-1"><i class="bi {item.icon} fs-5"></i></div>
               <h5 class="fw-bold mb-0">{item.val}</h5>
               <small class="text-muted">{item.label}</small>
             </div>
-          </div>
+          </a>
         </div>
       {/each}
     </div>
@@ -570,7 +589,12 @@ let npp = $derived(primaryAmt(activeSummary.purchasePayments));
         {@const oc = otherCurrs(activeSummary[m.key])}
         {@const cnt = activeCounts[m.key]}
         <div class="col animate__animated animate__fadeInUp" style="animation-delay:{0.05 * (i + 1)}s">
-          <div class="card border-start border-4 {m.border} shadow-sm h-100">
+          <a
+            class="card border-start border-4 {m.border} shadow-sm h-100 dashboard-card"
+            href={m.href}
+            use:link
+            title={m.label}
+            aria-label={`${t('Open')} ${m.label}`}>
             <div class="card-body py-3">
               <div class="d-flex justify-content-between align-items-start">
                 <div class="flex-grow-1 min-w-0">
@@ -594,7 +618,7 @@ let npp = $derived(primaryAmt(activeSummary.purchasePayments));
                 </div>
               </div>
             </div>
-          </div>
+          </a>
         </div>
       {/each}
     </div>
@@ -602,7 +626,12 @@ let npp = $derived(primaryAmt(activeSummary.purchasePayments));
     <!-- ═══════════ NET SUMMARY STRIP ═══════════ -->
     <div class="row g-3 mb-4 animate__animated animate__fadeInUp" style="animation-delay:0.6s">
       <div class="col-md-4">
-        <div class="card border-0 shadow-sm">
+        <a
+          class="card border-0 shadow-sm dashboard-card h-100"
+          href="/dashboard/accounts/report"
+          use:link
+          title={t('Net Benefit')}
+          aria-label={`${t('Open')} ${t('Net Benefit')}`}>
           <div class="card-body py-3 d-flex align-items-center">
             <div class="bg-success bg-opacity-10 rounded-3 p-3 me-3 flex-shrink-0">
               <i class="bi bi-arrow-up-right text-success fa-lg"></i>
@@ -614,10 +643,15 @@ let npp = $derived(primaryAmt(activeSummary.purchasePayments));
               </h6>
             </div>
           </div>
-        </div>
+        </a>
       </div>
       <div class="col-md-4">
-        <div class="card border-0 shadow-sm">
+        <a
+          class="card border-0 shadow-sm dashboard-card h-100"
+          href={treasuryHref}
+          use:link
+          title={t('Treasury')}
+          aria-label={`${t('Open')} ${t('Treasury')}`}>
           <div class="card-body py-3 d-flex align-items-center">
             <div class="bg-danger bg-opacity-10 rounded-3 p-3 me-3 flex-shrink-0">
               <i class="bi bi-bank2 text-danger fa-lg"></i>
@@ -640,10 +674,15 @@ let npp = $derived(primaryAmt(activeSummary.purchasePayments));
               </h6>
             </div>
           </div>
-        </div>
+        </a>
       </div>
       <div class="col-md-4">
-        <div class="card border-0 shadow-sm">
+        <a
+          class="card border-0 shadow-sm dashboard-card h-100"
+          href="/dashboard/sales"
+          use:link
+          title={t('Payments Collected')}
+          aria-label={`${t('Open')} ${t('Payments Collected')}`}>
           <div class="card-body py-3 d-flex align-items-center">
             <div class="bg-dark bg-opacity-10 rounded-3 p-3 me-3 flex-shrink-0">
               <i class="bi bi-cash-coin text-dark fa-lg"></i>
@@ -657,7 +696,7 @@ let npp = $derived(primaryAmt(activeSummary.purchasePayments));
               </h6>
             </div>
           </div>
-        </div>
+        </a>
       </div>
     </div>
 

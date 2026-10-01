@@ -7,8 +7,10 @@
   import AppDatePicker from '../components/common/AppDatePicker.svelte';
   import { theme } from '../stores/themeStore.js';
   import { dashboardApi } from '../api/dashboardApi.js';
+  import { findTreasuryAccountId } from './accounts/AccountsHelper.js';
   import { auth } from '../auth/authStore';
   import { canViewDashboard, canViewDashboardCard, canViewModule } from '../auth/permissions.js';
+  import { link } from 'svelte-spa-router';
 
   $: _lang = $lang;
   $: currentTheme = $theme;
@@ -46,6 +48,7 @@
 
   let netBenefit = ['-', 0, {}, {}];
   let treasuryBalance = {};
+  let treasuryAccountId = null;
   let totalPurchaseCostMap = {};
   let defaultCurrencyPurchaseCostMap = 0;
 
@@ -106,6 +109,11 @@
   const chartFont = { family: "'Vazirmatn', 'Roboto', 'Helvetica Neue', Arial, sans-serif" };
 
   $: treasuryEntries = Object.entries(treasuryBalance || {});
+  // The Treasury card opens the treasury account's own profile; the aggregate
+  // treasury page stays the target while the account id is unknown.
+  $: treasuryHref = treasuryAccountId
+    ? `/dashboard/account/${treasuryAccountId}`
+    : '/dashboard/treasury';
   $: netBenefitValue = Number(netBenefit?.[1]) || 0;
   $: netBenefitCurrency = netBenefit?.[0] || defaultCurrency;
 
@@ -139,6 +147,7 @@
       count: Number(metricDataCount.sales) || 0,
       icon: 'bi-graph-up-arrow',
       color: '#0f6efd',
+      href: '/dashboard/sales',
     },
     {
       key: 'purchases',
@@ -147,6 +156,7 @@
       count: Number(metricDataCount.purchases) || 0,
       icon: 'bi-bag-plus',
       color: '#14a44d',
+      href: '/dashboard/purchases',
     },
     {
       key: 'saleReturns',
@@ -155,6 +165,7 @@
       count: Number(metricDataCount.saleReturns) || 0,
       icon: 'bi-arrow-counterclockwise',
       color: '#f59f00',
+      href: '/dashboard/stock/returns',
     },
     {
       key: 'purchaseReturns',
@@ -163,6 +174,7 @@
       count: Number(metricDataCount.purchaseReturns) || 0,
       icon: 'bi-arrow-repeat',
       color: '#6f42c1',
+      href: '/dashboard/stock/returns',
     },
     {
       key: 'wastes',
@@ -171,6 +183,7 @@
       count: Number(metricDataCount.wastes) || 0,
       icon: 'bi-trash3',
       color: '#64748b',
+      href: '/dashboard/wastes',
     },
   ];
 
@@ -199,7 +212,23 @@
 
   onMount(() => {
     refresh();
+    resolveTreasuryAccount();
   });
+
+  /*
+   * Treasury balances come from the summary endpoint as a currency map with no
+   * account id, so the card resolves the account once from its system code. A
+   * failed lookup (for example without the Accounts permission) leaves the card
+   * pointing at the aggregate treasury page.
+   */
+  async function resolveTreasuryAccount() {
+    try {
+      treasuryAccountId = await findTreasuryAccountId();
+    } catch (lookupError) {
+      console.warn('Dashboard treasury account lookup failed:', lookupError);
+      treasuryAccountId = null;
+    }
+  }
 
   onDestroy(() => {
     destroyCharts();
@@ -314,6 +343,7 @@
           defaultCurrency,
           netBenefit,
           treasuryBalance,
+          treasuryAccountId,
           totalPurchaseCostMap,
           defaultCurrencyPurchaseCostMap,
           lowStockProducts,
@@ -338,6 +368,9 @@
     defaultCurrency = snapshot.defaultCurrency || defaultCurrency;
     netBenefit = snapshot.netBenefit || netBenefit;
     treasuryBalance = snapshot.treasuryBalance || {};
+    if (snapshot.treasuryAccountId) {
+      treasuryAccountId = Number(snapshot.treasuryAccountId);
+    }
     totalPurchaseCostMap = snapshot.totalPurchaseCostMap || {};
     defaultCurrencyPurchaseCostMap =
       Number(snapshot.defaultCurrencyPurchaseCostMap) || 0;
@@ -911,7 +944,9 @@
       {/if}
 
       {#if cardNetProfit}
-      <article class="metric-card metric-card--net summary-metric-card" class:negative={netProfit < 0}>
+      <article
+        class="metric-card metric-card--net summary-metric-card"
+        class:negative={netProfit < 0}>
         <span class="summary-metric-card__icon"><i class="bi bi-wallet2"></i></span>
         <div class="summary-metric-card__content">
           <div class="metric-card__value" dir="ltr">
@@ -1020,13 +1055,19 @@
 
         <div class="mix-list">
           {#each visiblePeriodMetrics as metric}
-            <div class="mix-item" style={`--metric-color: ${metric.color}; --metric-width: ${revenueMixTotal ? Math.max(4, Math.abs(metric.value) / revenueMixTotal * 100) : 4}%;`}>
+            <a
+              class="mix-item mix-item--link"
+              href={metric.href}
+              use:link
+              title={metric.label}
+              aria-label={`${t('Open')} ${metric.label}`}
+              style={`--metric-color: ${metric.color}; --metric-width: ${revenueMixTotal ? Math.max(4, Math.abs(metric.value) / revenueMixTotal * 100) : 4}%;`}>
               <div>
                 <span><i></i>{metric.label}</span>
                 <strong dir="ltr">{fmt(metric.value)}</strong>
               </div>
               <div class="mix-track"><span></span></div>
-            </div>
+            </a>
           {/each}
         </div>
       </article>
@@ -1036,7 +1077,12 @@
 
     <section class="support-grid" class:dense={denseSupportGrid}>
       {#if cardTreasury}
-      <article class="panel compact-panel">
+      <a
+        class="panel compact-panel card-link"
+        href={treasuryHref}
+        use:link
+        title={t('Treasury')}
+        aria-label={`${t('Open')} ${t('Treasury')}`}>
         <header class="panel-header">
           <div>
             <h2>{t('Treasury')}</h2>
@@ -1059,11 +1105,16 @@
             {/each}
           {/if}
         </div>
-      </article>
+      </a>
       {/if}
 
       {#if cardTopProducts}
-      <article class="panel products-panel">
+      <a
+        class="panel products-panel card-link"
+        href="/dashboard/product-alerts?tab=products"
+        use:link
+        title={t('Top Products')}
+        aria-label={`${t('Open')} ${t('Top Products')}`}>
         <header class="panel-header">
           <div>
             <h2>{t('Top Products')} — {periodLabels[activePeriod]}</h2>
@@ -1094,7 +1145,7 @@
             {/each}
           {/if}
         </div>
-      </article>
+      </a>
       {/if}
 
       {#if cardDebtors}
@@ -1107,7 +1158,15 @@
               {fmt(topDebtors.sum)} {t(topDebtors.default_currency || defaultCurrency)}
             </span>
           </div>
-          <i class="bi bi-person-exclamation panel-mark danger"></i>
+          <a
+            class="panel-link"
+            href="/dashboard/accounts/report"
+            use:link
+            title={t('Report')}
+            aria-label={`${t('Report')} — ${t('Top Debtors')}`}>
+            <i class="bi bi-person-lines-fill" aria-hidden="true"></i>
+            <span>{t('Report')}</span>
+          </a>
         </header>
 
         <div class="debtor-list">
@@ -1141,7 +1200,13 @@
       {/if}
 
       {#if cardStockAlerts}
-      <article class="panel compact-panel alert-panel" class:combined-alert-panel={enable_expiry_date}>
+      <a
+        class="panel compact-panel alert-panel card-link"
+        class:combined-alert-panel={enable_expiry_date}
+        href="/dashboard/product-alerts?tab=quantity"
+        use:link
+        title={t('Low Stock')}
+        aria-label={`${t('Open')} ${t('Low Stock')}`}>
         <header class="panel-header">
           <div>
             <h2>
@@ -1205,7 +1270,7 @@
             </section>
           {/if}
         </div>
-      </article>
+      </a>
       {/if}
     </section>
   </div>
@@ -1542,6 +1607,76 @@
     background: #fff;
     box-shadow: 0 14px 32px rgba(15, 23, 42, 0.055);
     overflow: hidden;
+  }
+
+  /*
+   * A card that opens a section is a real link: the whole tile is the target,
+   * so it keeps the look of a card, drops the link colour underline and only
+   * adds a small lift (plus a focus ring for keyboard users).
+   */
+  .card-link {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+
+  .card-link:hover {
+    transform: translateY(-2px);
+    border-color: #cfe0ff;
+    box-shadow: 0 16px 34px rgba(33, 55, 93, 0.14);
+  }
+
+  .card-link:focus-visible {
+    outline: 2px solid #0f6efd;
+    outline-offset: 2px;
+  }
+
+  .panel-link {
+    display: inline-flex;
+    gap: 0.3rem;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    color: #0f6efd;
+    font-size: 0.72rem;
+    font-weight: 850;
+    text-decoration: none;
+    transition: background 0.15s ease;
+  }
+
+  .panel-link span {
+    display: inline;
+    margin-top: 0;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  .panel-link:hover {
+    background: #eef5ff;
+  }
+
+  .panel-link:focus-visible {
+    outline: 2px solid #0f6efd;
+    outline-offset: 2px;
+  }
+
+  .mix-item--link {
+    color: inherit;
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+  }
+
+  .mix-item--link:hover {
+    background: #f4f8ff;
+  }
+
+  .mix-item--link:focus-visible {
+    outline: 2px solid #0f6efd;
+    outline-offset: 2px;
   }
 
   .panel-header {
@@ -2743,6 +2878,19 @@
     background: var(--erp-surface);
     color: var(--erp-text);
     box-shadow: var(--erp-shadow-sm);
+  }
+
+  :global(html.dark) .card-link:hover {
+    border-color: rgba(96, 165, 250, 0.45);
+    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.36);
+  }
+
+  :global(html.dark) .panel-link:hover {
+    background: rgba(96, 165, 250, 0.14);
+  }
+
+  :global(html.dark) .mix-item--link:hover {
+    background: rgba(96, 165, 250, 0.12);
   }
 
   :global(html.dark) .dashboard-filter-pill,

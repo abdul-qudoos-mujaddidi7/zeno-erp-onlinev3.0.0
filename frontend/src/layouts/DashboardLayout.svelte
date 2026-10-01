@@ -12,6 +12,7 @@
   const loadDashboard = () => import('../pages/Dashboard.svelte');
   const loadDashboard2 = () => import('../pages/Dashboard2.svelte');
   const loadTreasury = () => import('../pages/Treasury.svelte');
+  const loadProductAlerts = () => import('../pages/productalerts/ProductAlerts.svelte');
   const loadAccountView = () => import('../pages/accounts/AccountView.svelte');
   const loadAppointmentView = () => import('../pages/hospital/appointments/AppointmentView.svelte');
   const loadAccounts = () => import('../pages/Accounts.svelte');
@@ -211,6 +212,8 @@
         <AsyncPage loader={loadDashboard2} />
       {:else if loc === '/dashboard/treasury'}
         <AsyncPage loader={loadTreasury} />
+      {:else if loc === '/dashboard/product-alerts'}
+        <AsyncPage loader={loadProductAlerts} />
       {:else if loc.startsWith('/dashboard/account/')}
         <AsyncPage loader={loadAccountView} id={accountId} />
       {:else if loc.startsWith('/dashboard/appointment/')}

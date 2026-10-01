@@ -157,6 +157,11 @@
 
     return ['products', ...(enable_visitor ? ['visitors'] : [])].includes(tab) ? tab : 'sales';
   })();
+  $: productAlertTab = (() => {
+    const tab = new URLSearchParams(locQuery).get('tab');
+
+    return ['products', 'quantity', 'expiry'].includes(tab) ? tab : 'products';
+  })();
   $: pageKey = (function () {
     // if dashboard/accounts/5, extract accounts part and show "Accounts - View"
     if (locPath.startsWith('/dashboard/account/') && locPath.split('/').length === 4) {
@@ -625,6 +630,20 @@
               </li>
             <li class="nav-item">
               <a class="nav-link active py-0" href="javascript:void(0)"><small>${t('Users')}</small></a>
+            </li>
+          </ul>`;
+      case '/dashboard/product-alerts':
+        return `<ul class="navbar-nav me-auto stock-top-tabs">
+            <li class="nav-item">
+              <a class="nav-link ${productAlertTab === 'products' ? 'active' : ''} py-0" href="/#/dashboard/product-alerts?tab=products"><small>${t('Top Products')}</small></a>
+            </li>
+            <li class="nav-item d-flex align-items-center"><div class="nav-divider"></div></li>
+            <li class="nav-item">
+              <a class="nav-link ${productAlertTab === 'quantity' ? 'active' : ''} py-0" href="/#/dashboard/product-alerts?tab=quantity"><small>${t('Low Stock')}</small></a>
+            </li>
+            <li class="nav-item d-flex align-items-center"><div class="nav-divider"></div></li>
+            <li class="nav-item">
+              <a class="nav-link ${productAlertTab === 'expiry' ? 'active' : ''} py-0" href="/#/dashboard/product-alerts?tab=expiry"><small>${t('Expiry')}</small></a>
             </li>
           </ul>`;
       default:
