@@ -15,6 +15,7 @@
   import { setDatePickers } from '../../calendar.js';
   import { t, lang, shortID } from '../../i18n/i18n.js';
   import { saleApi } from '../../api/saleApi.js';
+  import { productApi } from '../../api/productApi.js';
   import { applyCurrentFiscalYearRange } from '../../utils/currentFiscalYear.js';
   import { oneMonthDateWindow } from '../accounts/reportDateRange.js';
 
@@ -34,6 +35,8 @@
   let toDate = '';
   let selectedCurrency = 'all';
   let searchTerm = '';
+  let products = [];
+  let selectedProducts = [];
 
   /*
    * A visitor's name is translated on the account, so the report reads the
@@ -68,6 +71,7 @@
         date_from: fromDate || undefined,
         date_to: toDate || undefined,
         currency: selectedCurrency,
+        product_ids: selectedProducts,
       });
 
       if (requestId !== loadRequestId) return;
@@ -147,6 +151,7 @@
     const { key, value } = event.detail;
 
     if (key === 'currency') selectedCurrency = value;
+    if (key === 'product') selectedProducts = Array.isArray(value) ? value : [];
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
 
@@ -156,6 +161,7 @@
   function resetReportFilters() {
     searchTerm = '';
     selectedCurrency = 'all';
+    selectedProducts = [];
 
     const window = oneMonthDateWindow();
     fromDate = window.from;
@@ -165,6 +171,13 @@
   }
 
   onMount(async () => {
+    try {
+      products = (await productApi.getAll({ status: 1 }))?.data || [];
+    } catch (error) {
+      console.error('Failed to load products for the visitor report:', error);
+      products = [];
+    }
+
     /*
      * Default to the working fiscal year, exactly like the sales list: a closed
      * year's documents stay out of the normal screens without ever being
@@ -244,6 +257,20 @@
       value: toDate,
       icon: 'bi-calendar3',
       type: 'date',
+    },
+    {
+      key: 'product',
+      label: t('Products'),
+      value: selectedProducts,
+      icon: 'bi-box-seam',
+      multiple: true,
+      options: [
+        { value: 'all', label: t('All') },
+        ...products.map((product) => ({
+          value: String(product.id),
+          label: product.name || product.code || String(product.id),
+        })),
+      ],
     },
     {
       key: 'currency',

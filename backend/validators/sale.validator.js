@@ -304,9 +304,8 @@ const updatePaymentSchema =
 
 /*
  * Used by GET /sales/visitor-report. A report is a whole-table aggregate, so it
- * takes a date range and an optional currency and nothing else: no pagination,
- * no search, no sort. `currency=all` (or an empty value) means every currency,
- * in which case the report groups its rows per currency.
+ * takes a date range, optional currency and optional comma-separated product
+ * IDs. There is no pagination, search or sort because the result is grouped.
  */
 const visitorReportQuerySchema = z.object({
   date_from: z
@@ -320,6 +319,13 @@ const visitorReportQuerySchema = z.object({
     .optional(),
 
   currency: z.string().trim().max(50).optional().default('all'),
+
+  product_ids: z
+    .string()
+    .trim()
+    .max(4000)
+    .regex(/^\d+(,\d+)*$/, 'product_ids must be comma-separated IDs')
+    .optional(),
 });
 
 /*

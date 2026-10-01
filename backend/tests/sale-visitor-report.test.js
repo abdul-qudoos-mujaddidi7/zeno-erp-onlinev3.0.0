@@ -166,7 +166,14 @@ test('the date range and a chosen currency reach the query', async () => {
     dateFrom: '2026-09-01',
     dateTo: '2026-09-30',
     currency: 'AFN',
+    productIds: [],
   });
+});
+
+test('multiple selected products reach the report query', async () => {
+  await report({ product_ids: '11,22,33' });
+
+  assert.deepEqual(state.received.productIds, [11, 22, 33]);
 });
 
 test('"all" means every currency, so no currency filter is sent', async () => {
@@ -197,4 +204,6 @@ test('the report query takes a date range and defaults the currency to all', () 
   );
   assert.equal(visitorReportQuerySchema.safeParse({ date_from: 'not-a-date' }).success, false);
   assert.equal(visitorReportQuerySchema.safeParse({ date_to: '2026/09/30' }).success, false);
+  assert.equal(visitorReportQuerySchema.safeParse({ product_ids: '11,22,33' }).success, true);
+  assert.equal(visitorReportQuerySchema.safeParse({ product_ids: '11,nope' }).success, false);
 });

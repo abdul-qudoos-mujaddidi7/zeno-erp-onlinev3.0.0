@@ -9,6 +9,8 @@ export function aggregateSelectedProductItems(rows = []) {
   const first = rows[0];
   const quantities = {};
   const balances = {};
+  const costs = {};
+  const benefits = {};
   const accountIds = new Set();
 
   for (const row of rows) {
@@ -18,6 +20,8 @@ export function aggregateSelectedProductItems(rows = []) {
       row.quantity,
     );
     addAmount(balances, row.currency, row.subtotal);
+    addAmount(costs, row.currency, row.total_cost);
+    addAmount(benefits, row.currency, row.gross_benefit);
     if (row.account_id != null) accountIds.add(String(row.account_id));
   }
 
@@ -29,6 +33,8 @@ export function aggregateSelectedProductItems(rows = []) {
     account_count: accountIds.size,
     quantities,
     balances,
+    costs,
+    benefits,
   };
 }
 
@@ -43,6 +49,8 @@ export function aggregateProductItemsForExport(rows = []) {
         ...row,
         quantity: Number(row.quantity) || 0,
         subtotal: Number(row.subtotal) || 0,
+        total_cost: Number(row.total_cost) || 0,
+        gross_benefit: Number(row.gross_benefit) || 0,
         source_count: 1,
         is_product_total: true,
       });
@@ -51,6 +59,8 @@ export function aggregateProductItemsForExport(rows = []) {
 
     existing.quantity += Number(row.quantity) || 0;
     existing.subtotal += Number(row.subtotal) || 0;
+    existing.total_cost += Number(row.total_cost) || 0;
+    existing.gross_benefit += Number(row.gross_benefit) || 0;
     existing.source_count += 1;
 
     const currentDate = new Date(existing.created_at || 0).getTime();

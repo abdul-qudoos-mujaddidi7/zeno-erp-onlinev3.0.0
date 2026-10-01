@@ -140,7 +140,7 @@ import { settingsApi } from '../api/settingsApi.js';
     loc === '/dashboard/fiscal-years' ||
     loc === '/dashboard/accounts/report' ||
     loc === '/dashboard/accounts/general-report' ||
-    (loc === '/dashboard/sales' && ['products', 'benefit'].includes(salesTab));
+    (loc === '/dashboard/sales' && salesTab === 'products');
   $: if (reportsMenuActive) reportsMenuOpen = true;
   $: if ($location !== previousSidebarLocation) {
     previousSidebarLocation = $location;
@@ -373,7 +373,7 @@ import { settingsApi } from '../api/settingsApi.js';
           (shiftPressed && ctrlPressed)
             ? ''
             : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-          class:active={$location === '/dashboard/sales' && !['products', 'benefit'].includes(salesTab)}>
+          class:active={$location === '/dashboard/sales' && salesTab !== 'products'}>
           <i class="bi bi-cart-check me-2"></i>
           {t('Sales')}
         </a>
@@ -550,14 +550,6 @@ import { settingsApi } from '../api/settingsApi.js';
                 <i class="bi bi-box-seam me-2"></i>
                 {t('Products Report')}
               </a>
-              {#if permissions?.some(p => p.code === 'Benefit' && p.view)}
-                <a use:link href="/dashboard/sales?tab=benefit"
-                  class="list-group-item list-group-item-action"
-                  class:active={loc === '/dashboard/sales' && salesTab === 'benefit'}>
-                  <i class="bi bi-graph-up-arrow me-2"></i>
-                  {t('Sale Benefit Report')}
-                </a>
-              {/if}
             </div>
           {/if}
         </div>

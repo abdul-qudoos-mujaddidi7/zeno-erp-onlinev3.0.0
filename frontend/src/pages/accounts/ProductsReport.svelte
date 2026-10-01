@@ -17,6 +17,9 @@
   import { accountApi } from '../../api/accountApi.js';
   import { productApi } from '../../api/productApi.js';
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../lib/pagination.js';
+  import { auth } from '../../auth/authStore.js';
+  import { getMultiple } from '../stocktransactions/calculateStock.js';
+  import { resolveItemCostPrice, usesBatchCost } from '../sales/SalesHelper.js';
   import {
     aggregateProductItemsForExport,
     aggregateSelectedProductItems,
@@ -25,6 +28,8 @@
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
+  $: showBenefit = $auth.permissions?.some((permission) => permission.code === 'Benefit' && permission.view);
+  $: showSaleBenefit = itemType === 'sale' && showBenefit;
 
   let units = [];
   let products = [];
@@ -65,6 +70,54 @@
 
   function requestedItemType() {
     return itemType || filterStatus;
+  }
+
+  const unitMultipleCache = new Map();
+
+  async function addSaleBenefit(row) {
+    if (row.item_type !== 'sale' || row.invoice_status !== 'confirmed') {
+      return { ...row, total_cost: null, gross_benefit: null };
+    }
+
+    const product = {
+      buy_price: row.product_buy_price,
+      buy_currency: row.product_buy_currency,
+      product_unit_id: row.product_base_unit_id,
+    };
+    let unitCost = resolveItemCostPrice(
+      row,
+      product,
+      { currency: row.sale_currency || row.currency },
+      currencies,
+    );
+
+    if (
+      !usesBatchCost(row) &&
+      row.product_unit_id &&
+      row.product_base_unit_id &&
+      Number(row.product_unit_id) !== Number(row.product_base_unit_id)
+    ) {
+      const key = `${row.product_unit_id}:${row.product_base_unit_id}`;
+      if (!unitMultipleCache.has(key)) {
+        unitMultipleCache.set(
+          key,
+          getMultiple(Number(row.product_unit_id), Number(row.product_base_unit_id)),
+        );
+      }
+      unitCost *= Number(await unitMultipleCache.get(key)) || 1;
+    }
+
+    const quantity = Number(row.quantity) || 0;
+    const totalCost = unitCost * quantity;
+    return {
+      ...row,
+      total_cost: totalCost,
+      gross_benefit: (Number(row.subtotal) || 0) - totalCost,
+    };
+  }
+
+  async function addSaleBenefits(rows) {
+    return Promise.all(rows.map(addSaleBenefit));
   }
 
   function handleDateChange(inputName, value) {
@@ -109,7 +162,10 @@
 
       if (requestId !== loadRequestId) return;
 
-      const responseRows = Array.isArray(response) ? response : response?.data || [];
+      const rawResponseRows = Array.isArray(response) ? response : response?.data || [];
+      const responseRows = showSaleBenefit
+        ? await addSaleBenefits(rawResponseRows)
+        : rawResponseRows;
       items = productSelected
         ? selectedProductIds
             .map((productId) =>
@@ -271,7 +327,7 @@
       page += 1;
     }
 
-    return all;
+    return showSaleBenefit ? addSaleBenefits(all) : all;
   }
 
   /*
@@ -326,7 +382,7 @@
   $: paginatedItems = (() => {
     const result = [...items];
     result.sort((a, b) => {
-      if (sortColumn === 'subtotal' || sortColumn === 'quantity' || sortColumn === 'unit_price') {
+      if (['subtotal', 'quantity', 'unit_price', 'total_cost', 'gross_benefit'].includes(sortColumn)) {
         const valA = Number(a[sortColumn]) || 0;
         const valB = Number(b[sortColumn]) || 0;
         return sortDirection === 'asc' ? valA - valB : valB - valA;
@@ -468,6 +524,10 @@
             <th class="col-start cursor-pointer" on:click={() => setSort('unit_price')}>{t('Unit Price')}</th>
             <th class="col-start cursor-pointer" on:click={() => setSort('quantity')}>{t('Quantity')}</th>
             <th class="col-start cursor-pointer" on:click={() => setSort('subtotal')}>{t('Total')}</th>
+            {#if showSaleBenefit}
+              <th class="col-start cursor-pointer" on:click={() => setSort('total_cost')}>{t('Total Cost')}</th>
+              <th class="col-start cursor-pointer" on:click={() => setSort('gross_benefit')}>{t('Gross Benefit')}</th>
+            {/if}
           </tr>
         </svelte:fragment>
         {#each paginatedItems as row}
@@ -545,6 +605,42 @@
                 </span>
               {/if}
             </td>
+            {#if showSaleBenefit}
+              <td class="col-start">
+                {#if row.is_product_total}
+                  {#each Object.entries(row.costs || {}) as [currencyCode, cost]}
+                    <span class="amount-inline aggregate-line">
+                      <span dir="ltr">{Number(cost).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                      <span>{t(currencyCode)}</span>
+                    </span>
+                  {/each}
+                {:else if row.total_cost != null}
+                  <span class="amount-inline">
+                    <span dir="ltr">{Number(row.total_cost).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                    <span>{t(row.currency)}</span>
+                  </span>
+                {:else}
+                  <span aria-label={t('Not applicable')}>—</span>
+                {/if}
+              </td>
+              <td class="col-start fw-bold">
+                {#if row.is_product_total}
+                  {#each Object.entries(row.benefits || {}) as [currencyCode, benefit]}
+                    <span class="amount-inline aggregate-line benefit-value" class:negative={Number(benefit) < 0}>
+                      <span dir="ltr">{Number(benefit).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                      <span>{t(currencyCode)}</span>
+                    </span>
+                  {/each}
+                {:else if row.gross_benefit != null}
+                  <span class="amount-inline benefit-value" class:negative={Number(row.gross_benefit) < 0}>
+                    <span dir="ltr">{Number(row.gross_benefit).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+                    <span>{t(row.currency)}</span>
+                  </span>
+                {:else}
+                  <span aria-label={t('Not applicable')}>—</span>
+                {/if}
+              </td>
+            {/if}
           </tr>
         {/each}
       </DataTable>
@@ -582,6 +678,22 @@
 
   .report-date {
     white-space: nowrap;
+  }
+
+  .benefit-value {
+    color: #047857;
+  }
+
+  .benefit-value.negative {
+    color: #b91c1c;
+  }
+
+  :global(html.dark) .benefit-value {
+    color: #6ee7b7;
+  }
+
+  :global(html.dark) .benefit-value.negative {
+    color: #fca5a5;
   }
 
   .report-link,

@@ -1273,6 +1273,7 @@ async function findVisitorReport(
     dateFrom,
     dateTo,
     currency,
+    productIds = [],
   },
 ) {
   const conditions = [
@@ -1289,6 +1290,18 @@ async function findVisitorReport(
   if (currency) {
     conditions.push('s.currency = ?');
     values.push(currency);
+  }
+
+  if (productIds.length) {
+    conditions.push(`EXISTS (
+      SELECT 1
+      FROM sale_items visitor_filter_items
+      WHERE visitor_filter_items.org_id = s.org_id
+        AND visitor_filter_items.sale_id = s.local_id
+        AND visitor_filter_items.status = 1
+        AND visitor_filter_items.product_id IN (${productIds.map(() => '?').join(', ')})
+    )`);
+    values.push(...productIds);
   }
 
   if (dateFrom) {

@@ -38,10 +38,12 @@ describe('visitor report component', () => {
     expect(REPORT_SOURCE).not.toMatch(/saleApi\.getAll\(/);
   });
 
-  test('it sends the active date range and currency', () => {
+  test('it sends the active date range, currency and selected products', () => {
     expect(REPORT_SOURCE).toMatch(/date_from: fromDate/);
     expect(REPORT_SOURCE).toMatch(/date_to: toDate/);
     expect(REPORT_SOURCE).toMatch(/currency: selectedCurrency/);
+    expect(REPORT_SOURCE).toMatch(/product_ids: selectedProducts/);
+    expect(REPORT_SOURCE).toMatch(/multiple: true/);
   });
 
   test('it shows the benefit, the visitor share and the company share', () => {
@@ -137,9 +139,7 @@ describe('the visitor report is downloadable', () => {
 
 describe('the visitor report is reachable from the sales page', () => {
   test('the sales page knows the visitors tab', () => {
-    expect(SALES_SOURCE).toMatch(
-      /\? \['sales', 'benefit', 'products', 'visitors'\]/,
-    );
+    expect(SALES_SOURCE).toMatch(/enable_visitor \? \['sales', 'products', 'visitors'\]/);
     expect(SALES_SOURCE).toMatch(/enable_visitor && activeTab === 'visitors'/);
     expect(SALES_SOURCE).toMatch(/import VisitorReport from '\.\/sales\/VisitorReport\.svelte'/);
     expect(SALES_SOURCE).toMatch(/activeTab === 'visitors'/);

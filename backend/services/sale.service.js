@@ -512,6 +512,10 @@ async function getVisitorReport({
       currency: filters.currency && filters.currency !== 'all'
         ? filters.currency
         : null,
+      productIds: String(filters.product_ids || '')
+        .split(',')
+        .map(Number)
+        .filter((id) => Number.isSafeInteger(id) && id > 0),
     },
   );
 
