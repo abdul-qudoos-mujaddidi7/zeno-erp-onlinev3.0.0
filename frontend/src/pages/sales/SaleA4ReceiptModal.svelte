@@ -477,7 +477,7 @@ import { productBrandApi } from '../../api/productBrandApi.js';
           <!-- Product Table -->
           <table class="table table-bordered">
             <thead>
-              <tr style="border:1px solid #e0e0e0;font-size:11pt">
+              <tr style="border:1px solid var(--invoice-border, #e0e0e0);font-size:11pt">
                 <th class="p-2 py-1 fw-bold">#</th>
                 <th class="p-2 py-1 fw-bold">{t('Product')}</th>
                 {#if enable_show_category_in_invoice}
@@ -506,7 +506,7 @@ import { productBrandApi } from '../../api/productBrandApi.js';
             <tbody style="font-size: 9pt;">
               {#each items as it, index}
                 {#if index < bill_max_items}
-                  <tr style="border:1px solid #e0e0e0;height:25px">
+                  <tr style="border:1px solid var(--invoice-border, #e0e0e0);height:25px">
                     <td class="p-2 py-0" style="vertical-align: middle;">{index + 1}</td>
                     <td class="p-2 py-0" style="vertical-align: middle;">{it.product_name}</td>
                     {#if enable_show_category_in_invoice}
@@ -547,7 +547,7 @@ import { productBrandApi } from '../../api/productBrandApi.js';
               {/each}
               {#if enable_full_table && items.length < bill_max_items}
                 {#each Array(bill_max_items - items.length) as _, i}
-                  <tr style="border:1px solid #e0e0e0;height:30px">
+                  <tr style="border:1px solid var(--invoice-border, #e0e0e0);height:30px">
                     <td class="p-2 py-0" style="vertical-align: middle;">{i + items.length + 1}</td>
                     <td class="p-2 py-0" style="vertical-align: middle;">&nbsp;</td>
                     {#if enable_generics}
@@ -576,7 +576,7 @@ import { productBrandApi } from '../../api/productBrandApi.js';
           <div class="row">
             {#if enable_vertical_info}
             <div class="col-sm-8">
-              <div class="border h-100 p-3" style="border-color:#e0e0e0 !important;">
+              <div class="border h-100 p-3" style="border-color:var(--invoice-border, #e0e0e0) !important;">
                 <div class="section-title">{sale?.description ? t('Description') : t('Description')}:</div>
                 
         <div class='ProseMirror'>
@@ -695,7 +695,7 @@ import { productBrandApi } from '../../api/productBrandApi.js';
             </div>
             {#if !enable_vertical_info}
               <div class="col-sm-12">
-                <div class="border h-100 p-3" style="border-color:#e0e0e0 !important;">
+                <div class="border h-100 p-3" style="border-color:var(--invoice-border, #e0e0e0) !important;">
                   <div class="section-title">{sale?.description ? t('Description') : t('Description')}:</div>
                   
         <div class='ProseMirror'>
@@ -751,6 +751,76 @@ import { productBrandApi } from '../../api/productBrandApi.js';
 </AppModal>
 
 <style>
+  /* Preview colors follow the app theme; the separate print window stays light. */
+  @media screen {
+    .invoice-container {
+      --invoice-bg: #fff;
+      --invoice-text: #212529;
+      --invoice-border: #e0e0e0;
+      --invoice-heading: #f5f5f5;
+      --invoice-accent: #3b71ca;
+      --invoice-danger: #dc3545;
+      background: var(--invoice-bg);
+      color: var(--invoice-text);
+    }
+
+    :global(html.dark) .invoice-container,
+    :global(body.dark) .invoice-container,
+    :global([data-theme='dark']) .invoice-container {
+      --invoice-bg: #111827;
+      --invoice-text: #e5edf8;
+      --invoice-border: #334762;
+      --invoice-heading: #172238;
+      --invoice-accent: #93c5fd;
+      --invoice-danger: #fca5a5;
+      color-scheme: dark;
+    }
+
+    .invoice-container :global(.table) {
+      --bs-table-color: var(--invoice-text);
+      --bs-table-bg: var(--invoice-bg);
+      --bs-table-border-color: var(--invoice-border);
+      color: var(--invoice-text);
+      border-color: var(--invoice-border);
+    }
+
+    .invoice-container :global(th),
+    .invoice-container :global(td) {
+      color: var(--invoice-text);
+      border-color: var(--invoice-border);
+      background-color: var(--invoice-bg);
+    }
+
+    .invoice-container :global(th) {
+      background-color: var(--invoice-heading);
+    }
+
+    .invoice-container :global(.text-primary) {
+      color: var(--invoice-accent) !important;
+    }
+
+    .invoice-container :global(.text-danger) {
+      color: var(--invoice-danger) !important;
+    }
+
+    .invoice-container .form-control {
+      background-color: var(--invoice-bg);
+      color: var(--invoice-text);
+      border-color: var(--invoice-border);
+    }
+
+    .invoice-container .form-control:focus {
+      border-color: var(--invoice-accent);
+      outline: 2px solid var(--invoice-accent);
+      outline-offset: 2px;
+    }
+
+    .invoice-container :global(.ProseMirror table),
+    .invoice-container :global(.ProseMirror th),
+    .invoice-container :global(.ProseMirror td) {
+      border: 1px solid var(--invoice-border);
+    }
+  }
 
     :global(.ProseMirror td p),
     :global(.ProseMirror th p) {

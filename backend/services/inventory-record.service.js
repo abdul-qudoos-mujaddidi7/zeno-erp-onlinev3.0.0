@@ -1,4 +1,5 @@
 const db = require('../database/pool');
+const dashboardService = require('./dashboard.service');
 
 const AppError =
   require('../errors/AppError');
@@ -482,6 +483,9 @@ async function createInventoryRecord({
 
     await connection.commit();
 
+    /* Records/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return {
       ...record,
       items: createdItems,
@@ -940,6 +944,9 @@ async function updateInventoryRecord({
 
     await connection.commit();
 
+    /* Records/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return updatedRecord;
   } catch (error) {
     await connection.rollback();
@@ -1193,6 +1200,9 @@ async function deleteInventoryRecord({
 
     await connection.commit();
 
+    /* Records/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return deletedRecord;
   } catch (error) {
     await connection.rollback();
@@ -1384,6 +1394,9 @@ async function createPayment({
 
     await connection.commit();
 
+    /* Records/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return payment;
   } catch (error) {
     await connection.rollback();
@@ -1495,6 +1508,9 @@ async function deletePayment({
     );
 
     await connection.commit();
+
+    /* Records/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedPayment;
   } catch (error) {
@@ -1699,6 +1715,9 @@ async function createReturn({
 
     await connection.commit();
 
+    /* Records/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return {
       ...recordReturn,
       items: createdItems,
@@ -1887,6 +1906,9 @@ async function deleteReturn({
     );
 
     await connection.commit();
+
+    /* Records/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedReturn;
   } catch (error) {

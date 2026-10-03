@@ -70,13 +70,13 @@ const TENS = {
 const PASHTO_TENS_STEM = ['', '', 'ویشت', 'دېرش', 'څلویښت', 'پنځوس', 'شپېته', 'اویا', 'اتيا', 'نوي'];
 
 /*
- * Hundreds are a single compound word in Persian (چهارصد, نهصد) and a "سل"
+ * Hundreds use Dari wording for the app's fa language (دوصد, سه‌صد, پنجصد) and a "سل"
  * family in Pashto, while English keeps "One Hundred" apart.
  */
 const HUNDREDS = {
   en: ['', 'One Hundred', 'Two Hundred', 'Three Hundred', 'Four Hundred', 'Five Hundred',
     'Six Hundred', 'Seven Hundred', 'Eight Hundred', 'Nine Hundred'],
-  fa: ['', 'صد', 'دویست', 'سیصد', 'چهارصد', 'پانصد', 'ششصد', 'هفتصد', 'هشتصد', 'نهصد'],
+  fa: ['', 'صد', 'دوصد', 'سهصد', 'چهارصد', 'پنجصد', 'ششصد', 'هفتصد', 'هشتصد', 'نهصد'],
   ps: ['', 'سل', 'دوه سوه', 'درې سوه', 'څلور سوه', 'پنځه سوه', 'شپږ سوه', 'اووه سوه',
     'اته سوه', 'نهه سوه'],
 };

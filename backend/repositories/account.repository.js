@@ -353,6 +353,13 @@ async function findDirectionalBalances(executor, { orgId, accountIds = null }) {
   const idFilter = Array.isArray(accountIds) && accountIds.length
     ? ` AND entry_account IN (${accountIds.map(() => '?').join(', ')})`
     : '';
+  /*
+   * Each UNION branch aggregates its own side of the journals first, so the
+   * derived table the outer query groups is a few hundred small rows instead
+   * of every journal entry of the organization twice over. The grouping stays
+   * at (account, currency, reference_type) so the outer CASE sums add up to
+   * exactly the same numbers as summing the raw rows did.
+   */
   const [rows] = await executor.execute(
     `
       SELECT entry_account AS account_id, currency,
@@ -362,14 +369,16 @@ async function findDirectionalBalances(executor, { orgId, accountIds = null }) {
           THEN credit - debit ELSE 0 END) AS supplier_payable
       FROM (
         SELECT first_entry_account AS entry_account, currency, reference_type,
-          COALESCE(first_entry_debit,0) AS debit,
-          COALESCE(first_entry_credit,0) AS credit
+          SUM(COALESCE(first_entry_debit,0)) AS debit,
+          SUM(COALESCE(first_entry_credit,0)) AS credit
         FROM journals WHERE org_id = ? AND status = 1
+        GROUP BY first_entry_account, currency, reference_type
         UNION ALL
         SELECT second_entry_account AS entry_account, currency, reference_type,
-          COALESCE(second_entry_debit,0) AS debit,
-          COALESCE(second_entry_credit,0) AS credit
+          SUM(COALESCE(second_entry_debit,0)) AS debit,
+          SUM(COALESCE(second_entry_credit,0)) AS credit
         FROM journals WHERE org_id = ? AND status = 1
+        GROUP BY second_entry_account, currency, reference_type
       ) directional
       WHERE reference_type IN ('sale','sale_payment','sale_return','purchase','purchase_payment','purchase_return')
         ${idFilter}

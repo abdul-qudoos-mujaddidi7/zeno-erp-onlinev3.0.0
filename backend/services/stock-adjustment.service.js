@@ -1,4 +1,5 @@
 const db = require('../database/pool');
+const dashboardService = require('./dashboard.service');
 const AppError = require('../errors/AppError');
 const adjustmentRepository = require('../repositories/stock-adjustment.repository');
 const productRepository = require('../repositories/product.repository');
@@ -110,6 +111,9 @@ async function createStockAdjustment({ user, data, requestContext }) {
       oldValues: { product_qty: beforeQty, warehouse_qty: beforeWarehouseQty }, newValues: { product_qty: afterQty, warehouse_qty: afterWarehouseQty, ...data },
       description: `${data.adjustment_type === 'increase' ? 'Increased' : 'Decreased'} ${product.name} by ${qty}.`, ...requestContext });
     await connection.commit();
+
+    /* Stock (and therefore the overview's inventory value / low stock) changed. */
+    dashboardService.invalidateDashboardAggregates(orgId);
     return getStockAdjustment({ user, adjustmentId });
   } catch (error) {
     await connection.rollback();
@@ -169,6 +173,9 @@ async function zeroStockAdjustment({ user, data, requestContext }) {
       oldValues: { product_qty: beforeQty, warehouse_qty: beforeWarehouseQty }, newValues: { product_qty: 0, warehouse_qty: 0, ...data },
       description: `Zeroed ${product.name} stock (was ${beforeQty} in total, ${beforeWarehouseQty} in warehouse ${data.warehouse_id}).`, ...requestContext });
     await connection.commit();
+
+    /* Stock (and therefore the overview's inventory value / low stock) changed. */
+    dashboardService.invalidateDashboardAggregates(orgId);
     return getStockAdjustment({ user, adjustmentId });
   } catch (error) {
     await connection.rollback();
@@ -277,6 +284,9 @@ async function zeroAllStock({ user, data, requestContext }) {
       ...requestContext });
 
     await connection.commit();
+
+    /* Stock (and therefore the overview's inventory value / low stock) changed. */
+    dashboardService.invalidateDashboardAggregates(orgId);
     return { products_zeroed: adjustments.length, warehouse_balances_zeroed: balancesCleared,
       units_removed: unitsRemoved, units_added: unitsAdded, reason: data.reason, note: data.note };
   } catch (error) {

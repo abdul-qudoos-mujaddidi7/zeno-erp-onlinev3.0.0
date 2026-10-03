@@ -5,6 +5,13 @@
 
 const store = new Map();
 
+/*
+ * Loader promises that are currently running, keyed by cache key. While one
+ * request is rebuilding an aggregate, every other request for the same key
+ * awaits the SAME promise instead of starting its own duplicate scan.
+ */
+const inflight = new Map();
+
 function makeKey(parts = []) {
   return parts.map((part) => String(part ?? '')).join('|');
 }
@@ -48,8 +55,28 @@ async function getOrSet(key, ttlMs, loader) {
     return cached;
   }
 
-  const value = await loader();
-  return set(key, value, ttlMs);
+  const pending = inflight.get(key);
+  if (pending) {
+    return pending;
+  }
+
+  const promise = (async () => {
+    try {
+      const value = await loader();
+      set(key, value, ttlMs);
+      return value;
+    } finally {
+      /*
+       * Always clear the in-flight entry — on success the value now lives in
+       * the store; on failure nothing was cached, so the next caller retries
+       * the load instead of awaiting a promise that already settled.
+       */
+      inflight.delete(key);
+    }
+  })();
+
+  inflight.set(key, promise);
+  return promise;
 }
 
 module.exports = {

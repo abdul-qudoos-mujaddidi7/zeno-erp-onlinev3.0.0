@@ -434,19 +434,31 @@ async function buildOverviewPayload({
   defaultCurrency,
   rateMap,
 }) {
+  /*
+   * ONE pair of journal scans feeds both the bucket balances and the debtor
+   * ranking: the two per-side totals run in parallel, the tiny account/type
+   * lookup runs alongside them, and the rest of the overview keeps running
+   * in parallel as before. (The previous shape scanned every journal row
+   * four times — twice per query — and joined accounts on all of them.)
+   */
   const [
-    bucketRows,
+    sideTotals,
+    accountMeta,
     inventoryRows,
     lowStockRows,
     expiringRows,
-    debtorRows,
   ] = await Promise.all([
-    dashboardRepository.sumBenefitBalancesByBucket(db, orgId),
+    dashboardRepository.loadJournalSideTotals(db, orgId),
+    dashboardRepository.loadAccountMeta(db, orgId),
     dashboardRepository.findInventoryValueByCurrency(db, orgId),
     dashboardRepository.findLowStockProducts(db, orgId, 10),
     dashboardRepository.findExpiringProducts(db, orgId, 10),
-    dashboardRepository.findTopDebtors(db, orgId),
   ]);
+
+  const bucketRows =
+    dashboardRepository.classifyBenefitBuckets(sideTotals, accountMeta);
+  const debtorRows =
+    dashboardRepository.rankDebtors(sideTotals, accountMeta);
 
   const lowStockCount =
     Number(lowStockRows?.[0]?.total_count) || lowStockRows.length;

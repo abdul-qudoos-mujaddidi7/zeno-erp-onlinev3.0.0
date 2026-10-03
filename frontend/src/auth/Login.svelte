@@ -4,6 +4,9 @@
   import { setLanguage, isRTL, lang, supported, setTranslateOrgType } from '../i18n/i18n';
   import { onMount, onDestroy } from 'svelte';
   import LoginPage from './login/LoginPage.svelte';
+  import { useLightPageTheme } from '../stores/themeStore.js';
+
+  onMount(useLightPageTheme);
 
   import { app_version } from '../config.js';
 
@@ -61,11 +64,6 @@
         mdbCss['disabled'] = shouldRtl;
         mdbRtlCss['disabled'] = !shouldRtl;
       }
-    } catch (e) {}
-
-    try {
-      const theme = localStorage.getItem('theme') || 'light';
-      document.documentElement.dataset.mdbTheme = theme;
     } catch (e) {}
 
   });

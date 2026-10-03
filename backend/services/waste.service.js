@@ -1,4 +1,5 @@
 const db = require('../database/pool');
+const dashboardService = require('./dashboard.service');
 
 const AppError =
   require('../errors/AppError');
@@ -325,6 +326,9 @@ async function createWaste({
 
     await connection.commit();
 
+    /* Stock (and therefore the overview's inventory value / low stock) changed. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return {
       ...waste,
       items: createdItems,
@@ -527,6 +531,9 @@ async function updateWaste({
 
     await connection.commit();
 
+    /* Stock (and therefore the overview's inventory value / low stock) changed. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return {
       ...updatedWaste,
       items: createdItems,
@@ -665,6 +672,9 @@ async function deleteWaste({
     );
 
     await connection.commit();
+
+    /* Stock (and therefore the overview's inventory value / low stock) changed. */
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedWaste;
   } catch (error) {

@@ -56,19 +56,94 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           /**
-           * Only static build assets are precached. There is intentionally NO
-           * `runtimeCaching`, so API responses, tokens, sales/purchase data,
-           * balances, reports and downloads are never stored by the service
-           * worker - the app stays online-only.
+           * Only the app shell is precached: entry + vendor, the boot-route
+           * chunks (Login/Register/Dashboard/DashboardLayout/swal), the CSS
+           * and fonts index.html references, and the legacy /js libraries the
+           * shell loads synchronously. Route chunks, the PDF/editor/chart
+           * bundles, images and the currency image catalogue are fetched on
+           * demand and kept in the runtime caches below — this cut the
+           * install/update download from ~8.3 MB to ~2.5 MB.
+           *
+           * There is intentionally NO runtime caching for /api/ or /uploads/,
+           * so API responses, tokens, sales/purchase data, balances, reports
+           * and downloads are never stored by the service worker - the app
+           * stays online-only.
            */
           globPatterns: [
-            '**/*.{js,css,html,ico,json,woff,woff2,ttf,otf,eot,png,svg,webp,jpg,jpeg,gif}',
+            'index.html',
+            'manifest.webmanifest',
+            'assets/index-*.js',
+            'assets/index-*.css',
+            'assets/vendor-*.js',
+            'assets/vendor-*.css',
+            'assets/Login-*.js',
+            'assets/Login-*.css',
+            'assets/Register-*.js',
+            'assets/Register-*.css',
+            'assets/DashboardLayout-*.js',
+            'assets/DashboardLayout-*.css',
+            'assets/Dashboard-*.js',
+            'assets/Dashboard-*.css',
+            'assets/swal-*.js',
+            'css/mdb.rtl.min.css',
+            'css/mdb.min.css',
+            'css/bootstrap-icons.min.css',
+            'css/fonts/bootstrap-icons.woff2',
+            'css/mds.bs.datetimepicker.style.css',
+            'fonts/vazirmatn.css',
+            'fonts/vazirmatn/*.woff2',
+            'js/mdb.umd.min.js',
+            'js/mds.bs.datetimepicker.js',
+            'img/favicon.png',
+            'img/logo.png',
+            'img/no-image.png',
+            'pwa-192x192.png',
+            'pwa-512x512.png',
           ],
-          globIgnores: [
-            // Large marketing artwork is not needed for the app shell.
-            '**/zeno-hero-dashboard.png',
-            '**/zeno_img.png',
-            '**/zeno_img2.png',
+          /*
+           * Content-hashed build assets and static public/ files are safe to
+           * cache-first: a deploy changes the hashes, so a stale entry can
+           * never be served for a URL the new index.html asks for. Old
+           * entries age out via maxEntries, and cleanupOutdatedCaches clears
+           * superseded precache revisions on update.
+           */
+          runtimeCaching: [
+            {
+              urlPattern: /\/assets\/.+\.(js|css|woff2?|ttf|otf)$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'zeno-chunks',
+                expiration: { maxEntries: 160, maxAgeSeconds: 60 * 60 * 24 * 30 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
+            {
+              urlPattern: /\/js\//,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'zeno-legacy-js',
+                expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
+            {
+              urlPattern: /\/img\//,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'zeno-images',
+                expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 30 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
+            {
+              urlPattern: /\/fonts\//,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'zeno-fonts',
+                expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 180 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
           ],
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           navigateFallback: 'index.html',

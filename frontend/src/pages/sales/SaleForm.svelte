@@ -5290,6 +5290,33 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     background: var(--sale-border);
   }
 
+  :global(html.dark) .sale-rich-editor :global(.toolbar),
+  :global(html.dark) .sale-rich-editor :global(.editor) {
+    border-color: var(--sale-border);
+    background: var(--sale-bg-soft);
+    color: var(--sale-text);
+  }
+
+  :global(html.dark) .sale-rich-editor :global(.ProseMirror) {
+    color: var(--sale-text);
+    caret-color: var(--sale-text);
+  }
+
+  :global(html.dark) .sale-rich-editor :global(.ProseMirror th),
+  :global(html.dark) .sale-rich-editor :global(.ProseMirror td) {
+    border-color: var(--sale-border);
+  }
+
+  :global(html.dark) .sale-rich-editor :global(.ProseMirror th) {
+    background: var(--sale-surface);
+  }
+
+  :global(html.dark) .sale-rich-editor :global(pre.border) {
+    border-color: var(--sale-border) !important;
+    background: var(--sale-surface);
+    color: var(--sale-text);
+  }
+
   :global(html.dark) .sale-readonly-field,
   :global(html.dark) .sale-exchange-editor > span,
   :global(html.dark) .sale-payment-toggle,

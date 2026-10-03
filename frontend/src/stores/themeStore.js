@@ -6,6 +6,7 @@ const savedTheme = isBrowser ? localStorage.getItem('theme') : null;
 const defaultTheme = savedTheme || (isBrowser && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 
 export const theme = writable(defaultTheme);
+let lightPageCount = 0;
 
 function normalizeTheme(value) {
   return value === 'dark' ? 'dark' : 'light';
@@ -15,11 +16,23 @@ function applyTheme(value) {
   if (!isBrowser) return;
 
   const normalized = normalizeTheme(value);
-  document.documentElement.classList.toggle('dark', normalized === 'dark');
-  document.documentElement.classList.toggle('light', normalized === 'light');
-  document.documentElement.dataset.mdbTheme = normalized;
-  document.documentElement.style.colorScheme = normalized;
+  const displayedTheme = lightPageCount > 0 ? 'light' : normalized;
+  document.documentElement.classList.toggle('dark', displayedTheme === 'dark');
+  document.documentElement.classList.toggle('light', displayedTheme === 'light');
+  document.documentElement.dataset.mdbTheme = displayedTheme;
+  document.documentElement.style.colorScheme = displayedTheme;
   localStorage.setItem('theme', normalized);
+}
+
+// Temporarily display public authentication pages in light mode without
+// replacing the user's preferred theme. Return a cleanup for onMount.
+export function useLightPageTheme() {
+  lightPageCount++;
+  applyTheme(get(theme));
+  return () => {
+    lightPageCount--;
+    applyTheme(get(theme));
+  };
 }
 
 function getCurrentUserId() {

@@ -1,4 +1,5 @@
 const db = require('../database/pool');
+const dashboardService = require('./dashboard.service');
 
 const AppError =
   require('../errors/AppError');
@@ -896,6 +897,9 @@ async function createStockTransaction({
 
     await connection.commit();
 
+    /* Stock (and therefore the overview's inventory value / low stock) changed. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return stockTransaction;
   } catch (error) {
     await connection.rollback();
@@ -998,6 +1002,9 @@ async function updateStockTransaction({
 
     await connection.commit();
 
+    /* Stock (and therefore the overview's inventory value / low stock) changed. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return updatedStockTransaction;
   } catch (error) {
     await connection.rollback();
@@ -1087,6 +1094,9 @@ async function deleteStockTransaction({
     );
 
     await connection.commit();
+
+    /* Stock (and therefore the overview's inventory value / low stock) changed. */
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedStockTransaction;
   } catch (error) {

@@ -500,79 +500,218 @@ async function findBenefitAccounts(executor, orgId) {
 }
 
 /**
- * Net-position balances for dashboard overview.
- * Two journal passes JOIN accounts — avoids loading every AR/AP id
- * into Node and building a giant IN (...).
+ * Shared journal aggregation for the dashboard overview.
+ *
+ * The original overview queries each scanned the org's journals TWICE
+ * (UNION ALL of the first/second entry sides) and joined accounts plus
+ * account_types on every one of those rows. This helper instead lets SQL
+ * sum each side once per (account, currency, reference_type) — a few hundred
+ * small rows — while the two sides run in PARALLEL on the pool, and the
+ * account/type metadata is loaded once and shared by every consumer.
+ *
+ * `executor` must be the connection pool (not a single transaction
+ * connection) because the two side queries run concurrently.
  */
-async function sumBenefitBalancesByBucket(executor, orgId) {
-  const [rows] = await executor.execute(
-    `SELECT bucket, currency, SUM(credit - debit) AS balance
-       FROM (
-         SELECT e.currency, e.credit, e.debit,
-           CASE
-             WHEN a.code = 'TREASURY' THEN 'treasury'
-             WHEN a.account_type_id = 7 THEN 'shareholder'
-             WHEN e.reference_type IN ('sale','sale_payment','sale_return')
-               AND (a.account_type_id = 4 OR COALESCE(at.can_be_customer,0) = 1) THEN 'customer'
-             WHEN e.reference_type IN ('purchase','purchase_payment','purchase_return')
-               AND (a.account_type_id = 3 OR COALESCE(at.can_be_supplier,0) = 1) THEN 'supplier'
-             ELSE NULL
-           END AS bucket
-         FROM (
-           SELECT org_id, first_entry_account account_id, currency, reference_type,
-             COALESCE(first_entry_credit,0) credit, COALESCE(first_entry_debit,0) debit
-           FROM journals WHERE org_id = ? AND status = 1
-           UNION ALL
-           SELECT org_id, second_entry_account account_id, currency, reference_type,
-             COALESCE(second_entry_credit,0) credit, COALESCE(second_entry_debit,0) debit
-           FROM journals WHERE org_id = ? AND status = 1
-         ) e
-         JOIN accounts a ON a.org_id=e.org_id AND a.local_id=e.account_id AND a.status=1
-         LEFT JOIN account_types at ON at.org_id=a.org_id AND at.local_id=a.account_type_id AND at.status=1
-       ) classified
-      WHERE bucket IS NOT NULL
-      GROUP BY bucket, currency`,
-    [orgId, orgId],
-  );
-  return rows.map((row) => ({ ...row, currency: row.currency || 'AFN', balance: Number(row.balance) || 0 }));
+async function loadJournalSideTotals(executor, orgId) {
+  const sideSql = (side) => `
+    SELECT ${side}_entry_account AS account_id, currency, reference_type,
+      SUM(COALESCE(${side}_entry_credit, 0)) AS credit,
+      SUM(COALESCE(${side}_entry_debit, 0)) AS debit
+    FROM journals
+    WHERE org_id = ? AND status = 1
+    GROUP BY ${side}_entry_account, currency, reference_type`;
+
+  const [firstSide, secondSide] = await Promise.all([
+    executor.execute(sideSql('first'), [orgId]),
+    executor.execute(sideSql('second'), [orgId]),
+  ]);
+
+  return { first: firstSide[0], second: secondSide[0] };
 }
 
 /**
- * Customers who still owe money, one row per account and currency.
- * This deliberately uses every active journal entry on each customer account,
- * matching the account profile's balance (debit - credit). Limiting the query
- * to sale references would ignore manual adjustments and other valid postings,
- * causing the dashboard and profile to disagree.
+ * Active accounts plus the account-type flags the bucket classification and
+ * debtor ranking need. Tiny result — one row per active account/type.
+ */
+async function loadAccountMeta(executor, orgId) {
+  const [accountRows, typeRows] = await Promise.all([
+    executor.execute(
+      `SELECT local_id, name, code, account_type_id
+         FROM accounts
+        WHERE org_id = ? AND status = 1`,
+      [orgId],
+    ),
+    executor.execute(
+      `SELECT local_id, can_be_customer, can_be_supplier
+         FROM account_types
+        WHERE org_id = ? AND status = 1`,
+      [orgId],
+    ),
+  ]);
+
+  return { accounts: accountRows[0], types: typeRows[0] };
+}
+
+function buildAccountIndex(accountMeta) {
+  const accounts = new Map();
+  for (const account of accountMeta.accounts || []) {
+    accounts.set(Number(account.local_id), account);
+  }
+
+  const types = new Map();
+  for (const type of accountMeta.types || []) {
+    types.set(Number(type.local_id), type);
+  }
+
+  return { accounts, types };
+}
+
+/*
+ * Mirrors the original SQL CASE exactly:
+ *   1. code = 'TREASURY'            -> treasury
+ *   2. account_type_id = 7          -> shareholder
+ *   3. sale-side references AND
+ *      (type 4 OR can_be_customer)  -> customer
+ *   4. purchase-side references AND
+ *      (type 3 OR can_be_supplier)  -> supplier
+ *   5. everything else              -> dropped (bucket IS NULL)
+ *
+ * MySQL compares account codes case-insensitively under its default
+ * collation, so the TREASURY check is case-insensitive too. A missing or
+ * inactive account_types row behaves like COALESCE(at.can_be_*, 0).
+ */
+function classifyAccountEntry(account, type, referenceType) {
+  if (String(account.code || '').toUpperCase() === 'TREASURY') return 'treasury';
+  if (Number(account.account_type_id) === 7) return 'shareholder';
+
+  const reference = String(referenceType || '');
+  const canBeCustomer = Number(type?.can_be_customer) === 1;
+  const canBeSupplier = Number(type?.can_be_supplier) === 1;
+
+  if (
+    ['sale', 'sale_payment', 'sale_return'].includes(reference) &&
+    (Number(account.account_type_id) === 4 || canBeCustomer)
+  ) {
+    return 'customer';
+  }
+
+  if (
+    ['purchase', 'purchase_payment', 'purchase_return'].includes(reference) &&
+    (Number(account.account_type_id) === 3 || canBeSupplier)
+  ) {
+    return 'supplier';
+  }
+
+  return null;
+}
+
+/**
+ * Net-position balances for the dashboard overview, computed from the shared
+ * per-side totals. Same rows as the original GROUP BY bucket, currency:
+ * SUM(credit - debit) per bucket/currency, with a NULL currency rendered as
+ * 'AFN'. Row order is irrelevant to the only consumer (the service builds
+ * currency maps from it).
+ */
+function classifyBenefitBuckets(sideTotals, accountMeta) {
+  const { accounts, types } = buildAccountIndex(accountMeta);
+  const balances = new Map();
+
+  for (const side of ['first', 'second']) {
+    for (const row of sideTotals[side] || []) {
+      const account = accounts.get(Number(row.account_id));
+      if (!account) continue; // the original INNER JOIN dropped these
+
+      const bucket = classifyAccountEntry(
+        account,
+        types.get(Number(account.account_type_id)) || null,
+        row.reference_type,
+      );
+      if (!bucket) continue;
+
+      const currency = row.currency || 'AFN';
+      const key = `${bucket}|${currency}`;
+      const entry = balances.get(key) || { bucket, currency, balance: 0 };
+      entry.balance += Number(row.credit) - Number(row.debit);
+      balances.set(key, entry);
+    }
+  }
+
+  return [...balances.values()];
+}
+
+/**
+ * Customers who still owe money, one row per account and currency — same
+ * semantics as the original query: every active journal entry on the account
+ * (not just sale references, so manual adjustments stay included),
+ * receivable = debit - credit, HAVING receivable > 0, ORDER BY receivable
+ * DESC. Ties are broken deterministically by account and currency where the
+ * original left tie order to the optimizer.
+ */
+function rankDebtors(sideTotals, accountMeta) {
+  const { accounts, types } = buildAccountIndex(accountMeta);
+  const receivables = new Map();
+
+  for (const side of ['first', 'second']) {
+    for (const row of sideTotals[side] || []) {
+      const account = accounts.get(Number(row.account_id));
+      if (!account) continue;
+
+      const type = types.get(Number(account.account_type_id)) || null;
+      const isCustomer =
+        Number(account.account_type_id) === 4 || Number(type?.can_be_customer) === 1;
+      if (!isCustomer) continue;
+
+      const accountId = Number(account.local_id);
+      const currency = row.currency || 'AFN';
+      const key = `${accountId}|${currency}`;
+      const entry = receivables.get(key) || {
+        account_id: accountId,
+        name: account.name || '',
+        code: account.code || '',
+        currency,
+        receivable: 0,
+      };
+      entry.receivable += Number(row.debit) - Number(row.credit);
+      receivables.set(key, entry);
+    }
+  }
+
+  return [...receivables.values()]
+    .filter((row) => row.receivable > 0)
+    .sort(
+      (a, b) =>
+        b.receivable - a.receivable ||
+        a.account_id - b.account_id ||
+        String(a.currency).localeCompare(String(b.currency)),
+    );
+}
+
+/**
+ * Backward-compatible wrapper: loads the shared aggregates itself and
+ * classifies them. The dashboard service uses loadJournalSideTotals directly
+ * so the bucket and debtor views share ONE pair of scans instead of four.
+ */
+async function sumBenefitBalancesByBucket(executor, orgId) {
+  const [sideTotals, accountMeta] = await Promise.all([
+    loadJournalSideTotals(executor, orgId),
+    loadAccountMeta(executor, orgId),
+  ]);
+
+  return classifyBenefitBuckets(sideTotals, accountMeta);
+}
+
+/**
+ * Backward-compatible wrapper for the debtor ranking (see rankDebtors for
+ * the full semantics note). The dashboard service shares this work with the
+ * bucket view through loadJournalSideTotals instead.
  */
 async function findTopDebtors(executor, orgId) {
-  const [rows] = await executor.execute(
-    `SELECT a.local_id AS account_id, a.name, a.code, e.currency,
-       SUM(e.debit - e.credit) AS receivable
-     FROM (
-       SELECT org_id, first_entry_account account_id, currency,
-         COALESCE(first_entry_credit,0) credit, COALESCE(first_entry_debit,0) debit
-       FROM journals WHERE org_id = ? AND status = 1
-       UNION ALL
-       SELECT org_id, second_entry_account account_id, currency,
-         COALESCE(second_entry_credit,0) credit, COALESCE(second_entry_debit,0) debit
-       FROM journals WHERE org_id = ? AND status = 1
-     ) e
-     JOIN accounts a ON a.org_id = e.org_id AND a.local_id = e.account_id AND a.status = 1
-     LEFT JOIN account_types at ON at.org_id = a.org_id AND at.local_id = a.account_type_id AND at.status = 1
-     WHERE (a.account_type_id = 4 OR COALESCE(at.can_be_customer,0) = 1)
-     GROUP BY a.local_id, a.name, a.code, e.currency
-     HAVING receivable > 0
-     ORDER BY receivable DESC`,
-    [orgId, orgId],
-  );
+  const [sideTotals, accountMeta] = await Promise.all([
+    loadJournalSideTotals(executor, orgId),
+    loadAccountMeta(executor, orgId),
+  ]);
 
-  return rows.map((row) => ({
-    account_id: Number(row.account_id),
-    name: row.name || '',
-    code: row.code || '',
-    currency: row.currency || 'AFN',
-    receivable: Number(row.receivable) || 0,
-  }));
+  return rankDebtors(sideTotals, accountMeta);
 }
 
 module.exports = {
@@ -591,6 +730,10 @@ module.exports = {
   findLowStockProducts,
   findExpiringProducts,
   findBenefitAccounts,
+  loadJournalSideTotals,
+  loadAccountMeta,
+  classifyBenefitBuckets,
+  rankDebtors,
   sumBenefitBalancesByBucket,
   findTopDebtors,
 };

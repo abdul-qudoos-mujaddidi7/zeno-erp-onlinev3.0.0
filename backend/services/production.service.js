@@ -1,4 +1,5 @@
 const db = require('../database/pool');
+const dashboardService = require('./dashboard.service');
 
 const AppError =
   require('../errors/AppError');
@@ -837,6 +838,9 @@ async function createProduction({
 
     await connection.commit();
 
+    /* Productions/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return {
       ...production,
       items: createdItems,
@@ -1008,6 +1012,9 @@ async function updateProduction({
     );
 
     await connection.commit();
+
+    /* Productions/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return attachRelations(
       connection,
@@ -1284,6 +1291,9 @@ async function deleteProduction({
 
     await connection.commit();
 
+    /* Productions/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return deletedProduction;
   } catch (error) {
     await connection.rollback();
@@ -1372,6 +1382,9 @@ async function createPayment({
     );
 
     await connection.commit();
+
+    /* Productions/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return payment;
   } catch (error) {
@@ -1472,6 +1485,9 @@ async function deletePayment({
     );
 
     await connection.commit();
+
+    /* Productions/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedPayment;
   } catch (error) {
@@ -1706,6 +1722,9 @@ async function createReturn({
 
     await connection.commit();
 
+    /* Productions/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return {
       ...productionReturn,
       items: createdItems,
@@ -1895,6 +1914,9 @@ async function deleteReturn({
     );
 
     await connection.commit();
+
+    /* Productions/payments/returns write journals and move stock. */
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedReturn;
   } catch (error) {

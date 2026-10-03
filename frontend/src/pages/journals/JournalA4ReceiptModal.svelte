@@ -22,8 +22,19 @@
 
   export let journal = {};
 
+  /*
+   * The receipt's rows come from several async sources (settings, accounts,
+   * balances, the QR code). These promises let printReceipt() wait for them
+   * instead of racing them, so a receipt printed in the first moments after
+   * the modal opens cannot come out with the data sections missing while the
+   * dividers print.
+   */
+  let qrReady = Promise.resolve();
+  let balanceReady = Promise.resolve();
+  let itemsReady = Promise.resolve();
+
   $: if (journal) {
-    loadQRCode();
+    qrReady = loadQRCode();
   }
 
   export let saleData = null;
@@ -59,7 +70,7 @@ import { saleApi } from '../../api/saleApi.js';
   }
 
   $: if (journal?.first_entry_account) {
-    loadBalance();
+    balanceReady = loadBalance();
   }
 
   const dispatch = createEventDispatcher();
@@ -113,17 +124,34 @@ import { saleApi } from '../../api/saleApi.js';
     out = out || 'Unknown';
     return out;
   }
-  onMount(async () => {
-    await loadItems();
-    sales = (await saleApi.getAll({ status: 1 }))?.data || [];
-    sale_payments = (await salePaymentApi.getAll({ status: 1 }))?.data || [];
-    await tick();
-    fitText(addressEl);
+  onMount(() => {
+    itemsReady = (async () => {
+      try {
+        await loadItems();
+        sales = (await saleApi.getAll({ status: 1 }))?.data || [];
+        sale_payments = (await salePaymentApi.getAll({ status: 1 }))?.data || [];
+      } catch (loadError) {
+        console.error('Failed to load receipt references:', loadError);
+      }
+    })();
+
+    itemsReady
+      .then(() => tick())
+      .then(() => fitText(addressEl))
+      .catch((fitError) => console.warn('Receipt layout fit failed:', fitError));
   });
 
   let receipt_content;
-  function printReceipt() {
-    const content = receipt_content.innerHTML;
+  async function printReceipt() {
+    /* Snapshot only after the async rows have landed in the DOM. */
+    try {
+      await Promise.allSettled([itemsReady, qrReady, balanceReady]);
+      await tick();
+    } catch (waitError) {
+      console.warn('Receipt data not ready for print:', waitError);
+    }
+
+    const content = receipt_content?.innerHTML || '';
     const styles = `
         <style>
 body { margin: 10mm; }
@@ -162,6 +190,8 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
         </style>
       `;
     const w = window.open('', '_blank');
+    if (!w) return; /* popup blocked — there is nothing to print into */
+
     w.document.write(/*html*/ `
         
         <!doctype html><html ${t('dir=ltr')}><head><meta charset="utf-8">
@@ -176,11 +206,45 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
           </head>
           <body>${content}</body></html>`);
     w.document.close();
-    w.focus();
-    setTimeout(() => {
+
+    /*
+     * Print only once the popup really has its stylesheets and web fonts.
+     * A fixed 500ms timer used to fire while the theme CSS and Vazirmatn
+     * were still downloading; printing mid-load is what intermittently put
+     * the logos on the sheet but dropped the text between the dividers.
+     */
+    let printed = false;
+    const doPrint = () => {
+      if (printed) return;
+      printed = true;
+      w.focus();
       w.print();
       w.close();
-    }, 500);
+    };
+
+    const printWhenReady = () => {
+      if (printed) return;
+
+      const fontsReady = w.document.fonts?.ready;
+      if (!fontsReady) {
+        doPrint();
+        return;
+      }
+
+      /* Fonts must delay the print, never swallow it. */
+      Promise.race([
+        fontsReady,
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]).then(doPrint, doPrint);
+    };
+
+    if (w.document.readyState === 'complete') {
+      printWhenReady();
+    } else {
+      w.addEventListener('load', printWhenReady, { once: true });
+      /* Safety net: a hanging image must not swallow the print either. */
+      setTimeout(printWhenReady, 5000);
+    }
   }
 
   $: referenceText = (() => {

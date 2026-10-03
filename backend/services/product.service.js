@@ -1,4 +1,5 @@
 const db = require('../database/pool');
+const dashboardService = require('./dashboard.service');
 
 const AppError =
   require('../errors/AppError');
@@ -177,6 +178,9 @@ async function reconcileProductStock({
 
     await connection.commit();
 
+    /* Products drive the overview's inventory value / low stock / expiry lists. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return productRepository.findByLocalId(
       db,
       {
@@ -326,6 +330,9 @@ async function createProduct({
     );
 
     await connection.commit();
+
+    /* Products drive the overview's inventory value / low stock / expiry lists. */
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return product;
   } catch (error) {
@@ -485,6 +492,9 @@ async function updateProduct({
 
     await connection.commit();
 
+    /* Products drive the overview's inventory value / low stock / expiry lists. */
+    dashboardService.invalidateDashboardAggregates(orgId);
+
     return updatedProduct;
   } catch (error) {
     await connection.rollback();
@@ -574,6 +584,9 @@ async function deleteProduct({
     );
 
     await connection.commit();
+
+    /* Products drive the overview's inventory value / low stock / expiry lists. */
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedProduct;
   } catch (error) {

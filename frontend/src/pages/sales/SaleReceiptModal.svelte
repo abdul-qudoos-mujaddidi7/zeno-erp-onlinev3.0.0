@@ -1017,6 +1017,29 @@ td {
 <WhatsappModal bind:this={WhatsappModalRef} />
 
 <style>
+  @media screen {
+    :global(html.dark) .receipt,
+    :global(body.dark) .receipt,
+    :global([data-theme='dark']) .receipt {
+      --receipt-preview-text: #e5edf8;
+      --receipt-preview-border: #64748b;
+      background: #111827;
+      color: var(--receipt-preview-text);
+      color-scheme: dark;
+    }
+
+    .receipt :global(*) {
+      color: var(--receipt-preview-text, #000) !important;
+    }
+
+    .receipt th,
+    .receipt .items-table .subtotal-row td,
+    .receipt .items-table .nettotal-row td,
+    .receipt .divider {
+      border-color: var(--receipt-preview-border, #000) !important;
+    }
+  }
+
   table {
     table-layout: fixed;
     width: 100%;

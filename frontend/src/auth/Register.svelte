@@ -3,6 +3,9 @@
   import { push } from 'svelte-spa-router';
   import { t, setLanguage, isRTL, lang, supported } from '../i18n/i18n';
   import { onMount } from 'svelte';
+  import { useLightPageTheme } from '../stores/themeStore.js';
+
+  onMount(useLightPageTheme);
   import {app_version} from '../config.js';
 
   let phone = '';
@@ -37,11 +40,6 @@
         mdbCss['disabled'] = shouldRtl;
         mdbRtlCss['disabled'] = !shouldRtl;
       }
-    } catch (e) {}
-
-    try {
-      const theme = localStorage.getItem('theme') || 'light';
-      document.documentElement.dataset.mdbTheme = theme;
     } catch (e) {}
 
     return () => unsubscribeLang();
