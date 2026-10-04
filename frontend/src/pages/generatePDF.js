@@ -43,6 +43,7 @@ import { t, shortID } from '../i18n/i18n';
 import { accountApi } from '../api/accountApi.js';
 import { accountTypeApi } from '../api/accountTypeApi.js';
 import { sumReportQuantity } from './reportQuantity.js';
+import { productReportAmounts } from './accounts/productReportAmounts.js';
 
 /*
  * ZenoERP modern PDF report generator
@@ -3215,6 +3216,14 @@ function buildReportMetrics({
     const totalQuantity = sumReportQuantity(
       normalizeItems(filteredItems),
     );
+    const amounts = { gross: {}, discount: {}, final: {} };
+    normalizeItems(filteredItems).forEach((item) => {
+      const currency = item.currency || 'AFN';
+      const row = productReportAmounts(item);
+      Object.keys(amounts).forEach((key) => {
+        amounts[key][currency] = (amounts[key][currency] || 0) + row[key];
+      });
+    });
 
     return [
       {
@@ -3233,9 +3242,11 @@ function buildReportMetrics({
       },
       {
         label: t('Total Amount'),
-        value: formatCurrencyMap(totalAmount),
+        value: formatCurrencyMap(amounts.gross),
         tone: 'blue',
       },
+      { label: t('Discount'), value: formatCurrencyMap(amounts.discount), tone: 'red' },
+      { label: t('Final Amount'), value: formatCurrencyMap(amounts.final), tone: 'green' },
     ];
   }
 
@@ -3858,10 +3869,13 @@ function buildAccountProductsTable(
     t('Unit Price'),
     t('Quantity'),
     t('Total'),
+    t('Discount'),
+    t('Final Amount'),
   ];
 
   const body = items.map((item, index) => {
     const currency = item.currency || 'AFN';
+    const amounts = productReportAmounts(item);
     const row = [
       index + 1,
       formatDualDateForPDF(item.created_at),
@@ -3869,14 +3883,16 @@ function buildAccountProductsTable(
       stripTags(item.product_name),
       createMoneyCell(item.unit_price, currency),
       `${formatNumber(item.quantity)} ${item.product_unit_name}`,
-      createMoneyCell(item.subtotal, currency),
+      createMoneyCell(amounts.gross, currency),
+      createMoneyCell(amounts.discount, currency),
+      createMoneyCell(amounts.final, currency),
     ];
 
     return rtl ? [...row].reverse() : row;
   });
 
   /* Scale the preferred column proportions to the real page width. */
-  const preferredWidths = [10, 34, 40, 89, 32, 32, 42];
+  const preferredWidths = [10, 30, 32, 65, 30, 26, 32, 30, 34];
   const preferredTotal = preferredWidths.reduce(
     (total, width) => total + width,
     0,
@@ -3896,6 +3912,8 @@ function buildAccountProductsTable(
     4: { cellWidth: scaledWidths[4], halign: 'center' },
     5: { cellWidth: scaledWidths[5], halign: 'center' },
     6: { cellWidth: scaledWidths[6], halign: 'center' },
+    7: { cellWidth: scaledWidths[7], halign: 'center' },
+    8: { cellWidth: scaledWidths[8], halign: 'center' },
   };
 
   const columnStyles = rtl

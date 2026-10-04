@@ -1,3 +1,5 @@
+import { productReportAmounts } from './productReportAmounts.js';
+
 function addAmount(totals, key, value) {
   const normalizedKey = String(key || '').trim();
   totals[normalizedKey] = (totals[normalizedKey] || 0) + (Number(value) || 0);
@@ -43,6 +45,7 @@ export function aggregateProductItemsForExport(rows = []) {
 
   for (const row of rows) {
     const key = [row.product_id, row.product_unit_id, row.currency || ''].join('|');
+    const amounts = productReportAmounts(row);
     const existing = groups.get(key);
     if (!existing) {
       groups.set(key, {
@@ -51,6 +54,9 @@ export function aggregateProductItemsForExport(rows = []) {
         subtotal: Number(row.subtotal) || 0,
         total_cost: Number(row.total_cost) || 0,
         gross_benefit: Number(row.gross_benefit) || 0,
+        report_gross_amount: amounts.gross,
+        report_discount_amount: amounts.discount,
+        report_final_amount: amounts.final,
         source_count: 1,
         is_product_total: true,
       });
@@ -59,6 +65,9 @@ export function aggregateProductItemsForExport(rows = []) {
 
     existing.quantity += Number(row.quantity) || 0;
     existing.subtotal += Number(row.subtotal) || 0;
+    existing.report_gross_amount += amounts.gross;
+    existing.report_discount_amount += amounts.discount;
+    existing.report_final_amount += amounts.final;
     existing.total_cost += Number(row.total_cost) || 0;
     existing.gross_benefit += Number(row.gross_benefit) || 0;
     existing.source_count += 1;
@@ -70,6 +79,6 @@ export function aggregateProductItemsForExport(rows = []) {
 
   return [...groups.values()].map((row) => ({
     ...row,
-    unit_price: row.quantity ? row.subtotal / row.quantity : 0,
+    unit_price: row.quantity ? row.report_gross_amount / row.quantity : 0,
   }));
 }

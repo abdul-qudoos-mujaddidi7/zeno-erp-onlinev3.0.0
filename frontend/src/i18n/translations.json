@@ -1,5 +1,6 @@
 {
   "en": {
+    "Final Amount": "Final Amount",
     "app.title": "ZenoERP",
     "Search": "Search",
     "No result": "No result",
@@ -272,6 +273,7 @@
     "This product has no stock to zero.": "This product has no stock to zero."
   },
   "fa": {
+    "Final Amount": "مبلغ نهایی",
     "Welcome": "خوش آمدید",
     "and": "و",
     "-of-": " ",
@@ -1874,6 +1876,7 @@
     "This product has no stock to zero.": "این محصول موجودی‌ای برای صفر کردن ندارد."
   },
   "ps": {
+    "Final Amount": "وروستی مبلغ",
     "Welcome": "ښه راغلاست",
     "and": "او",
     "-of-": "-له-",

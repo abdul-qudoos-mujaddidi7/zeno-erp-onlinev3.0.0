@@ -15,6 +15,9 @@ function buildSaleQuery({
   const conditions = [
     's.org_id = ?',
     's.status = 1',
+    // Sales summaries recognize confirmed invoices only. Draft lines must
+    // not inflate product quantities or monetary totals for the same period.
+    "s.invoice_status = 'confirmed'",
   ];
   const values = [orgId];
 
@@ -81,6 +84,12 @@ function buildSaleQuery({
         si.unit_price,
         si.currency,
         si.subtotal,
+        si.discount_type,
+        si.discount_amount,
+        s.discount_type AS invoice_discount_type,
+        s.discount_amount AS invoice_discount_amount,
+        s.total_amount AS invoice_total_amount,
+        s.expense_amount AS invoice_expense_amount,
         si.fifo_cost,
         si.profit,
         s.invoice_status,
@@ -197,6 +206,12 @@ function buildPurchaseQuery({
         pi.unit_price,
         pi.currency,
         pi.subtotal,
+        pi.discount_type,
+        pi.discount_amount,
+        p.discount_type AS invoice_discount_type,
+        p.discount_amount AS invoice_discount_amount,
+        p.total_amount AS invoice_total_amount,
+        p.expense_amount AS invoice_expense_amount,
         NULL AS fifo_cost,
         NULL AS profit,
         NULL AS invoice_status,
