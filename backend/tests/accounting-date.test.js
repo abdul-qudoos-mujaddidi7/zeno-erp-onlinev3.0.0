@@ -334,6 +334,24 @@ test('no opening balance is written when the balance is zero', async () => {
   assert.equal(state.journals.length, 0);
 });
 
+for (const type of ['Debit', 'Credit']) {
+  for (const amount of [-500, 500]) {
+    test(`opening ${type} ${amount} posts balanced nonnegative journal entries`, async () => {
+      await createAccountWith({ balance: amount, initial_balance_type: type });
+      const journal = state.journals[0];
+      assert.ok(journal);
+      const debit = journal.first_entry_debit + journal.second_entry_debit;
+      const credit = journal.first_entry_credit + journal.second_entry_credit;
+      assert.equal(debit, 500);
+      assert.equal(credit, 500);
+      assert.equal(journal.first_entry_credit - journal.first_entry_debit, type === 'Credit' ? amount : -amount);
+      for (const field of ['first_entry_debit', 'first_entry_credit', 'second_entry_debit', 'second_entry_credit']) {
+        assert.ok(journal[field] >= 0);
+      }
+    });
+  }
+}
+
 /* ===================== payment_date input validation ================== */
 /*
  * Step 3.6. The app now sends a calendar day. Existing API callers send a

@@ -36,7 +36,36 @@ test('directional SQL excludes voided journals and cross-organization rows', asy
   let captured;
   const executor = { execute: async (sql, values) => { captured = { sql, values }; return [[]]; } };
   await accountRepository.findDirectionalBalances(executor, { orgId: 42, accountIds: [123] });
-  assert.equal((captured.sql.match(/org_id = \?/g) || []).length, 2);
+  assert.equal((captured.sql.match(/org_id = \?/g) || []).length, 3);
   assert.match(captured.sql, /status = 1/g);
-  assert.deepEqual(captured.values, [42, 42, 123]);
+  assert.deepEqual(captured.values, [42, 42, 42, 123]);
+});
+
+for (const role of ['customer', 'supplier', 'both']) {
+  for (const opening of [-500, 500]) {
+    test(`${role} opening balance ${opening} contributes exactly once`, async () => {
+      const executor = { execute: async () => [[{
+        account_id: 123, currency: 'USD',
+        customer_receivable: 70, supplier_payable: 40,
+        opening_balance: String(opening),
+        can_be_customer: role !== 'supplier' ? 1 : 0,
+        can_be_supplier: role !== 'customer' ? 1 : 0,
+      }]] };
+      const [row] = await accountRepository.findDirectionalBalances(executor, { orgId: 7 });
+      const customerOpening = role === 'customer' || (role === 'both' && opening < 0);
+      assert.equal(row.customer_receivable, 70 - (customerOpening ? opening : 0));
+      assert.equal(row.supplier_payable, 40 + (customerOpening ? 0 : opening));
+      assert.equal(-row.customer_receivable + row.supplier_payable, -70 + 40 + opening);
+    });
+  }
+}
+
+test('directional query includes opening journals and resolves organization-scoped account roles', async () => {
+  let sql;
+  await accountRepository.findDirectionalBalances({ execute: async (query) => { sql = query; return [[]]; } }, { orgId: 7 });
+  assert.match(sql, /reference_type = 'account'/);
+  assert.match(sql, /WHERE reference_type IN \([^)]*'account'\)/);
+  assert.match(sql, /account_type\.org_id = account\.org_id/);
+  assert.match(sql, /account\.account_type_id = 4 OR account_type\.can_be_customer = 1/);
+  assert.match(sql, /account\.account_type_id = 3 OR account_type\.can_be_supplier = 1/);
 });

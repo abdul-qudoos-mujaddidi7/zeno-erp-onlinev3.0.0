@@ -428,6 +428,10 @@ async function createInitialBalanceJournals({
 
   async function createJournal(entry) {
     const journalLocalId = generateLocalId();
+    const amount = Math.abs(entry.balance);
+    const type = entry.balance < 0
+      ? (entry.type === 'Credit' ? 'Debit' : 'Credit')
+      : entry.type;
 
     await journalRepository.create(
       connection,
@@ -442,11 +446,11 @@ async function createInitialBalanceJournals({
           description: `Initial balance for account ${name}`,
           currency: entry.currency || currency,
           first_entry_account: account.id,
-          first_entry_debit: entry.type === 'Debit' ? entry.balance : 0,
-          first_entry_credit: entry.type === 'Credit' ? entry.balance : 0,
+          first_entry_debit: type === 'Debit' ? amount : 0,
+          first_entry_credit: type === 'Credit' ? amount : 0,
           second_entry_account: noTrackAccount.id,
-          second_entry_debit: entry.balance > 0 && entry.type === 'Credit' ? entry.balance : 0,
-          second_entry_credit: entry.balance > 0 && entry.type === 'Debit' ? entry.balance : 0,
+          second_entry_debit: type === 'Credit' ? amount : 0,
+          second_entry_credit: type === 'Debit' ? amount : 0,
           status: 1,
         },
       },

@@ -362,11 +362,17 @@ async function findDirectionalBalances(executor, { orgId, accountIds = null }) {
    */
   const [rows] = await executor.execute(
     `
-      SELECT entry_account AS account_id, currency,
+      SELECT entry_account AS account_id, directional.currency,
         SUM(CASE WHEN reference_type IN ('sale','sale_payment','sale_return')
           THEN debit - credit ELSE 0 END) AS customer_receivable,
         SUM(CASE WHEN reference_type IN ('purchase','purchase_payment','purchase_return')
-          THEN credit - debit ELSE 0 END) AS supplier_payable
+          THEN credit - debit ELSE 0 END) AS supplier_payable,
+        SUM(CASE WHEN reference_type = 'account'
+          THEN credit - debit ELSE 0 END) AS opening_balance,
+        MAX(CASE WHEN account.account_type_id = 4 OR account_type.can_be_customer = 1
+          THEN 1 ELSE 0 END) AS can_be_customer,
+        MAX(CASE WHEN account.account_type_id = 3 OR account_type.can_be_supplier = 1
+          THEN 1 ELSE 0 END) AS can_be_supplier
       FROM (
         SELECT first_entry_account AS entry_account, currency, reference_type,
           SUM(COALESCE(first_entry_debit,0)) AS debit,
@@ -380,16 +386,29 @@ async function findDirectionalBalances(executor, { orgId, accountIds = null }) {
         FROM journals WHERE org_id = ? AND status = 1
         GROUP BY second_entry_account, currency, reference_type
       ) directional
-      WHERE reference_type IN ('sale','sale_payment','sale_return','purchase','purchase_payment','purchase_return')
+      JOIN accounts account ON account.local_id = entry_account AND account.org_id = ?
+      LEFT JOIN account_types account_type
+        ON account_type.local_id = account.account_type_id AND account_type.org_id = account.org_id
+      WHERE reference_type IN ('sale','sale_payment','sale_return','purchase','purchase_payment','purchase_return','account')
         ${idFilter}
-      GROUP BY entry_account, currency
-      ORDER BY entry_account, currency
+      GROUP BY entry_account, directional.currency
+      ORDER BY entry_account, directional.currency
     `,
-    [orgId, orgId, ...(accountIds || [])],
+    [orgId, orgId, orgId, ...(accountIds || [])],
   );
   return rows.map((row) => {
-    const customerReceivable = Number(row.customer_receivable || 0);
-    const supplierPayable = Number(row.supplier_payable || 0);
+    let customerReceivable = Number(row.customer_receivable || 0);
+    let supplierPayable = Number(row.supplier_payable || 0);
+    const openingBalance = Number(row.opening_balance || 0);
+    const isCustomer = Number(row.can_be_customer) === 1;
+    const isSupplier = Number(row.can_be_supplier) === 1;
+    // A dual-role account's opening debt belongs to receivables, and its
+    // opening credit belongs to payables. Include the opening exactly once.
+    if (isCustomer && (!isSupplier || openingBalance < 0)) {
+      customerReceivable -= openingBalance;
+    } else if (isSupplier) {
+      supplierPayable += openingBalance;
+    }
     return {
       account_id: Number(row.account_id),
       currency: row.currency || 'AFN',
