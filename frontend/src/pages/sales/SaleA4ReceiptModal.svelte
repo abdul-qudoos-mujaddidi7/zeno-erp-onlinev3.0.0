@@ -1,4 +1,5 @@
 <script>
+  import { balanceStatus } from '../../utils/balanceStatus.js';
   import { onMount, createEventDispatcher } from 'svelte';
 import { productCategoryApi } from '../../api/productCategoryApi.js';
 import { settingsApi } from '../../api/settingsApi.js';
@@ -353,7 +354,7 @@ import { productBrandApi } from '../../api/productBrandApi.js';
       ? Object.entries(balance)
           .map(
             ([cur, amt]) =>
-              `<span class='${amt < 0 ? 'text-danger' : ''}'><span dir='ltr'>${amt.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span> ${t(cur)}</span>`,
+              `<span class='${amt < 0 ? 'text-danger' : ''}'><span dir='ltr'>${amt.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span> ${t(cur)}${balanceStatus(amt) ? ` (${t(balanceStatus(amt))})` : ''}</span>`,
           )
           .join(' ')
       : '';
@@ -631,11 +632,14 @@ import { productBrandApi } from '../../api/productBrandApi.js';
                         <td class="p-2 py-1">{t('Old Balance')} </td><td class="p-2 py-1 fw-bold">
                           <span dir="ltr"
                             >{@html balance[sale?.currency] !== undefined && balance[sale?.currency] !== null
-                              ? Number(balance[sale?.currency] + due || 0).toLocaleString(undefined, {
+                              ? (Number(balance[sale?.currency]) + Number(due || 0)).toLocaleString(undefined, {
                                   maximumFractionDigits: 3,
                                 })
                               : ''}</span>
-                          {t(sale?.currency)}</td>
+                          {t(sale?.currency)}
+                          {#if balance[sale?.currency] != null && balanceStatus(Number(balance[sale?.currency]) + Number(due || 0))}
+                            ({t(balanceStatus(Number(balance[sale?.currency]) + Number(due || 0)))})
+                          {/if}</td>
                       </tr>
                       <tr
                         ><td class="p-2 py-1">{t('Now Balance')}</td><td class="p-2 py-1 fw-bold">{@html showAccountBalance}</td
@@ -673,11 +677,14 @@ import { productBrandApi } from '../../api/productBrandApi.js';
                         <td class="p-2 py-1">{t('Old Balance')}: <strong>
                           <span dir="ltr"
                             >{@html balance[sale?.currency] !== undefined && balance[sale?.currency] !== null
-                              ? Number(balance[sale?.currency] + due || 0).toLocaleString(undefined, {
+                              ? (Number(balance[sale?.currency]) + Number(due || 0)).toLocaleString(undefined, {
                                   maximumFractionDigits: 3,
                                 })
                               : ''}</span>
-                          {t(sale?.currency)}</strong></td>
+                          {t(sale?.currency)}
+                          {#if balance[sale?.currency] != null && balanceStatus(Number(balance[sale?.currency]) + Number(due || 0))}
+                            ({t(balanceStatus(Number(balance[sale?.currency]) + Number(due || 0)))})
+                          {/if}</strong></td>
                         <td class="p-2 py-1">{t('Now Balance')}: <strong>{@html showAccountBalance}</strong></td>
                       {/if}
                     </tr>

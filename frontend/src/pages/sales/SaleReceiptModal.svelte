@@ -1,4 +1,5 @@
 <script>
+  import { balanceStatus } from '../../utils/balanceStatus.js';
   import { onMount, createEventDispatcher, tick } from 'svelte';
 import { productUnitApi } from '../../api/productUnitApi.js';
 
@@ -745,7 +746,7 @@ td {
       ? Object.entries(balance)
           .map(
             ([cur, amt]) =>
-              `<span dir='ltr'>${amt.toLocaleString(undefined, { maximumfractiondigits: 3 })}</span> ${t(cur)}`,
+              `<span dir='ltr'>${amt.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span> ${t(cur)}${balanceStatus(amt) ? ` (${t(balanceStatus(amt))})` : ''}`,
           )
           .join(' ')
       : '';
@@ -941,12 +942,15 @@ td {
                   <span>
                     <span dir="ltr"
                       >{balance[sale?.currency] !== undefined && balance[sale?.currency] !== null
-                        ? Number(balance[sale?.currency] + due || 0).toLocaleString(undefined, {
+                        ? (Number(balance[sale?.currency]) + Number(due || 0)).toLocaleString(undefined, {
                             maximumFractionDigits: 3,
                           })
                         : '---'}</span
                     >
                     {t(sale?.currency) || ''}
+                    {#if balance[sale?.currency] != null && balanceStatus(Number(balance[sale?.currency]) + Number(due || 0))}
+                      ({t(balanceStatus(Number(balance[sale?.currency]) + Number(due || 0)))})
+                    {/if}
                   </span>
                 </div>
 

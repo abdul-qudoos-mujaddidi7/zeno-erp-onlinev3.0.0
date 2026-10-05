@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script>
+  import { balanceStatus } from '../utils/balanceStatus.js';
   import { createEventDispatcher, onMount } from 'svelte';
 
   import { t, lang, translate_org_type, settings_all, shortID } from '../i18n/i18n';
@@ -381,6 +382,11 @@
         })} ${t(currency)}`;
       })
       .join(' | ');
+  }
+
+  function formatSaleBalance(value, currency) {
+    const status = balanceStatus(value);
+    return formatSaleMoney(value, currency) + (status ? ` (${t(status)})` : '');
   }
 
   function formatSaleMoney(value, currency) {
@@ -796,7 +802,7 @@
               ? currentBalance + due
               : currentBalance;
 
-          return formatSaleMoney(
+          return formatSaleBalance(
             previousBalance,
             balanceCurrency,
           );
@@ -812,7 +818,7 @@
               ? Number(value?.balance || 0)
               : Number(value || 0);
 
-          return formatSaleMoney(
+          return formatSaleBalance(
             amount,
             balanceCurrency,
           );
