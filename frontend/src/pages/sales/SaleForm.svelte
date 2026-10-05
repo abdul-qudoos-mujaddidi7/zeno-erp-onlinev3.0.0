@@ -1932,19 +1932,17 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
         {#if editCurrency}
           <div class="sale-exchange-editor" dir="ltr">
-            <span>
+            <div class="sale-exchange-editor__currency">
               1
-              <select
+              <FilterSelect
+                compact
+                label={t('From Currency')}
                 value={saleRateFromCurrency}
                 disabled={saleRateSaving}
-                aria-label={t('From Currency')}
-                on:change={(event) => selectSaleRateCurrency('from', event.target.value)}>
-                {#each currencies as currency (currency.code)}
-                  <option value={currency.code}>{t(currency.code)}</option>
-                {/each}
-              </select>
+                options={currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))}
+                on:change={(event) => selectSaleRateCurrency('from', event.detail)} />
               =
-            </span>
+            </div>
 
             <input
               type="number"
@@ -1954,22 +1952,21 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               step="any"
               aria-label={t('Exchange Rate')} />
 
-            <span>
-              <select
+            <div class="sale-exchange-editor__currency">
+              <FilterSelect
+                compact
+                label={t('To Currency')}
                 value={saleRateToCurrency}
                 disabled={saleRateSaving}
-                aria-label={t('To Currency')}
-                on:change={(event) => selectSaleRateCurrency('to', event.target.value)}>
-                {#each currencies as currency (currency.code)}
-                  <option value={currency.code}>{t(currency.code)}</option>
-                {/each}
-              </select>
-            </span>
+                options={currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))}
+                on:change={(event) => selectSaleRateCurrency('to', event.detail)} />
+            </div>
 
             <button
               type="button"
               class="sale-exchange-editor__save"
               aria-label={t('Save')}
+              title={t('Save')}
               disabled={saleRateSaving}
               on:click={saveSaleExchangeRate}>
               <i class="bi bi-check-lg" aria-hidden="true"></i>
@@ -1979,6 +1976,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               type="button"
               class="sale-exchange-editor__cancel"
               aria-label={t('Cancel')}
+              title={t('Cancel')}
               disabled={saleRateSaving}
               on:click={() => (editCurrency = false)}>
               <i class="bi bi-x-lg" aria-hidden="true"></i>
@@ -2157,24 +2155,22 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     <label class="sale-simple-payment__field sale-simple-payment__field--amount">
       <span>{t('Payment')}</span>
 
-      <div class="payment-composite-control">
+      <div class="payment-composite-control" class:is-rate-editing={quickPaymentRateEditing}>
         {#if quickPaymentRateEditing}
           <div
             class="sale-exchange-editor payment-quick-rate__editor"
             dir="ltr">
-            <span>
+            <div class="sale-exchange-editor__currency">
               1
-              <select
+              <FilterSelect
+                compact
+                label={t('From Currency')}
                 value={quickPaymentFromCurrency}
                 disabled={quickPaymentRateSaving}
-                aria-label={t('From Currency')}
-                on:change={(event) => selectQuickPaymentCurrency('from', event.target.value)}>
-                {#each currencies as currency (currency.code)}
-                  <option value={currency.code}>{t(currency.code)}</option>
-                {/each}
-              </select>
+                options={currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))}
+                on:change={(event) => selectQuickPaymentCurrency('from', event.detail)} />
               =
-            </span>
+            </div>
 
             <input
               bind:this={quickPaymentRateInput}
@@ -2186,17 +2182,15 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               aria-label={t('Exchange Rate')}
               on:keydown={handleQuickPaymentRateKeydown} />
 
-            <span>
-              <select
+            <div class="sale-exchange-editor__currency">
+              <FilterSelect
+                compact
+                label={t('To Currency')}
                 value={quickPaymentToCurrency}
                 disabled={quickPaymentRateSaving}
-                aria-label={t('To Currency')}
-                on:change={(event) => selectQuickPaymentCurrency('to', event.target.value)}>
-                {#each currencies as currency (currency.code)}
-                  <option value={currency.code}>{t(currency.code)}</option>
-                {/each}
-              </select>
-            </span>
+                options={currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))}
+                on:change={(event) => selectQuickPaymentCurrency('to', event.detail)} />
+            </div>
 
             <button
               type="button"
@@ -3710,10 +3704,13 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   }
 
   .sale-exchange-editor {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(2.5rem, 0.7fr) minmax(0, 1fr);
+    grid-template-rows: minmax(var(--sale-control-height), auto) 1.75rem;
     align-items: stretch;
     width: 100%;
-    height: var(--sale-control-height);
+    min-width: 0;
+    height: auto;
     overflow: hidden;
     border: 1px solid #d6dfeb;
     border-radius: 0.625rem;
@@ -3725,20 +3722,21 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1);
   }
 
-  .sale-exchange-editor > span {
+  .sale-exchange-editor > .sale-exchange-editor__currency {
     display: inline-flex;
     align-items: center;
-    padding-inline: 0.45rem;
+    min-width: 0;
+    padding-inline: 0.2rem;
     border-inline-end: 1px solid #e2e8f0;
     background: #f7f9fc;
     color: #64748b;
-    font-size: 0.58rem;
+    font-size: 0.72rem;
     font-weight: 700;
     white-space: nowrap;
   }
 
   .sale-exchange-editor > input {
-    flex: 1 1 auto;
+    width: 100%;
     min-width: 2.5rem;
     padding-inline: 0.35rem;
     border: 0;
@@ -3750,56 +3748,67 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     text-align: center;
   }
 
-  .sale-exchange-editor > span > select {
+  .sale-exchange-editor__currency :global(.filter-select) {
+    flex: 1 1 auto;
+    width: 100%;
     min-width: 0;
-    max-width: 5rem;
-    margin-inline: 0.15rem;
-    padding: 0.25rem 0;
-    border: 0;
-    border-radius: 0.2rem;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
+    margin-inline: 0.1rem;
   }
 
-  .sale-exchange-editor > span > select:focus-visible {
+  .sale-exchange-editor .sale-exchange-editor__currency :global(.filter-select__control) {
+    min-height: 0 !important;
+    height: 100% !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .sale-exchange-editor .sale-exchange-editor__currency :global(.filter-select__trigger) {
+    min-height: 1.75rem !important;
+    height: 100% !important;
+    padding: 0.25rem 0.35rem !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: inherit !important;
+    font: inherit !important;
+  }
+
+  .sale-exchange-editor__currency :global(.filter-select__value) {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+  }
+
+  .sale-exchange-editor .sale-exchange-editor__currency :global(.filter-select__trigger:focus-visible) {
     outline: 2px solid #78a4f5;
-    outline-offset: 1px;
-  }
-
-  .sale-exchange-editor > span > select:disabled {
-    cursor: wait;
-  }
-
-  .sale-exchange-editor > span > select > option {
-    background: #ffffff;
-    color: #26364b;
-  }
-
-  :global(html.dark) .sale-exchange-editor > span > select > option {
-    background: #1e293b;
-    color: #e2e8f0;
+    outline-offset: -2px;
   }
 
   .sale-exchange-editor__save,
   .sale-exchange-editor__cancel {
     display: inline-grid;
-    flex: 0 0 2rem;
-    width: 2rem;
+    width: 100%;
+    min-width: 0;
     padding: 0;
     place-items: center;
     border: 0;
+    border-top: 1px solid #e2e8f0;
     border-inline-start: 1px solid #e2e8f0;
     cursor: pointer;
   }
 
   .sale-exchange-editor__save {
+    grid-column: 1 / 3;
+    grid-row: 2;
     background: #ecfdf5;
     color: var(--sale-green);
   }
 
   .sale-exchange-editor__cancel {
+    grid-column: 3;
+    grid-row: 2;
     background: #fef2f2;
     color: #dc2626;
   }
@@ -4031,21 +4040,6 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     box-shadow: none;
   }
 
-  .payment-quick-rate__editor > span:first-child {
-    flex: 1 1 auto;
-    min-width: 4.5rem;
-  }
-
-  .payment-quick-rate__editor > input {
-    flex: 1 1 4rem;
-    min-width: 3.5rem;
-  }
-
-  .payment-quick-rate__editor > span:nth-of-type(2) {
-    flex: 0 1 auto;
-    min-width: 3.5rem;
-  }
-
   .payment-quick-rate__editor .spinner-border {
     width: 0.75rem;
     height: 0.75rem;
@@ -4066,6 +4060,10 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   .sale-simple-payment__field > div:focus-within {
     border-color: #78a4f5;
     box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1);
+  }
+
+  .sale-simple-payment__field > .payment-composite-control.is-rate-editing {
+    height: auto;
   }
 
   .sale-simple-payment__field i {
@@ -5424,7 +5422,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   }
 
   :global(html.dark) .sale-readonly-field,
-  :global(html.dark) .sale-exchange-editor > span,
+  :global(html.dark) .sale-exchange-editor > .sale-exchange-editor__currency,
   :global(html.dark) .sale-payment-toggle,
   :global(html.dark) .sale-payment-suffix,
   :global(html.dark) .payment-currency-picker__btn {

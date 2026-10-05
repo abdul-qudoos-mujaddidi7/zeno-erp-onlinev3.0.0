@@ -17,6 +17,7 @@
   export let multiple = false;
   /** `auto` (default) adds the search box to lists long enough to search, `true` always, `false` never. */
   export let searchable = 'auto';
+  export let disabled = false;
 
   const dispatch = createEventDispatcher();
 
@@ -51,6 +52,7 @@
   }
 
   async function toggle() {
+    if (disabled) return;
     if (open) { closeMenu(); return; }
     const rect = triggerEl.getBoundingClientRect();
     const width = Math.max(rect.width, 150);
@@ -194,6 +196,7 @@
     <button
       bind:this={triggerEl}
       type="button"
+      {disabled}
       class="filter-select__trigger"
       aria-haspopup="listbox"
       aria-expanded={open}
@@ -348,6 +351,11 @@
     outline: none;
     border-color: #d6e0ed;
     box-shadow: 0 0 0 0.15rem rgba(37, 99, 235, 0.1);
+  }
+
+  .filter-select__trigger:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   :global(html.dark) .filter-select__trigger:focus-visible {
