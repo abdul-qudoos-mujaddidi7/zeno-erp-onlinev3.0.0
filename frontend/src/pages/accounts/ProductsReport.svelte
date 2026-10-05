@@ -18,8 +18,7 @@
   import { productApi } from '../../api/productApi.js';
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../lib/pagination.js';
   import {
-    aggregateProductItemsForExport,
-    aggregateSelectedProductItems,
+    buildProductReportRows,
   } from './productReportAggregation.js';
   import { oneMonthDateWindow } from './reportDateRange.js';
 
@@ -47,6 +46,8 @@
   let searchTerm = '';
   let filterStatus = 'all';
   let selectedProducts = [];
+  let reportView = 'all';
+  $: showBills = reportView === 'bills';
   let currentPage = 1;
   let itemsPerPage = DEFAULT_PAGE_SIZE;
   let totalPages = 1;
@@ -110,15 +111,7 @@
       if (requestId !== loadRequestId) return;
 
       const responseRows = Array.isArray(response) ? response : response?.data || [];
-      items = productSelected
-        ? selectedProductIds
-            .map((productId) =>
-              aggregateSelectedProductItems(
-                responseRows.filter((row) => Number(row.product_id) === productId),
-              ),
-            )
-            .filter(Boolean)
-        : responseRows;
+      items = buildProductReportRows(responseRows, selectedProductIds, { showBills });
 
       const missingProductIds = [
         ...new Set(
@@ -154,7 +147,9 @@
       }
 
       const hasMore = productSelected ? false : Boolean(response?.meta?.hasMore);
-      totalPages = hasMore
+      totalPages = productSelected && showBills
+        ? Math.max(1, Math.ceil(items.length / itemsPerPage))
+        : hasMore
         ? Math.max(currentPage + 1, currentPage)
         : Math.max(currentPage, items.length ? currentPage : 1);
     } catch (error) {
@@ -286,7 +281,7 @@
     const rows = (await Promise.all(
       selectedProductIds.map((productId) => fetchFilteredItems(productId)),
     )).flat();
-    return aggregateProductItemsForExport(rows);
+    return buildProductReportRows(rows, selectedProductIds, { showBills, forExport: true });
   }
 
   async function exportProducts(format) {
@@ -341,7 +336,9 @@
       if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-    return result;
+    return selectedProducts.length && showBills
+      ? result.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+      : result;
   })();
 
   $: pdfItems = paginatedItems.map(decorateItem);
@@ -349,6 +346,16 @@
   $: enable_services = $settings_all.find((s) => s.key === 'enable_services')?.value == 1;
 
   $: reportFilters = [
+    {
+      key: 'view',
+      label: t('Show Bills'),
+      value: reportView,
+      icon: 'bi-receipt',
+      options: [
+        { value: 'all', label: t('Total Quantity') },
+        { value: 'bills', label: t('Show Bills') },
+      ],
+    },
     {
       key: 'fromDate',
       label: t('From Date'),
@@ -389,6 +396,7 @@
     const { key, value } = event.detail;
     if (key === 'type') filterStatus = value;
     if (key === 'product') selectedProducts = Array.isArray(value) ? value : [];
+    if (key === 'view') reportView = value;
     if (key === 'currency') selectedCurrency = value;
     if (key === 'fromDate') fromDate = value;
     if (key === 'toDate') toDate = value;
@@ -401,12 +409,24 @@
     searchTerm = '';
     filterStatus = 'all';
     selectedProducts = [];
+    reportView = 'all';
     selectedCurrency = 'all';
     fromDate = '';
     toDate = '';
     currentPage = 1;
     lastPageKey = `1|${itemsPerPage}`;
     load();
+  }
+
+  function openProduct(row) {
+    if (showBills) {
+      selectedProducts = [String(row.product_id)];
+      currentPage = 1;
+      lastPageKey = `1|${itemsPerPage}`;
+      load();
+    } else {
+      push(`/dashboard/product/${row.product_id}`);
+    }
   }
 
 </script>
@@ -502,7 +522,7 @@
               {/if}
             </td>
             <td>
-              <button class="product-link" on:click={() => push(`/dashboard/product/${row.product_id}`)}
+              <button class="product-link" on:click={() => openProduct(row)}
                 >{row.product_name || products.find((product) => product.id == row.product_id)?.name || '—'}</button>
             </td>
             <td class="col-start fw-bold">

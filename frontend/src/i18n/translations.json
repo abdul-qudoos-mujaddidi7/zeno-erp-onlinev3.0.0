@@ -1,5 +1,7 @@
 {
   "en": {
+    "Show Bills": "By Bill",
+    "Total Quantity": "Total Quantity",
     "Final Amount": "Final Amount",
     "app.title": "ZenoERP",
     "Search": "Search",
@@ -273,6 +275,7 @@
     "This product has no stock to zero.": "This product has no stock to zero."
   },
   "fa": {
+    "Show Bills": "به اساس بل",
     "Final Amount": "مبلغ نهایی",
     "Welcome": "خوش آمدید",
     "and": "و",
@@ -1876,6 +1879,7 @@
     "This product has no stock to zero.": "این محصول موجودی‌ای برای صفر کردن ندارد."
   },
   "ps": {
+    "Show Bills": "د بل پر بنسټ",
     "Final Amount": "وروستی مبلغ",
     "Welcome": "ښه راغلاست",
     "and": "او",

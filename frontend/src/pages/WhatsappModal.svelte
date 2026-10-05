@@ -807,7 +807,7 @@
             balanceCurrency,
           );
         })
-        .join(' | ');
+        .join('\n');
 
       const currentBalanceText = Object.entries(
         firstEntryBalance || {},
@@ -823,7 +823,7 @@
             balanceCurrency,
           );
         })
-        .join(' | ');
+        .join('\n');
 
       message = String(
         sale_created_template ||

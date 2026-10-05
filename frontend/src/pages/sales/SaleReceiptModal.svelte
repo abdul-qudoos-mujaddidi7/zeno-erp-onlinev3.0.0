@@ -299,6 +299,18 @@ import { currencyApi } from '../../api/currencyApi.js';
 
     const styles = `
         <style>
+  .pay-row.balance-row {
+    align-items: flex-start;
+  }
+
+  .balance-row > span:first-child {
+    white-space: nowrap;
+  }
+
+  .balance-row > span:last-child {
+    text-align: end;
+  }
+
           /*
            * Typography only: 13px / 500 base, one scale for headings (700)
            * and money labels (600), NET Total above the rest (15px / 700).
@@ -746,9 +758,9 @@ td {
       ? Object.entries(balance)
           .map(
             ([cur, amt]) =>
-              `<span dir='ltr'>${amt.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span> ${t(cur)}${balanceStatus(amt) ? ` (${t(balanceStatus(amt))})` : ''}`,
+              `<span style='display:block;white-space:nowrap'><span dir='ltr'>${amt.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span> ${t(cur)}${balanceStatus(amt) ? ` (${t(balanceStatus(amt))})` : ''}</span>`,
           )
-          .join(' ')
+          .join('')
       : '';
   }
 </script>
@@ -954,7 +966,7 @@ td {
                   </span>
                 </div>
 
-                <div class="pay-row">
+                <div class="pay-row balance-row">
                   <span>{t('Now Balance')}</span>
                   <span>
                     {@html showAccountBalance}
@@ -1021,6 +1033,17 @@ td {
 <WhatsappModal bind:this={WhatsappModalRef} />
 
 <style>
+  .pay-row.balance-row {
+    align-items: flex-start;
+  }
+
+  .balance-row > span:first-child {
+    white-space: nowrap;
+  }
+
+  .balance-row > span:last-child {
+    text-align: end;
+  }
   @media screen {
     :global(html.dark) .receipt,
     :global(body.dark) .receipt,

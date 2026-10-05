@@ -354,9 +354,9 @@ import { productBrandApi } from '../../api/productBrandApi.js';
       ? Object.entries(balance)
           .map(
             ([cur, amt]) =>
-              `<span class='${amt < 0 ? 'text-danger' : ''}'><span dir='ltr'>${amt.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span> ${t(cur)}${balanceStatus(amt) ? ` (${t(balanceStatus(amt))})` : ''}</span>`,
+              `<span style='display:block;white-space:nowrap' class='${amt < 0 ? 'text-danger' : ''}'><span dir='ltr'>${amt.toLocaleString(undefined, { maximumFractionDigits: 3 })}</span> ${t(cur)}${balanceStatus(amt) ? ` (${t(balanceStatus(amt))})` : ''}</span>`,
           )
-          .join(' ')
+          .join('')
       : '';
   }
 </script>

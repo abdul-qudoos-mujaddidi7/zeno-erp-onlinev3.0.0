@@ -5,6 +5,16 @@ function addAmount(totals, key, value) {
   totals[normalizedKey] = (totals[normalizedKey] || 0) + (Number(value) || 0);
 }
 
+export function buildProductReportRows(rows, selectedProductIds = [], { showBills = false, forExport = false } = {}) {
+  if (!selectedProductIds.length || showBills) return rows;
+  if (forExport) return aggregateProductItemsForExport(rows);
+  return selectedProductIds
+    .map((productId) => aggregateSelectedProductItems(
+      rows.filter((row) => Number(row.product_id) === Number(productId)),
+    ))
+    .filter(Boolean);
+}
+
 export function aggregateSelectedProductItems(rows = []) {
   if (!rows.length) return null;
 
