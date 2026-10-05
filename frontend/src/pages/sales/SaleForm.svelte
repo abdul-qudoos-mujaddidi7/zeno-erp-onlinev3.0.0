@@ -21,6 +21,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 
   import { calculateRemainingAndBenefit, resolveCostCurrency } from './SalesHelper.js';
   import { repriceSaleItem } from './saleCurrencyPrices.js';
+  import { saleRatePair, saleRateUpdate } from './saleExchangeRate.js';
   import {
     mergeById,
     lookupAccounts,
@@ -676,8 +677,6 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   }
 
   function selectQuickPaymentCurrency(side, code) {
-    quickPaymentRateEditing = false;
-
     if (side === 'from') {
       const previousFrom = quickPaymentFromCurrency;
 
@@ -713,23 +712,9 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       currencies[0]?.code ||
       'AFN';
 
-    quickPaymentFromCurrency = selectedPaymentCurrency;
-
-    if (
-      !quickPaymentToCurrency ||
-      quickPaymentToCurrency === quickPaymentFromCurrency
-    ) {
-      quickPaymentToCurrency =
-        currencies.find(
-          (currency) =>
-            currency.code !== quickPaymentFromCurrency &&
-            Number(currency.isDefault) === 1,
-        )?.code ||
-        currencies.find(
-          (currency) => currency.code !== quickPaymentFromCurrency,
-        )?.code ||
-        quickPaymentFromCurrency;
-    }
+    const pair = saleRatePair(currencies, selectedPaymentCurrency, quickPaymentFromCurrency);
+    quickPaymentFromCurrency = pair.from;
+    quickPaymentToCurrency = pair.to;
 
     quickPaymentExchangeRate = getQuickPaymentExchangeRate(
       quickPaymentFromCurrency,
@@ -756,6 +741,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   }
 
   async function saveQuickPaymentExchangeRate() {
+    if (quickPaymentRateSaving) return;
     if (
       !quickPaymentFromCurrency ||
       !quickPaymentToCurrency ||
@@ -798,29 +784,24 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       return;
     }
 
-    const toCurrencyBaseRate = Number(toCurrencyRow.exchangeRate || 1);
-
-    const nextFromBaseRate =
-      enteredRate *
-      (Number.isFinite(toCurrencyBaseRate) && toCurrencyBaseRate > 0
-        ? toCurrencyBaseRate
-        : 1);
+    const { currency: updatedCurrency, exchangeRate: nextFromBaseRate } =
+      saleRateUpdate(currencies, quickPaymentFromCurrency, quickPaymentToCurrency, enteredRate);
 
     quickPaymentRateSaving = true;
 
     try {
-      await currencyApi.update(fromCurrencyRow.id, {
-        name: fromCurrencyRow.name,
-        code: fromCurrencyRow.code,
-        symbol: fromCurrencyRow.symbol,
-        isDefault: fromCurrencyRow.isDefault,
+      await currencyApi.update(updatedCurrency.id, {
+        name: updatedCurrency.name,
+        code: updatedCurrency.code,
+        symbol: updatedCurrency.symbol,
+        isDefault: updatedCurrency.isDefault,
         exchangeRate: nextFromBaseRate,
-        exchangeRateDate: fromCurrencyRow.exchangeRateDate,
+        exchangeRateDate: updatedCurrency.exchangeRateDate,
         status: 1,
       });
 
       currencies = currencies.map((currency) =>
-        currency.id === fromCurrencyRow.id
+        currency.id === updatedCurrency.id
           ? {
               ...currency,
               exchangeRate: nextFromBaseRate,
@@ -1591,6 +1572,68 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   }
 
   let editCurrency = false;
+  let saleRateFromCurrency = '';
+  let saleRateToCurrency = '';
+  let saleExchangeRate = 1;
+  let saleRateSaving = false;
+
+  function startSaleRateEdit() {
+    const pair = saleRatePair(currencies, selectedCurrency?.code, paymentCurrency);
+    saleRateFromCurrency = pair.from;
+    saleRateToCurrency = pair.to;
+    saleExchangeRate = getQuickPaymentExchangeRate(pair.from, pair.to, currencies);
+    editCurrency = true;
+  }
+
+  function selectSaleRateCurrency(side, code) {
+    if (side === 'from') {
+      if (code === saleRateToCurrency) saleRateToCurrency = saleRateFromCurrency;
+      saleRateFromCurrency = code;
+    } else {
+      if (code === saleRateFromCurrency) saleRateFromCurrency = saleRateToCurrency;
+      saleRateToCurrency = code;
+    }
+    saleExchangeRate = getQuickPaymentExchangeRate(
+      saleRateFromCurrency, saleRateToCurrency, currencies,
+    );
+  }
+
+  async function saveSaleExchangeRate() {
+    if (saleRateSaving) return;
+    if (!Number.isFinite(Number(saleExchangeRate)) || Number(saleExchangeRate) <= 0) {
+      toast.error(t('Validation Error'), t('Exchange rate must be greater than zero.'));
+      return;
+    }
+    if (saleRateFromCurrency === saleRateToCurrency) {
+      editCurrency = false;
+      return;
+    }
+    saleRateSaving = true;
+    try {
+      const { currency, exchangeRate: storedRate } = saleRateUpdate(
+        currencies, saleRateFromCurrency, saleRateToCurrency, saleExchangeRate,
+      );
+      await currencyApi.update(currency.id, {
+        name: currency.name,
+        code: currency.code,
+        symbol: currency.symbol,
+        isDefault: currency.isDefault,
+        exchangeRate: storedRate,
+        exchangeRateDate: currency.exchangeRateDate,
+        status: 1,
+      });
+      currencies = currencies.map((row) => row.id === currency.id
+        ? { ...row, exchangeRate: storedRate } : row);
+      editCurrency = false;
+      await tick();
+      initDropdowns();
+    } catch (error) {
+      console.error('Could not update the sale exchange rate:', error);
+      toast.error(t('Error'), t('Failed to update exchange rate.'));
+    } finally {
+      saleRateSaving = false;
+    }
+  }
 
   let selectedCurrency = null;
   let selectedCurrencyId = null;
@@ -1881,44 +1924,54 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               class="sale-currency-edit"
               title={t('Edit')}
               aria-label={t('Edit')}
-              on:click={() => (editCurrency = true)}>
+              on:click={startSaleRateEdit}>
               <i class="bi bi-pencil-square" aria-hidden="true"></i>
             </button>
           {/if}
         </div>
 
         {#if editCurrency}
-          <div class="sale-exchange-editor">
-            <span>1 {t(selectedCurrency?.code || 'AFN')} =</span>
+          <div class="sale-exchange-editor" dir="ltr">
+            <span>
+              1
+              <select
+                value={saleRateFromCurrency}
+                disabled={saleRateSaving}
+                aria-label={t('From Currency')}
+                on:change={(event) => selectSaleRateCurrency('from', event.target.value)}>
+                {#each currencies as currency (currency.code)}
+                  <option value={currency.code}>{t(currency.code)}</option>
+                {/each}
+              </select>
+              =
+            </span>
 
             <input
               type="number"
-              bind:value={selectedCurrency.exchangeRate}
-              min="0"
-              step="0.01"
+              bind:value={saleExchangeRate}
+              disabled={saleRateSaving}
+              min="0.000001"
+              step="any"
               aria-label={t('Exchange Rate')} />
 
-            <span>{t(defaultCurrency?.code || 'AFN')}</span>
+            <span>
+              <select
+                value={saleRateToCurrency}
+                disabled={saleRateSaving}
+                aria-label={t('To Currency')}
+                on:change={(event) => selectSaleRateCurrency('to', event.target.value)}>
+                {#each currencies as currency (currency.code)}
+                  <option value={currency.code}>{t(currency.code)}</option>
+                {/each}
+              </select>
+            </span>
 
             <button
               type="button"
               class="sale-exchange-editor__save"
               aria-label={t('Save')}
-              on:click={async () => {
-                editCurrency = false;
-                await currencyApi.update(selectedCurrency.id, {
-                  name: selectedCurrency.name,
-                  code: selectedCurrency.code,
-                  symbol: selectedCurrency.symbol,
-                  isDefault: selectedCurrency.isDefault,
-                  exchangeRate: Number(selectedCurrency.exchangeRate),
-                  exchangeRateDate: selectedCurrency.exchangeRateDate,
-                  status: 1,
-                });
-                currencies = (await currencyApi.getAll({ status: 1 }))?.data || [];
-                await tick();
-                initDropdowns();
-              }}>
+              disabled={saleRateSaving}
+              on:click={saveSaleExchangeRate}>
               <i class="bi bi-check-lg" aria-hidden="true"></i>
             </button>
 
@@ -1926,6 +1979,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               type="button"
               class="sale-exchange-editor__cancel"
               aria-label={t('Cancel')}
+              disabled={saleRateSaving}
               on:click={() => (editCurrency = false)}>
               <i class="bi bi-x-lg" aria-hidden="true"></i>
             </button>
@@ -2109,7 +2163,17 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
             class="sale-exchange-editor payment-quick-rate__editor"
             dir="ltr">
             <span>
-              1 {t(quickPaymentFromCurrency)} =
+              1
+              <select
+                value={quickPaymentFromCurrency}
+                disabled={quickPaymentRateSaving}
+                aria-label={t('From Currency')}
+                on:change={(event) => selectQuickPaymentCurrency('from', event.target.value)}>
+                {#each currencies as currency (currency.code)}
+                  <option value={currency.code}>{t(currency.code)}</option>
+                {/each}
+              </select>
+              =
             </span>
 
             <input
@@ -2122,7 +2186,17 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               aria-label={t('Exchange Rate')}
               on:keydown={handleQuickPaymentRateKeydown} />
 
-            <span>{t(quickPaymentToCurrency)}</span>
+            <span>
+              <select
+                value={quickPaymentToCurrency}
+                disabled={quickPaymentRateSaving}
+                aria-label={t('To Currency')}
+                on:change={(event) => selectQuickPaymentCurrency('to', event.target.value)}>
+                {#each currencies as currency (currency.code)}
+                  <option value={currency.code}>{t(currency.code)}</option>
+                {/each}
+              </select>
+            </span>
 
             <button
               type="button"
@@ -3674,6 +3748,38 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     font-size: 0.68rem;
     font-weight: 750;
     text-align: center;
+  }
+
+  .sale-exchange-editor > span > select {
+    min-width: 0;
+    max-width: 5rem;
+    margin-inline: 0.15rem;
+    padding: 0.25rem 0;
+    border: 0;
+    border-radius: 0.2rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .sale-exchange-editor > span > select:focus-visible {
+    outline: 2px solid #78a4f5;
+    outline-offset: 1px;
+  }
+
+  .sale-exchange-editor > span > select:disabled {
+    cursor: wait;
+  }
+
+  .sale-exchange-editor > span > select > option {
+    background: #ffffff;
+    color: #26364b;
+  }
+
+  :global(html.dark) .sale-exchange-editor > span > select > option {
+    background: #1e293b;
+    color: #e2e8f0;
   }
 
   .sale-exchange-editor__save,
