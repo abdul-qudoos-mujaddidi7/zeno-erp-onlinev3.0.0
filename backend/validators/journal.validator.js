@@ -161,6 +161,11 @@ const journalListQuerySchema = z.object({
     .positive()
     .optional(),
 
+  include_running_balance: z.coerce.number().int().min(0).max(1).default(0),
+  balance_date_to: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'balance_date_to must be YYYY-MM-DD')
+    .optional(),
+
   skip_count: z
     .coerce
     .number()

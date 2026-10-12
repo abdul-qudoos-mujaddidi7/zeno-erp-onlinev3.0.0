@@ -5,8 +5,7 @@
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import ExportMenu from '../../components/common/ExportMenu.svelte';
-  import { generatePDF } from '../generatePDF.js';
-  import { generateExcel } from '../generateExcel.js';
+
   import SummaryCard from '../../components/common/SummaryCard.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
@@ -141,7 +140,9 @@
     exportingReport = true;
 
     try {
-      const exporter = format === 'excel' ? generateExcel : generatePDF;
+      const exporter = format === 'excel'
+        ? (await import('../generateExcel.js')).generateExcel
+        : (await import('../generatePDF.js')).generatePDF;
       const items = visibleRows.map(decorateRow);
 
       await exporter(

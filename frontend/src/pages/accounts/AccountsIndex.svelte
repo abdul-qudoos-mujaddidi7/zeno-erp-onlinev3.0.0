@@ -1,10 +1,12 @@
 <script>
+  import { onceAsync } from '../../lib/onceAsync.js';
   import { onMount, onDestroy } from 'svelte';
   import { accountImageApi } from '../../api/accountImageApi.js';
   import { accountApi } from '../../api/accountApi.js';
   import { accountTypeApi } from '../../api/accountTypeApi.js';
   import { accountGroupApi } from '../../api/accountGroupApi.js';
-  import AccountModal from './AccountModal.svelte';
+  import DeferredModal from '../../components/DeferredModal.svelte';
+  const loadAccountModal = () => import('./AccountModal.svelte');
   import { push } from 'svelte-spa-router';
 
   import { showDate, setDatePickers } from '../../calendar.js';
@@ -62,7 +64,7 @@
     return `${currentPage}|${itemsPerPage}|${[...filterType]}|${[...filterGroup]}|${[...filterStatus]}`;
   }
 
-  async function loadLookups() {
+  const loadLookups = onceAsync(async () => {
     if (lookupsLoaded) return;
     const [typesRes, groupsRes] = await Promise.all([
       accountTypeApi.getAll({ status: 1 }),
@@ -71,14 +73,14 @@
     accountTypes = typesRes?.data || [];
     accountGroups = groupsRes?.data || [];
     lookupsLoaded = true;
-  }
+  });
 
   async function loadAccounts() {
     const requestId = ++loadRequestId;
     lastPageFilterKey = pageFilterKey();
     loading = true;
     try {
-      await loadLookups();
+      void loadLookups().catch((error) => console.error('Failed to load account filters', error));
 
       const query = {
         status: 1,
@@ -103,27 +105,28 @@
       const ids = rows.map((a) => a.id).filter(Boolean);
       const idsCsv = ids.join(',');
 
-      const [balancesRes, imagesRes] = await Promise.all([
-        accountApi.getBalances({ status: 1, account_ids: idsCsv }),
-        ids.length
-          ? accountImageApi.getAll({ status: 1, account_ids: idsCsv })
-          : Promise.resolve({ data: [] }),
-      ]);
-      if (requestId !== loadRequestId) return;
+      accounts = rows.map((account) => ({ ...account, balancesLoaded: false }));
+      loading = false;
+      if (!ids.length) return;
 
-      const accountBalances = balancesRes?.data || {};
-      const imageByAccountId = new Map(
-        (imagesRes?.data || []).map((img) => [Number(img.account_id), img]),
-      );
-
-      for (const account of rows) {
-        const img = imageByAccountId.get(Number(account.id));
-        account.imageUrl = resolveMediaUrl(img?.image, null);
-        account.computedBalances =
-          accountBalances[account.id] || accountBalances[String(account.id)] || undefined;
-      }
-
-      accounts = [...rows];
+      // Balances and images enrich the visible page independently.
+      void accountApi.getBalances({ status: 1, account_ids: idsCsv }).then((response) => {
+        if (requestId !== loadRequestId) return;
+        const balances = response?.data || {};
+        accounts = accounts.map((account) => ({
+          ...account,
+          balancesLoaded: true,
+          computedBalances: balances[account.id] || {},
+        }));
+      }).catch((error) => console.error('Failed to load account balances', error));
+      void accountImageApi.getAll({ status: 1, account_ids: idsCsv }).then((response) => {
+        if (requestId !== loadRequestId) return;
+        const images = new Map((response?.data || []).map((img) => [Number(img.account_id), img]));
+        accounts = accounts.map((account) => ({
+          ...account,
+          imageUrl: resolveMediaUrl(images.get(Number(account.id))?.image, null),
+        }));
+      }).catch((error) => console.error('Failed to load account images', error));
     } catch (err) {
       console.error('Failed to load accounts', err);
       if (requestId === loadRequestId) {
@@ -151,6 +154,7 @@
   });
 
   onDestroy(() => {
+    loadRequestId += 1;
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   });
 
@@ -351,8 +355,14 @@
     }
   }
 
-  function openModal(account = null) {
-    modalRef.openModal(account);
+  async function openModal(account = null) {
+    try {
+      await loadLookups();
+      await modalRef.openModal(account);
+    } catch (error) {
+      console.error('Failed to open account form', error);
+      toast.error(t('Error'));
+    }
   }
 
   function showInitials(name) {
@@ -361,7 +371,7 @@
     return parts[0].charAt(0).toUpperCase();
   }
 
-  function changeAccountStatus(id, newStatus) {
+  async function changeAccountStatus(id, newStatus) {
     const acc = accounts.find((a) => a.id === id);
     if (isSystemAccount(acc)) {
       toast.error(t('Error'), t('System accounts cannot be edited.'));
@@ -369,10 +379,21 @@
     }
 
     if (newStatus === 'archived') {
-      const acc = accounts.find((a) => a.id === id);
-      let keys = Object.keys(acc?.computedBalances || {});
+      // Never interpret a pending/failed balance request as a zero balance.
+      let balances = acc?.computedBalances;
+      if (!acc?.balancesLoaded) {
+        try {
+          const response = await accountApi.getBalances({ status: 1, account_ids: String(id) });
+          balances = response?.data?.[id] || {};
+        } catch (error) {
+          console.error('Failed to verify account balance', error);
+          toast.error(t('Error'));
+          return;
+        }
+      }
+      let keys = Object.keys(balances || {});
       for (let i = 0; i < keys.length; i++) {
-        if (acc.computedBalances[keys[i]] !== 0) {
+        if (Number(balances[keys[i]]) !== 0) {
           toast.error(t('Cannot archive account with non-zero balance!'));
           return;
         }
@@ -401,7 +422,7 @@
   tablePadding={true}>
   <svelte:fragment slot="actions">
     {#if permissions?.some((p) => p.code === 'Accounts' && p.create)}
-      <ActionButton icon="bi-plus-lg" label={t('Add Account')} on:click={() => modalRef?.openModal()} />
+      <ActionButton icon="bi-plus-lg" label={t('Add Account')} on:click={() => openModal()} />
     {/if}
   </svelte:fragment>
 
@@ -519,7 +540,9 @@
                   </td>
                 {/if}
                 <td>
-                  {#if acc.computedBalances}
+                  {#if !acc.balancesLoaded}
+                    <span aria-busy="true">...</span>
+                  {:else if acc.computedBalances}
                     <div class="balance-list">
                     {#each Object.keys(acc.computedBalances) as cur}
                         <StatusBadge
@@ -583,7 +606,7 @@
       {getPageNumbers} />
   </svelte:fragment>
 </IndexPageLayout>
-<AccountModal bind:this={modalRef} {accountTypes} on:saved={loadAccounts} />
+<DeferredModal loader={loadAccountModal} bind:this={modalRef} {accountTypes} on:saved={loadAccounts} />
 
 <style>
   :global(.accounts-index-content .data-table) {

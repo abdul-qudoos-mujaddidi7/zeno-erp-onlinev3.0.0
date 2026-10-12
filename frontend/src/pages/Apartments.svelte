@@ -1,18 +1,19 @@
 <script>
+  import AsyncPage from "../components/AsyncPage.svelte";
   import { onMount } from "svelte";
 
   import { API_URL } from "../config.js";
   export let page = 'list';
 
   import { t, lang, translate_org_type } from "../i18n/i18n.js";
-  import BuildingsIndex from "./apartments/buildings_index.svelte";
-  import FloorsIndex from "./apartments/floors_index.svelte";
-  import ApartmentsIndex from "./apartments/apartments_index.svelte";
-  import LeasesIndex from "./apartments/leases_index.svelte";
-  import RentInvoicesIndex from "./apartments/rent_invoices_index.svelte";
-  import MetersIndex from "./apartments/meters_index.svelte";
-  import MeterReadingsIndex from "./apartments/meter_readings_index.svelte";
-  import InventoryRecords from "./InventoryRecords.svelte";
+  const loadBuildingsIndex = () => import('./apartments/buildings_index.svelte');
+  const loadFloorsIndex = () => import('./apartments/floors_index.svelte');
+  const loadApartmentsIndex = () => import('./apartments/apartments_index.svelte');
+  const loadLeasesIndex = () => import('./apartments/leases_index.svelte');
+  const loadRentInvoicesIndex = () => import('./apartments/rent_invoices_index.svelte');
+  const loadMetersIndex = () => import('./apartments/meters_index.svelte');
+  const loadMeterReadingsIndex = () => import('./apartments/meter_readings_index.svelte');
+  const loadInventoryRecords = () => import('./InventoryRecords.svelte');
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -20,19 +21,19 @@
 </script>
 
 {#if page == 'list'}
-  <ApartmentsIndex />
+  <AsyncPage loader={loadApartmentsIndex} />
 {:else if page == 'floors'}
-  <FloorsIndex />
+  <AsyncPage loader={loadFloorsIndex} />
 {:else if page == 'buildings'}
-  <BuildingsIndex />
+  <AsyncPage loader={loadBuildingsIndex} />
 {:else if page == 'leases'}
-  <LeasesIndex />
+  <AsyncPage loader={loadLeasesIndex} />
 {:else if page == 'rent-invoices'}
-  <RentInvoicesIndex />
+  <AsyncPage loader={loadRentInvoicesIndex} />
 {:else if page == 'meters'}
-  <MetersIndex />
+  <AsyncPage loader={loadMetersIndex} />
 {:else if page == 'meter-readings'}
-  <MeterReadingsIndex />
+  <AsyncPage loader={loadMeterReadingsIndex} />
 {:else if page == 'records'}
-  <InventoryRecords />
+  <AsyncPage loader={loadInventoryRecords} />
 {/if}

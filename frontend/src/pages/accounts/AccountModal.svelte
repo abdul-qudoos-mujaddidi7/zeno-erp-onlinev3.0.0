@@ -1,4 +1,5 @@
 <script>
+  import { onceAsync } from '../../lib/onceAsync.js';
   import { createEventDispatcher, onMount } from 'svelte';
   import { toast } from '../../ToastUI/toast.js';
   import { accountApi } from '../../api/accountApi.js';
@@ -188,25 +189,19 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
   );
 
   async function loadAll() {
-    accounts = (await accountApi.getAll({ status: 1 }))?.data || [];
-    await loadMainGroup();
-    if (window.mdb) {
-      document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
-      document.querySelectorAll('.dropdown-toggle').forEach((el) => {
-        new window.mdb.Dropdown(el);
-      });
-    }
-
+    await Promise.all([
+      accountApi.getAll({ status: 1 }).then((response) => { accounts = response?.data || []; }),
+      loadMainGroup(), loadCurrencies(),
+    ]);
     account_groups = (await accountGroupApi.getAll({ status: 1 }))?.data || [];
-    loadCurrencies();
     if (!account?.id && accountTypes.length) {
       account_type_id = getDefaultAccountTypeId();
     }
     if (account) await loadAccount(account);
   }
-  onMount(async () => {
-    await loadAll();
-  });
+  const initializeOnce = onceAsync(loadAll);
+  export function initialize() { return initializeOnce(); }
+  onMount(() => { void initialize().catch((error) => console.error('Account form initialization failed', error)); });
 
   $: if (account) {
     async () => {
@@ -586,6 +581,7 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
       return;
     }
 
+    await initialize();
     await loadAccount(account);
     if (!account && accountTypes.length && !account_type_id) {
       account_type_id = getDefaultAccountTypeId();

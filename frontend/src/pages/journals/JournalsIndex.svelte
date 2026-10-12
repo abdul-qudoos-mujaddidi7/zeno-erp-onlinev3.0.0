@@ -169,6 +169,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
           account_id ||
           (filterAccount !== 'all' ? Number(filterAccount) : undefined),
         reference_type: reference_type || undefined,
+        currency: filterCurrency !== 'all' ? filterCurrency : undefined,
         page: currentPage,
         limit: itemsPerPage,
       });
@@ -222,6 +223,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   // --- Table State (mirrors ProductsIndex design) ---
   let searchTerm = '';
   let filterAccount = 'all';
+  let filterCurrency = 'all';
   let filterStatus = 'active'; // 'all', 'active', 'inactive'
   let currentPage = 1;
   let itemsPerPage = DEFAULT_PAGE_SIZE;
@@ -497,6 +499,10 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
 
   $: journalToolbarFilters = [
     {
+      key: 'currency', label: t('Currency'), icon: 'bi-cash-stack', value: filterCurrency,
+      options: [{ value: 'all', label: t('All') }, ...currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))],
+    },
+    {
       key: 'fiscal_year', label: t('Fiscal Year'), value: filterFiscalYear,
       options: [
         { value: 'all', label: t('All') },
@@ -538,6 +544,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   }
 
   function handleJournalFilterChange(event) {
+    if (event.detail.key === 'currency') filterCurrency = event.detail.value;
     if (event.detail.key === 'account') filterAccount = event.detail.value;
     if (event.detail.key === 'reference') reference_type = event.detail.value === 'all' ? null : event.detail.value;
     if (event.detail.key === 'fiscal_year') applyFiscalYearFilter(event.detail.value);
@@ -548,6 +555,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   function resetJournalFilters() {
     searchTerm = '';
     filterAccount = 'all';
+    filterCurrency = 'all';
     reference_type = null;
 
     /* Clearing goes back to the working year, not to every year at once. */

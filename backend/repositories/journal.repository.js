@@ -148,6 +148,46 @@ async function findAll(
   });
 }
 
+// Calculate against the ledger before restricting to the visible page. Search,
+// date_from and pagination must never remove movements from a row's balance.
+async function findAccountNewerMovements(executor, {
+  orgId, status = 1, accountId, dateTo, journalIds,
+}) {
+  if (!journalIds.length) return [];
+  const values = [accountId, accountId, orgId, status, accountId, accountId];
+  const endCondition = dateTo
+    ? 'AND COALESCE(n.date, n.created_at) < DATE_ADD(?, INTERVAL 1 DAY)'
+    : '';
+  if (dateTo) values.push(dateTo);
+  values.push(orgId, status, accountId, accountId, ...journalIds);
+
+  const [rows] = await executor.execute(`
+    SELECT j.local_id AS id, n.currency,
+      COALESCE(SUM(
+        CASE WHEN n.first_entry_account = ?
+          THEN COALESCE(n.first_entry_credit, 0) - COALESCE(n.first_entry_debit, 0)
+          ELSE 0 END
+        + CASE WHEN n.second_entry_account = ?
+          THEN COALESCE(n.second_entry_credit, 0) - COALESCE(n.second_entry_debit, 0)
+          ELSE 0 END
+      ), 0) AS newer_movement
+    FROM journals j
+    LEFT JOIN journals n ON n.org_id = ? AND n.status = ?
+      AND (n.first_entry_account = ? OR n.second_entry_account = ?)
+      AND (
+        n.date > j.date
+        OR (n.date <=> j.date) AND n.local_id > j.local_id
+        OR j.date IS NULL AND n.date IS NOT NULL
+      )
+      ${endCondition}
+    WHERE j.org_id = ? AND j.status = ?
+      AND (j.first_entry_account = ? OR j.second_entry_account = ?)
+      AND j.local_id IN (${journalIds.map(() => '?').join(', ')})
+    GROUP BY j.local_id, n.currency
+  `, values);
+  return rows;
+}
+
 async function resolveExcludedAccountIds(
   executor,
   {
@@ -605,6 +645,7 @@ async function softDelete(
 
 module.exports = {
   findAll,
+  findAccountNewerMovements,
   findSummary,
   findByLocalId,
   create,

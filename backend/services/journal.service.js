@@ -148,6 +148,30 @@ async function listJournals({
     result.summary = summary;
   }
 
+  if (Number(filters.include_running_balance) === 1 && filters.account_id) {
+    const movements = await journalRepository.findAccountNewerMovements(db, {
+      orgId,
+      status: filters.status,
+      accountId: filters.account_id,
+      dateTo: filters.balance_date_to,
+      journalIds: result.data.map((row) => row.id),
+    });
+    const byId = new Map();
+    for (const movement of movements) {
+      const key = String(movement.id);
+      if (!byId.has(key)) byId.set(key, {});
+      // A LEFT JOIN without newer rows produces a null currency and zero.
+      if (movement.currency != null || Number(movement.newer_movement)) {
+        const currency = movement.currency || 'DEFAULT';
+        byId.get(key)[currency] = Number(movement.newer_movement) || 0;
+      }
+    }
+    result.data = result.data.map((row) => ({
+      ...row,
+      newer_movements: byId.get(String(row.id)) || {},
+    }));
+  }
+
   /*
    * For paginated lists, attach the parent sale/purchase id to
    * sale_payment / purchase_payment rows so the frontend can build

@@ -7,7 +7,7 @@
     <div class="erp-route-spinner"></div>
   </div>
 {:then mod}
-  <svelte:component this={mod.default} {...$$restProps} />
+  <svelte:component this={mod.default} {...$$restProps} on:close on:saved on:showA4 on:show80mm />
 {:catch}
   <div class="erp-route-loading">Failed to load page. Check your connection and try again.</div>
 {/await}

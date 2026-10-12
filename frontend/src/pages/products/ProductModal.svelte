@@ -1,4 +1,5 @@
 <script>
+  import { onceAsync } from '../../lib/onceAsync.js';
 import { productImageApi } from '../../api/productImageApi.js';
 import { departmentApi } from '../../api/departmentApi.js';
 import { productUnitApi } from '../../api/productUnitApi.js';
@@ -105,10 +106,10 @@ import { userApi } from '../../api/userApi.js';
     name = name + ' ' + t(currency);
     setTimeout(() => {
       if (window.mdb) {
-        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
+        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
           new window.mdb.Input(el);
         });
-        document.querySelectorAll('.dropdown-toggle').forEach((el) => {
+        productModalEl?.querySelectorAll('.dropdown-toggle').forEach((el) => {
           new window.mdb.Dropdown(el);
         });
       }
@@ -517,11 +518,16 @@ import { userApi } from '../../api/userApi.js';
     warehouseQuantity = found ? found.quantity : '';
   }
 
-  onMount(async () => {
+  const initializeOnce = onceAsync(async () => {
     await tick();
 
-    departments = (await departmentApi.getAll({ status: 1 }))?.data || [];
-    users = await (await userApi.getAll({ status: 1 }))?.data || [];
+    const [departmentResponse, userResponse, currencyResponse, brandResponse, genericResponse] = await Promise.all([
+      departmentApi.getAll({ status: 1 }), userApi.getAll({ status: 1 }),
+      currencyApi.getAll({ status: 1 }), productBrandApi.getAll({ status: 1 }),
+      productGenericApi.getAll({ status: 1 }),
+    ]);
+    departments = departmentResponse?.data || [];
+    users = userResponse?.data || [];
 
     if (_translate_org_type == 'exchange') {
       fetch('/js/currencyDefaultImages.json')
@@ -542,30 +548,30 @@ import { userApi } from '../../api/userApi.js';
     }
     setTimeout(() => {
       if (window.mdb) {
-        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
+        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
           new window.mdb.Input(el);
         });
-        document.querySelectorAll('.dropdown-toggle').forEach((el) => {
+        productModalEl?.querySelectorAll('.dropdown-toggle').forEach((el) => {
           new window.mdb.Dropdown(el);
         });
       }
     }, 50);
-    currencies = (await currencyApi.getAll({ status: 1 }))?.data || [];
+    currencies = currencyResponse?.data || [];
     defaultCurrency = currencies.find((c) => c.isDefault == 1)?.code || 'AFN';
     currency = '';
     buy_currency = defaultCurrency;
     sell_currency = defaultCurrency;
-    const brandResponse = await productBrandApi.getAll({ status: 1 });
     brands = brandResponse?.data || [];
-    const genericResponse = await productGenericApi.getAll({ status: 1 });
     generics = genericResponse?.data || [];
     console.log('Loaded brands:', brands);
     console.log('Loaded generics:', generics);
     console.log('Default currency:', defaultCurrency);
     await initProductDatePickers();
   });
+  export function initialize() { return initializeOnce(); }
+  onMount(() => { void initialize().catch((error) => console.error('Product form initialization failed', error)); });
 
-  export function openModal() {
+  export async function openModal() {
     const currentRoute = getCurrentHashRoute();
 
     /*
@@ -579,6 +585,7 @@ import { userApi } from '../../api/userApi.js';
       return;
     }
 
+    await initialize();
     selectImage = false;
     loadingProductData = false;
 
@@ -590,7 +597,7 @@ import { userApi } from '../../api/userApi.js';
     }
     setTimeout(() => {
       if (window.mdb) {
-        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
       }
       initProductDatePickers();
     }, 100);
@@ -654,12 +661,13 @@ import { userApi } from '../../api/userApi.js';
     alarm_quantity = '';
     alarm_expiry_days = '';
     if (window.mdb) {
-      document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+      productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
     }
   }
 
   let oldProductinitial_warehouse_id = null;
   export async function editProduct(product) {
+    await initialize();
     resetForm();
     selectImage = false;
     loadingProductData = false;
@@ -701,7 +709,7 @@ import { userApi } from '../../api/userApi.js';
 
     setTimeout(() => {
       if (window.mdb) {
-        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
       }
     }, 100);
 
@@ -1013,8 +1021,8 @@ import { userApi } from '../../api/userApi.js';
           resetForm();
           setTimeout(() => {
             if (window.mdb) {
-              document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
-              document.querySelectorAll('.dropdown-toggle').forEach((el) => new window.mdb.Dropdown(el));
+              productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+              productModalEl?.querySelectorAll('.dropdown-toggle').forEach((el) => new window.mdb.Dropdown(el));
             }
           }, 100);
           return;
@@ -1329,7 +1337,7 @@ import { userApi } from '../../api/userApi.js';
 
                       form_category_search_input?.focus();
                       if (window.mdb) {
-                        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                       }
                     }}>
                     <i class="bi bi-chevron-down"></i>
@@ -1355,7 +1363,7 @@ import { userApi } from '../../api/userApi.js';
 
                       form_category_search_input?.focus();
                       if (window.mdb) {
-                        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -1521,7 +1529,7 @@ import { userApi } from '../../api/userApi.js';
                       await tick();
                       form_unit_search_input?.focus();
                       if (window.mdb) {
-                        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                       }
                     }}>
                     <i class="bi bi-chevron-down"></i>
@@ -1545,7 +1553,7 @@ import { userApi } from '../../api/userApi.js';
                       await tick();
                       form_unit_search_input?.focus();
                       if (window.mdb) {
-                        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -1664,7 +1672,7 @@ import { userApi } from '../../api/userApi.js';
                         await tick();
                         form_department_search_input?.focus();
                         if (window.mdb) {
-                          document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                          productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                         }
                       }}>
                       <i class="bi bi-chevron-down"></i>
@@ -1688,7 +1696,7 @@ import { userApi } from '../../api/userApi.js';
                       await tick();
                       form_department_search_input?.focus();
                       if (window.mdb) {
-                        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -1804,7 +1812,7 @@ import { userApi } from '../../api/userApi.js';
                         await tick();
                         form_user_search_input?.focus();
                         if (window.mdb) {
-                          document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                          productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                         }
                       }}>
                       <i class="bi bi-chevron-down"></i>
@@ -1828,7 +1836,7 @@ import { userApi } from '../../api/userApi.js';
                       await tick();
                       form_user_search_input?.focus();
                       if (window.mdb) {
-                        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -1945,7 +1953,7 @@ import { userApi } from '../../api/userApi.js';
                         await tick();
                         form_brand_search_input?.focus();
                         if (window.mdb) {
-                          document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                          productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                         }
                       }}>
                       <i class="bi bi-chevron-down"></i>
@@ -1969,7 +1977,7 @@ import { userApi } from '../../api/userApi.js';
                       await tick();
                       form_brand_search_input?.focus();
                       if (window.mdb) {
-                        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -2109,7 +2117,7 @@ import { userApi } from '../../api/userApi.js';
 
                         form_generic_search_input?.focus();
                         if (window.mdb) {
-                          document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                          productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                         }
                       }}>
                       <i class="bi bi-chevron-down"></i>
@@ -2137,7 +2145,7 @@ import { userApi } from '../../api/userApi.js';
 
                       form_generic_search_input?.focus();
                       if (window.mdb) {
-                        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -2487,10 +2495,10 @@ import { userApi } from '../../api/userApi.js';
                     }
                     setTimeout(() => {
                       if (window.mdb) {
-                        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
+                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
                           new window.mdb.Input(el);
                         });
-                        document.querySelectorAll('.dropdown-toggle').forEach((el) => {
+                        productModalEl?.querySelectorAll('.dropdown-toggle').forEach((el) => {
                           new window.mdb.Dropdown(el);
                         });
                       }

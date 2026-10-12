@@ -11,6 +11,7 @@ function buildSaleQuery({
   dateFrom,
   dateTo,
   limit,
+  offset = 0,
 }) {
   const conditions = [
     's.org_id = ?',
@@ -67,7 +68,7 @@ function buildSaleQuery({
   }
 
   // LIMIT as string: MySQL 8.0.22+ rejects DOUBLE binds for LIMIT (ER_WRONG_ARGUMENTS).
-  values.push(String(Number(limit)));
+  values.push(String(Number(offset)), String(Number(limit)));
 
   return {
     sql: `      SELECT
@@ -109,6 +110,16 @@ function buildSaleQuery({
       INNER JOIN sale_items si
         ON si.org_id = s.org_id
        AND si.sale_id = s.local_id
+      INNER JOIN (
+        SELECT si.org_id, si.local_id
+        FROM sales s
+        INNER JOIN sale_items si
+          ON si.org_id = s.org_id AND si.sale_id = s.local_id
+        ${search ? 'LEFT JOIN products pr ON pr.org_id = si.org_id AND pr.local_id = si.product_id' : ''}
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY COALESCE(s.invoice_date, s.created_at) DESC, si.local_id DESC
+        LIMIT ?, ?
+      ) page_items ON page_items.org_id = si.org_id AND page_items.local_id = si.local_id
       LEFT JOIN products pr
         ON pr.org_id = si.org_id
        AND pr.local_id = si.product_id
@@ -118,9 +129,7 @@ function buildSaleQuery({
       LEFT JOIN accounts ac
         ON ac.org_id = s.org_id
         AND ac.local_id = s.account_id
-      WHERE ${conditions.join(' AND ')}
       ORDER BY COALESCE(s.invoice_date, s.created_at) DESC, si.local_id DESC
-      LIMIT ?
     `,
     values,
   };
@@ -135,6 +144,7 @@ function buildPurchaseQuery({
   dateFrom,
   dateTo,
   limit,
+  offset = 0,
 }) {
   const conditions = [
     'p.org_id = ?',
@@ -189,7 +199,7 @@ function buildPurchaseQuery({
   }
 
   // LIMIT as string: MySQL 8.0.22+ rejects DOUBLE binds for LIMIT (ER_WRONG_ARGUMENTS).
-  values.push(String(Number(limit)));
+  values.push(String(Number(offset)), String(Number(limit)));
 
   return {
     sql: `      SELECT
@@ -231,6 +241,16 @@ function buildPurchaseQuery({
       INNER JOIN purchase_items pi
         ON pi.org_id = p.org_id
        AND pi.purchase_id = p.local_id
+      INNER JOIN (
+        SELECT pi.org_id, pi.local_id
+        FROM purchases p
+        INNER JOIN purchase_items pi
+          ON pi.org_id = p.org_id AND pi.purchase_id = p.local_id
+        ${search ? 'LEFT JOIN products pr ON pr.org_id = pi.org_id AND pr.local_id = pi.product_id' : ''}
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY COALESCE(p.bill_date, p.created_at) DESC, pi.local_id DESC
+        LIMIT ?, ?
+      ) page_items ON page_items.org_id = pi.org_id AND page_items.local_id = pi.local_id
       LEFT JOIN products pr
         ON pr.org_id = pi.org_id
        AND pr.local_id = pi.product_id
@@ -240,9 +260,7 @@ function buildPurchaseQuery({
       LEFT JOIN accounts ac
         ON ac.org_id = p.org_id
         AND ac.local_id = p.account_id
-      WHERE ${conditions.join(' AND ')}
       ORDER BY COALESCE(p.bill_date, p.created_at) DESC, pi.local_id DESC
-      LIMIT ?
     `,
     values,
   };
@@ -279,7 +297,11 @@ async function findByAccount(
   const page = pagination?.page || 1;
   const limit = pagination?.limit || 15;
   const offset = pagination?.offset || 0;
-  const fetchLimit = Math.min(offset + limit + 1, 500);
+  // A single document type can page in SQL. Mixed histories need a prefix
+  // from each side before merging, without truncating histories at 500 rows.
+  const mixed = itemType === 'all';
+  const queryOffset = mixed ? 0 : offset;
+  const fetchLimit = (mixed ? offset : 0) + limit + 1;
 
   const includeSales = itemType === 'all' || itemType === 'sale';
   const includePurchases = itemType === 'all' || itemType === 'purchase';
@@ -296,6 +318,7 @@ async function findByAccount(
       dateFrom,
       dateTo,
       limit: fetchLimit,
+      offset: queryOffset,
     });
     tasks.push(
       executor
@@ -314,6 +337,7 @@ async function findByAccount(
       dateFrom,
       dateTo,
       limit: fetchLimit,
+      offset: queryOffset,
     });
     tasks.push(
       executor
@@ -335,7 +359,8 @@ async function findByAccount(
 
   const chunks = await Promise.all(tasks);
   const merged = chunks.flat().sort(sortRows);
-  const windowRows = merged.slice(offset, offset + limit + 1);
+  const windowOffset = mixed ? offset : 0;
+  const windowRows = merged.slice(windowOffset, windowOffset + limit + 1);
   const hasMore = windowRows.length > limit;
   const data = hasMore ? windowRows.slice(0, limit) : windowRows;
 

@@ -1,18 +1,18 @@
 <script>
+  import { onceAsync } from '../lib/onceAsync.js';
   import { onMount, tick, onDestroy } from 'svelte';
+  import AsyncPage from '../components/AsyncPage.svelte';
   import { push } from 'svelte-spa-router';
-  import { generatePDF } from './generatePDF.js';
-  import { generateExcel } from './generateExcel.js';
-  import PaymentSection from './sales/PaymentSection.svelte';
+  const loadPaymentSection = () => import('./sales/PaymentSection.svelte');
   import { showDate, setDatePickers } from '../calendar.js';
   import { auth } from '../auth/authStore';
   import { t, lang, translate_org_type, shortID, settings_all } from '../i18n/i18n.js';
   import { calculateRemainingAndBenefitOfAllSales } from './sales/SalesHelper.js';
-  import SaleA4ReceiptModal from './sales/SaleA4ReceiptModal.svelte';
+  const loadSaleA4ReceiptModal = () => import('./sales/SaleA4ReceiptModal.svelte');
   import { applyCurrentFiscalYearRange } from '../utils/currentFiscalYear.js';
-  import SaleReceiptModal from './sales/SaleReceiptModal.svelte';
-  import ProductsReport from './accounts/ProductsReport.svelte';
-  import VisitorReport from './sales/VisitorReport.svelte';
+  const loadSaleReceiptModal = () => import('./sales/SaleReceiptModal.svelte');
+  const loadProductsReport = () => import('./accounts/ProductsReport.svelte');
+  const loadVisitorReport = () => import('./sales/VisitorReport.svelte');
   import SummaryCard from '../components/common/SummaryCard.svelte';
   import FilterSelect from '../components/common/FilterSelect.svelte';
   import FilterToolbar from '../components/common/FilterToolbar.svelte';
@@ -77,6 +77,7 @@ import { saleApi } from '../api/saleApi.js';
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('keyup', handleKeyUp);
     window.removeEventListener('hashchange', syncTabFromHash);
+    loadRequestId += 1;
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   });
 
@@ -122,7 +123,7 @@ import { saleApi } from '../api/saleApi.js';
   let calculatingAll = false;
 
   function getAccountName(acc) {
-    if (!acc) return 'Unknown';
+    if (!acc) return lookupsLoaded ? 'Unknown' : '...';
     let out = '';
     if (t('Lang') === 'en') out = acc.name || '';
     if (t('Lang') === 'fa') out = acc.name_fa || acc.name || '';
@@ -231,7 +232,9 @@ import { saleApi } from '../api/saleApi.js';
     exportingReport = true;
 
     try {
-      const exporter = format === 'excel' ? generateExcel : generatePDF;
+      const exporter = format === 'excel'
+        ? (await import('./generateExcel.js')).generateExcel
+        : (await import('./generatePDF.js')).generatePDF;
 
       const allSales = await fetchAllSalesForExport();
 
@@ -274,7 +277,7 @@ import { saleApi } from '../api/saleApi.js';
     else if (inputName === 'toDate') toDate = value;
   }
 
-  async function loadLookups() {
+  const loadLookups = onceAsync(async () => {
     if (lookupsLoaded) return;
     if (account_id) {
       const [currencyResponse, accountResponse, warehouseResponse] =
@@ -302,7 +305,7 @@ import { saleApi } from '../api/saleApi.js';
     );
     warehouses = warehouseResponse?.data || [];
     lookupsLoaded = true;
-  }
+  });
 
   async function load() {
     if (activeTab !== 'sales') return;
@@ -310,44 +313,42 @@ import { saleApi } from '../api/saleApi.js';
     lastPageKey = getSalesQueryKey();
     loading = true;
     try {
-      await Promise.all([
-        loadLookups(),
-        (async () => {
-          const salesResponse = await saleApi.getAll({
-            status: 1,
-            search: searchTerm.trim(),
-            account_id: account_id || undefined,
-            invoice_status: filterStatus !== 'all' ? filterStatus : undefined,
-            payment_status: filterPaymentStatus !== 'all' ? filterPaymentStatus : undefined,
-            currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
-            page: currentPage,
-            limit: itemsPerPage,
-            skip_count:
-              searchTerm.trim() ||
-              account_id ||
-              filterStatus !== 'all' ||
-              filterPaymentStatus !== 'all' ||
-              fromDate ||
-              toDate
-                ? 0
-                : 1,
-            date_from: fromDate || undefined,
-            date_to: toDate || undefined,
-            sort_by: sortColumn,
-            sort_dir: sortDirection,
-          });
-          if (requestId !== loadRequestId) return;
-          sales = salesResponse?.data || [];
-          const meta = readListMeta(salesResponse, sales.length);
-          const hasMore = Boolean(salesResponse?.meta?.hasMore);
-          totalItems = hasMore
-            ? Math.max(meta.total, currentPage * itemsPerPage + 1)
-            : Math.max(meta.total, (currentPage - 1) * itemsPerPage + sales.length);
-          totalPages = hasMore
-            ? Math.max(currentPage + 1, Math.ceil(totalItems / itemsPerPage) || 0)
-            : Math.max(currentPage, Math.ceil(totalItems / itemsPerPage) || 0);
-        })(),
-      ]);
+      // Supporting filters must not hold up the invoice table.
+      void loadLookups().catch((error) => console.error('Failed to load filters', error));
+      const salesResponse = await saleApi.getAll({
+        status: 1,
+        search: searchTerm.trim(),
+        account_id: account_id || undefined,
+        invoice_status: filterStatus !== 'all' ? filterStatus : undefined,
+        payment_status: filterPaymentStatus !== 'all' ? filterPaymentStatus : undefined,
+        currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
+        page: currentPage,
+        limit: itemsPerPage,
+        skip_count:
+          searchTerm.trim() ||
+          account_id ||
+          filterStatus !== 'all' ||
+          filterPaymentStatus !== 'all' ||
+          fromDate ||
+          toDate
+            ? 0
+            : 1,
+        date_from: fromDate || undefined,
+        date_to: toDate || undefined,
+        sort_by: sortColumn,
+        sort_dir: sortDirection,
+      });
+      if (requestId !== loadRequestId) return;
+      sales = salesResponse?.data || [];
+      const meta = readListMeta(salesResponse, sales.length);
+      const hasMore = Boolean(salesResponse?.meta?.hasMore);
+      totalItems = hasMore
+        ? Math.max(meta.total, currentPage * itemsPerPage + 1)
+        : Math.max(meta.total, (currentPage - 1) * itemsPerPage + sales.length);
+      totalPages = hasMore
+        ? Math.max(currentPage + 1, Math.ceil(totalItems / itemsPerPage) || 0)
+        : Math.max(currentPage, Math.ceil(totalItems / itemsPerPage) || 0);
+
     } finally {
       if (requestId === loadRequestId) loading = false;
     }
@@ -378,7 +379,7 @@ import { saleApi } from '../api/saleApi.js';
       fromDate = from;
       toDate = to;
     });
-    await loadLookups();
+    void loadLookups().catch((error) => console.error('Failed to load filters', error));
 
     lastPageKey = getSalesQueryKey();
     bootstrapped = true;
@@ -581,9 +582,11 @@ import { saleApi } from '../api/saleApi.js';
 {#if !permissions?.some((p) => p.code === 'Sales' && p.view)}
   <h3 class="permission-denied"><i class="bi bi-exclamation-triangle"></i>{t('No access allowed')}</h3>
 {:else if activeTab === 'products'}
-  <ProductsReport account_id={account_id} itemType="sale" bind:selectedCurrency {currencies} />
+  {#await loadProductsReport() then mod}
+    <svelte:component this={mod.default} account_id={account_id} itemType="sale" bind:selectedCurrency {currencies} />
+  {/await}
 {:else if enable_visitor && activeTab === 'visitors'}
-  <VisitorReport {currencies} />
+  <AsyncPage loader={loadVisitorReport} {currencies} />
 {:else}
   <IndexPageLayout
     dir={t('dir')}
@@ -1034,14 +1037,14 @@ import { saleApi } from '../api/saleApi.js';
 {/if}
 
 {#if showA4Receipt}
-  <SaleA4ReceiptModal
+  <AsyncPage loader={loadSaleA4ReceiptModal}
     sale={selectedA4Sale}
     on:close={() => (showA4Receipt = false)}
     on:show80mm={() => ((showReceipt = true), (showA4Receipt = false))} />
 {/if}
 
 {#if showReceipt}
-  <SaleReceiptModal
+  <AsyncPage loader={loadSaleReceiptModal}
     sale={selectedA4Sale}
     on:showA4={() => ((showA4Receipt = true), (showReceipt = false))}
     on:close={() => (showReceipt = false)} />
@@ -1059,7 +1062,7 @@ import { saleApi } from '../api/saleApi.js';
       </div>
       <div class="modal-body">
         {#if selectedSale}
-          <PaymentSection saleId={selectedSale.id} />
+          <AsyncPage loader={loadPaymentSection} saleId={selectedSale.id} />
         {/if}
       </div>
     </div>

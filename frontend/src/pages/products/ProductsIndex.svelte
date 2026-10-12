@@ -1,4 +1,5 @@
 <script>
+  import { onceAsync } from '../../lib/onceAsync.js';
   import { onMount, onDestroy } from 'svelte';
 import { productImageApi } from '../../api/productImageApi.js';
 import { productUnitApi } from '../../api/productUnitApi.js';
@@ -8,7 +9,8 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { productBrandApi } from '../../api/productBrandApi.js';
   import { productGenericApi } from '../../api/productGenericApi.js';
   import { productCategoryApi } from '../../api/productCategoryApi.js';
-  import ProductModal from './ProductModal.svelte';
+  import DeferredModal from '../../components/DeferredModal.svelte';
+  const loadProductModal = () => import('./ProductModal.svelte');
   import { t, lang, translate_org_type, settings_all } from '../../i18n/i18n';
   import { push } from 'svelte-spa-router';
   import OpenFoodAPIModal from './OpenFoodAPIModal.svelte';
@@ -64,6 +66,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   }
 
   onDestroy(() => {
+    loadRequestId += 1;
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('keyup', handleKeyUp);
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
@@ -93,7 +96,6 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     return `${currentPage}|${itemsPerPage}|${filterCategory}|${filterStatus}|${filterBrand}|${filterCurrency}|${filterGeneric}`;
   }
 
-  let goodModal;
   let serviceModal;
 
   // --- Table State ---
@@ -264,7 +266,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     }
   }
 
-  async function loadLookups() {
+  const loadLookups = onceAsync(async () => {
     if (lookupsLoaded) return;
     const [
       categoriesRes,
@@ -292,15 +294,14 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     warehouses = warehousesRes?.data || [];
     warehouse_products = [];
     lookupsLoaded = true;
-  }
+  });
 
   async function loadAll({ refreshSummary = false } = {}) {
     const requestId = ++loadRequestId;
     lastPageKey = getProductQueryKey();
     loading = true;
     try {
-      await loadLookups();
-      if (requestId !== loadRequestId) return;
+      void loadLookups().catch((error) => console.error('Failed to load product filters', error));
 
       // Active products only; exclude services on the server.
       // Do not load status=0 or all sale_items on initial index load.
@@ -332,31 +333,23 @@ import { saleItemApi } from '../../api/saleItemApi.js';
       totalBenefit = {};
 
       if (refreshSummary) {
-        await loadIndexSummary();
+        void loadIndexSummary();
       }
 
       const pageIds = products
         .flatMap((p) => getProductGroupIds(p))
         .filter(Boolean);
-      const images =
-        (await productImageApi.getAll({
-          status: 1,
-          product_ids: pageIds.join(','),
-        }))?.data || [];
-      if (requestId !== loadRequestId) return;
-
-      const imageByProductId = new Map(
-        images.map((img) => [Number(img.product_id), img]),
-      );
-      for (let product of products) {
-        const img =
-          imageByProductId.get(Number(product.id)) ||
-          getProductGroupIds(product)
-            .map((id) => imageByProductId.get(Number(id)))
-            .find(Boolean) ||
-          null;
-        product.thumbnailUrl = resolveMediaUrl(img?.thumbnail, '/img/no-image.png');
-      }
+      loading = false;
+      if (!pageIds.length) return;
+      void productImageApi.getAll({ status: 1, product_ids: pageIds.join(',') }).then((response) => {
+        if (requestId !== loadRequestId) return;
+        const imageByProductId = new Map((response?.data || []).map((img) => [Number(img.product_id), img]));
+        products = products.map((product) => {
+          const img = imageByProductId.get(Number(product.id)) ||
+            getProductGroupIds(product).map((id) => imageByProductId.get(Number(id))).find(Boolean);
+          return { ...product, thumbnailUrl: resolveMediaUrl(img?.thumbnail, '/img/no-image.png') };
+        });
+      }).catch((error) => console.error('Failed to load product images', error));
     } catch (e) {
       console.error('Error loading products:', e);
     } finally {
@@ -381,7 +374,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
        * Validate and cache the real organization inventory method before
        * allowing CLASSIC/FIFO/LIFO stock calculations.
        */
-      await resolveInventoryMethod();
+      void resolveInventoryMethod().catch((error) => console.error('Could not resolve inventory method', error));
     } catch (error) {
       console.error(
         'Could not resolve inventory method:',
@@ -422,17 +415,19 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     }
   }
 
-  function openNewProduct(type = 'product') {
+  async function openNewProduct(type = 'product') {
     if (type === 'service') {
-      serviceModal.openModal();
+      try { await loadLookups(); await serviceModal.openModal(); }
+      catch (error) { console.error('Failed to open service form', error); toast.error(t('Error')); }
       return;
     }
     push('/dashboard/product-form/new');
   }
 
-  function editExistingProduct(product) {
+  async function editExistingProduct(product) {
     if (product?.type === 'service') {
-      serviceModal.editProduct(product);
+      try { await loadLookups(); await serviceModal.editProduct(product); }
+      catch (error) { console.error('Failed to open service form', error); toast.error(t('Error')); }
     } else {
       push(`/dashboard/product-form/${product.id}`);
     }
@@ -1204,20 +1199,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
 <!-- =====================================================================
      Modals
      ===================================================================== -->
-<ProductModal
-  bind:this={goodModal}
-  {categories}
-  {units}
-  {unitCategories}
-  {warehouses}
-  type="product"
-  defaultCurrency="AFN"
-  {warehouse_products}
-  on:saved={(e) => {
-    onProductSaved(e);
-  }} />
-
-<ProductModal
+<DeferredModal loader={loadProductModal}
   bind:this={serviceModal}
   {categories}
   {units}

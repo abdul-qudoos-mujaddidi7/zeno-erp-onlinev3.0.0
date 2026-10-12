@@ -1,9 +1,9 @@
 <script>
+  import AsyncPage from "../components/AsyncPage.svelte";
   import { onMount } from "svelte";
-  import AccountsIndex from "./accounts/AccountsIndex.svelte";
-  import AccountsGroups from "./accounts/AccountGroups.svelte";
-  import AllAccountsReport from "./accounts/AllAccountsReport.svelte";
-  import GeneralReport from "./accounts/GeneralReport.svelte";
+  const loadAccountsIndex = () => import('./accounts/AccountsIndex.svelte');
+  const loadAllAccountsReport = () => import('./accounts/AllAccountsReport.svelte');
+  const loadGeneralReport = () => import('./accounts/GeneralReport.svelte');
   // import AccountTypes from "./accounts/AccountTypes.svelte";
 
   import { API_URL } from "../config";
@@ -17,7 +17,7 @@
     $auth.isAuthenticated && (!Array.isArray(permissions) || permissions.length === 0);
 
   import { t, lang, translate_org_type } from "../i18n/i18n";
-  import AccountGroups from "./accounts/AccountGroups.svelte";
+  const loadAccountGroups = () => import('./accounts/AccountGroups.svelte');
 
   // ensure component re-renders when language changes
   $: _lang = $lang;
@@ -31,12 +31,12 @@
   <h3 class="text-danger m-3"><i class="bi bi-exclamation-triangle me-2"></i>{t('No access allowed')}</h3>
 {:else}
 {#if page == 'list'}
-  <AccountsIndex />
+  <AsyncPage loader={loadAccountsIndex} />
 {:else if page == 'groups'}
-  <AccountGroups />
+  <AsyncPage loader={loadAccountGroups} />
 {:else if page == 'report'}
-  <AllAccountsReport />
+  <AsyncPage loader={loadAllAccountsReport} />
 {:else if page == 'general-report'}
-  <GeneralReport />
+  <AsyncPage loader={loadGeneralReport} />
 {/if}
 {/if}

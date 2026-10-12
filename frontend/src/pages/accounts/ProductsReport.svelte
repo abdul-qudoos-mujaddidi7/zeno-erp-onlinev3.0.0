@@ -2,8 +2,7 @@
   import { productUnitApi } from '../../api/productUnitApi.js';
   import { onMount, onDestroy, tick } from 'svelte';
   import { push } from 'svelte-spa-router';
-  import { generatePDF } from '../generatePDF.js';
-  import { generateExcel } from '../generateExcel.js';
+
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import ExportMenu from '../../components/common/ExportMenu.svelte';
@@ -290,7 +289,9 @@
     exportingReport = true;
 
     try {
-      const exporter = format === 'excel' ? generateExcel : generatePDF;
+      const exporter = format === 'excel'
+        ? (await import('../generateExcel.js')).generateExcel
+        : (await import('../generatePDF.js')).generatePDF;
 
       const allItems = (await fetchAllItemsForExport()).map(decorateItem);
 

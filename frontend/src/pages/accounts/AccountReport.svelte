@@ -2,6 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { journalApi } from '../../api/journalApi.js';
   import { accountApi } from '../../api/accountApi.js';
+  import { currencyApi } from '../../api/currencyApi.js';
   import { accountTypeApi } from '../../api/accountTypeApi.js';
   import { accountImageApi } from '../../api/accountImageApi.js';
   import { fiscalYearApi } from '../../api/fiscalYearApi.js';
@@ -9,6 +10,7 @@
   import { push } from 'svelte-spa-router';
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../lib/pagination.js';
   import { localizeDescription } from '../../utils/localizedDescription.js';
+  import { accountRunningBalance } from '../../utils/accountRunningBalance.js';
 
   import EditJournalModal from '../journals/EditJournalModal.svelte';
 
@@ -41,6 +43,8 @@
   $: _translate_org_type = $translate_org_type;
   let componentRoot = null;
   let accounts = [];
+  let currencies = [];
+  let selectedCurrency = 'all';
   let account = null;
   let accountType = null;
   let imageUrl = null;
@@ -129,7 +133,7 @@
         [row.currency || account?.currency || 'DEFAULT']:
           Number(row.balance) || 0,
       },
-    }));
+    })).filter((row) => selectedCurrency === 'all' || row.currency === selectedCurrency);
   }
 
   /*
@@ -323,7 +327,12 @@
   }
 
   onMount(async () => {
-    await loadAccounts();
+    await Promise.all([
+      loadAccounts(),
+      currencyApi.getAll({ status: 1 }).then((response) => {
+        currencies = response?.data || [];
+      }),
+    ]);
     tick().then(() => setDatePickers(handleDateChange, componentRoot));
   });
 
@@ -389,29 +398,10 @@
       }
     }
 
-    /*
-     * Rows arrive newest-first. On page 1, seed the running balance
-     * from the canonical per-currency balances and rewind; later
-     * pages use a page-local running total.
-     */
-    let bal = {};
-    if (page === 1) {
-      bal = { ...(accountBalances || {}) };
-    }
-
-    return pageRows.map((j) => {
-      const debit = Number(j.debit || 0);
-      const credit = Number(j.credit || 0);
-      const cur = j.currency || account?.currency || 'DEFAULT';
-      const running = { ...bal };
-      if (page === 1) {
-        bal[cur] = (bal[cur] || 0) - (credit - debit);
-      } else {
-        bal[cur] = (bal[cur] || 0) + (credit - debit);
-        running[cur] = bal[cur];
-      }
-      return { ...j, debit, credit, running };
-    });
+    return pageRows.map((j) => ({
+      ...j,
+      running: accountRunningBalance(j, accountBalances, account?.currency),
+    }));
   }
 
   async function loadAccount(accountId) {
@@ -573,6 +563,8 @@
     if (!accountId) return;
 
     const requestId = ++loadRequestId;
+    const requestedPage = page;
+    const requestedPageSize = pageSize;
     lastPageKey = `${page}|${pageSize}`;
     listLoading = true;
 
@@ -581,17 +573,22 @@
         status: 1,
         account_id: Number(accountId),
         search: q.trim(),
+        currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
         date_from: startDate || undefined,
         date_to: endDate || undefined,
-        page,
-        limit: pageSize,
+        page: requestedPage,
+        limit: requestedPageSize,
         skip_count: 1,
+        include_running_balance: 1,
+        balance_date_to: fiscalYearInScope() && fiscalYearBalances !== null
+          ? endDate : undefined,
       });
 
       if (requestId !== loadRequestId) return;
 
       const rows = journalResponse?.data || [];
       await ensurePeerAccounts(rows);
+      if (requestId !== loadRequestId) return;
 
       /*
        * The opening row is shown whenever the visible range starts on a fiscal
@@ -601,7 +598,7 @@
       const openingRows = openingRowsForStatement();
 
       processed = [
-        ...(page === 1 ? openingRows : []),
+        ...(requestedPage === 1 ? openingRows : []),
         ...buildProcessedRows(accountId, rows),
       ];
       journals = processed;
@@ -609,14 +606,14 @@
 
       const hasMore = Boolean(journalResponse?.meta?.hasMore);
       totalPages = hasMore
-        ? Math.max(page + 1, page)
-        : Math.max(page, processed.length ? page : 1);
+        ? requestedPage + 1
+        : Math.max(requestedPage, 1);
     } catch (error) {
+      if (requestId !== loadRequestId) return;
       console.error('Failed to load account report journals:', error);
       processed = [];
       journals = [];
       paginated = [];
-      computedBalance = {};
       totalPages = 1;
     } finally {
       if (requestId === loadRequestId) listLoading = false;
@@ -657,6 +654,7 @@
   function formatRunningObj(obj) {
     if (!obj) return '-';
     return Object.keys(obj)
+      .filter((currency) => selectedCurrency === 'all' || currency === selectedCurrency)
       .map((k) => formatAmountInline(obj[k], k))
       .join('<br />');
   }
@@ -665,9 +663,10 @@
     push('/dashboard/accounts');
   }
 
-  function getCurrencyInfoArray(obj) {
+  function getCurrencyInfoArray(obj, currencyFilter = selectedCurrency) {
     let arr = [];
     for (const k in obj) {
+      if (currencyFilter !== 'all' && k !== currencyFilter) continue;
       arr.push({
         code: k,
         debit: obj[k].debit,
@@ -679,18 +678,23 @@
     return arr;
   }
 
-  function formatSummaryValues(balance, type) {
-    return getCurrencyInfoArray(balance)
+  function formatSummaryValues(balance, type, currencyFilter) {
+    return getCurrencyInfoArray(balance, currencyFilter)
       .map((cur) => `<div class="summary-currency-line">${formatAmountInline(cur[type], cur.code)}</div>`)
       .join('') || '0';
   }
 
   $: reportToolbarFilters = [
+    {
+      key: 'currency', label: t('Currency'), icon: 'bi-cash-stack', value: selectedCurrency,
+      options: [{ value: 'all', label: t('All') }, ...currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))],
+    },
     { key: 'startDate', label: t('From Date'), value: startDate, icon: 'bi-calendar3', type: 'date' },
     { key: 'endDate', label: t('To Date'), value: endDate, icon: 'bi-calendar3', type: 'date' },
   ];
 
   async function handleReportFilterChange(event) {
+    if (event.detail.key === 'currency') selectedCurrency = event.detail.value;
     if (event.detail.key === 'startDate') startDate = event.detail.value;
     if (event.detail.key === 'endDate') endDate = event.detail.value;
     page = 1;
@@ -705,6 +709,7 @@
 
   async function resetReportFilters() {
     q = '';
+    selectedCurrency = 'all';
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - 365);
@@ -767,21 +772,21 @@
   let balanceSummary = '0';
   let summaryRenderKey = 'empty';
 
-  $: summaryCurrencies = getCurrencyInfoArray(computedBalance);
+  $: summaryCurrencies = getCurrencyInfoArray(computedBalance, selectedCurrency);
 
   $: creditSummary =
     summaryCurrencies.length > 0
-      ? formatSummaryValues(computedBalance, 'credit')
+      ? formatSummaryValues(computedBalance, 'credit', selectedCurrency)
       : '0';
 
   $: debitSummary =
     summaryCurrencies.length > 0
-      ? formatSummaryValues(computedBalance, 'debit')
+      ? formatSummaryValues(computedBalance, 'debit', selectedCurrency)
       : '0';
 
   $: balanceSummary =
     summaryCurrencies.length > 0
-      ? formatSummaryValues(computedBalance, 'balance')
+      ? formatSummaryValues(computedBalance, 'balance', selectedCurrency)
       : '0';
 
   /*
@@ -1030,7 +1035,7 @@
     </div>
   </div>
   <div class="my-3 d-flex justify-content-start align-items-center">
-    {#each getCurrencyInfoArray(computedBalance) as cur}
+    {#each getCurrencyInfoArray(computedBalance, selectedCurrency) as cur}
       <div class="card me-4 shadow border-start border-{cur.color} border-5">
         <div class="card-body p-4">
           <div class="d-flex align-items-center">

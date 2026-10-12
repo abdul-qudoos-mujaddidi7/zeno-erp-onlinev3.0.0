@@ -1,4 +1,5 @@
 <script>
+  import AsyncPage from "../components/AsyncPage.svelte";
   import { onMount } from 'svelte';
   import { link, location } from 'svelte-spa-router';
 
@@ -12,20 +13,19 @@
 
   $: enable_account_groups = $settings_all.find((s) => s.key === 'enable_account_groups')?.value == 1;
 
-  import Departments from './hospital/Departments.svelte';
-  import PrintLabel from './products/PrintLabel.svelte';
-  import Currencies from './settings/Currencies.svelte';
-  import MainSettings from './settings/MainSettings.svelte';
-  import Units from './products/Units.svelte';
-  import UnitCategories from './products/UnitCategories.svelte';
-  import Categories from './products/Categories.svelte';
-  import AccountGroups from './accounts/AccountGroups.svelte';
-  import Brands from './settings/Brands.svelte';
-  import Generics from './settings/Generics.svelte';
-  import StockTransfers from './StockTransfers.svelte';
-  import UserRoles from './users/UserRoles.svelte';
-  import Users from './Users.svelte';
-  import UsersIndex from './users/UsersIndex.svelte';
+  const loadDepartments = () => import('./hospital/Departments.svelte');
+  const loadPrintLabel = () => import('./products/PrintLabel.svelte');
+  const loadCurrencies = () => import('./settings/Currencies.svelte');
+  const loadMainSettings = () => import('./settings/MainSettings.svelte');
+  const loadUnits = () => import('./products/Units.svelte');
+  const loadUnitCategories = () => import('./products/UnitCategories.svelte');
+  const loadCategories = () => import('./products/Categories.svelte');
+  const loadAccountGroups = () => import('./accounts/AccountGroups.svelte');
+  const loadBrands = () => import('./settings/Brands.svelte');
+  const loadGenerics = () => import('./settings/Generics.svelte');
+  const loadStockTransfers = () => import('./StockTransfers.svelte');
+  const loadUserRoles = () => import('./users/UserRoles.svelte');
+  const loadUsersIndex = () => import('./users/UsersIndex.svelte');
 
 
 
@@ -34,7 +34,7 @@
 </script>
 
 {#if page === 'main'}
-  <MainSettings />
+  <AsyncPage loader={loadMainSettings} />
 {:else}
 <div class="system-settings-page">
 <div class="system-settings-shell">
@@ -73,29 +73,29 @@
   <section class="system-settings-content">
 
 {#if page === 'departments'}
-  <Departments />
+  <AsyncPage loader={loadDepartments} />
 {:else if page === 'labels'}
-  <PrintLabel />
+  <AsyncPage loader={loadPrintLabel} />
 {:else if page === 'transfers'}
-  <StockTransfers />
+  <AsyncPage loader={loadStockTransfers} />
 {:else if page === 'currencies'}
-  <Currencies />
+  <AsyncPage loader={loadCurrencies} />
 {:else if page === 'units'}
-  <Units />
+  <AsyncPage loader={loadUnits} />
 {:else if page === 'unit-categories'}
-  <UnitCategories />
+  <AsyncPage loader={loadUnitCategories} />
 {:else if page === 'categories'}
-  <Categories />
+  <AsyncPage loader={loadCategories} />
 {:else if page === 'groups'}
-  <AccountGroups />
+  <AsyncPage loader={loadAccountGroups} />
 {:else if page === 'brands'}
-  <Brands />
+  <AsyncPage loader={loadBrands} />
 {:else if page === 'generics'}
-  <Generics />
+  <AsyncPage loader={loadGenerics} />
 {:else if page === 'roles'}
-  <UserRoles />
+  <AsyncPage loader={loadUserRoles} />
 {:else if page === 'users'}
-  <UsersIndex />
+  <AsyncPage loader={loadUsersIndex} />
 {/if}
 
   </section>

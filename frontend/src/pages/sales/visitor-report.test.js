@@ -129,7 +129,8 @@ describe('the visitor report is downloadable', () => {
   test('the report offers PDF and Excel download', () => {
     expect(REPORT_SOURCE).toMatch(/<ExportMenu/);
     expect(REPORT_SOURCE).toMatch(/on:export=\{\(event\) => exportReport\(event\.detail\)\}/);
-    expect(REPORT_SOURCE).toMatch(/format === 'excel' \? generateExcel : generatePDF/);
+    expect(REPORT_SOURCE).toContain("await import('../generateExcel.js')");
+    expect(REPORT_SOURCE).toContain("await import('../generatePDF.js')");
     expect(REPORT_SOURCE).toMatch(/'visitor_report',/);
   });
 
@@ -193,7 +194,8 @@ describe('the visitor report is reachable from the sales page', () => {
   test('the sales page knows the visitors tab', () => {
     expect(SALES_SOURCE).toMatch(/enable_visitor \? \['sales', 'products', 'visitors'\]/);
     expect(SALES_SOURCE).toMatch(/enable_visitor && activeTab === 'visitors'/);
-    expect(SALES_SOURCE).toMatch(/import VisitorReport from '\.\/sales\/VisitorReport\.svelte'/);
+    expect(SALES_SOURCE).toContain("const loadVisitorReport = () => import('./sales/VisitorReport.svelte')");
+    expect(SALES_SOURCE).toContain('loader={loadVisitorReport}');
     expect(SALES_SOURCE).toMatch(/activeTab === 'visitors'/);
   });
 

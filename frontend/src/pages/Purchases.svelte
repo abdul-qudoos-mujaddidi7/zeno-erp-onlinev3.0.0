@@ -1,12 +1,11 @@
 <script>
+  import { onceAsync } from '../lib/onceAsync.js';
   import { warehouseApi } from '../api/warehouseApi.js';
   import { purchaseApi } from '../api/purchaseApi.js';
   import { applyCurrentFiscalYearRange } from '../utils/currentFiscalYear.js';
   import { onMount, tick, onDestroy } from 'svelte';
   import { showDate, setDatePickers } from '../calendar.js';
   import { push } from 'svelte-spa-router';
-  import { generatePDF } from './generatePDF.js';
-  import { generateExcel } from './generateExcel.js';
   import { t, lang, translate_org_type, shortID, settings_all } from '../i18n/i18n';
   import { auth } from '../auth/authStore';
   import SummaryCard from '../components/common/SummaryCard.svelte';
@@ -91,7 +90,9 @@ import { currencyApi } from '../api/currencyApi.js';
     exportingReport = true;
 
     try {
-      const exporter = format === 'excel' ? generateExcel : generatePDF;
+      const exporter = format === 'excel'
+        ? (await import('./generateExcel.js')).generateExcel
+        : (await import('./generatePDF.js')).generatePDF;
 
       await exporter(
         'purchases',
@@ -110,7 +111,7 @@ import { currencyApi } from '../api/currencyApi.js';
   }
 
   function getAccountName(acc) {
-    if (!acc) return 'Unknown';
+    if (!acc) return lookupsLoaded ? 'Unknown' : '...';
     let out = '';
     if (t('Lang') === 'en') out = acc.name || '';
     if (t('Lang') === 'fa') out = acc.name_fa || acc.name || '';
@@ -173,7 +174,7 @@ import { currencyApi } from '../api/currencyApi.js';
     addPaymentModalInstance?.show();
   }
 
-  async function loadLookups() {
+  const loadLookups = onceAsync(async () => {
     if (lookupsLoaded) return;
     if (account_id) {
       const [accountsResponse, warehouseResponse, currencyResponse] = await Promise.all([
@@ -197,53 +198,51 @@ import { currencyApi } from '../api/currencyApi.js';
     warehouses = warehouseResponse?.data || [];
     currencies = currencyResponse?.data || [];
     lookupsLoaded = true;
-  }
+  });
 
   async function load() {
     const requestId = ++loadRequestId;
     lastPageKey = getPurchasesQueryKey();
     loading = true;
     try {
-      await Promise.all([
-        loadLookups(),
-        (async () => {
-          const response = await purchaseApi.getAllWithRelations({
-            status: 1,
-            search: searchTerm.trim(),
-            account_id: account_id || undefined,
-            bill_status: filterStatus !== 'all' ? filterStatus : undefined,
-            payment_status: paymentStatus !== 'all' ? paymentStatus : undefined,
-            currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
-            page: currentPage,
-            limit: itemsPerPage,
-            skip_count:
-              searchTerm.trim() ||
-              account_id ||
-              filterStatus !== 'all' ||
-              paymentStatus !== 'all' ||
-              fromDate ||
-              toDate
-                ? 0
-                : 1,
-            date_from: fromDate || undefined,
-            date_to: toDate || undefined,
-            sort_by: sortColumn,
-            sort_dir: sortDirection,
-          });
-          if (requestId !== loadRequestId) return;
-          purchases = response?.data || [];
-          const meta = readListMeta(response, purchases.length);
-          const hasMore = Boolean(response?.meta?.hasMore);
-          totalItems = hasMore
-            ? Math.max(meta.total, currentPage * itemsPerPage + 1)
-            : Math.max(meta.total, (currentPage - 1) * itemsPerPage + purchases.length);
-          totalPages = hasMore
-            ? Math.max(currentPage + 1, Math.ceil(totalItems / itemsPerPage) || 0)
-            : Math.max(currentPage, Math.ceil(totalItems / itemsPerPage) || 0);
-          purchase_payments = purchases.flatMap((p) => p.payments || []);
-          purchase_returns = purchases.flatMap((p) => p.returns || []);
-        })(),
-      ]);
+      // Supporting filters must not hold up the invoice table.
+      void loadLookups().catch((error) => console.error('Failed to load filters', error));
+      const response = await purchaseApi.getAllWithRelations({
+        status: 1,
+        search: searchTerm.trim(),
+        account_id: account_id || undefined,
+        bill_status: filterStatus !== 'all' ? filterStatus : undefined,
+        payment_status: paymentStatus !== 'all' ? paymentStatus : undefined,
+        currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
+        page: currentPage,
+        limit: itemsPerPage,
+        skip_count:
+          searchTerm.trim() ||
+          account_id ||
+          filterStatus !== 'all' ||
+          paymentStatus !== 'all' ||
+          fromDate ||
+          toDate
+            ? 0
+            : 1,
+        date_from: fromDate || undefined,
+        date_to: toDate || undefined,
+        sort_by: sortColumn,
+        sort_dir: sortDirection,
+      });
+      if (requestId !== loadRequestId) return;
+      purchases = response?.data || [];
+      const meta = readListMeta(response, purchases.length);
+      const hasMore = Boolean(response?.meta?.hasMore);
+      totalItems = hasMore
+        ? Math.max(meta.total, currentPage * itemsPerPage + 1)
+        : Math.max(meta.total, (currentPage - 1) * itemsPerPage + purchases.length);
+      totalPages = hasMore
+        ? Math.max(currentPage + 1, Math.ceil(totalItems / itemsPerPage) || 0)
+        : Math.max(currentPage, Math.ceil(totalItems / itemsPerPage) || 0);
+      purchase_payments = purchases.flatMap((p) => p.payments || []);
+      purchase_returns = purchases.flatMap((p) => p.returns || []);
+
     } finally {
       if (requestId === loadRequestId) loading = false;
     }
@@ -277,6 +276,7 @@ import { currencyApi } from '../api/currencyApi.js';
   });
 
   onDestroy(() => {
+    loadRequestId += 1;
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   });
 

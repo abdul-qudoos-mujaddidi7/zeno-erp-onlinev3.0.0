@@ -3,8 +3,7 @@
     import { accountApi } from "../../api/accountApi.js";
     import { showDate, setDatePickers } from "../../calendar.js";
     import {calculateCreditDebitOfAllAccounts} from './AccountsHelper.js';
-    import { generatePDF } from "../generatePDF.js";
-    import { generateExcel } from "../generateExcel.js";
+
     import { push } from "svelte-spa-router";
     import { t, lang, translate_org_type,settings_all ,shortID} from "../../i18n/i18n.js";
     import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
@@ -403,7 +402,9 @@
         exportingReport = true;
 
         try {
-            const exporter = format === 'excel' ? generateExcel : generatePDF;
+            const exporter = format === 'excel'
+        ? (await import('../generateExcel.js')).generateExcel
+        : (await import('../generatePDF.js')).generatePDF;
 
             await exporter(
                 'accounts',

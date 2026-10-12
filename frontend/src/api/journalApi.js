@@ -16,6 +16,8 @@ export const journalApi = {
     exclude_system_accounts = 0,
     exclude_report_accounts = 0,
     include_summary = 0,
+    include_running_balance = 0,
+    balance_date_to,
     account_id,
     page,
     limit,
@@ -62,6 +64,9 @@ export const journalApi = {
     if (include_summary) {
       params.set('include_summary', '1');
     }
+
+    if (include_running_balance) params.set('include_running_balance', '1');
+    if (balance_date_to) params.set('balance_date_to', String(balance_date_to));
 
     if (account_id !== undefined && account_id !== null && account_id !== '') {
       params.set('account_id', String(account_id));

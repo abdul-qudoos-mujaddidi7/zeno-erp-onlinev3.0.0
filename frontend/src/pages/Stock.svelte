@@ -1,21 +1,22 @@
 <script>
-  import ProductsIndex from './products/ProductsIndex.svelte';
-  import Warehouses from './products/Warehouses.svelte';
-  import Returns from './settings/Returns.svelte';
-  import Wastes from './Wastes.svelte';
+  import AsyncPage from "../components/AsyncPage.svelte";
+  const loadProductsIndex = () => import('./products/ProductsIndex.svelte');
+  const loadWarehouses = () => import('./products/Warehouses.svelte');
+  const loadReturns = () => import('./settings/Returns.svelte');
+  const loadWastes = () => import('./Wastes.svelte');
 
   export let page = 'products';
 </script>
 
 <div class="stock-route-page">
   {#if page === 'products'}
-    <ProductsIndex />
+    <AsyncPage loader={loadProductsIndex} />
   {:else if page === 'warehouses'}
-    <Warehouses />
+    <AsyncPage loader={loadWarehouses} />
   {:else if page === 'returns'}
-    <Returns />
+    <AsyncPage loader={loadReturns} />
   {:else if page === 'wastes'}
-    <Wastes />
+    <AsyncPage loader={loadWastes} />
   {/if}
 </div>
 
