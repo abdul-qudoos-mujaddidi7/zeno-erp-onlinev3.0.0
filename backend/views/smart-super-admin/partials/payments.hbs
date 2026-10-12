@@ -1,0 +1,53 @@
+<section class="workspace-card"><h2>{{t "Payments"}}</h2><div
+    class="table-responsive"
+  ><table class="table"><thead><tr><th>Date</th><th>Amount</th><th
+          >Method</th><th>Description</th></tr></thead><tbody>{{#each
+          payments
+        }}<tr><td>{{formatDate payment_date "display"}}</td><td>{{formatCurrency
+                amount
+                currency
+              }}</td><td>{{payment_method}}</td><td
+            >{{description}}</td></tr>{{else}}<tr><td colspan="4">No payments
+              recorded.</td></tr>{{/each}}</tbody></table></div></section>
+<form
+  method="post"
+  action="/smart-super-admin/payment/save"
+  class="workspace-card no-print"
+><h2>{{t "Record payment"}}</h2><input
+    type="hidden"
+    name="subscription_invoice_id"
+    value="{{record.id}}"
+  /><div class="form-grid"><label>Amount<input
+        class="form-control"
+        name="amount"
+        type="number"
+        step="0.000001"
+        min="0.000001"
+        required
+      /></label><label>Currency<input
+        class="form-control"
+        name="currency"
+        value="{{record.currency}}"
+        readonly
+      /></label><label>Date<input
+        class="form-control"
+        name="payment_date"
+        type="datetime-local"
+        value="{{paymentDate}}"
+      /></label><label>Method<select
+        class="form-select"
+        name="payment_method"
+      ><option value="cash">Cash</option><option
+          value="exchange_transfer"
+        >Exchange transfer</option><option value="bank_transfer">Bank transfer</option><option
+          value="credit_card"
+        >Credit card</option><option
+          value="other"
+        >Other</option></select></label><label class="wide">Description<textarea
+        class="form-control"
+        name="description"
+        maxlength="20000"
+      ></textarea></label></div><button
+    class="btn btn-primary form-actions"
+    type="submit"
+  >{{t "Record payment"}}</button></form>

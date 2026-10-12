@@ -84,6 +84,7 @@ app.use("/", express.static(path.join(__dirname, "public")));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/user", require("./routes/user"));
 app.use("/api/superadmin", require("./routes/components/superadmin"));
+app.use("/smart-super-admin", require("./smart-super-admin/app")());
 
 // New fully-online API. Existing routes remain active during migration.
 app.use("/api/v2", apiV2Routes);

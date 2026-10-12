@@ -1,0 +1,5 @@
+<aside id="smart-sidebar" class="smart-sidebar" aria-label="Navigation">
+<div class="sidebar-brand"><a href="/smart-super-admin"><span>SMART</span>Super Admin</a><button type="button" data-sidebar-close aria-label="Close navigation"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div>
+<nav>{{#each navigation}}<a href="{{url}}" class="{{#if active}}active{{/if}}" {{#if active}}aria-current="page"{{/if}}><i class="bi {{icon}}" aria-hidden="true"></i>{{t label}}</a>{{/each}}</nav>
+<details class="record-menu"><summary>{{t 'Records'}}</summary><nav>{{#each recordNavigation}}<a href="{{url}}">{{label}}</a>{{/each}}</nav></details>
+</aside>
