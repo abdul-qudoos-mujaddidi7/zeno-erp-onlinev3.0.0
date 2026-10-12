@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="{{htmlLanguage}}" dir="{{direction}}">
+<head>{{> head}}</head>
+<body class="admin-auth">
+  <header class="auth-header">
+    <span class="brand" dir="ltr">ZENO<span>ERP</span></span>
+    <form method="get" action="/superadmin/login" class="language-form">
+      <label for="language">{{labels.language}}</label>
+      <select id="language" name="lang" class="form-select">
+        {{#each languages}}<option value="{{code}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}
+      </select>
+      <button class="btn btn-outline-primary" type="submit">{{labels.apply}}</button>
+    </form>
+  </header>
+  <main class="auth-content">{{{body}}}</main>
+</body>
+</html>

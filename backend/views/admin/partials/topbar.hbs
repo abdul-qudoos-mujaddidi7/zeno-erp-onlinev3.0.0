@@ -1,0 +1,18 @@
+<header class="admin-topbar">
+  <div class="topbar-title">
+    <button type="button" class="menu-toggle" data-sidebar-toggle aria-controls="admin-sidebar" aria-expanded="false" aria-label="{{labels.menu}}"><i class="bi bi-list" aria-hidden="true"></i></button>
+    <span>{{labels.platform}}</span>
+  </div>
+  <div class="topbar-tools">
+    <form method="post" action="/superadmin/preferences/language" class="language-form">
+      <input type="hidden" name="_csrf" value="{{csrfToken}}">
+      <label for="language">{{labels.language}}</label>
+      <select id="language" name="language" class="form-select">
+        {{#each languages}}<option value="{{code}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}
+      </select>
+      <button type="submit" class="btn btn-outline-primary">{{labels.apply}}</button>
+    </form>
+    <span class="administrator-name">{{administratorName}}</span>
+    <form method="post" action="/superadmin/logout"><input type="hidden" name="_csrf" value="{{csrfToken}}"><button type="submit" class="btn btn-outline-primary">{{labels.signOut}}</button></form>
+  </div>
+</header>

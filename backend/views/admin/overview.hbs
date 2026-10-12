@@ -1,0 +1,10 @@
+<section class="page-heading">
+  <p class="section-label">{{labels.overview}}</p>
+  <h1>{{labels.welcome}}</h1>
+  <p>{{labels.introduction}}</p>
+</section>
+<section class="workspace-card" aria-labelledby="workspace-title">
+  <div class="workspace-heading"><i class="bi bi-building" aria-hidden="true"></i><h2 id="workspace-title">{{labels.platform}}</h2></div>
+  <p>{{labels.foundation}}</p>
+  <ul class="workspace-areas">{{#each areas}}<li><span>{{this}}</span><span class="planned-label">{{../labels.planned}}</span></li>{{/each}}</ul>
+</section>

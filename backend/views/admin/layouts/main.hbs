@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="{{htmlLanguage}}" dir="{{direction}}">
+<head>{{> head}}</head>
+<body class="admin-shell">
+  <a class="skip-link" href="#main">{{labels.skip}}</a>
+  {{> sidebar}}
+  <div class="admin-workspace">
+    {{> topbar}}
+    <main id="main" tabindex="-1" class="admin-content">{{{body}}}</main>
+  </div>
+  <script src="/superadmin/assets/js/admin.js" defer></script>
+</body>
+</html>
