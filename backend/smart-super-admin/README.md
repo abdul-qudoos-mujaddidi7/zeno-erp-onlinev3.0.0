@@ -62,6 +62,12 @@ List and index styling follows the existing ERP Svelte `IndexPageLayout`,
 action/search toolbars, dense striped tables, sticky sortable headers, status
 badges, footer page sizing, and labeled record cards on phones. These patterns
 are implemented in Handlebars and CSS; the ERP Svelte pages are unchanged.
+The application shell also follows the active ERP `DashboardLayout`, `Sidebar`,
+and `Topbar`: narrow logo sidebar, pale active links, bottom profile/language
+menu, saved desktop icon collapse, section navigation, organization context,
+fullscreen, and a mobile drawer with backdrop, Escape dismissal and focus trap.
+Sidebar collapse is stored under `smartSuperAdmin.sidebarCollapsed`, separately
+from ERP preferences. Shell styles are in `public/smart-super-admin/css/shell.css`.
 
 ## Verification
 

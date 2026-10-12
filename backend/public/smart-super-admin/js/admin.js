@@ -3,9 +3,41 @@
   const sidebar = document.getElementById("smart-sidebar"),
     toggle = document.querySelector("[data-sidebar-toggle]"),
     close = document.querySelector("[data-sidebar-close]");
+  const backdrop = document.querySelector("[data-sidebar-backdrop]");
+  const collapse = document.querySelector("[data-sidebar-collapse]");
+  const desktop = window.matchMedia("(min-width:992px)");
+  let collapsed = false;
+  try {
+    collapsed =
+      localStorage.getItem("smartSuperAdmin.sidebarCollapsed") === "1";
+  } catch {}
+  function setCollapsed(value) {
+    collapsed = value;
+    document.documentElement.classList.toggle("smart-sidebar-collapsed", value);
+    collapse?.setAttribute("aria-expanded", String(!value));
+    const label = value
+      ? collapse?.dataset.expandLabel
+      : collapse?.dataset.collapseLabel;
+    if (collapse && label) {
+      collapse.setAttribute("aria-label", label);
+      collapse.title = label;
+    }
+    const icon = collapse?.querySelector("i");
+    if (icon) icon.className = value ? "bi bi-grid" : "bi bi-list";
+    try {
+      localStorage.setItem(
+        "smartSuperAdmin.sidebarCollapsed",
+        value ? "1" : "0",
+      );
+    } catch {}
+  }
+  setCollapsed(collapsed);
+  collapse?.addEventListener("click", () => setCollapsed(!collapsed));
   function setSidebar(open) {
     if (!sidebar) return;
     sidebar.classList.toggle("open", open);
+    if (backdrop) backdrop.hidden = !open;
+    document.documentElement.classList.toggle("smart-drawer-open", open);
     toggle?.setAttribute("aria-expanded", String(open));
     const workspace = document.querySelector(".smart-workspace");
     if (workspace) workspace.inert = open;
@@ -13,10 +45,18 @@
   }
   toggle?.addEventListener("click", () => setSidebar(true));
   close?.addEventListener("click", () => setSidebar(false));
+  backdrop?.addEventListener("click", () => setSidebar(false));
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") setSidebar(false);
+    if (event.key === "Escape") {
+      if (sidebar?.classList.contains("open")) setSidebar(false);
+      sidebar?.querySelectorAll("details[open]").forEach((detail) => {
+        if (detail.classList.contains("sidebar-profile")) detail.open = false;
+      });
+    }
     if (event.key === "Tab" && sidebar?.classList.contains("open")) {
-      const nodes = [...sidebar.querySelectorAll("a[href],button,summary")];
+      const nodes = [
+        ...sidebar.querySelectorAll("a[href],button,summary,select"),
+      ].filter((node) => node.getClientRects().length);
       if (event.shiftKey && document.activeElement === nodes[0]) {
         event.preventDefault();
         nodes.at(-1).focus();
@@ -26,13 +66,37 @@
       }
     }
   });
-  window.matchMedia("(min-width:901px)").addEventListener("change", (event) => {
+  desktop.addEventListener("change", (event) => {
     if (event.matches) {
       sidebar?.classList.remove("open");
+      if (backdrop) backdrop.hidden = true;
+      document.documentElement.classList.remove("smart-drawer-open");
       if (document.querySelector(".smart-workspace"))
         document.querySelector(".smart-workspace").inert = false;
       toggle?.setAttribute("aria-expanded", "false");
     }
+  });
+  document.addEventListener("click", (event) => {
+    const profile = sidebar?.querySelector(".sidebar-profile");
+    if (profile?.open && !profile.contains(event.target)) profile.open = false;
+  });
+  const fullscreen = document.querySelector("[data-fullscreen]");
+  if (fullscreen && !document.fullscreenEnabled) fullscreen.hidden = true;
+  fullscreen?.addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      const status = document.querySelector("[data-shell-status]");
+      if (status)
+        status.textContent = "Fullscreen is unavailable in this browser.";
+    }
+  });
+  document.addEventListener("fullscreenchange", () => {
+    fullscreen?.setAttribute(
+      "aria-pressed",
+      String(Boolean(document.fullscreenElement)),
+    );
   });
   document
     .querySelectorAll("[data-print]")

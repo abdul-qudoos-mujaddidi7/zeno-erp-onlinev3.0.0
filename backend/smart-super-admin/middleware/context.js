@@ -1,6 +1,14 @@
 const STRINGS = {
   en: {},
   fa: {
+    Navigation: "ناوبری",
+    Preferences: "تنظیمات",
+    Fullscreen: "تمام‌صفحه",
+    "Page navigation": "ناوبری صفحه",
+    "Open navigation": "باز کردن فهرست",
+    "Close navigation": "بستن فهرست",
+    "Collapse sidebar": "جمع کردن نوار کناری",
+    "Expand sidebar": "باز کردن نوار کناری",
     Actions: "عملیات",
     Rows: "ردیف‌ها",
     Pagination: "صفحه‌بندی",
@@ -42,6 +50,14 @@ const STRINGS = {
     Invoices: "صورتحساب‌ها",
   },
   ps: {
+    Navigation: "لارښود",
+    Preferences: "غوراوي",
+    Fullscreen: "بشپړه پرده",
+    "Page navigation": "د پاڼې لارښود",
+    "Open navigation": "لارښود پرانیستل",
+    "Close navigation": "لارښود تړل",
+    "Collapse sidebar": "اړخ پټه راټولول",
+    "Expand sidebar": "اړخ پټه پراخول",
     Actions: "کړنې",
     Rows: "قطارونه",
     Pagination: "پاڼې",
@@ -156,6 +172,22 @@ module.exports = (db) => async (req, res, next) => {
     { code: "fa", label: "دری" },
     { code: "ps", label: "پښتو" },
   ].map((item) => ({ ...item, selected: item.code === language }));
+  res.locals.userInitial = [...res.locals.userName][0]?.toUpperCase() || "O";
+  const section = [
+    ["Organizations", /^\/(organizations|organization-list)(\/|$)/],
+    ["Organization Types", /^\/(list-org-types|org-type)(\/|$)/],
+    ["Features", /^\/(list-features|feature)(\/|$)/],
+    [
+      "Subscription Plans",
+      /^\/(list-subscription-plans|subscription-plan|subscription-plan-features)(\/|$)/,
+    ],
+    [
+      "Subscriptions",
+      /^\/(list-subscriptions|subscription|invoices|invoice|payment)(\/|$)/,
+    ],
+    ["Error Logs", /^\/(list-error-logs|view-error-log|error-logs)(\/|$)/],
+    ["Commands", /^\/(list-commands|command|command-result)(\/|$)/],
+  ].find(([, pattern]) => pattern.test(req.path))?.[0];
   res.locals.navigation = NAV.map(([label, url, icon]) => ({
     label,
     url:
@@ -165,12 +197,43 @@ module.exports = (db) => async (req, res, next) => {
         : url),
     icon,
     active:
+      label === section ||
       req.path === url ||
       (url !== "/" && req.path.startsWith(url.split("/id/")[0])),
   }));
   res.locals.recordNavigation = RECORDS.map((table) => ({
     label: table.replaceAll("_", " "),
     url: `/smart-super-admin/list/${table}/id/DESC/${orgId}/20/1`,
+    active:
+      req.path.startsWith(`/list/${table}/`) ||
+      req.path.startsWith(`/view/${table}/`),
   }));
+  res.locals.recordsActive = res.locals.recordNavigation.some(
+    (item) => item.active,
+  );
+  const active = res.locals.navigation.find((item) => item.active);
+  if (active) {
+    const secondary = {
+      Organizations: ["Organization List", "/organization-list/id/DESC/0/20/1"],
+      "Organization Types": ["New", "/org-type"],
+      Features: ["New", "/feature"],
+      "Subscription Plans": ["New", "/subscription-plan"],
+      Subscriptions: ["New", `/subscription/0/${orgId}`],
+      Commands: ["New", "/command/0"],
+    }[active.label];
+    const secondaryUrl = secondary && "/smart-super-admin" + secondary[1];
+    const secondaryActive =
+      secondary &&
+      (active.label === "Organizations"
+        ? req.path.startsWith("/organization-list/")
+        : req.path === secondary[1]);
+    res.locals.pageNavigation = [{ ...active, active: !secondaryActive }];
+    if (secondary)
+      res.locals.pageNavigation.push({
+        label: secondary[0],
+        url: secondaryUrl,
+        active: secondaryActive,
+      });
+  }
   next();
 };
