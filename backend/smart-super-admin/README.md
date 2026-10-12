@@ -57,6 +57,12 @@ identifiers, sort fields, filters, page limits, and values. Templates are in
 `backend/public/smart-super-admin`, served at `/smart-super-admin/assets`.
 Templates use escaped Handlebars output. JavaScript is external to templates.
 
+List and index styling follows the existing ERP Svelte `IndexPageLayout`,
+`DataTable`, `FilterToolbar`, and `PaginationBar`: shared compact panels,
+action/search toolbars, dense striped tables, sticky sortable headers, status
+badges, footer page sizing, and labeled record cards on phones. These patterns
+are implemented in Handlebars and CSS; the ERP Svelte pages are unchanged.
+
 ## Verification
 
 ```powershell

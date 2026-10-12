@@ -112,6 +112,9 @@ function tableModel(
   const columns = result.columns.map((column) => ({
     name: column.name,
     label: column.name.replaceAll("_", " "),
+    sorted: result.sort === column.name,
+    ascending: result.direction === "ASC",
+    ariaSort: result.direction === "ASC" ? "ascending" : "descending",
     url: addQuery(
       route(
         column.name,
@@ -134,9 +137,13 @@ function tableModel(
     tableTitle: title,
     columns,
     total: result.total,
+    rowStart: result.total ? (result.page - 1) * result.limit + 1 : 0,
+    rowEnd: Math.min(result.page * result.limit, result.total),
     rows: result.rows.map((row) => ({
       id: row.id,
       cells: result.columns.map((column) => ({
+        label: column.name.replaceAll("_", " "),
+        badge: /(^is_active$|status$)/.test(column.name),
         value: formatField(column.name, row[column.name], result.tableName),
         image: /image|photo/.test(column.name) ? image(row[column.name]) : null,
       })),
