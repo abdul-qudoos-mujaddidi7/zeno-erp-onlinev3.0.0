@@ -1,0 +1,10 @@
+<section class="page-heading"><p class="section-label">{{labels.organizations}}</p><h1>{{organization.name}}</h1><a href="/superadmin/organizations?lang={{language}}">{{labels.backToOrganizations}}</a></section>
+<section class="workspace-card">
+  <dl class="organization-properties">
+    <div><dt>{{labels.identifier}}</dt><dd>{{organization.id}}</dd></div><div><dt>{{labels.code}}</dt><dd>{{organization.codeLabel}}</dd></div>
+    <div><dt>{{labels.organizationType}}</dt><dd>{{organization.typeLabel}}</dd></div><div><dt>{{labels.status}}</dt><dd>{{organization.statusLabel}}</dd></div>
+    <div><dt>{{labels.inventoryMethod}}</dt><dd>{{organization.inventory_method}}</dd></div>
+  </dl>
+  {{#if organization.selected}}<p class="selected-label">{{labels.selected}}</p>{{else}}{{#if canSelectOrganization}}<form method="post" action="/superadmin/organizations/select"><input type="hidden" name="_csrf" value="{{csrfToken}}"><input type="hidden" name="organizationId" value="{{organization.id}}"><button class="btn btn-primary" type="submit">{{labels.selectOrganization}}</button></form>{{/if}}{{/if}}
+</section>
+<section class="workspace-card record-counts" aria-labelledby="counts-title"><h2 id="counts-title">{{labels.recordCounts}}</h2><p>{{labels.countDefinition}}</p><dl class="count-grid">{{#each counts}}<div><dt>{{label}}</dt><dd>{{total}}</dd></div>{{/each}}</dl></section>

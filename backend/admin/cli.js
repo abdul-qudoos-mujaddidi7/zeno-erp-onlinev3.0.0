@@ -40,14 +40,14 @@ function hiddenQuestion(prompt, { input = process.stdin, output = process.stdout
 async function main() {
   const [command, username, value, ...extra] = process.argv.slice(2);
   if (command === '--help' || !command) {
-    console.log('Usage: node admin/cli.js create | set-active <username> enabled|disabled | set-access <username> granted|revoked');
+    console.log('Usage: node admin/cli.js create | set-active <username> enabled|disabled | set-access <username> granted|revoked | grant-organization-permissions');
     return;
   }
-  if (!['create', 'set-active', 'set-access'].includes(command) || extra.length
-    || (command === 'create' && (username || value))
+  if (!['create', 'set-active', 'set-access', 'grant-organization-permissions'].includes(command) || extra.length
+    || (['create', 'grant-organization-permissions'].includes(command) && (username || value))
     || (command === 'set-active' && !['enabled', 'disabled'].includes(value))
     || (command === 'set-access' && !['granted', 'revoked'].includes(value))) throw new Error('INVALID_COMMAND');
-  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('INTERACTIVE_TERMINAL_REQUIRED');
+  if (command !== 'grant-organization-permissions' && (!process.stdin.isTTY || !process.stdout.isTTY)) throw new Error('INTERACTIVE_TERMINAL_REQUIRED');
   require('dotenv').config({ quiet: true });
   let pool;
   try {
@@ -55,7 +55,10 @@ async function main() {
     const repository = require('./repositories/auth')(pool);
     await repository.ready();
     const provisioning = require('./services/provisioning')(repository);
-    if (command === 'create') {
+    if (command === 'grant-organization-permissions') {
+      await require('./services/organization-policy')(repository)();
+      console.log('Organization read/select permissions granted to the platform administrator role and audited.');
+    } else if (command === 'create') {
       const terminal = createInterface({ input: process.stdin, output: process.stdout });
       let loginName, displayName;
       try {

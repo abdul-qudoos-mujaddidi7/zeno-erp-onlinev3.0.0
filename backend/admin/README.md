@@ -41,7 +41,7 @@ In production, use HTTPS. The dedicated cookie is `zeno_platform_admin`, with Pa
 
 ## Minimal initial role policy
 
-One role: `platform_administrator`. One permission: `overview.read`. Role assignments, role-active flags and permission definitions are separate from ERP users/roles. There is no role-management interface or implicit wildcard permission. The role enables only the implemented overview and language preferences; business modules remain absent.
+One role: `platform_administrator`. Its initial policy grants `overview.read`, `organizations.read`, and `organizations.select`. Role assignments, role-active flags and permission definitions are separate from ERP users/roles. There is no role-management interface or implicit wildcard permission. Existing Step 2 roles receive the added permissions through `node admin/cli.js grant-organization-permissions`; the operation is rerunnable and audited. See ORGANIZATIONS.md for the read-only directory and context semantics. Transactional business modules remain absent.
 
 Protected requests fetch current account status and role-derived permissions from the database. Session `platformAdmin` stores only account ID and authentication version. Session display names/permissions are not trusted. Disabling an account or changing its authentication version destroys its session on the next protected request. Permission removal denies protected features immediately; logout remains available to active administrators even without overview permission.
 

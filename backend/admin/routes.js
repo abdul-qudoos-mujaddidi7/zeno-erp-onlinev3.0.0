@@ -3,8 +3,11 @@ const { requireAdministrator, requirePermission } = require('./middleware/permis
 const csrf = require('./middleware/csrf');
 const overview = require('./controllers/overview');
 const createAuthController = require('./controllers/auth');
+const createOrganizationContext = require('./middleware/organization-context');
+const createOrganizationService = require('./services/organizations');
+const createOrganizationController = require('./controllers/organizations');
 
-module.exports = ({ sessionConfigured, authService, environment }) => {
+module.exports = ({ sessionConfigured, authService, environment, organizationRepository }) => {
   const router = express.Router();
   router.use((req, res, next) => {
     if (!sessionConfigured) return res.status(503).render('restricted', {
@@ -19,9 +22,13 @@ module.exports = ({ sessionConfigured, authService, environment }) => {
   router.use(requireAdministrator({ sessionConfigured, authService, environment }));
   router.use(csrf);
   router.post('/logout', auth.logout);
-  router.use(requirePermission('overview.read'));
-  router.get('/', overview.show);
-  router.post('/preferences/language', overview.updateLanguage);
+  router.use(createOrganizationContext(organizationRepository));
+  const organizations = createOrganizationController(createOrganizationService(organizationRepository), authService);
+  router.get('/', requirePermission('overview.read'), overview.show);
+  router.post('/preferences/language', requirePermission('overview.read'), overview.updateLanguage);
+  router.get('/organizations', requirePermission('organizations.read'), organizations.list);
+  router.get('/organizations/:id', requirePermission('organizations.read'), organizations.detail);
+  router.post('/organizations/select', requirePermission('organizations.read'), requirePermission('organizations.select'), organizations.select);
   router.use((req, res) => res.status(404).render('restricted', {
     layout: 'auth', title: res.locals.labels.unavailable, message: res.locals.labels.error,
   }));

@@ -2,7 +2,7 @@ const { createHmac } = require('node:crypto');
 const passwords = require('./passwords');
 const validators = require('../validators/auth');
 
-const PERMISSIONS = Object.freeze(['overview.read']);
+const PERMISSIONS = require('../policy').permissions;
 module.exports = function createAuthService(repository, secret) {
   const digest = (scope, value) => createHmac('sha256', secret).update(scope + '\0' + value).digest('hex');
   const audit = (event, outcome, context = {}, extra = {}) => repository.audit({

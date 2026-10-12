@@ -33,9 +33,9 @@ The installed express-handlebars 9.0.2 requires Node >=22.23.3; verified locally
 
 Seven additive authentication tables use matching INT UNSIGNED account/role/permission IDs. Operator CLI provisions salted bcrypt cost-12 passwords through hidden terminal input. The minimal role grants only overview.read. Server-rendered login/logout uses CSRF, persistent account/IP throttling, session regeneration and explicit saves. Protected requests reload active status and current permissions; audited operator changes invalidate old sessions. No ERP user hashes or login protocols change. See README.md for migration/provisioning commands, environment names, access policy and failure handling. Migration execution and first-account provisioning remain operator setup actions; tests use isolated storage.
 
-## Step 3: read-only platform modules
+## Step 3: read-only organization management (implemented)
 
-Reimplement organization lists/selection and summaries, approved record inspection, sync/error/activity logs, and pagination/filtering. Use explicit tenant access and permissions per module. Allowlist all tables and sort columns; bound page sizes. Correct legacy duplicate-WHERE filters, missing feature columns, unbounded organization results and missing async propagation. Exclude password hashes, tokens and session data from lists. Add indexes only after query-plan checks and data audits.
+Organization directory, filters/search, bounded deterministic pagination, detail counts, and CSRF-protected context selection are implemented. Every organization route checks explicit read/select permissions; existing platform roles are upgraded by a rerunnable audited CLI operation. Organization and count queries use verified explicit columns, fixed identifiers and prepared values. See ORGANIZATIONS.md. Selected context is a navigation preference, not a tenant-access grant. General business-record inspection and log pages remain future work; subscriptions, billing and support commands are not part of this step.
 
 ## Step 4: configuration and subscriptions
 

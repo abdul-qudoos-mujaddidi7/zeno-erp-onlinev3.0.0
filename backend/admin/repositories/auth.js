@@ -1,3 +1,4 @@
+const policy = require('../policy');
 module.exports = function createAuthRepository(pool) {
   async function access(id, executor = pool) {
     const [accounts] = await executor.execute(
@@ -62,10 +63,12 @@ module.exports = function createAuthRepository(pool) {
       const [existing] = await connection.execute('SELECT id, is_active FROM platform_admin_roles WHERE code = ?', ['platform_administrator']);
       if (!existing.length) {
         await connection.execute('INSERT INTO platform_admin_roles (code) VALUES (?)', ['platform_administrator']);
-        await connection.execute('INSERT INTO platform_admin_permissions (code) VALUES (?) ON DUPLICATE KEY UPDATE code = VALUES(code)', ['overview.read']);
-        await connection.execute(`INSERT INTO platform_admin_role_permissions (role_id, permission_id)
+        for (const code of policy.permissions) {
+          await connection.execute('INSERT INTO platform_admin_permissions (code) VALUES (?) ON DUPLICATE KEY UPDATE code = VALUES(code)', [code]);
+          await connection.execute(`INSERT INTO platform_admin_role_permissions (role_id, permission_id)
           SELECT r.id, p.id FROM platform_admin_roles r, platform_admin_permissions p
-          WHERE r.code = ? AND p.code = ?`, ['platform_administrator', 'overview.read']);
+          WHERE r.code = ? AND p.code = ?`, [policy.role, code]);
+        }
       }
       const [roles] = await connection.execute(`SELECT r.id FROM platform_admin_roles r
         JOIN platform_admin_role_permissions rp ON rp.role_id = r.id
@@ -73,6 +76,16 @@ module.exports = function createAuthRepository(pool) {
         WHERE r.code = ? AND r.is_active = 1 AND p.code = ?`, ['platform_administrator', 'overview.read']);
       if (!roles.length) throw new Error('INITIAL_POLICY_UNAVAILABLE');
       return roles[0].id;
+    },
+    async grantOrganizationPolicy(connection) {
+      const [roles] = await connection.execute('SELECT id, is_active FROM platform_admin_roles WHERE code = ? FOR UPDATE', [policy.role]);
+      if (!roles.length || Number(roles[0].is_active) !== 1) throw new Error('INITIAL_POLICY_UNAVAILABLE');
+      for (const code of policy.organizationPermissions) {
+        await connection.execute('INSERT INTO platform_admin_permissions (code) VALUES (?) ON DUPLICATE KEY UPDATE code = VALUES(code)', [code]);
+        await connection.execute(`INSERT INTO platform_admin_role_permissions (role_id, permission_id)
+          SELECT ?, id FROM platform_admin_permissions WHERE code = ?
+          ON DUPLICATE KEY UPDATE permission_id = VALUES(permission_id)`, [roles[0].id, code]);
+      }
     },
     async createAccount(connection, { username, displayName, hash }, roleId) {
       const [result] = await connection.execute('INSERT INTO platform_admin_accounts (username, display_name, password_hash) VALUES (?, ?, ?)', [username, displayName, hash]);

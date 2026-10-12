@@ -6,7 +6,7 @@
   {{> sidebar}}
   <div class="admin-workspace">
     {{> topbar}}
-    <main id="main" tabindex="-1" class="admin-content">{{{body}}}</main>
+    <main id="main" tabindex="-1" class="admin-content">{{> organization-context}}{{{body}}}</main>
   </div>
   <script src="/superadmin/assets/js/admin.js" defer></script>
 </body>

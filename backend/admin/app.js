@@ -7,8 +7,9 @@ const { securityHeaders } = require('./middleware/security');
 const createRoutes = require('./routes');
 const createAuthRepository = require('./repositories/auth');
 const createAuthService = require('./services/auth');
+const createOrganizationRepository = require('./repositories/organizations');
 
-module.exports = function createAdminApp({ environment = process.env, pool, sessionStore, authRepository } = {}) {
+module.exports = function createAdminApp({ environment = process.env, pool, sessionStore, authRepository, organizationRepository } = {}) {
   const app = express();
   app.disable('x-powered-by');
   // Trust only an explicitly configured proxy range on this sub-application.
@@ -36,14 +37,18 @@ module.exports = function createAdminApp({ environment = process.env, pool, sess
   app.use(express.urlencoded({ extended: false, limit: '8kb' }));
   const repository = adminSession.configured ? (authRepository || createAuthRepository(pool || require('../db'))) : null;
   const authService = repository ? createAuthService(repository, environment.ADMIN_SESSION_SECRET) : null;
-  app.use(createRoutes({ sessionConfigured: adminSession.configured, authService, environment }));
+  // Resolve the pool only when used; tests of authentication need no business-table fixtures.
+  const organizations = organizationRepository || createOrganizationRepository({
+    execute: (...args) => (pool || require('../db')).execute(...args),
+  });
+  app.use(createRoutes({ sessionConfigured: adminSession.configured, authService, environment, organizationRepository: organizations }));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
     const status = [400, 404, 413].includes(error.status) ? error.status : 503;
     if (status === 503) console.error('Platform admin request failed:', error.code || 'ADMIN_UNAVAILABLE');
     res.status(status).render('restricted', {
       layout: 'auth', title: res.locals.labels?.unavailable || 'Panel unavailable',
-      message: (status === 503 ? res.locals.labels?.serviceError : res.locals.labels?.error) || 'Please try again later.',
+      message: (error.message === 'ORGANIZATION_NOT_FOUND' ? res.locals.labels?.organizationNotFound : status === 400 ? res.locals.labels?.invalidOrganizationRequest : status === 503 ? res.locals.labels?.serviceError : res.locals.labels?.error) || 'Please try again later.',
     });
   });
   return app;

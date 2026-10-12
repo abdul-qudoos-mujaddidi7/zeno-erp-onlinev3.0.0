@@ -1,10 +1,11 @@
 const { language } = require('../validators/preferences');
 const dictionaries = require('../services/translations');
+const organizationDictionaries = require('../services/organization-translations');
 
 exports.locale = (req, res, next) => {
   const chosen = language.safeParse(req.query.lang ?? req.session?.language ?? 'en');
   const code = chosen.success ? chosen.data : 'en';
-  res.locals.labels = dictionaries[code];
+  res.locals.labels = { ...dictionaries[code], ...organizationDictionaries[code] };
   res.locals.language = code;
   res.locals.htmlLanguage = { en: 'en', fa: 'fa-AF', ps: 'ps-AF' }[code];
   res.locals.direction = code === 'en' ? 'ltr' : 'rtl';
