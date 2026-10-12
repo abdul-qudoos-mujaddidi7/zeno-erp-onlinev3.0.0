@@ -1,5 +1,0 @@
-<section class="organization-context" aria-label="{{labels.organizationContext}}">
-  <div><span class="context-caption">{{labels.organizationContext}}</span><strong>{{contextName}}</strong>{{#if allOrganizationsMode}}<span class="context-note">{{labels.allModeDescription}}</span>{{/if}}</div>
-  {{#unless allOrganizationsMode}}{{#if canSelectOrganization}}<form method="post" action="/superadmin/organizations/select"><input type="hidden" name="_csrf" value="{{csrfToken}}"><input type="hidden" name="organizationId" value="all"><button class="btn btn-outline-primary" type="submit">{{labels.useAllOrganizations}}</button></form>{{/if}}{{/unless}}
-  {{#if contextReset}}<p role="status">{{labels.contextReset}}</p>{{/if}}
-</section>

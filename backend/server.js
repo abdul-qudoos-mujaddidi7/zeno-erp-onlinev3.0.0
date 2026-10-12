@@ -17,10 +17,6 @@ const compression = require("compression");
 
 app.use(compression());
 
-// Isolated platform panel: mount before ERP parsers and session middleware.
-// The legacy /api/superadmin panel and API protocols remain independent.
-app.use("/superadmin", require("./admin/app")());
-
 const session = require("express-session");
 const MySQLStore = require("express-mysql-session")(session);
 
