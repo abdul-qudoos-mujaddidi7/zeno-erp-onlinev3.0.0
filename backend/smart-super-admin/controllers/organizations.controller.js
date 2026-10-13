@@ -22,6 +22,8 @@ module.exports = (service) => ({
         basePath: "organization-list",
         query: req.query,
         detail: (row) => "/smart-super-admin/select-org/" + row.id,
+        download: (row) =>
+          "/smart-super-admin/download/organizations/" + row.id,
         extraActions: (row) => [
           {
             label: "Users",

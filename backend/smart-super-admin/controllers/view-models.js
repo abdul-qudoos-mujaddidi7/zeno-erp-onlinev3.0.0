@@ -86,12 +86,12 @@ function changes(record) {
 }
 function tableModel(
   result,
-  { title, basePath, detail, createUrl, query = {}, extraActions } = {},
+  { title, basePath, detail, createUrl, download, query = {}, extraActions } = {},
 ) {
   const suffix = new URLSearchParams(
     Object.entries(query).filter(
       ([key, value]) =>
-        ["q", "type", "status", "filter", "lang"].includes(key) &&
+        ["q", "type", "status", "filter", "from", "to", "lang"].includes(key) &&
         typeof value === "string",
     ),
   ).toString();
@@ -148,13 +148,32 @@ function tableModel(
         image: /image|photo/.test(column.name) ? image(row[column.name]) : null,
       })),
       detailUrl: detail?.(row),
+      downloadUrl: download?.(row),
       actions: extraActions?.(row) || [],
     })),
     pagination,
     limits,
     createUrl,
     tableName: result.tableName,
+    dateFilter: dateFilter(result, query),
     query,
   };
 }
-module.exports = { BASE, display, recordModel, tableModel, changes };
+// The from/to toolbar fields only appear when the queried table has a temporal
+// column; the label names the column the range is applied to.
+function dateFilter(result, query) {
+  if (!result.dateColumn) return { enabled: false };
+  return {
+    enabled: true,
+    label: result.dateColumn.replaceAll("_", " "),
+    from:
+      typeof query.from === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(query.from)
+        ? query.from.slice(0, 16)
+        : "",
+    to:
+      typeof query.to === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(query.to)
+        ? query.to.slice(0, 16)
+        : "",
+  };
+}
+module.exports = { BASE, clean, display, recordModel, tableModel, changes };

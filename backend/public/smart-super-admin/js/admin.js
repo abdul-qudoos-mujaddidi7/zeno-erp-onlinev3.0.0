@@ -6,6 +6,59 @@
   const backdrop = document.querySelector("[data-sidebar-backdrop]");
   const collapse = document.querySelector("[data-sidebar-collapse]");
   const desktop = window.matchMedia("(min-width:992px)");
+  const sidebarMenu = sidebar?.querySelector("[data-sidebar-scroll]");
+  const sidebarStateKey = "smartSuperAdmin.sidebarState";
+  function readSidebarState() {
+    try {
+      const state = JSON.parse(sessionStorage.getItem(sidebarStateKey) || "{}");
+      return state && typeof state === "object" ? state : {};
+    } catch {
+      return {};
+    }
+  }
+  function saveSidebarState() {
+    if (!sidebarMenu) return;
+    try {
+      sessionStorage.setItem(
+        sidebarStateKey,
+        JSON.stringify({
+          scrollTop: sidebarMenu.scrollTop,
+          groups: Object.fromEntries(
+            [...sidebarMenu.querySelectorAll("[data-sidebar-group]")].map(
+              (group) => [group.dataset.sidebarGroup, group.open],
+            ),
+          ),
+        }),
+      );
+    } catch {}
+  }
+  const savedSidebarState = readSidebarState();
+  if (sidebarMenu && Number.isFinite(savedSidebarState.scrollTop))
+    sidebarMenu.scrollTop = savedSidebarState.scrollTop;
+  sidebarMenu?.querySelectorAll("[data-sidebar-group]").forEach((group) => {
+    const isActive = group.querySelector('[aria-current="page"]');
+    const savedOpen = savedSidebarState.groups?.[group.dataset.sidebarGroup];
+    if (isActive) group.open = true;
+    else if (typeof savedOpen === "boolean") group.open = savedOpen;
+    group.addEventListener("toggle", saveSidebarState);
+  });
+  sidebarMenu?.addEventListener("click", (event) => {
+    const link = event.target.closest("a[href]");
+    if (
+      !link ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      (link.target && link.target !== "_self")
+    )
+      return;
+    const destination = new URL(link.href, window.location.href);
+    if (destination.origin === window.location.origin) saveSidebarState();
+  });
+  window.addEventListener("pagehide", saveSidebarState);
   let collapsed = false;
   try {
     collapsed =
@@ -113,6 +166,65 @@
       if (!window.confirm(form.dataset.confirm)) event.preventDefault();
     }),
   );
+  function closeRowMenus(except) {
+    document.querySelectorAll(".row-action-menu[open]").forEach((menu) => {
+      if (menu === except) return;
+      menu.open = false;
+      menu.querySelector(".row-action-menu-items")?.removeAttribute("style");
+    });
+  }
+  document.querySelectorAll("tr[data-row-url]").forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        event.target.closest("a,button,summary,input,select,textarea,label")
+      )
+        return;
+      window.location.href = row.dataset.rowUrl;
+    });
+    row.addEventListener("contextmenu", (event) => {
+      const menu = row.querySelector(".row-action-menu"),
+        items = menu?.querySelector(".row-action-menu-items");
+      if (!menu || !items) return;
+      event.preventDefault();
+      closeRowMenus(menu);
+      menu.open = true;
+      const left = Math.max(
+          8,
+          Math.min(event.clientX, window.innerWidth - items.offsetWidth - 8),
+        ),
+        top = Math.max(
+          8,
+          Math.min(event.clientY, window.innerHeight - items.offsetHeight - 8),
+        );
+      items.style.position = "fixed";
+      items.style.insetInlineEnd = "auto";
+      items.style.insetBlockStart = "auto";
+      items.style.left = left + "px";
+      items.style.top = top + "px";
+    });
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".row-action-menu")) closeRowMenus();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeRowMenus();
+  });
+  document.addEventListener("scroll", () => closeRowMenus(), true);
+  window.addEventListener("resize", () => closeRowMenus());
+  const returnTo = window.location.pathname + window.location.search;
+  document
+    .querySelectorAll('a[href^="/smart-super-admin/select-org/"]')
+    .forEach((link) => {
+      const url = new URL(link.href, window.location.origin);
+      url.searchParams.set("returnTo", returnTo);
+      link.href = url.pathname + url.search;
+    });
   const search = document.querySelector("[data-org-search]"),
     results = document.querySelector("[data-org-results]");
   let timer,
@@ -131,7 +243,12 @@
         results.replaceChildren();
         for (const row of rows) {
           const link = document.createElement("a");
-          link.href = base + "/select-org/" + row.id;
+          link.href =
+            base +
+            "/select-org/" +
+            row.id +
+            "?returnTo=" +
+            encodeURIComponent(window.location.pathname + window.location.search);
           link.textContent = row.name + " (#" + row.id + ")";
           results.append(link);
         }

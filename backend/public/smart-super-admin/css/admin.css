@@ -389,10 +389,12 @@ pre {
   min-width: 0;
 }
 .index-toolbar-main {
+  flex-wrap: wrap;
   justify-content: flex-end;
   justify-self: end;
-  width: min(100%, 44rem);
+  width: min(100%, 48rem);
   margin: 0;
+  row-gap: 0.5rem;
 }
 [dir="rtl"] .index-toolbar-actions,
 [dir="rtl"] .index-toolbar-main {
@@ -482,6 +484,10 @@ pre {
   flex: 0 1 9rem;
   margin: 0;
 }
+.index-filter-field--date {
+  width: 12.5rem;
+  flex: 0 1 12.5rem;
+}
 .index-filter-field span {
   position: absolute;
   inset-inline-start: 0.75rem;
@@ -521,19 +527,33 @@ pre {
 }
 .data-table-wrap {
   width: 100%;
-  max-height: calc(100dvh - 19rem);
+  max-height: none;
   min-height: 12rem;
-  overflow: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #b8c4d2 transparent;
 }
 .data-table-wrap::-webkit-scrollbar {
-  display: none;
+  width: auto;
+  height: auto;
+}
+.data-table-wrap::-webkit-scrollbar:vertical {
   width: 0;
-  height: 0;
+}
+.data-table-wrap::-webkit-scrollbar:horizontal {
+  height: 8px;
+}
+.data-table-wrap::-webkit-scrollbar-thumb {
+  background: #b8c4d2;
+  border-radius: 999px;
+}
+.data-table-wrap::-webkit-scrollbar-track {
+  background: transparent;
 }
 .data-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   margin: 0;
   border-collapse: separate;
   border-spacing: 0;
@@ -552,6 +572,12 @@ pre {
   font-weight: 700;
   white-space: nowrap;
   text-transform: capitalize;
+}
+.data-table th:last-child {
+  inset-inline-end: 0;
+  z-index: 4;
+  border-inline-start: 1px solid #dfe5ed;
+  background: #fff;
 }
 .data-table th a {
   display: inline-flex;
@@ -572,6 +598,26 @@ pre {
   color: #172033;
   background: inherit;
   line-height: 1.5;
+  white-space: nowrap;
+}
+.data-table td:last-child:not([colspan]) {
+  position: sticky;
+  inset-inline-end: 0;
+  z-index: 1;
+  border-inline-start: 1px solid #e0e0e0;
+  white-space: nowrap;
+}
+.data-table td:last-child:has(.row-action-menu[open]) {
+  z-index: 5;
+}
+.data-table tbody tr.row-clickable,
+.mobile-cards tbody tr.row-clickable {
+  cursor: pointer;
+}
+.data-table tbody tr.row-clickable:hover,
+.data-table tbody tr.row-clickable:focus-within,
+.mobile-cards tbody tr.row-clickable:hover {
+  background: #eff6ff;
 }
 .data-table tbody tr:nth-child(even) {
   background: #f5f7fa;
@@ -580,6 +626,7 @@ pre {
   background: #fff;
 }
 .data-table .cell-value {
+  display: inline-block;
   min-width: 4rem;
   max-width: 18rem;
   overflow: hidden;
@@ -626,10 +673,6 @@ pre {
   color: var(--smart-primary);
   border: 1px solid #bfdbfe;
 }
-.data-table .row-actions {
-  flex-wrap: nowrap;
-  gap: 0.375rem;
-}
 .row-action {
   display: inline-flex;
   align-items: center;
@@ -643,12 +686,49 @@ pre {
   color: var(--smart-primary);
   box-shadow: none;
 }
-.row-action-text {
-  width: auto;
-  padding: 0 0.625rem;
-  font-size: 0.75rem;
-  text-transform: none;
+.row-action-menu {
+  position: relative;
+  width: max-content;
+  margin-inline-start: auto;
+}
+.row-action-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.row-action-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.row-action-menu-items {
+  position: absolute;
+  inset-block-start: calc(100% + 0.25rem);
+  inset-inline-end: 0;
+  z-index: 20;
+  display: none;
+  max-height: min(60vh, 20rem);
+  overflow: auto;
+  min-width: 9rem;
+  padding: 0.35rem;
+  border: 1px solid #dfe5ed;
+  border-radius: 0.625rem;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 14%);
+}
+.row-action-menu[open] .row-action-menu-items {
+  display: grid;
+}
+.row-action-menu-item {
+  display: block;
+  min-height: 40px;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.375rem;
+  color: var(--smart-primary);
+  text-decoration: none;
   white-space: nowrap;
+}
+.row-action-menu-item:hover,
+.row-action-menu-item:focus-visible {
+  background: #eff6ff;
+  color: var(--smart-primary);
 }
 .index-footer {
   padding: 0.875rem 1.25rem 1rem;
@@ -887,13 +967,15 @@ pre {
     padding-inline: 0.75rem;
   }
   .data-table-wrap {
-    max-height: none;
-    overflow-x: hidden;
+    overflow-x: auto;
   }
   .mobile-cards .data-table,
   .mobile-cards tbody {
     display: block;
     min-width: 0;
+  }
+  .mobile-cards .data-table {
+    width: 100%;
   }
   .mobile-cards thead {
     display: none;
@@ -906,6 +988,11 @@ pre {
     overflow: hidden;
     background: #fff;
   }
+  .mobile-cards tbody tr:has(.row-action-menu[open]) {
+    position: relative;
+    z-index: 5;
+    overflow: visible;
+  }
   .mobile-cards .data-table td {
     display: flex;
     align-items: center;
@@ -915,6 +1002,7 @@ pre {
     padding: 0.4rem 0.7rem;
     border-bottom: 1px solid #eef2f7;
     text-align: end;
+    white-space: normal;
   }
   .mobile-cards .data-table tbody tr:nth-child(even) {
     background: #fff;
@@ -939,9 +1027,10 @@ pre {
   .mobile-cards td:last-child {
     border-bottom: 0;
   }
-  .mobile-cards .row-actions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
+  .mobile-cards .data-table th:last-child,
+  .mobile-cards .data-table td:last-child:not([colspan]) {
+    position: static;
+    border-inline-start: 0;
   }
   .row-action {
     min-height: 44px;

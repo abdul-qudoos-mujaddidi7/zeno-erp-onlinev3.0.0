@@ -9,8 +9,19 @@ module.exports = (service) => ({
         basePath: "list/" + name,
         query: req.query,
         detail: (row) => `/smart-super-admin/view/${name}/${row.id}`,
+        download: (row) => `/smart-super-admin/download/${name}/${row.id}`,
       }),
     });
+  },
+  async download(req, res) {
+    const { tableName, id } = req.params;
+    const record = await service.record(tableName, id);
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${tableName}-${id}.json"`,
+    );
+    res.send(JSON.stringify(vm.clean(record), null, 2));
   },
   async detail(req, res) {
     const { record, related } = await service.detail(

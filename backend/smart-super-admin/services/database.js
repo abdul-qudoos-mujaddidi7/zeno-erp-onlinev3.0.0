@@ -1,4 +1,26 @@
 const { buildPagination } = require("../helpers/handlebars-helpers");
+const dates = require("../helpers/date-helpers");
+const PREFERRED_DATE_COLUMNS = [
+  "created_at",
+  "inserted_at",
+  "updated_at",
+  "date",
+  "datetime",
+];
+// The column a from/to range filter applies to: the usual audit timestamp when
+// the table has one, otherwise the first temporal-looking column.
+function rangeColumn(columns) {
+  const names = columns.map((column) => column.name);
+  const preferred = PREFERRED_DATE_COLUMNS.find((name) => names.includes(name));
+  if (preferred) return columns[names.indexOf(preferred)];
+  return (
+    columns.find(
+      (column) =>
+        /_(at|date|time)$/.test(column.name) &&
+        /date|time|stamp/i.test(String(column.type)),
+    ) || null
+  );
+}
 const TABLES = Object.freeze([
   "organizations",
   "org_types",
@@ -118,34 +140,48 @@ module.exports = function createDatabase(pool) {
       values.push(org);
     }
     for (const [column, value] of Object.entries(filters)) {
+      if (column.startsWith("$")) continue;
       if (value !== undefined && value !== "" && value !== "all") {
-        if (column === "$search") {
-          const fields = [
-            "name",
-            "username",
-            "code",
-            "message",
-            "invoice_number",
-            "script",
-          ].filter((field) => names.includes(field));
-          if (fields.length) {
-            const term =
-              "%" + text(value, 120).replace(/[!%_]/g, (c) => "!" + c) + "%";
-            conditions.push(
-              "(" +
-                fields
-                  .map((field) => "`" + field + "` LIKE ? ESCAPE '!'")
-                  .join(" OR ") +
-                ")",
-            );
-            values.push(...fields.map(() => term));
-          }
-        } else {
-          if (!names.includes(column)) fail("Unsupported filter");
-          conditions.push("`" + column + "`=?");
-          values.push(text(String(value), 255));
-        }
+        if (!names.includes(column)) fail("Unsupported filter");
+        conditions.push("`" + column + "`=?");
+        values.push(text(String(value), 255));
       }
+    }
+    if (filters.$search !== undefined && String(filters.$search) !== "") {
+      const fields = [
+        "name",
+        "username",
+        "code",
+        "message",
+        "invoice_number",
+        "script",
+      ].filter((field) => names.includes(field));
+      if (fields.length) {
+        const term =
+          "%" +
+          text(String(filters.$search), 120).replace(/[!%_]/g, (c) => "!" + c) +
+          "%";
+        conditions.push(
+          "(" +
+            fields.map((field) => "`" + field + "` LIKE ? ESCAPE '!'").join(
+              " OR ",
+            ) +
+            ")",
+        );
+        values.push(...fields.map(() => term));
+      }
+    }
+    const range = rangeColumn(columns);
+    for (const [name, operator] of [
+      ["$from", ">="],
+      ["$to", "<="],
+    ]) {
+      const value = filters[name];
+      if (value === undefined || value === "") continue;
+      if (!range) fail("This table has no date column to filter");
+      const stamp = dates.formatMySQLDateKabulToUTC(value);
+      conditions.push("`" + range.name + "`" + operator + "?");
+      values.push(/^date$/i.test(String(range.type)) ? stamp.slice(0, 10) : stamp);
     }
     const where = conditions.length ? " WHERE " + conditions.join(" AND ") : "";
     const [counts] = await pool.execute(
@@ -173,6 +209,7 @@ module.exports = function createDatabase(pool) {
       org,
       sort,
       direction,
+      dateColumn: range ? range.name : null,
     };
   }
   async function lookup(table) {

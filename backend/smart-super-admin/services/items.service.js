@@ -1,6 +1,11 @@
 module.exports = (db) => ({
   list: (params, query) =>
-    db.list(params.tableName, params, { $search: query.q }),
+    db.list(params.tableName, params, {
+      $search: query.q,
+      $from: query.from,
+      $to: query.to,
+    }),
+  record: (table, id) => db.one(table, id),
   async detail(table, id) {
     const record = await db.one(table, id),
       related = [];

@@ -372,23 +372,26 @@ body {
   margin-inline: auto;
   padding: clamp(0.65rem, 1.3vw, 1.25rem);
   overflow: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.smart-workspace > main::-webkit-scrollbar:vertical {
+  width: 0;
 }
 .smart-workspace > main:has(> .index-page) {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .smart-workspace > main > .index-page {
   display: flex;
-  flex: 1;
+  flex: 0 0 auto;
   flex-direction: column;
-  min-height: 0;
 }
 .smart-workspace > main > .index-page > .index-panel {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
 }
 .index-toolbar,
 .index-footer,
@@ -398,13 +401,12 @@ body {
 }
 .index-content {
   display: flex;
-  flex: 1;
+  flex: 0 0 auto;
   flex-direction: column;
-  min-height: 0;
 }
 .data-table-wrap {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: 12rem;
   max-height: none;
 }
 .index-grid-content {

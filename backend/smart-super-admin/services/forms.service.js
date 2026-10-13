@@ -311,6 +311,8 @@ module.exports = function formsService(db, key) {
         {
           [filterColumn]: query.filter,
           $search: query.q,
+          $from: query.from,
+          $to: query.to,
         },
         key === "subscriptions"
           ? {

@@ -30,6 +30,8 @@ module.exports = (db) => ({
         ...(org ? { id: String(org) } : {}),
         ...(query.type ? { type: query.type } : {}),
         $search: query.q,
+        $from: query.from,
+        $to: query.to,
       },
       {
         ...Object.fromEntries(

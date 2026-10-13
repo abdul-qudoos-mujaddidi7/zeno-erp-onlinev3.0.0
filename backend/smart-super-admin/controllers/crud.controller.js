@@ -11,6 +11,8 @@ module.exports = (service, key) => ({
           `/smart-super-admin/${path}/${row.id}${key === "subscriptions" ? "/" + (row.org_id || 0) : ""}`,
         createUrl: `/smart-super-admin/${path}${key === "subscriptions" ? "/0/" + res.locals.orgId : ""}`,
         query: req.query,
+        download: (row) =>
+          `/smart-super-admin/download/${service.config.table}/${row.id}`,
         extraActions:
           key === "subscriptions"
             ? (row) => [

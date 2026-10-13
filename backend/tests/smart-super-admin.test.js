@@ -82,6 +82,43 @@ test("removed error-log, command, and sync-log routes return 404", async () => {
   }
 });
 
+test("organization selection returns to the current page and updates its organization filter", async () => {
+  const controller = require("../smart-super-admin/controllers/dashboard.controller")({
+    select: async (id) => Number(id),
+  });
+  for (const [returnTo, expected] of [
+    [
+      "/smart-super-admin/list/products/name/ASC/0/20/2?q=soap",
+      "/smart-super-admin/list/products/name/ASC/42/20/2?q=soap",
+    ],
+    [
+      "/smart-super-admin/organization-list/name/ASC/0/20/2",
+      "/smart-super-admin/organization-list/name/ASC/42/20/2",
+    ],
+    [
+      "/smart-super-admin/list-subscriptions/id/DESC/0/20/1",
+      "/smart-super-admin/list-subscriptions/id/DESC/42/20/1",
+    ],
+    [
+      "https://example.com/unsafe",
+      "/smart-super-admin",
+    ],
+  ]) {
+    let redirect;
+    const req = {
+      params: { orgId: "42" },
+      query: { returnTo },
+      session: { save: (callback) => callback(null) },
+    };
+    await controller.selectOrg(req, {
+      redirect: (status, url) => {
+        redirect = { status, url };
+      },
+    });
+    assert.deepEqual(redirect, { status: 303, url: expected });
+  }
+});
+
 test("Kabul dates round-trip independently of host timezone and invoice IDs stay unique", () => {
   const old = process.env.TZ;
   try {
@@ -182,6 +219,21 @@ test("all requested templates compile and source has no legacy links or authenti
     path.join(__dirname, "../views/smart-super-admin"),
   ).filter((file) => file.endsWith(".hbs"));
   assert.ok(templates.length >= 24);
+  const table = fs.readFileSync(
+    path.join(
+      __dirname,
+      "../views/smart-super-admin/partials/table.hbs",
+    ),
+    "utf8",
+  );
+  assert.match(table, /bi-three-dots-vertical/);
+  assert.match(table, /row-action-menu-items/);
+  assert.match(table, /data-row-menu/);
+  assert.match(table, /data-row-url="\{\{detailUrl\}\}"/);
+  assert.match(table, /name="from"/);
+  assert.match(table, /name="to"/);
+  assert.match(table, /type="datetime-local"/);
+  assert.match(table, /downloadUrl/);
   for (const file of templates) {
     const source = fs.readFileSync(file, "utf8");
     handlebars.precompile(source);
@@ -220,5 +272,219 @@ test("browser feature editor adds/removes safe DOM rows without inline scripts",
   assert.equal(document.querySelector('[name="feature_id[]"]').value, "4");
   document.querySelector("[data-feature-remove]").click();
   assert.equal(document.querySelectorAll(".feature-row").length, 0);
+  dom.window.close();
+});
+
+test("sidebar navigation restores its scroll position and expanded group", () => {
+  const { JSDOM } = require("jsdom");
+  const dom = new JSDOM(
+    '<aside id="smart-sidebar"><div class="sidebar-menu" data-sidebar-scroll><details data-sidebar-group="records"><summary>Records</summary><a href="/smart-super-admin/list/warehouses/id/DESC/0/20/1" aria-current="page">Warehouse</a></details></div></aside>',
+    { runScripts: "outside-only", url: "http://localhost/smart-super-admin/list/warehouses/id/DESC/0/20/1" },
+  );
+  dom.window.matchMedia = () => ({ addEventListener() {} });
+  dom.window.sessionStorage.setItem(
+    "smartSuperAdmin.sidebarState",
+    JSON.stringify({ scrollTop: 128, groups: { records: true } }),
+  );
+  dom.window.eval(
+    fs.readFileSync(
+      path.join(__dirname, "../public/smart-super-admin/js/admin.js"),
+      "utf8",
+    ),
+  );
+  const menu = dom.window.document.querySelector("[data-sidebar-scroll]"),
+    group = dom.window.document.querySelector("[data-sidebar-group]");
+  assert.equal(menu.scrollTop, 128);
+  assert.equal(group.open, true);
+  menu.scrollTop = 176;
+  menu.addEventListener("click", (event) => event.preventDefault());
+  menu.querySelector("a").dispatchEvent(
+    new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }),
+  );
+  assert.equal(
+    JSON.parse(
+      dom.window.sessionStorage.getItem("smartSuperAdmin.sidebarState"),
+    ).scrollTop,
+    176,
+  );
+  dom.window.close();
+});
+
+function recordingPool(columns) {
+  const calls = [];
+  return {
+    calls,
+    execute: async (sql, params) => {
+      calls.push({ sql, params });
+      if (/information_schema/.test(sql)) return [columns];
+      if (/COUNT\(\*\)/.test(sql)) return [[{ count: 0 }]];
+      return [[]];
+    },
+  };
+}
+
+test("list date range filters bind to the table's temporal column in Kabul time", async () => {
+  const pool = recordingPool([
+    { name: "id", type: "bigint" },
+    { name: "name", type: "varchar" },
+    { name: "created_at", type: "datetime" },
+  ]);
+  const db = database(pool);
+  const result = await db.list(
+    "products",
+    { sortcolumn: "id", sortdir: "DESC", org: 0, limit: 20, page: 1 },
+    { $from: "2026-10-01T00:00", $to: "2026-10-02T12:30" },
+  );
+  assert.equal(result.dateColumn, "created_at");
+  const query = pool.calls.find(
+    (call) => /FROM `products`/.test(call.sql) && !/COUNT/.test(call.sql),
+  );
+  assert.match(query.sql, /`created_at`>=\?/);
+  assert.match(query.sql, /`created_at`<=\?/);
+  assert.deepEqual(query.params, [
+    "2026-09-30 19:30:00.000",
+    "2026-10-02 08:00:00.000",
+    20,
+    0,
+  ]);
+});
+
+test("a date-typed column compares on the day and unusable ranges fail with 400", async () => {
+  const dayPool = recordingPool([
+    { name: "id", type: "bigint" },
+    { name: "date", type: "date" },
+  ]);
+  const dayResult = await database(dayPool).list(
+    "journals",
+    { org: 0, limit: 20, page: 1 },
+    { $from: "2026-10-01T00:00" },
+  );
+  assert.equal(dayResult.dateColumn, "date");
+  assert.ok(
+    dayPool.calls
+      .find((call) => /FROM `journals`/.test(call.sql))
+      .params.includes("2026-09-30"),
+  );
+
+  const plain = database(
+    recordingPool([
+      { name: "id", type: "bigint" },
+      { name: "name", type: "varchar" },
+    ]),
+  );
+  await assert.rejects(
+    () =>
+      plain.list(
+        "features",
+        { org: 0, limit: 20, page: 1 },
+        { $from: "2026-10-01T00:00" },
+      ),
+    (error) => error.status === 400,
+    "a table without a temporal column rejects a range filter",
+  );
+  await assert.rejects(
+    () =>
+      plain.list(
+        "products",
+        { org: 0, limit: 20, page: 1 },
+        { $from: "not-a-date" },
+      ),
+    (error) => error.status === 400,
+    "an unparsable range value is rejected",
+  );
+});
+
+test("row download streams an attachment without credential columns", async () => {
+  const express = require("express");
+  const parent = express();
+  parent.use(
+    "/smart-super-admin",
+    require("../smart-super-admin/app")({
+      pool: {
+        execute: async (sql) => {
+          if (/information_schema/.test(sql))
+            return [
+              [
+                { name: "id", type: "bigint" },
+                { name: "name", type: "varchar" },
+                { name: "api_token", type: "varchar" },
+              ],
+            ];
+          return [[{ id: 7, name: "Acme Trading", api_token: "PRIVATE" }]];
+        },
+      },
+    }),
+  );
+  const server = parent.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${server.address().port}/smart-super-admin/download/organizations/7`,
+    );
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /application\/json/);
+    assert.equal(
+      response.headers.get("content-disposition"),
+      'attachment; filename="organizations-7.json"',
+    );
+    assert.deepEqual(await response.json(), { id: 7, name: "Acme Trading" });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("table rows open their record on click and the action menu on right-click", () => {
+  const { JSDOM, VirtualConsole } = require("jsdom");
+  const virtualConsole = new VirtualConsole();
+  const navigations = [];
+  virtualConsole.on("jsdomError", (error) => navigations.push(error.message));
+  const dom = new JSDOM(
+    '<table><tbody><tr class="row-clickable" data-row-url="/smart-super-admin/view/products/3"><td>Soap</td><td><details class="row-action-menu" data-row-menu><summary>menu</summary><div class="row-action-menu-items"><a class="row-action-menu-item" href="/smart-super-admin/view/products/3">Details</a></div></details></td></tr></tbody></table>',
+    {
+      runScripts: "outside-only",
+      url: "http://localhost/smart-super-admin/list/products/id/DESC/0/20/1",
+      virtualConsole,
+    },
+  );
+  dom.window.matchMedia = () => ({ addEventListener() {} });
+  dom.window.eval(
+    fs.readFileSync(
+      path.join(__dirname, "../public/smart-super-admin/js/admin.js"),
+      "utf8",
+    ),
+  );
+  const document = dom.window.document,
+    row = document.querySelector("tr"),
+    menu = document.querySelector(".row-action-menu"),
+    items = document.querySelector(".row-action-menu-items");
+  document.querySelector("td").dispatchEvent(
+    new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }),
+  );
+  assert.match(navigations.join(" | "), /navigation/i);
+  navigations.length = 0;
+  menu.querySelector("summary").dispatchEvent(
+    new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }),
+  );
+  assert.equal(
+    navigations.length,
+    0,
+    "opening the row menu must not navigate away",
+  );
+  row.dispatchEvent(
+    new dom.window.MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 60,
+      clientY: 40,
+    }),
+  );
+  assert.equal(menu.open, true);
+  assert.equal(items.style.position, "fixed");
+  assert.match(items.style.left, /^\d+px$/);
+  assert.match(items.style.top, /^\d+px$/);
+  document.dispatchEvent(
+    new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+  );
+  assert.equal(menu.open, false);
   dom.window.close();
 });
