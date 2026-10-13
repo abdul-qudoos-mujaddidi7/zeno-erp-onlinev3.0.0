@@ -237,6 +237,67 @@ test("generic Records rows expose edit links for the generic editor", async () =
   );
 });
 
+test("table models mark records with status zero for inactive row styling", () => {
+  const { tableModel } = require("../smart-super-admin/controllers/view-models");
+  const result = {
+    rows: [{ id: 1, status: 0 }, { id: 2, status: "0" }, { id: 3, status: 1 }],
+    columns: [{ name: "name", type: "varchar" }, { name: "status", type: "int" }],
+    tableName: "products",
+    total: 3,
+    page: 1,
+    totalPages: 1,
+    limit: 20,
+    org: 0,
+    sort: "id",
+    direction: "DESC",
+  };
+  const model = tableModel(result, { title: "Products", basePath: "products" });
+  assert.deepEqual(
+    model.rows.map((row) => row.inactive),
+    [true, true, false],
+  );
+});
+
+test("generic table renders only status-zero rows with inactive styling", async () => {
+  const express = require("express");
+  const app = express();
+  app.use(
+    "/smart-super-admin",
+    require("../smart-super-admin/app")({
+      pool: {
+        execute: async (sql) => {
+          if (/information_schema/.test(sql))
+            return [
+              [
+                { name: "id", type: "bigint" },
+                { name: "name", type: "varchar" },
+                { name: "status", type: "int" },
+              ],
+            ];
+          if (/COUNT\(\*\)/.test(sql)) return [[{ count: 2 }]];
+          return [[
+            { id: 2, name: "Inactive", status: 0 },
+            { id: 1, name: "Active", status: 1 },
+          ]];
+        },
+      },
+    }),
+  );
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${server.address().port}/smart-super-admin/list/products/id/DESC/0/20/1`,
+    );
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /class="row-clickable row-inactive"[^>]*>\s*<td[^>]*>.*?Inactive/s);
+    assert.match(html, /class="row-clickable "[^>]*>\s*<td[^>]*>.*?Active/s);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("generic Records editor excludes identifiers and safely validates updates", async () => {
   const saved = [];
   const columns = [

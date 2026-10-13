@@ -625,6 +625,14 @@ pre {
 .data-table tbody tr:nth-child(odd) {
   background: #fff;
 }
+.data-table tbody tr.row-inactive {
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+.data-table tbody tr.row-inactive.row-clickable:hover,
+.data-table tbody tr.row-inactive.row-clickable:focus-within {
+  background: #fecaca;
+}
 .data-table .cell-value {
   display: inline-block;
   min-width: 4rem;
@@ -1006,6 +1014,13 @@ pre {
   }
   .mobile-cards .data-table tbody tr:nth-child(even) {
     background: #fff;
+  }
+  .mobile-cards .data-table tbody tr.row-inactive {
+    background: #fee2e2;
+  }
+  .mobile-cards .data-table tbody tr.row-inactive.row-clickable:hover,
+  .mobile-cards .data-table tbody tr.row-inactive.row-clickable:focus-within {
+    background: #fecaca;
   }
   .mobile-cards td[data-label]::before {
     content: attr(data-label);

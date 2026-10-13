@@ -141,6 +141,7 @@ function tableModel(
     rowEnd: Math.min(result.page * result.limit, result.total),
     rows: result.rows.map((row) => ({
       id: row.id,
+      inactive: row.status === 0 || row.status === "0",
       cells: result.columns.map((column) => ({
         label: column.name.replaceAll("_", " "),
         badge: /(^is_active$|status$)/.test(column.name),
