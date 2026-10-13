@@ -555,6 +555,33 @@ test("all requested templates compile and Smart Super Admin uses the session gat
   assert.match(accessControl, /requireSameOriginForChanges/);
 });
 
+test("Smart Super Admin index pages keep vertical scrolling inside the table or card", () => {
+  const shell = fs.readFileSync(
+    path.join(__dirname, "../public/smart-super-admin/css/shell.css"),
+    "utf8",
+  );
+  assert.match(
+    shell,
+    /\.smart-workspace > main:has\(> \.index-page\)[\s\S]*?overflow-y:\s*hidden;/,
+  );
+  assert.match(
+    shell,
+    /\.smart-workspace > main > \.index-page[\s\S]*?min-height:\s*0;/,
+  );
+  assert.match(
+    shell,
+    /\.data-table-wrap\s*\{[^}]*flex:\s*1 1 auto;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/,
+  );
+  assert.match(
+    shell,
+    /\.index-grid-content\s*\{[^}]*min-height:\s*0;[^}]*overflow:\s*auto;/,
+  );
+  assert.match(
+    shell,
+    /@media \(max-width: 767px\)[\s\S]*?\.smart-workspace > main:has\(> \.index-page\)\s*\{[^}]*overflow:\s*auto;/,
+  );
+});
+
 test("browser feature editor adds/removes safe DOM rows without inline scripts", async () => {
   const { JSDOM } = require("jsdom");
   const dom = new JSDOM(

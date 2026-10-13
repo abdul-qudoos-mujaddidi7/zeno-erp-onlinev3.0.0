@@ -382,16 +382,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-height: 0;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
 }
 .smart-workspace > main > .index-page {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   flex-direction: column;
+  min-height: 0;
 }
 .smart-workspace > main > .index-page > .index-panel {
-  flex: 0 0 auto;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
 }
 .index-toolbar,
 .index-footer,
@@ -401,13 +406,20 @@ body {
 }
 .index-content {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   flex-direction: column;
+  min-height: 0;
 }
 .data-table-wrap {
-  flex: 0 0 auto;
-  min-height: 12rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
   max-height: none;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #b8c4d2 transparent;
 }
 .index-grid-content {
   flex: 1;
@@ -550,11 +562,16 @@ body {
   .smart-workspace > main > .index-page {
     display: block;
   }
+  .smart-workspace > main > .index-page > .index-panel {
+    display: block;
+  }
   .index-content {
     display: block;
   }
   .data-table-wrap {
+    max-height: 70dvh;
     min-height: 12rem;
+    overflow-y: auto;
   }
   .sidebar-profile-menu .form-select,
   .sidebar-profile-menu .btn {
