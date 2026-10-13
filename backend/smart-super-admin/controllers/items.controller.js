@@ -10,7 +10,6 @@ module.exports = (service) => ({
         query: req.query,
         detail: (row) => `/smart-super-admin/view/${name}/${row.id}`,
       }),
-      syncLogs: name === "sync_logs",
     });
   },
   async detail(req, res) {
@@ -27,11 +26,5 @@ module.exports = (service) => ({
         rows: section.rows.map((row) => vm.recordModel(row)),
       })),
     });
-  },
-  async clearSync(req, res) {
-    if (req.body.action !== "clear_logs")
-      throw Object.assign(new Error("Invalid log action"), { status: 400 });
-    await service.clearSync();
-    res.redirect(303, "/smart-super-admin/list/sync_logs/id/DESC/0/20/1");
   },
 });

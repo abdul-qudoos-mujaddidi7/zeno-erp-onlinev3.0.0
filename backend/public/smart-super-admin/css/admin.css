@@ -524,8 +524,13 @@ pre {
   max-height: calc(100dvh - 19rem);
   min-height: 12rem;
   overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #b8c4d2 transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.data-table-wrap::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 .data-table {
   width: 100%;

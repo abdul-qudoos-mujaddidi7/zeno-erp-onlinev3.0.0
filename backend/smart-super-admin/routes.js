@@ -6,8 +6,6 @@ module.exports = (db) => {
     "dashboard",
     "organizations",
     "items",
-    "error-logs",
-    "commands",
     "org-types",
     "features",
     "subscription-plans",
@@ -20,8 +18,6 @@ module.exports = (db) => {
   const d = controllers.dashboard,
     o = controllers.organizations,
     i = controllers.items,
-    e = controllers["error-logs"],
-    c = controllers.commands,
     t = controllers["org-types"],
     f = controllers.features,
     p = controllers["subscription-plans"],
@@ -37,14 +33,6 @@ module.exports = (db) => {
   router.get("/select-org/:orgId", d.selectOrg);
   router.get("/list/:tableName/:sortcolumn/:sortdir/:org/:limit/:page", i.list);
   router.get("/view/:tableName/:id", i.detail);
-  router.post("/list/sync_logs", i.clearSync);
-  router.get("/list-error-logs/:sortcolumn/:sortdir/:org/:limit/:page", e.list);
-  router.get("/view-error-log/:tableName/:id", e.detail);
-  router.post("/error-logs/clear", e.clear);
-  router.get("/list-commands/:sortcolumn/:sortdir/:org/:limit/:page", c.list);
-  router.get("/command/:commandId", c.detail);
-  router.post("/command/execute", c.execute);
-  router.get("/command-result/:commandId", c.result);
   router.get("/list-org-types/:sortcolumn/:sortdir/:org/:limit/:page", t.list);
   router.get(["/org-type", "/org-type/:id"], t.form);
   router.post("/org-type", t.save);

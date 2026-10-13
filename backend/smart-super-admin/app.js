@@ -64,8 +64,6 @@ module.exports = function createSmartSuperAdmin({ pool } = {}) {
         error.code || "UNAVAILABLE",
       );
     if (
-      req.path.startsWith("/command-result/") ||
-      req.path === "/command/execute" ||
       req.path.startsWith("/subscription-plan-features/") ||
       req.path === "/organization-options"
     )

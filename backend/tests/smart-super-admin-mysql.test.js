@@ -277,39 +277,10 @@ test(
         ).status,
         400,
       );
-      response = await request(
-        "/command/execute",
-        {
-          org_id: 0,
-          user_id: 0,
-          tab_ses_id: "fixture-tab",
-          selector: "tab_ses_id",
-          script: 'return "fixture";',
-        },
-        true,
-      );
-      assert.equal(response.status, 200);
-      const commandId = (await response.json()).id;
-      response = await request("/command-result/" + commandId);
-      assert.equal((await response.json()).command_status, "pending");
-      await pool.execute(
-        "UPDATE commands SET command_status=?,answer=?,answer_type=? WHERE id=?",
-        ["executed", "fixture result", "text", commandId],
-      );
-      response = await request("/command-result/" + commandId);
-      assert.equal((await response.json()).answer, "fixture result");
-      const [log] = await pool.execute(
-        "INSERT INTO error_logs (org_id,log_type,message,created_at) VALUES (?,?,?,UTC_TIMESTAMP(3))",
-        [orgId, "error", "Fixture error"],
-      );
       const urls = [
         "/organizations",
         "/organization-list/products_count/DESC/0/20/1",
         "/view/users/" + 777,
-        "/list-error-logs/id/DESC/" + orgId + "/20/1?type=error",
-        "/view-error-log/error_logs/" + log.insertId,
-        "/list-commands/id/DESC/0/20/1?status=executed",
-        "/command/" + commandId,
         "/list-org-types/id/DESC/0/20/1",
         "/feature/" + featureId,
         "/list-features/id/DESC/0/20/1",
@@ -333,6 +304,38 @@ test(
           url,
         );
       }
+      for (const url of [
+        "/list-error-logs/id/DESC/" + orgId + "/20/1",
+        "/view-error-log/error_logs/1",
+        "/list-commands/id/DESC/0/20/1",
+        "/command/1",
+        "/command-result/1",
+        "/list/error_logs/id/DESC/0/20/1",
+        "/list/commands/id/DESC/0/20/1",
+      ]) {
+        assert.equal((await request(url)).status, 404, url);
+      }
+      assert.equal(
+        (
+          await request(
+            "/command/execute",
+            {
+              org_id: 0,
+              user_id: 0,
+              tab_ses_id: "fixture-tab",
+              selector: "tab_ses_id",
+              script: 'return "fixture";',
+            },
+            true,
+          )
+        ).status,
+        404,
+      );
+      assert.equal(
+        (await request("/error-logs/clear", { action: "clear_all_logs" }))
+          .status,
+        404,
+      );
       const [before] = await pool.query(
         "SELECT COUNT(*) count FROM subscription_plans",
       );
@@ -350,15 +353,6 @@ test(
         "SELECT COUNT(*) count FROM subscription_plans",
       );
       assert.equal(before[0].count, after[0].count);
-      assert.equal(
-        (await request("/error-logs/clear", { action: "clear_all_logs" }))
-          .status,
-        303,
-      );
-      const [cleared] = await pool.query(
-        "SELECT COUNT(*) count FROM error_logs",
-      );
-      assert.equal(Number(cleared[0].count), 0);
     } finally {
       if (server) await new Promise((resolve) => server.close(resolve));
       if (pool) await pool.end();

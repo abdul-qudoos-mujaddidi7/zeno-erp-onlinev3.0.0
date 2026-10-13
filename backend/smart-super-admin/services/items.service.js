@@ -43,9 +43,6 @@ module.exports = (db) => ({
           );
           people[field + "_name"] = rows[0]?.username || "";
         }
-    return { record: { ...record, ...people }, related };
-  },
-  async clearSync() {
-    await db.pool.execute("DELETE FROM sync_logs");
+        return { record: { ...record, ...people }, related };
   },
 });

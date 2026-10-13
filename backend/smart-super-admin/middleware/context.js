@@ -26,8 +26,6 @@ const STRINGS = {
     Features: "ویژگی‌ها",
     "Subscription Plans": "طرح‌های اشتراک",
     Subscriptions: "اشتراک‌ها",
-    "Error Logs": "خطاها",
-    Commands: "فرمان‌ها",
     "All organizations": "همهٔ سازمان‌ها",
     Language: "زبان",
     Apply: "اعمال",
@@ -75,8 +73,6 @@ const STRINGS = {
     Features: "ځانګړنې",
     "Subscription Plans": "د ګډون پلانونه",
     Subscriptions: "ګډونونه",
-    "Error Logs": "تېروتنې",
-    Commands: "امرونه",
     "All organizations": "ټول سازمانونه",
     Language: "ژبه",
     Apply: "پلي کول",
@@ -110,12 +106,9 @@ const NAV = [
     "bi-card-list",
   ],
   ["Subscriptions", "/list-subscriptions/id/DESC/0/20/1", "bi-calendar-check"],
-  ["Error Logs", "/list-error-logs/id/DESC/0/20/1", "bi-bug"],
-  ["Commands", "/list-commands/id/DESC/0/20/1", "bi-terminal"],
 ];
 const RECORDS = [
   "users",
-  "sync_logs",
   "warehouses",
   "products",
   "product_images",
@@ -185,14 +178,12 @@ module.exports = (db) => async (req, res, next) => {
       "Subscriptions",
       /^\/(list-subscriptions|subscription|invoices|invoice|payment)(\/|$)/,
     ],
-    ["Error Logs", /^\/(list-error-logs|view-error-log|error-logs)(\/|$)/],
-    ["Commands", /^\/(list-commands|command|command-result)(\/|$)/],
   ].find(([, pattern]) => pattern.test(req.path))?.[0];
   res.locals.navigation = NAV.map(([label, url, icon]) => ({
     label,
     url:
       "/smart-super-admin" +
-      (["Subscriptions", "Error Logs", "Commands"].includes(label)
+      (label === "Subscriptions"
         ? url.replace("/0/20/1", "/" + orgId + "/20/1")
         : url),
     icon,
@@ -219,7 +210,6 @@ module.exports = (db) => async (req, res, next) => {
       Features: ["New", "/feature"],
       "Subscription Plans": ["New", "/subscription-plan"],
       Subscriptions: ["New", `/subscription/0/${orgId}`],
-      Commands: ["New", "/command/0"],
     }[active.label];
     const secondaryUrl = secondary && "/smart-super-admin" + secondary[1];
     const secondaryActive =

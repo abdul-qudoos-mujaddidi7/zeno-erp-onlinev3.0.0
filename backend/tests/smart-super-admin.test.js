@@ -36,6 +36,52 @@ test("database failures return a rendered 503 without leaking database details",
   }
 });
 
+test("removed error-log, command, and sync-log routes return 404", async () => {
+  const express = require("express");
+  const parent = express();
+  parent.use(
+    "/smart-super-admin",
+    require("../smart-super-admin/app")({
+      pool: { execute: async () => [[]] },
+    }),
+  );
+  const server = parent.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  try {
+    const base = `http://127.0.0.1:${server.address().port}/smart-super-admin`;
+    for (const route of [
+      "/list-error-logs/id/DESC/0/20/1",
+      "/view-error-log/error_logs/1",
+      "/list-commands/id/DESC/0/20/1",
+      "/command/1",
+      "/command-result/1",
+      "/list/sync_logs/id/DESC/0/20/1",
+      "/view/sync_logs/1",
+    ]) {
+      assert.equal((await fetch(base + route)).status, 404, route);
+    }
+    for (const route of [
+      "/error-logs/clear",
+      "/command/execute",
+      "/list/sync_logs",
+    ]) {
+      assert.equal(
+        (
+          await fetch(base + route, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: "",
+          })
+        ).status,
+        404,
+        route,
+      );
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("Kabul dates round-trip independently of host timezone and invoice IDs stay unique", () => {
   const old = process.env.TZ;
   try {
@@ -85,6 +131,9 @@ test("helpers escape badges, build bounded pages, and validate decimal input", (
 });
 
 test("generic schema browsing rejects identifiers, bounds limits, and excludes credentials", async () => {
+  assert.equal(database.TABLES.includes("error_logs"), false);
+  assert.equal(database.TABLES.includes("commands"), false);
+  assert.equal(database.TABLES.includes("sync_logs"), false);
   const calls = [];
   const db = database({
     execute: async (sql, values) => {

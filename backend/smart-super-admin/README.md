@@ -17,7 +17,7 @@ npm.cmd start
 Open `http://localhost:3001/smart-super-admin` when using the existing port 3001;
 use the configured `PORT` otherwise. There is no new login, authentication,
 permission middleware, administrator provisioning, or database migration.
-All routes, including writes and command submission, accept anonymous requests.
+All routes, including writes, accept anonymous requests.
 The host application's session stores only organization selection and language
 for this module; a host user name is displayed when available. There is no
 impersonation feature and selection does not change the ERP user identity.
@@ -37,9 +37,6 @@ deployment runtime has not been supplied and its compatibility remains unverifie
   pagination, image previews, changed-field comparisons, related line items,
   payments, and organization-scoped user-name lookups. Credential columns and
   credential keys in structured JSON are omitted.
-- Error-log browsing and clearing; sync-log clearing.
-- Command browsing, Monaco editor, queuing, and status/result polling. Text,
-  JSON, images, and sandboxed HTML/iframe previews are supported.
 - Organization type and feature create/edit forms with existing inactive status
   fields; subscription plans and subscriptions with dynamic feature assignments,
   plan-feature JSON lookup, multilingual business fields, and preserved usage.
@@ -87,8 +84,7 @@ It does not modify ERP business records.
 Focused checks cover rendering, dates, decimals, identifier validation,
 pagination bounds, excluded credentials, safe feature-row DOM editing, anonymous
 workflow access, organization selection, CRUD, assignment usage preservation,
-invoice/payment balances, transaction rollback, command results, and database
-failure pages. Live smoke checks cover new pages and existing legacy login,
+invoice/payment balances, transaction rollback, and database failure pages. Live smoke checks cover new pages and existing legacy login,
 legacy authentication redirect, ERP frontend, server-time API, and v2 anonymous
 authentication rejection. The unchanged full backend suite currently has one
 failure in `tests/fiscal-year.test.js`: a source-formatting assertion expects a
@@ -96,16 +92,8 @@ single-quoted fiscal-year route registration in the existing v2 index.
 
 ## Remaining verification and behavior limits
 
-- Monaco is loaded from jsDelivr; a normal textarea remains usable if unavailable.
-  Full interactive browser/printing checks and real ERP client command execution
-  have not been performed. Database queue/result integration is tested.
+- Full interactive browser/printing checks have not been performed.
 - Existing `/logs` delivery and `/command-executed` replies are unchanged.
-  Delivery currently supports the legacy `tab_ses_id` selector. Other selector
-  values can be stored but require client/server delivery support outside this
-  module. The old secret-token selector and impersonation are not recreated.
-- HTML results render in sandboxed frames rather than injecting markup into the
-  panel document. Polling pauses after approximately one minute; reopening a
-  pending command resumes polling.
 - Shared navigation/actions and direction support three languages. Some schema
   column labels, form labels, and browser status messages remain English and need
   a complete translation review. Reference pickers are bounded to 1,000 rows;
