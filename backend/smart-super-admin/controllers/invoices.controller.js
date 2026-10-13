@@ -44,6 +44,12 @@ module.exports = (service) => ({
       basePath: "invoices",
       query: req.query,
       detail: (row) => "/smart-super-admin/invoice/view/" + row.id,
+      extraActions: (row) => [
+        {
+          label: "Edit",
+          url: "/smart-super-admin/invoice/edit/" + row.id,
+        },
+      ],
       createUrl: "/smart-super-admin/invoice/new/" + req.params.subscriptionId,
     });
     const url = (sort, dir, limit, page) =>

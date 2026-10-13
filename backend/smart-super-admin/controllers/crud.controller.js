@@ -13,9 +13,13 @@ module.exports = (service, key) => ({
         query: req.query,
         download: (row) =>
           `/smart-super-admin/download/${service.config.table}/${row.id}`,
-        extraActions:
-          key === "subscriptions"
-            ? (row) => [
+        extraActions: (row) => [
+          {
+            label: "Edit",
+            url: `/smart-super-admin/${path}/${row.id}${key === "subscriptions" ? "/" + (row.org_id || 0) : ""}`,
+          },
+          ...(key === "subscriptions"
+            ? [
                 {
                   label: "Invoices",
                   url: "/smart-super-admin/invoices/" + row.id,
@@ -25,7 +29,8 @@ module.exports = (service, key) => ({
                   url: "/smart-super-admin/invoice/new/" + row.id,
                 },
               ]
-            : undefined,
+            : []),
+        ],
       }),
       filterEnabled: true,
     });

@@ -94,7 +94,7 @@ module.exports = function createDatabase(pool) {
     if (!TABLES.includes(table)) fail("Unknown table", 404);
     if (!cache.has(table)) {
       const [rows] = await pool.execute(
-        "SELECT column_name AS name, data_type AS type FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? ORDER BY ordinal_position",
+        "SELECT column_name AS name, data_type AS type, extra, is_generated AS generated, is_nullable AS nullable, character_maximum_length AS maxLength FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? ORDER BY ordinal_position",
         [table],
       );
       const columns = rows.filter(
@@ -104,6 +104,17 @@ module.exports = function createDatabase(pool) {
       cache.set(table, columns);
     }
     return cache.get(table);
+  }
+  async function editableColumns(table) {
+    return (await schema(table)).filter(
+      (column) =>
+        column.name !== "id" &&
+        !/auto_increment/i.test(column.extra || "") &&
+        !/always/i.test(column.generated || "") &&
+        !/^(tinyblob|blob|mediumblob|longblob|binary|varbinary|geometry|point|linestring|polygon|multipoint|multilinestring|multipolygon|geometrycollection)$/i.test(
+          column.type,
+        ),
+    );
   }
   async function one(table, identifier, executor = pool) {
     const columns = await schema(table);
@@ -260,6 +271,7 @@ module.exports = function createDatabase(pool) {
   return {
     pool,
     schema,
+    editableColumns,
     one,
     list,
     lookup,

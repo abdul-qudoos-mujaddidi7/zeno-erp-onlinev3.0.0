@@ -10,8 +10,28 @@ module.exports = (service) => ({
         query: req.query,
         detail: (row) => `/smart-super-admin/view/${name}/${row.id}`,
         download: (row) => `/smart-super-admin/download/${name}/${row.id}`,
+        extraActions: (row) => [
+          {
+            label: "Edit",
+            url: `/smart-super-admin/edit/${name}/${row.id}`,
+          },
+        ],
       }),
     });
+  },
+  async editForm(req, res) {
+    res.render(
+      "items/edit",
+      await service.editForm(req.params.tableName, req.params.id),
+    );
+  },
+  async saveEdit(req, res) {
+    const id = await service.saveEdit(
+      req.params.tableName,
+      req.params.id,
+      req.body,
+    );
+    res.redirect(303, `/smart-super-admin/view/${req.params.tableName}/${id}`);
   },
   async download(req, res) {
     const { tableName, id } = req.params;

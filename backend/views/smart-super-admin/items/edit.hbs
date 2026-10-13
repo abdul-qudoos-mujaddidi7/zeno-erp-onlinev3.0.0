@@ -1,0 +1,22 @@
+<section class="workspace-card generic-record-form">
+  <h1>{{title}}</h1>
+  <form method="post" action="{{action}}">
+    <div class="form-grid">
+  {{#each fields}}
+  <div class="form-field {{#if textarea}}wide{{/if}}">
+    <label for="record-{{name}}">{{label}}</label>
+    {{#if textarea}}
+    <textarea class="form-control" id="record-{{name}}" name="{{name}}" rows="4" {{#if required}}required{{/if}}>{{value}}</textarea>
+    {{else}}
+    <input class="form-control" id="record-{{name}}" name="{{name}}" type="{{inputType}}" value="{{value}}" {{#if step}}step="{{step}}"{{/if}} {{#if required}}required{{/if}}>
+    {{/if}}
+    {{#if nullable}}<small class="text-muted">Leave blank to save as null.</small>{{/if}}
+  </div>
+  {{/each}}
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">{{t 'Save'}}</button>
+      <a class="btn btn-outline-primary" href="{{backUrl}}">{{t 'Back'}}</a>
+    </div>
+  </form>
+</section>

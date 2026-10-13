@@ -11,6 +11,7 @@ const STRINGS = {
     "Expand sidebar": "باز کردن نوار کناری",
     Actions: "عملیات",
     "Row actions": "عملیات ردیف",
+    Edit: "ویرایش",
     Rows: "ردیف‌ها",
     Pagination: "صفحه‌بندی",
     Status: "وضعیت",
@@ -62,6 +63,7 @@ const STRINGS = {
     "Expand sidebar": "اړخ پټه پراخول",
     Actions: "کړنې",
     "Row actions": "د قطار کړنې",
+    Edit: "سمول",
     Rows: "قطارونه",
     Pagination: "پاڼې",
     Status: "حالت",
@@ -205,7 +207,8 @@ module.exports = (db) => async (req, res, next) => {
     url: `/smart-super-admin/list/${table}/id/DESC/${orgId}/20/1`,
     active:
       req.path.startsWith(`/list/${table}/`) ||
-      req.path.startsWith(`/view/${table}/`),
+      req.path.startsWith(`/view/${table}/`) ||
+      req.path.startsWith(`/edit/${table}/`),
   }));
   res.locals.recordsActive = res.locals.recordNavigation.some(
     (item) => item.active,

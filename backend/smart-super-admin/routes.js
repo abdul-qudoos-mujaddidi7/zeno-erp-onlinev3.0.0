@@ -34,6 +34,8 @@ module.exports = (db) => {
   router.get("/list/:tableName/:sortcolumn/:sortdir/:org/:limit/:page", i.list);
   router.get("/view/:tableName/:id", i.detail);
   router.get("/download/:tableName/:id", i.download);
+  router.get("/edit/:tableName/:id", i.editForm);
+  router.post("/edit/:tableName/:id", i.saveEdit);
   router.get("/list-org-types/:sortcolumn/:sortdir/:org/:limit/:page", t.list);
   router.get(["/org-type", "/org-type/:id"], t.form);
   router.post("/org-type", t.save);

@@ -119,6 +119,239 @@ test("organization selection returns to the current page and updates its organiz
   }
 });
 
+test("row menus provide edit links for resources with existing edit forms", async () => {
+  const createCrudController = require("../smart-super-admin/controllers/crud.controller");
+  const resources = [
+    {
+      key: "org-types",
+      path: "org-type",
+      table: "org_types",
+      expected: "/smart-super-admin/org-type/7",
+    },
+    {
+      key: "features",
+      path: "feature",
+      table: "features",
+      expected: "/smart-super-admin/feature/7",
+    },
+    {
+      key: "subscription-plans",
+      path: "subscription-plan",
+      table: "subscription_plans",
+      expected: "/smart-super-admin/subscription-plan/7",
+    },
+    {
+      key: "subscriptions",
+      path: "subscription",
+      table: "subscriptions",
+      expected: "/smart-super-admin/subscription/7/42",
+      org_id: 42,
+    },
+  ];
+  for (const resource of resources) {
+    const service = {
+      config: { path: resource.path, table: resource.table, title: resource.key },
+      list: async () => ({
+        rows: [{ id: 7, org_id: resource.org_id }],
+        columns: [{ name: "id" }],
+        tableName: resource.table,
+        total: 1,
+        page: 1,
+        totalPages: 1,
+        limit: 20,
+        org: resource.org_id || 0,
+        sort: "id",
+        direction: "DESC",
+      }),
+    };
+    let model;
+    await createCrudController(service, resource.key).list(
+      { params: {}, query: {} },
+      {
+        locals: { orgId: 42 },
+        render: (view, locals) => (model = locals),
+      },
+    );
+    assert.ok(
+      model.rows[0].actions.some(
+        (action) => action.label === "Edit" && action.url === resource.expected,
+      ),
+      resource.key,
+    );
+  }
+  const invoiceController = require("../smart-super-admin/controllers/invoices.controller")({
+    list: async () => ({
+      rows: [{ id: 19 }],
+      columns: [{ name: "id" }],
+      tableName: "subscription_invoices",
+      total: 1,
+      page: 1,
+      totalPages: 1,
+      limit: 20,
+      org: 0,
+      sort: "id",
+      direction: "DESC",
+      subscription: {},
+    }),
+  });
+  let invoiceModel;
+  await invoiceController.list(
+    { params: { subscriptionId: "42" }, query: {} },
+    { render: (view, locals) => (invoiceModel = locals) },
+  );
+  assert.ok(
+    invoiceModel.rows[0].actions.some(
+      (action) =>
+        action.label === "Edit" &&
+        action.url === "/smart-super-admin/invoice/edit/19",
+    ),
+  );
+});
+
+test("generic Records rows expose edit links for the generic editor", async () => {
+  const controller = require("../smart-super-admin/controllers/items.controller")({
+    list: async () => ({
+      rows: [{ id: 7 }],
+      columns: [{ name: "id" }],
+      tableName: "warehouses",
+      total: 1,
+      page: 1,
+      totalPages: 1,
+      limit: 20,
+      org: 0,
+      sort: "id",
+      direction: "DESC",
+    }),
+  });
+  let model;
+  await controller.list(
+    { params: { tableName: "warehouses" }, query: {} },
+    { render: (view, locals) => (model = locals) },
+  );
+  assert.ok(
+    model.rows[0].actions.some(
+      (action) =>
+        action.label === "Edit" &&
+        action.url === "/smart-super-admin/edit/warehouses/7",
+    ),
+  );
+});
+
+test("generic Records editor excludes identifiers and safely validates updates", async () => {
+  const saved = [];
+  const columns = [
+    { name: "name", type: "varchar", nullable: "NO", maxLength: 100 },
+    { name: "quantity", type: "decimal", nullable: "YES", maxLength: null },
+    { name: "created_at", type: "datetime", nullable: "YES", maxLength: null },
+  ];
+  const db = {
+    editableColumns: async () => columns,
+    one: async () => ({
+      id: 7,
+      name: "Warehouse",
+      quantity: "12.5",
+      created_at: "2026-10-11 19:35:00.000",
+    }),
+    id: database.id,
+    text: database.text,
+    fail: database.fail,
+    save: async (...args) => saved.push(args),
+  };
+  const service = require("../smart-super-admin/services/items.service")(db);
+  const form = await service.editForm("warehouses", "7");
+  assert.equal(form.recordId, 7);
+  assert.equal(form.fields.some((field) => field.name === "id"), false);
+  assert.equal(
+    form.fields.find((field) => field.name === "created_at").value,
+    dates.getLocalDateTime("2026-10-11 19:35:00.000"),
+  );
+  const id = await service.saveEdit("warehouses", "7", {
+    name: " Main warehouse ",
+    quantity: "",
+    created_at: "2026-10-12T00:05",
+  });
+  assert.equal(id, 7);
+  assert.deepEqual(saved[0], [
+    "warehouses",
+    {
+      name: "Main warehouse",
+      quantity: null,
+      created_at: "2026-10-11 19:35:00.000",
+    },
+    7,
+  ]);
+  await assert.rejects(() =>
+    service.saveEdit("warehouses", "7", {
+      name: "Warehouse",
+      quantity: "",
+      created_at: "",
+      id: "8",
+    }),
+  );
+  await assert.rejects(() =>
+    service.saveEdit("warehouses", "7", {
+      name: "Warehouse",
+      quantity: "not-a-number",
+      created_at: "",
+    }),
+  );
+});
+
+test("generic Records edit route renders schema-safe fields", async () => {
+  const express = require("express");
+  const pool = {
+    execute: async (sql) => {
+      if (sql.includes("information_schema"))
+        return [
+          [
+            {
+              name: "id",
+              type: "int",
+              extra: "auto_increment",
+              generated: "NEVER",
+              nullable: "NO",
+            },
+            {
+              name: "name",
+              type: "varchar",
+              extra: "",
+              generated: "NEVER",
+              nullable: "NO",
+              maxLength: 100,
+            },
+            {
+              name: "access_token",
+              type: "varchar",
+              extra: "",
+              generated: "NEVER",
+              nullable: "YES",
+              maxLength: 255,
+            },
+          ],
+        ];
+      return [[{ id: 7, name: "Warehouse", access_token: "PRIVATE_VALUE" }]];
+    },
+  };
+  const app = express();
+  app.use(
+    "/smart-super-admin",
+    require("../smart-super-admin/app")({ pool }),
+  );
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${server.address().port}/smart-super-admin/edit/warehouses/7`,
+    );
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /name="name"/);
+    assert.doesNotMatch(html, /name="id"|access_token|PRIVATE_VALUE/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("Kabul dates round-trip independently of host timezone and invoice IDs stay unique", () => {
   const old = process.env.TZ;
   try {
