@@ -73,7 +73,10 @@ test(
       );
       parent.use(
         "/smart-super-admin",
-        require("../smart-super-admin/app")({ pool }),
+        require("../smart-super-admin/app")({
+          pool,
+          skipAccessControl: true,
+        }),
       );
       server = parent.listen(0, "127.0.0.1");
       await new Promise((resolve) => server.once("listening", resolve));

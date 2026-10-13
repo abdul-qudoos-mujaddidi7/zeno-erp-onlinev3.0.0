@@ -1,8 +1,13 @@
-module.exports = function Login(req,res,db) {
-    if (req.session.user) {
+const {
+  isSuperAdminSession,
+} = require("../../smart-super-admin/middleware/access-control");
+
+module.exports = function Login(req, res, db) {
+  if (isSuperAdminSession(req.session)) {
     return res.redirect("/api/superadmin/dashboard");
-  } else {
-    res.send(/*html*/ `
+  }
+
+  res.send(/*html*/ `
     <!doctype html>
 <html lang="en" dir="ltr">
   <head>
@@ -96,5 +101,4 @@ module.exports = function Login(req,res,db) {
   </body>
 </html>
   `);
-  }
 };

@@ -39,6 +39,11 @@
     unsubscribeLang();
   });
   onMount(() => {
+    try {
+      error = sessionStorage.getItem('auth_notice') || error;
+      sessionStorage.removeItem('auth_notice');
+    } catch (e) {}
+
     setTimeout(() => {
       if (window.mdb) {
         document.querySelectorAll('[data-mdb-input-init]').forEach((el) => {

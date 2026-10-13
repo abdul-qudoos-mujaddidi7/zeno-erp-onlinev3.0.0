@@ -50,30 +50,12 @@ async function loadImage({
   table,
   fieldName,
   serveId,
-  token,
+  orgId,
 }) {
   if (!IMAGE_TABLES.includes(table)) {
     const error = new Error("Invalid table name");
     error.statusCode = 400;
     error.code = "INVALID_IMAGE_TABLE";
-    throw error;
-  }
-
-  const [rows] = await db.execute(
-    `
-      SELECT u.*, t.token
-      FROM auth_tokens t
-      JOIN users u ON u.local_id = t.user_id
-      WHERE t.token = ?
-        AND t.expires_at > NOW()
-    `,
-    [token],
-  );
-
-  if (!rows.length) {
-    const error = new Error("Not authorized or expired session.");
-    error.statusCode = 401;
-    error.code = "UNAUTHORIZED";
     throw error;
   }
 
@@ -89,7 +71,7 @@ async function loadImage({
     throw error;
   }
 
-  if (Number(images[0].org_id) !== Number(rows[0].org_id)) {
+  if (Number(images[0].org_id) !== Number(orgId)) {
     const error = new Error("Not authorized to view this image.");
     error.statusCode = 403;
     error.code = "FORBIDDEN";

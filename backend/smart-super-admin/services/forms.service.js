@@ -1,4 +1,9 @@
 const dates = require("../helpers/date-helpers");
+const {
+  getOrganizationSubscription,
+  markExpired,
+  revokeOrganizationTokens,
+} = require("../../services/subscription-access");
 const field = (name, type = "text", options) => ({
   name,
   type,
@@ -277,6 +282,20 @@ module.exports = function formsService(db, key) {
     const identifier = db.id(body[config.idField] || 0, true),
       data = input(body);
     return db.transaction(async (connection) => {
+      const previousRecord =
+        key === "subscriptions" && identifier
+          ? await db.one(config.table, identifier, connection)
+          : null;
+      const organizationIds =
+        key === "subscriptions"
+          ? [...new Set([previousRecord?.org_id, data.org_id].filter(Boolean).map(Number))]
+          : [];
+      const previousAccess = new Map();
+      for (const orgId of organizationIds) {
+        const subscription = await getOrganizationSubscription(connection, orgId);
+        previousAccess.set(orgId, subscription?.access_status);
+      }
+
       for (const descriptor of config.fields.filter(
         (field) => field.type === "reference",
       ))
@@ -291,6 +310,24 @@ module.exports = function formsService(db, key) {
         data.status = 1;
       const saved = await db.save(config.table, data, identifier, connection);
       if (config.features) await assignments(connection, saved, body);
+
+      if (key === "subscriptions") {
+        for (const orgId of organizationIds) {
+          const current = await getOrganizationSubscription(connection, orgId);
+          const currentlyAllowed = ["active", "trial"].includes(
+            current?.access_status,
+          );
+          const previouslyAllowed = ["active", "trial"].includes(
+            previousAccess.get(orgId),
+          );
+
+          await markExpired(connection, current);
+          if (!currentlyAllowed || !previouslyAllowed) {
+            await revokeOrganizationTokens(connection, orgId);
+          }
+        }
+      }
+
       return saved;
     });
   }

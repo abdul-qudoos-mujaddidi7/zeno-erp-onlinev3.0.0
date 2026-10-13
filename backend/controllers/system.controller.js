@@ -40,7 +40,7 @@ async function loadImage(req, res) {
     table: req.params.table,
     fieldName: req.params.fieldName,
     serveId: req.params.serveid,
-    token: req.params.token,
+    orgId: req.user.org_id,
   });
 
   res.set("Content-Type", image.mimeType);

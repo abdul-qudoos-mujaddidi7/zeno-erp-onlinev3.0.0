@@ -5,9 +5,33 @@ const API_BASE_URL =
 const GET_CACHE_TTL_MS = 90_000;
 const getCache = new Map();
 const inflightGets = new Map();
+let invalidatedToken = null;
 
 function getToken() {
   return localStorage.getItem('token');
+}
+
+function invalidateAuthentication(token, error) {
+  if (!token || invalidatedToken === token) return;
+  invalidatedToken = token;
+
+  invalidateApiCache();
+
+  if (typeof window === 'undefined') return;
+
+  const message =
+    error.data?.message ||
+    'Your session is no longer valid. Please sign in again.';
+  try {
+    sessionStorage.setItem('auth_notice', message);
+  } catch (storageError) {
+    // The redirect still proceeds when browser storage is unavailable.
+  }
+  window.dispatchEvent(
+    new CustomEvent('erp:authentication-invalid', {
+      detail: { message, code: error.code, status: error.status },
+    }),
+  );
 }
 
 export function invalidateApiCache() {
@@ -43,8 +67,10 @@ async function request(
     cache,
   } = {},
 ) {
+  const token = getToken();
   const useCache =
     method === 'GET' &&
+    !token &&
     cache !== false &&
     !/[?&]page=/.test(path);
 
@@ -61,8 +87,6 @@ async function request(
   }
 
   const run = (async () => {
-    const token = getToken();
-
     let response;
 
     try {
@@ -126,6 +150,15 @@ async function request(
       error.errors =
         result?.errors || null;
       error.data = result;
+
+      if (
+        token &&
+        (response.status === 401 || response.status === 402) &&
+        (response.status === 401 ||
+          String(error.code).startsWith('SUBSCRIPTION_'))
+      ) {
+        invalidateAuthentication(token, error);
+      }
 
       throw error;
     }

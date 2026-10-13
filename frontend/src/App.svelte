@@ -14,6 +14,7 @@
   import './stores/themeStore.js';
   import { loadUserTheme } from './stores/themeStore.js';
   import { loadSettings } from './i18n/i18n';
+  import { push } from 'svelte-spa-router';
 
   import ToastContainer from "./ToastUI/ToastContainer.svelte";
   import ConfirmModalHost from "./components/common/ConfirmModalHost.svelte";
@@ -89,6 +90,10 @@
     armExpiryTimer();
   }
 
+  function handleAuthenticationInvalid() {
+    push('/login');
+  }
+
   onMount(() => {
     setPermissionsFromUsers();
     loadUserTheme();
@@ -97,12 +102,14 @@
     armExpiryTimer();
     const unsubscribeAuth = auth.subscribe(() => armExpiryTimer());
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('erp:authentication-invalid', handleAuthenticationInvalid);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       unsubscribeAuth();
       clearExpiryTimer();
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('erp:authentication-invalid', handleAuthenticationInvalid);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   });

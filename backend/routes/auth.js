@@ -5,6 +5,9 @@ const { generateToken } = require("../utils/token");
 const crypto = require("crypto");
 const unitCategoryRepository = require("../repositories/unit-category.repository");
 const { generateLocalId } = require("../utils/generateLocalId");
+const {
+  enforceOrganizationSubscription,
+} = require("../services/subscription-access");
 
 let last = 0;
 let counter = 0;
@@ -141,70 +144,33 @@ router.post("/login", async (req, res) => {
     }
   }
 
-  const now2 = new Date();
-
-  // Get active subscriptions
-  const [subscriptions] = await db.execute(
-    `SELECT * FROM subscriptions
-     WHERE org_id = ?
-     AND subscription_status = 'active'`,
-    [user.org_id],
-  );
-
-  // Find a currently valid subscription
-  const validSubscription = subscriptions.find((sub) => {
-    const startDate = new Date(sub.start_date);
-    const endDate = new Date(sub.end_date);
-
-    return now2 >= startDate && now2 <= endDate;
-  });
-
-  let activeTrial = null;
-  if (!validSubscription) {
-    // Check trial
-    const [trials] = await db.execute(
-      `SELECT * FROM subscriptions
-       WHERE org_id = ?
-       AND subscription_status = 'trial'`,
-      [user.org_id],
-    );
-
-    activeTrial = trials.find((trial) => {
-      const trialEnd = new Date(trial.trial_end_date);
-      return now2 <= trialEnd;
+  const access = await enforceOrganizationSubscription(db, user.org_id);
+  if (!access.allowed) {
+    return res.status(402).json({
+      success: false,
+      message: access.message,
+      code: access.code,
+      subscription_status: access.status,
     });
-
-    if (activeTrial) {
-      // Trial still valid → allow login
-    } else {
-      const lastTrial = trials.length ? trials[0] : null;
-
-      return res.status(401).json({
-        message: lastTrial
-          ? `Trial expired on ${lastTrial.trial_end_date}. Please contact +93 70 449 5743.`
-          : "No Subscription! Please contact +93 70 449 5743.",
-      });
-    }
   }
 
-  const mainSubscription = validSubscription || activeTrial;
+  const mainSubscription = access.subscription;
   if (mainSubscription) {
-    const [features_result] = await db.query(`
-      SELECT spf.*, f.name , f.type, f.icon
-      FROM subscription_features spf
-      JOIN features f ON f.id = spf.feature_id
-      WHERE spf.subscription_id = ${mainSubscription.id}
-    `);
+    delete mainSubscription.access_status;
+    const [features_result] = await db.execute(
+      `SELECT spf.*, f.name, f.type, f.icon
+       FROM subscription_features spf
+       JOIN features f ON f.id = spf.feature_id
+       WHERE spf.subscription_id = ?`,
+      [mainSubscription.id],
+    );
     mainSubscription.features = features_result;
 
-    const subscription_plan = await db.execute(`
-      SELECT * FROM subscription_plans WHERE id = ${mainSubscription.plan_id}
-    `);
+    const subscription_plan = await db.execute(
+      "SELECT * FROM subscription_plans WHERE id = ?",
+      [mainSubscription.plan_id],
+    );
     mainSubscription.subscription_plan = subscription_plan[0][0];
-  } else {
-    return res.status(401).json({
-      message: "No Subscription! Please contact +93 70 449 5743.",
-    });
   }
 
   const token = generateToken();
@@ -221,11 +187,10 @@ router.post("/login", async (req, res) => {
    * Letting MySQL add the interval to its own NOW() keeps the lifetime exactly
    * 24 hours whatever clock the server runs on.
    */
-  const now = new Date().toISOString().slice(0, 23).replace("T", " ");
   await db.execute(
-    `INSERT INTO auth_tokens (user_id, token, expires_at, created_at)
-     VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ${SESSION_TTL_HOURS} HOUR), ?)`,
-    [String(user.local_id), token, now],
+    `INSERT INTO auth_tokens (user_id, user_pk, token, expires_at, created_at)
+     VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ${SESSION_TTL_HOURS} HOUR), NOW())`,
+    [String(user.local_id), user.id, token],
   );
 
   let org_type = await db.execute(

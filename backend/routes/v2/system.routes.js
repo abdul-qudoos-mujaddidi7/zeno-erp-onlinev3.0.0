@@ -18,6 +18,7 @@ router.get(
 
 router.get(
   "/loadimage/:table/:fieldName/:serveid/:token",
+  auth,
   asyncHandler(systemController.loadImage),
 );
 

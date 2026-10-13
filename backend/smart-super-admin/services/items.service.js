@@ -59,6 +59,9 @@ module.exports = (db) => ({
     };
   },
   async saveEdit(table, id, body) {
+    if (table === "subscriptions") {
+      db.fail("Subscriptions must be changed through subscription management.", 403);
+    }
     const identifier = db.id(id);
     const columns = await db.editableColumns(table);
     const names = columns.map((column) => column.name);

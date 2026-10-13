@@ -12,6 +12,7 @@ test("database failures return a rendered 503 without leaking database details",
   parent.use(
     "/smart-super-admin",
     require("../smart-super-admin/app")({
+      skipAccessControl: true,
       pool: {
         execute: async () => {
           throw Object.assign(new Error("PRIVATE_DATABASE_DETAIL"), {
@@ -42,6 +43,7 @@ test("removed error-log, command, and sync-log routes return 404", async () => {
   parent.use(
     "/smart-super-admin",
     require("../smart-super-admin/app")({
+      skipAccessControl: true,
       pool: { execute: async () => [[]] },
     }),
   );
@@ -264,6 +266,7 @@ test("generic table renders only status-zero rows with inactive styling", async 
   app.use(
     "/smart-super-admin",
     require("../smart-super-admin/app")({
+      skipAccessControl: true,
       pool: {
         execute: async (sql) => {
           if (/information_schema/.test(sql))
@@ -396,7 +399,7 @@ test("generic Records edit route renders schema-safe fields", async () => {
   const app = express();
   app.use(
     "/smart-super-admin",
-    require("../smart-super-admin/app")({ pool }),
+    require("../smart-super-admin/app")({ pool, skipAccessControl: true }),
   );
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
@@ -498,7 +501,7 @@ test("generic schema browsing rejects identifiers, bounds limits, and excludes c
   await assert.rejects(() => db.list("users", { limit: 251 }));
 });
 
-test("all requested templates compile and source has no legacy links or authentication gates", () => {
+test("all requested templates compile and Smart Super Admin uses the session gate", () => {
   const handlebars = require("handlebars");
   function files(root) {
     return fs
@@ -541,9 +544,15 @@ test("all requested templates compile and source has no legacy links or authenti
   )) {
     assert.doesNotMatch(
       fs.readFileSync(file, "utf8"),
-      /requireAuth|loginAsUser|me@2020|requirePermission|\/api\/superadmin/,
+      /loginAsUser|me@2020|requirePermission/,
     );
   }
+  const accessControl = fs.readFileSync(
+    path.join(__dirname, "../smart-super-admin/middleware/access-control.js"),
+    "utf8",
+  );
+  assert.match(accessControl, /requireSuperAdminSession/);
+  assert.match(accessControl, /requireSameOriginForChanges/);
 });
 
 test("browser feature editor adds/removes safe DOM rows without inline scripts", async () => {
@@ -694,6 +703,7 @@ test("row download streams an attachment without credential columns", async () =
   parent.use(
     "/smart-super-admin",
     require("../smart-super-admin/app")({
+      skipAccessControl: true,
       pool: {
         execute: async (sql) => {
           if (/information_schema/.test(sql))

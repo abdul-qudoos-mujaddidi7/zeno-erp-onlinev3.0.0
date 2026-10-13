@@ -1,7 +1,10 @@
 const express = require("express");
 const path = require("node:path");
 const { engine } = require("express-handlebars");
-module.exports = function createSmartSuperAdmin({ pool } = {}) {
+module.exports = function createSmartSuperAdmin({
+  pool,
+  skipAccessControl = false,
+} = {}) {
   const app = express(),
     db = require("./services/database")(pool || require("../db"));
   app.disable("x-powered-by");
@@ -32,6 +35,14 @@ module.exports = function createSmartSuperAdmin({ pool } = {}) {
     res.set("X-Content-Type-Options", "nosniff");
     next();
   });
+  if (!skipAccessControl) {
+    const {
+      requireSameOriginForChanges,
+      requireSuperAdminSession,
+    } = require("./middleware/access-control");
+    app.use(requireSuperAdminSession);
+    app.use(requireSameOriginForChanges);
+  }
   app.use(
     express.urlencoded({ extended: true, limit: "2mb", parameterLimit: 1000 }),
   );
@@ -49,7 +60,7 @@ module.exports = function createSmartSuperAdmin({ pool } = {}) {
     const status =
       error.code === "ER_DUP_ENTRY"
         ? 409
-        : [400, 404, 409, 413, 503].includes(error.status)
+        : [400, 402, 403, 404, 409, 413, 503].includes(error.status)
           ? error.status
           : 503;
     const message =

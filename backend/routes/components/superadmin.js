@@ -9,6 +9,17 @@ const ViewErrorLog = require("./ViewErrorLog");
 const Login = require("./Login");
 const Organizations = require("./Organizations");
 const OrganizationList = require("./OrganizationList");
+const {
+  requireSameOriginForChanges,
+  requireSuperAdminSession,
+} = require("../../smart-super-admin/middleware/access-control");
+const {
+  getOrganizationSubscription,
+  markExpired,
+  revokeOrganizationTokens,
+} = require("../../services/subscription-access");
+
+router.use(requireSameOriginForChanges);
 
 const ListErrorLogs = require("./ListErrorLogs");
 const ListCommands = require("./ListCommands");
@@ -456,12 +467,9 @@ function formatMySQLDateKabulToUTC(dateString) {
 router.post(
   "/subscription/",
   express.urlencoded({ extended: true }),
+  requireAuth,
+  requireSuperAdminSession,
   async (req, res) => {
-    if (req.session.user.username !== "superadmin") {
-      return res
-        .status(403)
-        .send("Forbidden: Only superadmin can save subscription-plans");
-    }
     try {
       const myData = req.body;
 
@@ -473,6 +481,26 @@ router.post(
       const trial_end_date = myData.trial_end_date ? formatMySQLDateKabulToUTC(myData.trial_end_date) : null;
       const cancelled_at = myData.cancelled_at ? formatMySQLDateKabulToUTC(myData.cancelled_at) : null;
       const price_override = myData.price_override ? Number(myData.price_override) : null;
+      const previousRecord =
+        myData.subscription_id != 0
+          ? (await db.execute(
+              "SELECT org_id FROM subscriptions WHERE id = ?",
+              [myData.subscription_id],
+            ))[0][0]
+          : null;
+      const affectedOrganizations = [
+        ...new Set(
+          [previousRecord?.org_id, org_id]
+            .filter(Boolean)
+            .map(Number),
+        ),
+      ];
+      const previousAccess = new Map();
+      for (const affectedOrgId of affectedOrganizations) {
+        const subscription = await getOrganizationSubscription(db, affectedOrgId);
+        previousAccess.set(affectedOrgId, subscription?.access_status);
+      }
+
       if (myData.subscription_id != 0) {
         await db.execute(
           `UPDATE subscriptions SET org_id=?, plan_id=?, start_date=?, end_date=?, next_billing_date=?, subscription_status=?, auto_renew=?, trial_end_date=?, cancelled_at=?, price_override=?,description=?,currency=? WHERE id=?`,
@@ -545,6 +573,21 @@ router.post(
           [myData.subscription_id, feature_ids[i], feature_values[i] || null, feature_units[i] || null]
         );
       }
+
+      for (const affectedOrgId of affectedOrganizations) {
+        const current = await getOrganizationSubscription(db, affectedOrgId);
+        const currentlyAllowed = ["active", "trial"].includes(
+          current?.access_status,
+        );
+        const previouslyAllowed = ["active", "trial"].includes(
+          previousAccess.get(affectedOrgId),
+        );
+        await markExpired(db, current);
+        if (!currentlyAllowed || !previouslyAllowed) {
+          await revokeOrganizationTokens(db, affectedOrgId);
+        }
+      }
+
         // redirect to list
       res.redirect(
         `/api/superadmin/list-subscriptions/all/id/DESC/0/20/1/`,

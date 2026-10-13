@@ -42,6 +42,22 @@ export const auth = writable({
   isAuthenticated: sessionIsValid,
 });
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('erp:authentication-invalid', () => {
+    clearSessionStorage();
+    auth.set({
+      token: null,
+      user_id: null,
+      org_id: null,
+      username: null,
+      role_id: null,
+      subscription: null,
+      permissions: [],
+      isAuthenticated: false,
+    });
+  });
+}
+
 
 export async function setPermissionsFromUsers() {
   const userId = get(auth).user_id;
