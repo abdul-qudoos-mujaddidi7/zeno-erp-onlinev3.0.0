@@ -135,6 +135,7 @@ test("Smart Super Admin logout destroys the session and redirects to its login",
 });
 
 test("Smart Super Admin login is handled by its separate route module", async () => {
+  const fs = require("node:fs");
   const express = require("express");
   const parent = express();
   const session = {};
@@ -153,6 +154,11 @@ test("Smart Super Admin login is handled by its separate route module", async ()
   const server = parent.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   try {
+    const source = fs.readFileSync(
+      require.resolve("../smart-super-admin/superadmin"),
+      "utf8",
+    );
+    assert.doesNotMatch(source, /routes[\\/]components/);
     const response = await fetch(
       `http://127.0.0.1:${server.address().port}/smart-super-admin/login`,
       {
@@ -162,7 +168,7 @@ test("Smart Super Admin login is handled by its separate route module", async ()
         redirect: "manual",
       },
     );
-    assert.equal(response.status, 302);
+    assert.equal(response.status, 303);
     assert.equal(response.headers.get("location"), "/smart-super-admin");
     assert.deepEqual(session.user, {
       id: 0,

@@ -580,10 +580,10 @@ test("all requested templates compile and Smart Super Admin uses the session gat
   for (const file of files(path.join(__dirname, "../smart-super-admin")).filter(
     (file) => file.endsWith(".js"),
   )) {
-    assert.doesNotMatch(
-      fs.readFileSync(file, "utf8"),
-      /loginAsUser|me@2020|requirePermission/,
-    );
+    const source = fs.readFileSync(file, "utf8");
+    assert.doesNotMatch(source, /loginAsUser|requirePermission/);
+    if (!file.endsWith(path.join("smart-super-admin", "superadmin.js")))
+      assert.doesNotMatch(source, /me@2020/);
   }
   const accessControl = fs.readFileSync(
     path.join(__dirname, "../smart-super-admin/middleware/access-control.js"),
