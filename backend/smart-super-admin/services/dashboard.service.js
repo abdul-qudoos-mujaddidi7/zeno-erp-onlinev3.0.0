@@ -56,4 +56,20 @@ module.exports = (db) => ({
       recentSubscriptions: subscriptionsResult[0],
     };
   },
+  async select(orgId) {
+    const id = db.id(orgId, true);
+    if (id) await db.one("organizations", id);
+    return id;
+  },
+  async options(query) {
+    const term =
+      "%" +
+      db.text(query, 120).replace(/[!%_]/g, (character) => "!" + character) +
+      "%";
+    const [rows] = await db.pool.execute(
+      "SELECT id,name FROM organizations WHERE name LIKE ? ESCAPE '!' OR CAST(id AS CHAR) LIKE ? ESCAPE '!' ORDER BY name LIMIT 20",
+      [term, term],
+    );
+    return rows;
+  },
 });
