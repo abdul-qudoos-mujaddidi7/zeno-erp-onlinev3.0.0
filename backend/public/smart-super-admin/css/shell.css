@@ -118,11 +118,11 @@ body {
 }
 .smart-sidebar nav a:hover,
 .record-menu > summary:hover {
-  background: #f4f8ff;
+  background: #eef3f6;
   color: var(--smart-primary);
 }
 .smart-sidebar nav a.active {
-  background: #eaf3ff;
+  background: #eaf2f6;
   color: var(--smart-primary);
 }
 .sidebar-label {
@@ -344,7 +344,7 @@ body {
   font-weight: 850;
 }
 .topbar-page-nav a:hover {
-  background: #eaf3ff;
+  background: #eaf2f6;
   color: var(--smart-primary);
 }
 .topbar-actions {
@@ -385,7 +385,7 @@ body {
 .quick-search:focus-within {
   border-color: var(--smart-primary);
   background: #fff;
-  box-shadow: 0 0 0 3px rgb(30 108 165 / 12%);
+  box-shadow: 0 0 0 3px rgb(41 122 160 / 12%);
 }
 .quick-search > i {
   flex: 0 0 auto;
@@ -451,7 +451,7 @@ body {
 }
 .quick-search-result:hover,
 .quick-search-result:focus-visible {
-  background: #f1f6fb;
+  background: #eef3f6;
   color: var(--smart-primary);
 }
 .quick-search-result > i {
@@ -461,7 +461,7 @@ body {
   height: 2rem;
   place-items: center;
   border-radius: 0.45rem;
-  background: #eaf4fb;
+  background: #eaf2f6;
   color: var(--smart-primary);
 }
 .quick-search-result-text {

@@ -42,7 +42,7 @@ body {
   height: 44px;
   place-items: center;
   border-radius: 8px;
-  background: #1e6ca5;
+  background: #297aa0;
   color: #fff;
   font-size: 24px;
   font-weight: 700;
@@ -50,7 +50,7 @@ body {
 
 .login-eyebrow {
   margin: 22px 0 4px;
-  color: #1e6ca5;
+  color: #216581;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -95,21 +95,21 @@ input {
 
 input:focus-visible,
 button:focus-visible {
-  outline: 3px solid rgb(30 108 165 / 35%);
+  outline: 3px solid rgb(41 122 160 / 35%);
   outline-offset: 2px;
 }
 
 button {
   margin-top: 12px;
   border: 0;
-  background: #1e6ca5;
+  background: #297aa0;
   color: #fff;
   font-weight: 650;
   cursor: pointer;
 }
 
 button:hover {
-  background: #185b8c;
+  background: #216581;
 }
 
 .login-error {

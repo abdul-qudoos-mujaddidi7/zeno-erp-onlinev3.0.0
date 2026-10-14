@@ -617,6 +617,43 @@ test("all requested templates compile and Smart Super Admin uses the session gat
     path.join(__dirname, "../views/smart-super-admin"),
   ).filter((file) => file.endsWith(".hbs"));
   assert.ok(templates.length >= 24);
+  const sharedHead = fs.readFileSync(
+      path.join(
+        __dirname,
+        "../views/smart-super-admin/partials/head.hbs",
+      ),
+      "utf8",
+    ),
+    login = fs.readFileSync(
+      path.join(__dirname, "../views/smart-super-admin/login.hbs"),
+      "utf8",
+    ),
+    design = fs.readFileSync(
+      path.join(__dirname, "../public/smart-super-admin/css/modern.css"),
+      "utf8",
+    );
+  assert.match(sharedHead, /assets\/css\/modern\.css\?v=4/);
+  assert.match(login, /assets\/css\/modern\.css\?v=4/);
+  assert.match(design, /\.smart-sidebar nav a\.active/);
+  assert.match(design, /\.data-table th/);
+  assert.match(design, /\.dashboard-metric/);
+  assert.match(design, /\.form-actions/);
+  assert.match(design, /--smart-primary:\s*#297aa0/);
+  assert.match(
+    fs.readFileSync(
+      path.join(__dirname, "../public/smart-super-admin/css/admin.css"),
+      "utf8",
+    ),
+    /--smart-primary:\s*#297aa0/,
+  );
+  assert.match(
+    fs.readFileSync(
+      path.join(__dirname, "../public/smart-super-admin/css/login.css"),
+      "utf8",
+    ),
+    /background:\s*#297aa0/,
+  );
+  assert.doesNotMatch(design, /#2563eb|#1d4ed8|#0f6efd/);
   const table = fs.readFileSync(
     path.join(
       __dirname,

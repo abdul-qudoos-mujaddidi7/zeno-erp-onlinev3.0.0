@@ -1,5 +1,5 @@
 :root {
-  --smart-primary: #1e6ca5;
+  --smart-primary: #297aa0;
   --smart-bg: #f5f6f9;
   --smart-ink: #172033;
   --smart-muted: #64748b;
@@ -479,7 +479,7 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
 .index-toolbar-actions .btn-primary {
   border-color: var(--smart-primary);
   background: var(--smart-primary);
-  box-shadow: 0 8px 18px rgba(30, 108, 165, 0.18);
+  box-shadow: 0 8px 18px rgb(41 122 160 / 18%);
   transition:
     background 0.15s ease,
     border-color 0.15s ease,
@@ -488,8 +488,8 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
 }
 .index-toolbar-actions .btn-primary:hover {
   transform: translateY(-1px);
-  border-color: #185b8c;
-  background: #185b8c;
+  border-color: #216581;
+  background: #216581;
 }
 .index-toolbar .btn-outline-primary,
 .organization-card .btn-outline-primary {
@@ -499,8 +499,8 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
 }
 .index-toolbar .btn-outline-primary:hover,
 .row-action:hover {
-  border-color: #93b4e7;
-  background: #f5f9ff;
+  border-color: #a7c5d1;
+  background: #eef3f6;
   color: var(--smart-primary);
 }
 .filter-search {
@@ -526,8 +526,8 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
 }
 .filter-search:focus-within,
 .filter-search.is-open {
-  border-color: #79a8f8;
-  box-shadow: 0 0 0 3px rgb(37 99 235 / 8%), 0 4px 12px rgb(15 23 42 / 4%);
+  border-color: #82afc0;
+  box-shadow: 0 0 0 3px rgb(41 122 160 / 10%), 0 4px 12px rgb(15 23 42 / 4%);
 }
 .filter-search.is-loading {
   cursor: progress;
@@ -689,8 +689,8 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
   width: 2.25rem;
   height: 2.25rem;
   border-radius: 0.625rem;
-  background: #eaf2ff;
-  color: #0f6efd;
+  background: #eaf2f6;
+  color: #216581;
   font-size: 1rem;
 }
 .filter-panel__title > div {
@@ -763,8 +763,8 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
   font-size: 0.8125rem;
 }
 .filter-field .form-control:focus {
-  border-color: #79a8f8;
-  box-shadow: 0 0 0 3px rgb(37 99 235 / 8%);
+  border-color: #82afc0;
+  box-shadow: 0 0 0 3px rgb(41 122 160 / 10%);
 }
 .filter-panel__footer {
   display: flex;
@@ -806,14 +806,14 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
 }
 .filter-apply {
   min-width: 6rem;
-  border: 1px solid #0f6efd;
-  background: #0f6efd;
+  border: 1px solid #297aa0;
+  background: #297aa0;
   color: #fff;
-  box-shadow: 0 5px 12px rgb(37 99 235 / 18%);
+  box-shadow: 0 5px 12px rgb(41 122 160 / 18%);
 }
 .filter-apply:hover {
-  border-color: #1d4ed8;
-  background: #1d4ed8;
+  border-color: #216581;
+  background: #216581;
 }
 @media (max-width: 767.98px) {
   .filter-search {
@@ -940,7 +940,7 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
 .data-table tbody tr.row-clickable:hover,
 .data-table tbody tr.row-clickable:focus-within,
 .mobile-cards tbody tr.row-clickable:hover {
-  background: #eff6ff;
+  background: #eef3f6;
 }
 .data-table tbody tr:nth-child(even) {
   background: #f5f7fa;
@@ -1000,9 +1000,9 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
 }
 .data-table .badge.bg-primary,
 .data-table .badge.bg-info {
-  background: #eff6ff !important;
+  background: #eaf2f6 !important;
   color: var(--smart-primary);
-  border: 1px solid #bfdbfe;
+  border: 1px solid #d1e0e1;
 }
 .row-action {
   display: inline-flex;
@@ -1011,9 +1011,9 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
   width: 34px;
   min-height: 34px;
   padding: 0;
-  border: 1px solid #bfdbfe;
+  border: 1px solid #d1e0e1;
   border-radius: 0.5rem;
-  background: #eff6ff;
+  background: #eaf2f6;
   color: var(--smart-primary);
   box-shadow: none;
 }
@@ -1058,7 +1058,7 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
 }
 .row-action-menu-item:hover,
 .row-action-menu-item:focus-visible {
-  background: #eff6ff;
+  background: #eef3f6;
   color: var(--smart-primary);
 }
 .index-footer {
@@ -1202,7 +1202,7 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
   width: 2.25rem;
   height: 2.25rem;
   border-radius: 0.625rem;
-  background: #eaf4fb;
+  background: #eaf2f6;
   color: var(--smart-primary);
   font-size: 0.9375rem;
 }
@@ -1329,8 +1329,8 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
   font-size: 1rem;
 }
 .dashboard-icon-blue {
-  background: #eaf4fb;
-  color: #1e6ca5;
+  background: #eaf2f6;
+  color: #216581;
 }
 .dashboard-icon-green {
   background: #eaf8f0;
@@ -1426,7 +1426,7 @@ html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
   border-bottom: 0;
 }
 .dashboard-record-link {
-  color: #1e6ca5;
+  color: #216581;
   font-weight: 650;
   text-decoration: none;
 }
