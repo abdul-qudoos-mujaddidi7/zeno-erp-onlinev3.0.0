@@ -1,11 +1,30 @@
 <section class="index-page" aria-label="{{t tableTitle}}"><div class="index-panel">
   <header class="index-toolbar">
     <div class="index-toolbar-actions">{{#if createUrl}}<a class="btn btn-primary action-btn" href="{{createUrl}}"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t 'New'}}</a>{{/if}}<span class="index-record-count"><i class="bi bi-list-ul" aria-hidden="true"></i>{{t 'Records'}} <strong>{{total}}</strong></span></div>
-    <form method="get" class="index-toolbar-main no-print">
-      <label class="filter-search"><i class="bi bi-search" aria-hidden="true"></i><span class="visually-hidden">{{t 'Search'}}</span><input name="q" type="search" value="{{query.q}}" maxlength="120" placeholder="{{t 'Search'}}"></label>
+    <form method="get" class="index-toolbar-main no-print" data-filter-form>
+      <div class="filter-search" data-filter-search>
+        <i class="bi bi-search filter-search__icon" aria-hidden="true"></i>
+        <label class="visually-hidden" for="index-search">{{t 'Search'}}</label>
+        <input id="index-search" class="filter-search__input" name="q" type="search" value="{{query.q}}" maxlength="120" placeholder="{{t 'Search'}}" autocomplete="off" data-filter-input>
+        <button type="button" class="search-clear" data-filter-clear aria-label="{{t 'Clear search'}}" title="{{t 'Clear search'}}" {{#unless query.q}}hidden{{/unless}}><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        {{#if (any filterEnabled dateFilter.enabled)}}<button type="button" class="filter-toggle{{#if (any query.filter query.from query.to)}} is-active{{/if}}" data-filter-toggle aria-label="{{t 'Filter'}}" title="{{t 'Filter'}}" aria-expanded="false" aria-controls="index-filter-panel"><i class="bi bi-sliders2" aria-hidden="true"></i></button>{{/if}}
+      </div>
       {{#if query.type}}<input type="hidden" name="type" value="{{query.type}}">{{/if}}{{#if query.status}}<input type="hidden" name="status" value="{{query.status}}">{{/if}}
-      {{#if filterEnabled}}<label class="index-filter-field"><span>{{t 'Type / status'}}</span><input class="form-control" name="filter" value="{{query.filter}}" maxlength="255"></label>{{/if}}{{#if dateFilter.enabled}}<label class="index-filter-field index-filter-field--date"><span>{{t 'From'}} · {{dateFilter.label}}</span><input class="form-control" type="datetime-local" name="from" value="{{dateFilter.from}}"></label><label class="index-filter-field index-filter-field--date"><span>{{t 'To'}} · {{dateFilter.label}}</span><input class="form-control" type="datetime-local" name="to" value="{{dateFilter.to}}"></label>{{/if}}
-      <button class="btn btn-outline-primary action-btn" type="submit"><i class="bi bi-funnel" aria-hidden="true"></i>{{t 'Apply'}}</button>
+      {{#if (any filterEnabled dateFilter.enabled)}}<div class="filter-panel" id="index-filter-panel" data-filter-panel hidden>
+        <span class="filter-panel__arrow" aria-hidden="true"></span>
+        <header class="filter-panel__header">
+          <div class="filter-panel__title"><span class="filter-panel__title-icon"><i class="bi bi-sliders2" aria-hidden="true"></i></span><div><strong>{{t 'Filter'}}</strong><small>{{t 'Choose the options you need'}}</small></div></div>
+          <button type="button" class="filter-panel__close" data-filter-close aria-label="{{t 'Close'}}" title="{{t 'Close'}}"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </header>
+        <div class="filter-panel__body"><div class="filter-panel__fields">
+          {{#if filterEnabled}}<label class="filter-field"><span class="filter-field__label">{{t 'Type / status'}}</span><input class="form-control" name="filter" value="{{query.filter}}" maxlength="255"></label>{{/if}}
+          {{#if dateFilter.enabled}}<label class="filter-field"><span class="filter-field__label">{{t 'From'}} · {{dateFilter.label}}</span><input class="form-control" type="datetime-local" name="from" value="{{dateFilter.from}}"></label><label class="filter-field"><span class="filter-field__label">{{t 'To'}} · {{dateFilter.label}}</span><input class="form-control" type="datetime-local" name="to" value="{{dateFilter.to}}"></label>{{/if}}
+        </div></div>
+        <footer class="filter-panel__footer">
+          <button type="button" class="filter-reset" data-filter-reset><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>{{t 'Reset'}}</button>
+          <button type="submit" class="filter-apply"><i class="bi bi-check2" aria-hidden="true"></i>{{t 'Apply'}}</button>
+        </footer>
+      </div>{{/if}}
     </form>
   </header>
   <div class="index-content"><div class="table-responsive data-table-wrap mobile-cards" tabindex="0" role="region" aria-label="{{t tableTitle}}"><table class="table smart-table data-table"><caption class="visually-hidden">{{t tableTitle}}</caption>

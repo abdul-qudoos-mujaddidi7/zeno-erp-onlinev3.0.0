@@ -257,6 +257,57 @@
       }
     }, 200);
   });
+  document.querySelectorAll("[data-filter-form]").forEach((form) => {
+    const search = form.querySelector("[data-filter-search]"),
+      panel = form.querySelector("[data-filter-panel]"),
+      toggle = form.querySelector("[data-filter-toggle]"),
+      input = form.querySelector("[data-filter-input]"),
+      clear = form.querySelector("[data-filter-clear]"),
+      close = form.querySelector("[data-filter-close]"),
+      reset = form.querySelector("[data-filter-reset]");
+    function setPanel(open) {
+      if (!panel || !toggle) return;
+      panel.hidden = !open;
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.classList.toggle("is-active", open);
+      search?.classList.toggle("is-open", open);
+    }
+    function syncClear() {
+      if (clear && input) clear.hidden = !input.value;
+    }
+    syncClear();
+    toggle?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setPanel(panel.hidden);
+    });
+    close?.addEventListener("click", () => {
+      setPanel(false);
+      toggle?.focus();
+    });
+    document.addEventListener("click", (event) => {
+      if (!panel || panel.hidden || search?.contains(event.target)) return;
+      setPanel(false);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && panel && !panel.hidden) setPanel(false);
+    });
+    input?.addEventListener("input", syncClear);
+    clear?.addEventListener("click", () => {
+      if (!input) return;
+      input.value = "";
+      syncClear();
+      input.focus();
+    });
+    reset?.addEventListener("click", () => {
+      if (input) input.value = "";
+      panel
+        ?.querySelectorAll("input")
+        .forEach((field) => (field.value = ""));
+      syncClear();
+      setPanel(false);
+      form.submit();
+    });
+  });
   const featureEditor = document.querySelector("[data-feature-editor]");
   if (featureEditor) {
     const picker = featureEditor.querySelector("[data-feature-picker]"),

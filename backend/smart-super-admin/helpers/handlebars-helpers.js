@@ -44,6 +44,7 @@ function pagination(current, total, baseUrl) {
   };
 }
 module.exports = {
+  any: (...args) => args.slice(0, -1).some(Boolean),
   eq: (a, b) => String(a) === String(b),
   neq: (a, b) => String(a) !== String(b),
   gt: (a, b) => Number(a) > Number(b),
