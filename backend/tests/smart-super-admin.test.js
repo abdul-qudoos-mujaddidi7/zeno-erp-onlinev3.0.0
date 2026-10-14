@@ -261,6 +261,43 @@ test("table models mark records with status zero for inactive row styling", () =
   assert.ok(model.rows.every((row) => !("downloadUrl" in row)));
 });
 
+test("Smart Super Admin create buttons name the type of record being created", async () => {
+  const result = {
+    rows: [],
+    columns: [{ name: "name", type: "varchar" }],
+    tableName: "features",
+    total: 0,
+    page: 1,
+    totalPages: 1,
+    limit: 20,
+    org: 0,
+    sort: "id",
+    direction: "DESC",
+  };
+  const cases = [
+    ["org-types", "Organization Types", "org-type", "New Type"],
+    ["features", "Features", "feature", "New Feature"],
+    ["subscription-plans", "Subscription Plans", "subscription-plan", "New Subscription Plan"],
+    ["subscriptions", "Subscriptions", "subscription", "New Subscription"],
+  ];
+
+  for (const [key, title, path, expectedLabel] of cases) {
+    const controller = require("../smart-super-admin/controllers/crud.controller")(
+      {
+        config: { title, path },
+        list: async () => result,
+      },
+      key,
+    );
+    let model;
+    await controller.list(
+      { params: {}, query: {} },
+      { locals: { orgId: 0 }, render: (view, locals) => (model = locals) },
+    );
+    assert.equal(model.createLabel, expectedLabel);
+  }
+});
+
 test("generic table renders only status-zero rows with inactive styling", async () => {
   const express = require("express");
   const app = express();

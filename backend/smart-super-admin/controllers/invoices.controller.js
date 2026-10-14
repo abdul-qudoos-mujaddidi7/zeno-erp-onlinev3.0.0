@@ -44,6 +44,7 @@ module.exports = (service) => ({
       basePath: "invoices",
       query: req.query,
       detail: (row) => "/smart-super-admin/invoice/view/" + row.id,
+      createLabel: "New Invoice",
       extraActions: (row) => [
         {
           label: "Edit",

@@ -86,7 +86,7 @@ function changes(record) {
 }
 function tableModel(
   result,
-  { title, basePath, detail, createUrl, query = {}, extraActions } = {},
+  { title, basePath, detail, createUrl, createLabel = "New", query = {}, extraActions } = {},
 ) {
   const suffix = new URLSearchParams(
     Object.entries(query).filter(
@@ -154,6 +154,7 @@ function tableModel(
     pagination,
     limits,
     createUrl,
+    createLabel,
     tableName: result.tableName,
     dateFilter: dateFilter(result, query),
     query,

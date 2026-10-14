@@ -1,4 +1,11 @@
 const vm = require("./view-models");
+const createLabels = {
+  "org-types": "New Type",
+  features: "New Feature",
+  "subscription-plans": "New Subscription Plan",
+  subscriptions: "New Subscription",
+};
+
 module.exports = (service, key) => ({
   async list(req, res) {
     const result = await service.list(req.params, req.query);
@@ -10,6 +17,7 @@ module.exports = (service, key) => ({
         detail: (row) =>
           `/smart-super-admin/${path}/${row.id}${key === "subscriptions" ? "/" + (row.org_id || 0) : ""}`,
         createUrl: `/smart-super-admin/${path}${key === "subscriptions" ? "/0/" + res.locals.orgId : ""}`,
+        createLabel: createLabels[key] || "New",
         query: req.query,
         extraActions: (row) => [
           {
