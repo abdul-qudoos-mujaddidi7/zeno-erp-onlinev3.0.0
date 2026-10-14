@@ -1,6 +1,7 @@
 const STRINGS = {
   en: {},
   fa: {
+    "Could not refresh results. Please try again.": "بارگذاری نتایج انجام نشد. لطفاً دوباره تلاش کنید.",
     Navigation: "ناوبری",
     Preferences: "تنظیمات",
     Fullscreen: "تمام‌صفحه",
@@ -58,6 +59,7 @@ const STRINGS = {
     Invoices: "صورتحساب‌ها",
   },
   ps: {
+    "Could not refresh results. Please try again.": "پایلې تازه نه شوې. مهرباني وکړئ بیا هڅه وکړئ.",
     Navigation: "لارښود",
     Preferences: "غوراوي",
     Fullscreen: "بشپړه پرده",

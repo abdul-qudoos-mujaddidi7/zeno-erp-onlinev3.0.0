@@ -173,42 +173,45 @@
       menu.querySelector(".row-action-menu-items")?.removeAttribute("style");
     });
   }
-  document.querySelectorAll("tr[data-row-url]").forEach((row) => {
-    row.addEventListener("click", (event) => {
-      if (
-        event.defaultPrevented ||
-        event.button !== 0 ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.shiftKey ||
-        event.altKey ||
-        event.target.closest("a,button,summary,input,select,textarea,label")
-      )
-        return;
-      window.location.href = row.dataset.rowUrl;
+  function bindTableRows(root = document) {
+    root.querySelectorAll("tr[data-row-url]").forEach((row) => {
+      row.addEventListener("click", (event) => {
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey ||
+          event.target.closest("a,button,summary,input,select,textarea,label")
+        )
+          return;
+        window.location.href = row.dataset.rowUrl;
+      });
+      row.addEventListener("contextmenu", (event) => {
+        const menu = row.querySelector(".row-action-menu"),
+          items = menu?.querySelector(".row-action-menu-items");
+        if (!menu || !items) return;
+        event.preventDefault();
+        closeRowMenus(menu);
+        menu.open = true;
+        const left = Math.max(
+            8,
+            Math.min(event.clientX, window.innerWidth - items.offsetWidth - 8),
+          ),
+          top = Math.max(
+            8,
+            Math.min(event.clientY, window.innerHeight - items.offsetHeight - 8),
+          );
+        items.style.position = "fixed";
+        items.style.insetInlineEnd = "auto";
+        items.style.insetBlockStart = "auto";
+        items.style.left = left + "px";
+        items.style.top = top + "px";
+      });
     });
-    row.addEventListener("contextmenu", (event) => {
-      const menu = row.querySelector(".row-action-menu"),
-        items = menu?.querySelector(".row-action-menu-items");
-      if (!menu || !items) return;
-      event.preventDefault();
-      closeRowMenus(menu);
-      menu.open = true;
-      const left = Math.max(
-          8,
-          Math.min(event.clientX, window.innerWidth - items.offsetWidth - 8),
-        ),
-        top = Math.max(
-          8,
-          Math.min(event.clientY, window.innerHeight - items.offsetHeight - 8),
-        );
-      items.style.position = "fixed";
-      items.style.insetInlineEnd = "auto";
-      items.style.insetBlockStart = "auto";
-      items.style.left = left + "px";
-      items.style.top = top + "px";
-    });
-  });
+  }
+  bindTableRows();
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".row-action-menu")) closeRowMenus();
   });
@@ -264,7 +267,10 @@
       input = form.querySelector("[data-filter-input]"),
       clear = form.querySelector("[data-filter-clear]"),
       close = form.querySelector("[data-filter-close]"),
-      reset = form.querySelector("[data-filter-reset]");
+      reset = form.querySelector("[data-filter-reset]"),
+      status = form.querySelector("[data-filter-status]");
+    form.action = window.location.pathname.replace(/\/\d+\/?$/, "/1");
+    let searchTimer, requestId = 0, activeRequest;
     function setPanel(open) {
       if (!panel || !toggle) return;
       panel.hidden = !open;
@@ -274,6 +280,66 @@
     }
     function syncClear() {
       if (clear && input) clear.hidden = !input.value;
+    }
+    async function loadResults() {
+      window.clearTimeout(searchTimer);
+      activeRequest?.abort();
+      const controller = new AbortController(),
+        currentRequest = ++requestId,
+        params = new URLSearchParams(new FormData(form)),
+        currentUrl = new URL(window.location.href);
+      activeRequest = controller;
+      if (currentUrl.searchParams.has("lang") && !params.has("lang"))
+        params.set("lang", currentUrl.searchParams.get("lang"));
+      const url = new URL(form.action, window.location.href);
+      url.search = params.toString();
+      search?.classList.add("is-loading");
+      if (status) status.hidden = true;
+      try {
+        const response = await fetch(url, {
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+          signal: controller.signal,
+        });
+        if (!response.ok)
+          throw new Error(`Could not refresh records (${response.status}).`);
+        const html = await response.text();
+        if (currentRequest !== requestId) return;
+        const nextPage =
+            new DOMParser().parseFromString(html, "text/html"),
+          nextContent = nextPage.querySelector(".index-content"),
+          nextFooter = nextPage.querySelector(".index-footer"),
+          nextCount = nextPage.querySelector(".index-record-count"),
+          content = document.querySelector(".index-content"),
+          footer = document.querySelector(".index-footer"),
+          count = document.querySelector(".index-record-count");
+        if (!nextContent || !content || !nextFooter || !footer)
+          throw new Error("The refreshed records could not be displayed.");
+        content.replaceWith(nextContent);
+        footer.replaceWith(nextFooter);
+        if (nextCount && count) count.replaceWith(nextCount);
+        bindTableRows(nextContent);
+        window.history.replaceState(
+          null,
+          "",
+          url.pathname + url.search + url.hash,
+        );
+      } catch (error) {
+        if (error.name === "AbortError") return;
+        console.error("Could not refresh Smart Super Admin records:", error);
+        if (status) {
+          status.textContent = form.dataset.errorMessage || error.message;
+          status.hidden = false;
+        }
+      } finally {
+        if (currentRequest === requestId) {
+          activeRequest = null;
+          search?.classList.remove("is-loading");
+        }
+      }
+    }
+    function scheduleSearch() {
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(loadResults, 300);
     }
     syncClear();
     toggle?.addEventListener("click", (event) => {
@@ -291,12 +357,16 @@
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && panel && !panel.hidden) setPanel(false);
     });
-    input?.addEventListener("input", syncClear);
+    input?.addEventListener("input", () => {
+      syncClear();
+      scheduleSearch();
+    });
     clear?.addEventListener("click", () => {
       if (!input) return;
       input.value = "";
       syncClear();
       input.focus();
+      scheduleSearch();
     });
     reset?.addEventListener("click", () => {
       if (input) input.value = "";
@@ -305,7 +375,12 @@
         .forEach((field) => (field.value = ""));
       syncClear();
       setPanel(false);
-      form.submit();
+      form.requestSubmit();
+    });
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      setPanel(false);
+      loadResults();
     });
   });
   const featureEditor = document.querySelector("[data-feature-editor]");

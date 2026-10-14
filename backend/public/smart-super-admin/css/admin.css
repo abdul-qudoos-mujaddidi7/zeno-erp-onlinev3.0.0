@@ -382,6 +382,31 @@ pre {
   background: #fff;
   direction: ltr;
 }
+.index-toolbar--table {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.index-toolbar--table .index-toolbar-main {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  justify-content: flex-start;
+}
+.index-toolbar--table .index-toolbar-actions {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+html[dir="rtl"] .index-toolbar--table {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+html[dir="rtl"] .index-toolbar--table .index-toolbar-main {
+  grid-column: 2;
+  justify-self: end;
+}
+html[dir="rtl"] .index-toolbar--table .index-toolbar-actions {
+  grid-column: 1;
+  justify-self: start;
+}
 .index-toolbar-actions,
 .index-toolbar-main {
   display: flex;
@@ -489,6 +514,15 @@ pre {
 .filter-search.is-open {
   border-color: #79a8f8;
   box-shadow: 0 0 0 3px rgb(37 99 235 / 8%), 0 4px 12px rgb(15 23 42 / 4%);
+}
+.filter-search.is-loading {
+  cursor: progress;
+}
+.filter-status {
+  flex: 0 0 100%;
+  color: #b91c1c;
+  font-size: 0.75rem;
+  text-align: start;
 }
 .filter-search__icon {
   flex: 0 0 auto;
@@ -1218,7 +1252,7 @@ pre {
   box-shadow: 0 8px 24px rgb(15 23 42 / 10%);
 }
 @media (max-width: 1199px) {
-  .index-toolbar {
+  .index-toolbar:not(.index-toolbar--table) {
     grid-template-columns: 1fr;
   }
   .index-toolbar-main {
@@ -1229,6 +1263,18 @@ pre {
 @media (max-width: 767px) {
   main {
     padding: 16px 12px;
+  }
+  .index-toolbar--table {
+    grid-template-columns: 1fr;
+  }
+  .index-toolbar--table .index-toolbar-main,
+  .index-toolbar--table .index-toolbar-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .index-toolbar--table .index-toolbar-main {
+    justify-self: stretch;
+    width: 100%;
   }
   .index-toolbar,
   .index-extra-actions,

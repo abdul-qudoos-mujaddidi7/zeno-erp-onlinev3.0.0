@@ -1,7 +1,7 @@
 <section class="index-page" aria-label="{{t tableTitle}}"><div class="index-panel">
-  <header class="index-toolbar">
+  <header class="index-toolbar index-toolbar--table">
     <div class="index-toolbar-actions">{{#if createUrl}}<a class="btn btn-primary action-btn" href="{{createUrl}}"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{t 'New'}}</a>{{/if}}<span class="index-record-count"><i class="bi bi-list-ul" aria-hidden="true"></i>{{t 'Records'}} <strong>{{total}}</strong></span></div>
-    <form method="get" class="index-toolbar-main no-print" data-filter-form>
+    <form method="get" class="index-toolbar-main no-print" data-filter-form data-error-message="{{t 'Could not refresh results. Please try again.'}}">
       <div class="filter-search" data-filter-search>
         <i class="bi bi-search filter-search__icon" aria-hidden="true"></i>
         <label class="visually-hidden" for="index-search">{{t 'Search'}}</label>
@@ -25,6 +25,7 @@
           <button type="submit" class="filter-apply"><i class="bi bi-check2" aria-hidden="true"></i>{{t 'Apply'}}</button>
         </footer>
       </div>{{/if}}
+      <span class="filter-status" data-filter-status role="status" aria-live="polite" hidden></span>
     </form>
   </header>
   <div class="index-content"><div class="table-responsive data-table-wrap mobile-cards" tabindex="0" role="region" aria-label="{{t tableTitle}}"><table class="table smart-table data-table"><caption class="visually-hidden">{{t tableTitle}}</caption>

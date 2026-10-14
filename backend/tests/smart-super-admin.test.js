@@ -820,3 +820,56 @@ test("table rows open their record on click and the action menu on right-click",
   assert.equal(menu.open, false);
   dom.window.close();
 });
+
+test("table search refreshes results live after typing and resets pagination", async () => {
+  const { JSDOM } = require("jsdom");
+  const dom = new JSDOM(
+    '<form method="get" action="/smart-super-admin/list/products/id/DESC/0/20/4" data-filter-form><div data-filter-search><input name="q" data-filter-input><button type="button" data-filter-clear hidden></button></div><span data-filter-status hidden></span></form><span class="index-record-count"><strong>4</strong></span><div class="index-content">old results</div><footer class="index-footer">old pages</footer>',
+    {
+      runScripts: "outside-only",
+      url: "http://localhost/smart-super-admin/list/products/id/DESC/0/20/4",
+    },
+  );
+  dom.window.matchMedia = () => ({ addEventListener() {} });
+  const requests = [];
+  dom.window.fetch = async (url, options) => {
+    requests.push({ url: String(url), options });
+    return {
+      ok: true,
+      text: async () =>
+        '<span class="index-record-count"><strong>2</strong></span><div class="index-content">new results</div><footer class="index-footer">new pages</footer>',
+    };
+  };
+  dom.window.eval(
+    fs.readFileSync(
+      path.join(__dirname, "../public/smart-super-admin/js/admin.js"),
+      "utf8",
+    ),
+  );
+
+  const input = dom.window.document.querySelector("[data-filter-input]");
+  input.value = "soap";
+  input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  input.value = "soap powder";
+  input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 350));
+
+  assert.equal(requests.length, 1, "typing is debounced into one fetch");
+  assert.match(requests[0].url, /q=soap\+powder$/);
+  assert.equal(
+    dom.window.document.querySelector(".index-content").textContent,
+    "new results",
+    "results update without replacing the page",
+  );
+  assert.equal(
+    dom.window.document.querySelector(".index-record-count strong").textContent,
+    "2",
+  );
+  assert.equal(
+    new URL(dom.window.location.href).pathname,
+    "/smart-super-admin/list/products/id/DESC/0/20/1",
+    "search submits from the first page",
+  );
+  dom.window.close();
+});

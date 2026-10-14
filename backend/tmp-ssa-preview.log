@@ -1,0 +1,2 @@
+◇ injected env (7) from .env // tip: ⌘ suppress logs { quiet: true }
+preview on http://localhost:4321/smart-super-admin/list/products/id/DESC/0/20/1
