@@ -42,6 +42,14 @@ const RECENT_SUBSCRIPTIONS_SQL = `
   LIMIT 6
 `;
 
+function searchTerm(db, query) {
+  return (
+    "%" +
+    db.text(query, 120).replace(/[!%_]/g, (character) => "!" + character) +
+    "%"
+  );
+}
+
 module.exports = (db) => ({
   async summary() {
     const [metricsResult, subscriptionsResult] = await Promise.all([
@@ -62,14 +70,59 @@ module.exports = (db) => ({
     return id;
   },
   async options(query) {
-    const term =
-      "%" +
-      db.text(query, 120).replace(/[!%_]/g, (character) => "!" + character) +
-      "%";
+    const term = searchTerm(db, query);
     const [rows] = await db.pool.execute(
       "SELECT id,name FROM organizations WHERE name LIKE ? ESCAPE '!' OR CAST(id AS CHAR) LIKE ? ESCAPE '!' ORDER BY name LIMIT 20",
       [term, term],
     );
     return rows;
+  },
+  async quickSearch(query) {
+    const normalized = db.text(query, 120);
+    if (normalized.length < 2) return [];
+    const term = searchTerm(db, normalized);
+    const [organizations, subscriptions] = await Promise.all([
+      db.pool.execute(
+        "SELECT id,name FROM organizations WHERE name LIKE ? ESCAPE '!' OR CAST(id AS CHAR) LIKE ? ESCAPE '!' ORDER BY name LIMIT 6",
+        [term, term],
+      ),
+      db.pool.execute(
+        `SELECT s.id, s.org_id AS organizationId,
+          COALESCE(o.name, '—') AS organizationName,
+          COALESCE(p.name, '—') AS planName,
+          s.subscription_status AS status
+        FROM subscriptions s
+        LEFT JOIN organizations o ON o.id = s.org_id
+        LEFT JOIN subscription_plans p ON p.id = s.plan_id
+        WHERE CAST(s.id AS CHAR) LIKE ? ESCAPE '!'
+          OR CAST(s.org_id AS CHAR) LIKE ? ESCAPE '!'
+          OR o.name LIKE ? ESCAPE '!'
+          OR p.name LIKE ? ESCAPE '!'
+        ORDER BY s.id DESC
+        LIMIT 6`,
+        [term, term, term, term],
+      ),
+    ]);
+    return [
+      ...organizations[0].map((row) => ({
+        type: "organization",
+        label: row.name,
+        detail: `#${row.id}`,
+        url:
+          "/smart-super-admin/select-org/" +
+          encodeURIComponent(row.id) +
+          "?returnTo=%2Fsmart-super-admin%2Forganizations",
+      })),
+      ...subscriptions[0].map((row) => ({
+        type: "subscription",
+        label: row.organizationName,
+        detail: `#${row.id} · ${row.planName} · ${row.status}`,
+        url:
+          "/smart-super-admin/subscription/" +
+          encodeURIComponent(row.id) +
+          "/" +
+          encodeURIComponent(row.organizationId),
+      })),
+    ];
   },
 });

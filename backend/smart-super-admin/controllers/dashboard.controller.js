@@ -22,6 +22,9 @@ module.exports = (service) => ({
   async options(req, res) {
     res.json(await service.options(req.query.q || ""));
   },
+  async quickSearch(req, res) {
+    res.json(await service.quickSearch(req.query.q || ""));
+  },
 });
 
 function organizationReturnPath(value, orgId) {

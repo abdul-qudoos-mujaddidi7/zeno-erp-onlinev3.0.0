@@ -121,6 +121,69 @@ test("organization selection returns to the current page and updates its organiz
   }
 });
 
+test("quick search returns bounded organization and subscription matches", async () => {
+  const express = require("express");
+  const parent = express();
+  const statements = [];
+  parent.use(
+    "/smart-super-admin",
+    require("../smart-super-admin/app")({
+      skipAccessControl: true,
+      pool: {
+        execute: async (sql, values) => {
+          statements.push({ sql, values });
+          if (sql.includes("FROM organizations"))
+            return [[{ id: 315, name: "Northwind" }]];
+          if (sql.includes("FROM subscriptions"))
+            return [
+              [
+                {
+                  id: 87,
+                  organizationId: 315,
+                  organizationName: "Northwind",
+                  planName: "Growth",
+                  status: "active",
+                },
+              ],
+            ];
+          throw new Error("Unexpected quick-search query");
+        },
+      },
+    }),
+  );
+  const server = parent.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  try {
+    const base = `http://127.0.0.1:${server.address().port}/smart-super-admin/quick-search`;
+    const shortQuery = await fetch(`${base}?q=N`);
+    assert.equal(shortQuery.status, 200);
+    assert.deepEqual(await shortQuery.json(), []);
+    assert.equal(statements.length, 0);
+
+    const response = await fetch(`${base}?q=${encodeURIComponent("Northwind")}`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), [
+      {
+        type: "organization",
+        label: "Northwind",
+        detail: "#315",
+        url: "/smart-super-admin/select-org/315?returnTo=%2Fsmart-super-admin%2Forganizations",
+      },
+      {
+        type: "subscription",
+        label: "Northwind",
+        detail: "#87 · Growth · active",
+        url: "/smart-super-admin/subscription/87/315",
+      },
+    ]);
+    assert.equal(statements.length, 2);
+    assert.ok(statements.every(({ sql, values }) => sql.includes("LIKE ?")));
+    assert.ok(statements.every(({ values }) => values.every((value) => value === "%Northwind%")));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("row menus provide edit links for resources with existing edit forms", async () => {
   const createCrudController = require("../smart-super-admin/controllers/crud.controller");
   const resources = [

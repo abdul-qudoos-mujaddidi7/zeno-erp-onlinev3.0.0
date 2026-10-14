@@ -260,6 +260,156 @@
       }
     }, 200);
   });
+  const quickSearch = document.querySelector("[data-quick-search]"),
+    quickSearchInput = quickSearch?.querySelector("[data-quick-search-input]"),
+    quickSearchResults = quickSearch?.querySelector(
+      "[data-quick-search-results]",
+    ),
+    quickSearchStatus = quickSearch?.querySelector(
+      "[data-quick-search-status]",
+    );
+  let quickSearchTimer, quickSearchRequest, quickSearchSequence = 0;
+  function closeQuickSearch() {
+    if (!quickSearchResults || !quickSearchInput) return;
+    quickSearchResults.hidden = true;
+  }
+  function showQuickSearchMessage(message) {
+    if (!quickSearchResults) return;
+    quickSearchResults.replaceChildren();
+    const note = document.createElement("p");
+    note.className = "quick-search-message";
+    note.textContent = message;
+    quickSearchResults.append(note);
+    quickSearchResults.hidden = false;
+  }
+  async function loadQuickSearch() {
+    if (!quickSearch || !quickSearchInput || !quickSearchResults) return;
+    const query = quickSearchInput.value.trim();
+    const request = ++quickSearchSequence;
+    quickSearchRequest?.abort();
+    if (query.length < 2) {
+      quickSearchResults.replaceChildren();
+      closeQuickSearch();
+      if (quickSearchStatus)
+        quickSearchStatus.textContent = query
+          ? quickSearch.dataset.minimumLabel
+          : "";
+      return;
+    }
+    const controller = new AbortController();
+    quickSearchRequest = controller;
+    const loading = quickSearch.dataset.searchingLabel || "Searching...";
+    if (quickSearchStatus) quickSearchStatus.textContent = loading;
+    showQuickSearchMessage(loading);
+    try {
+      const response = await fetch(
+        quickSearch.dataset.searchUrl + "?q=" + encodeURIComponent(query),
+        { headers: { "X-Requested-With": "XMLHttpRequest" }, signal: controller.signal },
+      );
+      if (!response.ok) throw new Error("Quick search request failed.");
+      const rows = await response.json();
+      if (request !== quickSearchSequence) return;
+      quickSearchResults.replaceChildren();
+      for (const row of rows) {
+        if (
+          !row ||
+          typeof row.label !== "string" ||
+          typeof row.detail !== "string" ||
+          typeof row.url !== "string" ||
+          !row.url.startsWith(base + "/")
+        )
+          continue;
+        const link = document.createElement("a"),
+          icon = document.createElement("i"),
+          text = document.createElement("span"),
+          detail = document.createElement("small");
+        link.className = "quick-search-result";
+        link.href = row.url;
+        icon.className =
+          row.type === "organization"
+            ? "bi bi-building"
+            : "bi bi-credit-card";
+        icon.setAttribute("aria-hidden", "true");
+        text.className = "quick-search-result-text";
+        const kind = document.createElement("small");
+        kind.className = "quick-search-result-type";
+        kind.textContent =
+          row.type === "organization"
+            ? quickSearch.dataset.organizationLabel
+            : quickSearch.dataset.subscriptionLabel;
+        const label = document.createElement("span");
+        label.textContent = row.label;
+        text.append(kind, label);
+        detail.className = "quick-search-result-detail";
+        detail.textContent = row.detail;
+        link.append(icon, text, detail);
+        quickSearchResults.append(link);
+      }
+      if (!quickSearchResults.childElementCount) {
+        const empty = quickSearch.dataset.emptyLabel || "No matching results";
+        showQuickSearchMessage(empty);
+        if (quickSearchStatus) quickSearchStatus.textContent = empty;
+      } else {
+        quickSearchResults.hidden = false;
+        if (quickSearchStatus)
+          quickSearchStatus.textContent =
+            quickSearchResults.childElementCount + " " +
+            (quickSearch.dataset.resultsLabel || "Search results");
+      }
+    } catch (error) {
+      if (error.name === "AbortError" || request !== quickSearchSequence) return;
+      console.error("Could not search Smart Super Admin:", error);
+      const message =
+        quickSearch.dataset.errorLabel || "Search failed. Please try again.";
+      showQuickSearchMessage(message);
+      if (quickSearchStatus) quickSearchStatus.textContent = message;
+    }
+  }
+  quickSearchInput?.addEventListener("input", () => {
+    window.clearTimeout(quickSearchTimer);
+    quickSearchTimer = window.setTimeout(loadQuickSearch, 180);
+  });
+  quickSearchInput?.addEventListener("focus", () => {
+    if (quickSearchInput.value.trim().length >= 2) {
+      window.clearTimeout(quickSearchTimer);
+      quickSearchTimer = window.setTimeout(loadQuickSearch, 0);
+    }
+  });
+  quickSearchInput?.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" && !quickSearchResults?.hidden) {
+      event.preventDefault();
+      quickSearchResults.querySelector("a")?.focus();
+    } else if (event.key === "Escape") {
+      closeQuickSearch();
+    }
+  });
+  quickSearchResults?.addEventListener("keydown", (event) => {
+    const links = [...quickSearchResults.querySelectorAll("a")],
+      index = links.indexOf(event.target);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeQuickSearch();
+      quickSearchInput?.focus();
+    } else if (event.key === "ArrowDown" && index < links.length - 1) {
+      event.preventDefault();
+      links[index + 1].focus();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (index > 0) links[index - 1].focus();
+      else quickSearchInput?.focus();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (quickSearch && !quickSearch.contains(event.target))
+      closeQuickSearch();
+  });
+  document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      quickSearchInput?.focus();
+      quickSearchInput?.select();
+    }
+  });
   document.querySelectorAll("[data-filter-form]").forEach((form) => {
     const search = form.querySelector("[data-filter-search]"),
       panel = form.querySelector("[data-filter-panel]"),

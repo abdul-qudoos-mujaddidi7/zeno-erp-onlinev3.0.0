@@ -1,5 +1,27 @@
 <header class="smart-topbar"><div class="topbar-inner">
   <button type="button" class="shell-icon-button" data-sidebar-toggle aria-controls="smart-sidebar" aria-expanded="false" aria-label="{{t 'Open navigation'}}"><i class="bi bi-list" aria-hidden="true"></i></button>
   <div class="topbar-page-title">{{#if pageNavigation}}<nav class="topbar-page-nav" aria-label="{{t 'Page navigation'}}">{{#each pageNavigation}}<a href="{{url}}" class="{{#if active}}active{{/if}}" {{#if active}}aria-current="page"{{/if}}>{{t label}}</a>{{/each}}</nav>{{else}}<span>{{t title}}</span>{{/if}}</div>
-  <div class="topbar-actions"><a class="organization-context-pill" href="/smart-super-admin/organizations" title="{{orgName}}"><i class="bi bi-building" aria-hidden="true"></i><span>{{orgName}}</span></a>{{#if orgId}}<a class="shell-icon-button" href="/smart-super-admin/select-org/0" title="{{t 'All organizations'}}" aria-label="{{t 'All organizations'}}"><i class="bi bi-globe" aria-hidden="true"></i></a>{{/if}}<button class="shell-icon-button" type="button" data-fullscreen aria-label="{{t 'Fullscreen'}}" title="{{t 'Fullscreen'}}"><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i></button></div>
+  <div class="topbar-actions">
+    <div class="quick-search" data-quick-search
+      data-search-url="/smart-super-admin/quick-search"
+      data-searching-label="{{t 'Searching...'}}"
+      data-empty-label="{{t 'No matching results'}}"
+      data-error-label="{{t 'Search failed. Please try again.'}}"
+      data-minimum-label="{{t 'Type at least 2 characters'}}"
+      data-organization-label="{{t 'Organization'}}"
+      data-subscription-label="{{t 'Subscription'}}"
+      data-results-label="{{t 'Search results'}}"
+      data-search-label="{{t 'Search Smart Super Admin'}}">
+      <i class="bi bi-search" aria-hidden="true"></i>
+      <input type="search" autocomplete="off"
+        aria-controls="smart-quick-search-results"
+        aria-label="{{t 'Search Smart Super Admin'}}"
+        placeholder="{{t 'Search organizations and subscriptions'}}"
+        data-quick-search-input>
+      <kbd aria-hidden="true">Ctrl K</kbd>
+      <div class="quick-search-results" id="smart-quick-search-results"
+        role="group" aria-label="{{t 'Search results'}}" data-quick-search-results hidden></div>
+      <span class="visually-hidden" role="status" aria-live="polite" data-quick-search-status></span>
+    </div>
+    <a class="organization-context-pill" href="/smart-super-admin/organizations" title="{{orgName}}"><i class="bi bi-building" aria-hidden="true"></i><span>{{orgName}}</span></a>{{#if orgId}}<a class="shell-icon-button" href="/smart-super-admin/select-org/0" title="{{t 'All organizations'}}" aria-label="{{t 'All organizations'}}"><i class="bi bi-globe" aria-hidden="true"></i></a>{{/if}}<button class="shell-icon-button" type="button" data-fullscreen aria-label="{{t 'Fullscreen'}}" title="{{t 'Fullscreen'}}"><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i></button></div>
 </div><p class="visually-hidden" data-shell-status role="status"></p></header>

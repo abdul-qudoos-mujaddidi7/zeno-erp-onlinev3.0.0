@@ -80,7 +80,8 @@ module.exports = function createSmartSuperAdmin({
       );
     if (
       req.path.startsWith("/subscription-plan-features/") ||
-      req.path === "/organization-options"
+      req.path === "/organization-options" ||
+      req.path === "/quick-search"
     )
       return res.status(status).json({ success: false, message });
     res.status(status).render("error", { title: "Request failed", message });

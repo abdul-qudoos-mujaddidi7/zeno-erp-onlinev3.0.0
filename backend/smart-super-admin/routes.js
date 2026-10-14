@@ -27,6 +27,7 @@ module.exports = (db, pool) => {
   router.get("/", d.index);
   router.get("/organizations", o.grid);
   router.get("/organization-options", d.options);
+  router.get("/quick-search", d.quickSearch);
   router.get(
     "/organization-list/:sortcolumn/:sortdir/:org/:limit/:page",
     o.list,
