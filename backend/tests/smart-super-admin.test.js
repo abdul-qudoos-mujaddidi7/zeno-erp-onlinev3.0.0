@@ -680,6 +680,25 @@ test("list date range filters bind to the table's temporal column in Kabul time"
   ]);
 });
 
+test("subscription search matches organization IDs", async () => {
+  const pool = recordingPool([
+    { name: "id", type: "bigint" },
+    { name: "org_id", type: "bigint" },
+    { name: "subscription_status", type: "varchar" },
+  ]);
+  await database(pool).list(
+    "subscriptions",
+    { sortcolumn: "id", sortdir: "DESC", org: 0, limit: 20, page: 1 },
+    { $search: "276" },
+  );
+
+  const listing = pool.calls.find((call) =>
+    /FROM `subscriptions`/.test(call.sql) && !/COUNT/.test(call.sql),
+  );
+  assert.match(listing.sql, /CAST\(`org_id` AS CHAR\) LIKE \? ESCAPE '!'/);
+  assert.ok(listing.params.includes("%276%"));
+});
+
 test("a date-typed column compares on the day and unusable ranges fail with 400", async () => {
   const dayPool = recordingPool([
     { name: "id", type: "bigint" },

@@ -167,6 +167,8 @@ module.exports = function createDatabase(pool) {
         "invoice_number",
         "script",
       ].filter((field) => names.includes(field));
+      if (table === "subscriptions" && names.includes("org_id"))
+        fields.push("org_id");
       if (fields.length) {
         const term =
           "%" +
@@ -174,9 +176,13 @@ module.exports = function createDatabase(pool) {
           "%";
         conditions.push(
           "(" +
-            fields.map((field) => "`" + field + "` LIKE ? ESCAPE '!'").join(
-              " OR ",
-            ) +
+            fields
+              .map((field) =>
+                field === "org_id"
+                  ? "CAST(`org_id` AS CHAR) LIKE ? ESCAPE '!'"
+                  : "`" + field + "` LIKE ? ESCAPE '!'",
+              )
+              .join(" OR ") +
             ")",
         );
         values.push(...fields.map(() => term));
