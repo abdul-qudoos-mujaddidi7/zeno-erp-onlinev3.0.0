@@ -86,7 +86,7 @@ function changes(record) {
 }
 function tableModel(
   result,
-  { title, basePath, detail, createUrl, download, query = {}, extraActions } = {},
+  { title, basePath, detail, createUrl, query = {}, extraActions } = {},
 ) {
   const suffix = new URLSearchParams(
     Object.entries(query).filter(
@@ -149,7 +149,6 @@ function tableModel(
         image: /image|photo/.test(column.name) ? image(row[column.name]) : null,
       })),
       detailUrl: detail?.(row),
-      downloadUrl: download?.(row),
       actions: extraActions?.(row) || [],
     })),
     pagination,

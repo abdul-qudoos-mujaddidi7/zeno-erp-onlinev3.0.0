@@ -9,7 +9,6 @@ module.exports = (service) => ({
         basePath: "list/" + name,
         query: req.query,
         detail: (row) => `/smart-super-admin/view/${name}/${row.id}`,
-        download: (row) => `/smart-super-admin/download/${name}/${row.id}`,
         extraActions: (row) => [
           {
             label: "Edit",

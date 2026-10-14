@@ -258,6 +258,7 @@ test("table models mark records with status zero for inactive row styling", () =
     model.rows.map((row) => row.inactive),
     [true, true, false],
   );
+  assert.ok(model.rows.every((row) => !("downloadUrl" in row)));
 });
 
 test("generic table renders only status-zero rows with inactive styling", async () => {
@@ -530,7 +531,7 @@ test("all requested templates compile and Smart Super Admin uses the session gat
   assert.match(table, /name="from"/);
   assert.match(table, /name="to"/);
   assert.match(table, /type="datetime-local"/);
-  assert.match(table, /downloadUrl/);
+  assert.doesNotMatch(table, /downloadUrl|>\{\{t 'Download'\}\}</);
   for (const file of templates) {
     const source = fs.readFileSync(file, "utf8");
     handlebars.precompile(source);
