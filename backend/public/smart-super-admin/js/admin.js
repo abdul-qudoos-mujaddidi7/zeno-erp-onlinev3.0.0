@@ -351,7 +351,7 @@
       toggle?.focus();
     });
     document.addEventListener("click", (event) => {
-      if (!panel || panel.hidden || search?.contains(event.target)) return;
+      if (!panel || panel.hidden || form.contains(event.target)) return;
       setPanel(false);
     });
     document.addEventListener("keydown", (event) => {

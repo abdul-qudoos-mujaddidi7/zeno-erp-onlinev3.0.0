@@ -1,1 +1,91 @@
-<section class="index-page"><div class="index-panel">{{> organization-cards}}<footer class="index-footer"><a class="directory-link" href="/smart-super-admin/organizations">{{t 'Organizations'}} <i class="bi bi-arrow-right" aria-hidden="true"></i></a></footer></div></section>
+<section class="dashboard-page">
+  <header class="dashboard-heading">
+    <div>
+      <p class="dashboard-eyebrow">{{t "Smart Super Admin"}}</p>
+      <h1>{{t "Platform overview"}}</h1>
+      <p>{{t "A quick view of organizations, subscriptions, and invoices."}}</p>
+    </div>
+    <span class="dashboard-scope"><i class="bi bi-globe2" aria-hidden="true"></i>{{t "Across all organizations"}}</span>
+  </header>
+
+  <div class="dashboard-metrics" aria-label="{{t 'Platform metrics'}}">
+    <a class="dashboard-metric" href="/smart-super-admin/organizations">
+      <span class="dashboard-metric-icon dashboard-icon-blue"><i class="bi bi-buildings" aria-hidden="true"></i></span>
+      <span class="dashboard-metric-label">{{t "Organizations"}}</span>
+      <strong>{{metrics.totalOrganizations}}</strong>
+      <span class="dashboard-metric-hint">{{t "All registered organizations"}}</span>
+    </a>
+    <a class="dashboard-metric" href="/smart-super-admin/list-subscriptions/id/DESC/0/20/1">
+      <span class="dashboard-metric-icon dashboard-icon-green"><i class="bi bi-check-circle" aria-hidden="true"></i></span>
+      <span class="dashboard-metric-label">{{t "Active subscriptions"}}</span>
+      <strong>{{metrics.activeSubscriptions}}</strong>
+      <span class="dashboard-metric-hint">{{t "Currently active"}}</span>
+    </a>
+    <a class="dashboard-metric" href="/smart-super-admin/list-subscriptions/id/DESC/0/20/1">
+      <span class="dashboard-metric-icon dashboard-icon-violet"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span>
+      <span class="dashboard-metric-label">{{t "Trial subscriptions"}}</span>
+      <strong>{{metrics.trialSubscriptions}}</strong>
+      <span class="dashboard-metric-hint">{{t "Currently in trial"}}</span>
+    </a>
+    <a class="dashboard-metric" href="/smart-super-admin/list-subscriptions/id/DESC/0/20/1">
+      <span class="dashboard-metric-icon dashboard-icon-amber"><i class="bi bi-clock-history" aria-hidden="true"></i></span>
+      <span class="dashboard-metric-label">{{t "Expiring soon"}}</span>
+      <strong>{{metrics.expiringSubscriptions}}</strong>
+      <span class="dashboard-metric-hint">{{t "Within the next 30 days"}}</span>
+    </a>
+    <a class="dashboard-metric" href="/smart-super-admin/list/subscription_invoices/id/DESC/0/20/1">
+      <span class="dashboard-metric-icon dashboard-icon-red"><i class="bi bi-receipt" aria-hidden="true"></i></span>
+      <span class="dashboard-metric-label">{{t "Open invoices"}}</span>
+      <strong>{{metrics.openInvoices}}</strong>
+      <span class="dashboard-metric-hint">{{t "With an unpaid balance"}}</span>
+    </a>
+  </div>
+
+  <div class="dashboard-sections">
+    <section class="dashboard-panel" aria-labelledby="recent-subscriptions-title">
+      <header class="dashboard-panel-heading">
+        <div>
+          <h2 id="recent-subscriptions-title">{{t "Recent subscriptions"}}</h2>
+          <p>{{t "Latest subscription records across the platform."}}</p>
+        </div>
+        <a href="/smart-super-admin/list-subscriptions/id/DESC/0/20/1">{{t "View all"}}</a>
+      </header>
+      <div class="dashboard-table-wrap">
+        <table class="dashboard-table">
+          <thead>
+            <tr>
+              <th scope="col">{{t "Organization"}}</th>
+              <th scope="col">{{t "Plan"}}</th>
+              <th scope="col">{{t "Status"}}</th>
+              <th scope="col">{{t "Expires"}}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each recentSubscriptions}}
+              <tr>
+                <td><a class="dashboard-record-link" href="/smart-super-admin/subscription/{{id}}/{{organizationId}}">{{organizationName}}</a></td>
+                <td>{{planName}}</td>
+                <td>{{statusBadge status}}</td>
+                <td>{{#if expiryDate}}{{formatDate expiryDate "date"}}{{else}}—{{/if}}</td>
+              </tr>
+            {{else}}
+              <tr><td colspan="4"><div class="dashboard-empty"><i class="bi bi-inbox" aria-hidden="true"></i><span>{{t "No subscriptions yet."}}</span></div></td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <nav class="dashboard-panel dashboard-quick-links" aria-label="{{t 'Quick links'}}">
+      <header class="dashboard-panel-heading">
+        <div>
+          <h2>{{t "Quick links"}}</h2>
+          <p>{{t "Go directly to common tasks."}}</p>
+        </div>
+      </header>
+      <a href="/smart-super-admin/organizations"><i class="bi bi-buildings" aria-hidden="true"></i><span>{{t "Manage organizations"}}</span><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+      <a href="/smart-super-admin/list-subscription-plans/id/DESC/0/20/1"><i class="bi bi-layers" aria-hidden="true"></i><span>{{t "Subscription Plans"}}</span><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+      <a href="/smart-super-admin/list-features/id/DESC/0/20/1"><i class="bi bi-grid-3x3-gap" aria-hidden="true"></i><span>{{t "Features"}}</span><i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
+    </nav>
+  </div>
+</section>

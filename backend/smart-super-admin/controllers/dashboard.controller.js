@@ -1,10 +1,9 @@
 module.exports = (service) => ({
   async index(req, res) {
-    const result = await service.index();
+    const result = await service.summary();
     res.render("dashboard", {
       title: "Dashboard",
-      organizations: result.rows,
-      total: result.total,
+      ...result,
     });
   },
   async selectOrg(req, res) {
