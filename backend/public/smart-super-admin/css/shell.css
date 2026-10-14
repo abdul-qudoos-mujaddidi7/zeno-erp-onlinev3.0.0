@@ -252,6 +252,31 @@ body {
   font-size: 0.75rem;
   text-transform: none;
 }
+.sidebar-logout-form {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+}
+.sidebar-profile-menu .sidebar-logout-button {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fff;
+  color: #b42318;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sidebar-profile-menu .sidebar-logout-button:hover {
+  background: #fef2f2;
+}
 .smart-workspace {
   display: flex;
   flex-direction: column;

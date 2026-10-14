@@ -12,7 +12,7 @@ function requireSuperAdminSession(req, res, next) {
   }
 
   if (req.accepts("html")) {
-    return res.redirect(303, "/api/superadmin");
+    return res.redirect(303, "/smart-super-admin/login");
   }
 
   return res.status(403).send("Only an authenticated superadmin can access this panel.");

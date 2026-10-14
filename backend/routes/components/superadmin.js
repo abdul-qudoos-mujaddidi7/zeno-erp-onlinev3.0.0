@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../../db");
-const crypto = require("crypto");
+const handleSuperadminLogin = require("./superadmin-login");
 const DashLayout = require("./DashLayout");
 const ListItems = require("./ListItems");
 const ViewItem = require("./ViewItem");
@@ -40,66 +40,14 @@ function requireAuth(req, res, next) {
   next();
 }
 
-function hashPassword(password) {
-  return crypto.createHash("sha256").update(password).digest("hex");
-}
 router.get("/", async (req, res) => {
   Login(req, res, db);
 });
 
 // Handle login
-router.post("/", express.urlencoded({ extended: true }), async (req, res) => {
-  const { username, password } = req.body;
-
-  try {
-    const [orgs] = await db.query(
-      `SELECT * FROM \`organizations\` ORDER BY created_at DESC`,
-    );
-
-    if (
-      username &&
-      username == "superadmin" &&
-      password &&
-      password == "me@2020"
-    ) {
-      req.session.user = {
-        id: 0,
-        org_id: 0,
-        username: username,
-      };
-
-      res.redirect("/api/superadmin/dashboard"); // or wherever
-    } else {
-      const [rows] = await db.execute(
-        "SELECT * FROM users WHERE username = ?",
-        [username],
-      );
-
-      if (rows.length && rows.length == 1) {
-        user = rows[0];
-        if (user.password_hash === hashPassword(password)) {
-          req.session.user = {
-            id: user.local_id,
-            org_id: user.org_id,
-            org_name: orgs.find((o) => o.id === user.org_id)?.name || "N/A",
-            username: username,
-          };
-
-          res.redirect("/api/superadmin/dashboard"); // or wherever
-        } else {
-          return res.send(
-            "Invalid password <a href='/api/superadmin'>Go back</a>",
-          );
-        }
-      } else {
-        return res.send("User not found <a href='/api/superadmin'>Go back</a>");
-      }
-    }
-  } catch (err) {
-    console.error(err);
-    res.send("Login error");
-  }
-});
+router.post("/", express.urlencoded({ extended: true }), (req, res) =>
+  handleSuperadminLogin(req, res, db),
+);
 
 // Update user preferences (language/theme)
 router.get("/dashboard", requireAuth, (req, res) => {

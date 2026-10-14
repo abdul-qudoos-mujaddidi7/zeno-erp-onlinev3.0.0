@@ -6,7 +6,8 @@ module.exports = function createSmartSuperAdmin({
   skipAccessControl = false,
 } = {}) {
   const app = express(),
-    db = require("./services/database")(pool || require("../db"));
+    databasePool = pool || require("../db"),
+    db = require("./services/database")(databasePool);
   app.disable("x-powered-by");
   const helpers = { ...require("./helpers/handlebars-helpers") };
   delete helpers.buildPagination;
@@ -40,7 +41,10 @@ module.exports = function createSmartSuperAdmin({
       requireSameOriginForChanges,
       requireSuperAdminSession,
     } = require("./middleware/access-control");
-    app.use(requireSuperAdminSession);
+    app.use((req, res, next) => {
+      if (req.path === "/login") return next();
+      return requireSuperAdminSession(req, res, next);
+    });
     app.use(requireSameOriginForChanges);
   }
   app.use(
@@ -48,7 +52,7 @@ module.exports = function createSmartSuperAdmin({
   );
   app.use(express.json({ limit: "2mb" }));
   app.use(require("./middleware/context")(db));
-  app.use(require("./routes")(db));
+  app.use(require("./routes")(db, databasePool));
   app.use((req, res) =>
     res.status(404).render("error", {
       title: "Not found",

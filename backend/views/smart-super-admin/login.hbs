@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="{{htmlLanguage}}" dir="{{direction}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{t title}}</title>
+    <link rel="stylesheet" href="/fonts/vazirmatn.css" />
+    <link rel="stylesheet" href="/smart-super-admin/assets/css/login.css" />
+  </head>
+  <body>
+    <main class="login-page">
+      <section class="login-card" aria-labelledby="login-title">
+        <div class="login-brand" aria-hidden="true">Z</div>
+        <p class="login-eyebrow">ZENOERP</p>
+        <h1 id="login-title">{{t "Smart Super Admin"}}</h1>
+        <p class="login-description">{{t "Sign in to continue"}}</p>
+
+        {{#if loginError}}
+          <p class="login-error" role="alert">{{t loginError}}</p>
+        {{/if}}
+
+        <form method="post" action="/smart-super-admin/login">
+          <label for="username">{{t "Username"}}</label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            autocomplete="username"
+            required
+            autofocus
+          />
+
+          <label for="password">{{t "Password"}}</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+
+          <button type="submit">{{t "Login"}}</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

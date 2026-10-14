@@ -15,12 +15,16 @@ npm.cmd start
 ```
 
 Open `http://localhost:3001/smart-super-admin` when using the existing port 3001;
-use the configured `PORT` otherwise. There is no new login, authentication,
-permission middleware, administrator provisioning, or database migration.
-All routes, including writes, accept anonymous requests.
-The host application's session stores only organization selection and language
-for this module; a host user name is displayed when available. There is no
-impersonation feature and selection does not change the ERP user identity.
+use the configured `PORT` otherwise. Unauthenticated visitors see a basic
+Smart Super Admin login form. Its login and logout routes are isolated in
+`smart-super-admin/superadmin.js`, separate from the legacy
+`/api/superadmin` routes. Sign-in reuses the existing credential handler and
+session shape; this is not a hardened authentication system. Privilege checks
+protect panel routes, and writes require a same-origin request. No administrator
+provisioning or database migration is added.
+The host application's session also stores organization selection and language;
+a host user name is displayed when available. There is no impersonation feature
+and selection does not change the ERP user identity.
 
 Use the existing database configuration (`DB_HOST`, `DB_USER`, `DB_PASSWORD`,
 `DB_NAME`) and the existing host session configuration. No new runtime environment
@@ -60,11 +64,13 @@ action/search toolbars, dense striped tables, sticky sortable headers, status
 badges, footer page sizing, and labeled record cards on phones. These patterns
 are implemented in Handlebars and CSS; the ERP Svelte pages are unchanged.
 The application shell also follows the active ERP `DashboardLayout`, `Sidebar`,
-and `Topbar`: narrow logo sidebar, pale active links, bottom profile/language
-menu, saved desktop icon collapse, section navigation, organization context,
-fullscreen, and a mobile drawer with backdrop, Escape dismissal and focus trap.
-Sidebar collapse is stored under `smartSuperAdmin.sidebarCollapsed`, separately
-from ERP preferences. Shell styles are in `public/smart-super-admin/css/shell.css`.
+and `Topbar`: narrow logo sidebar, pale active links, bottom profile menu with
+language and logout, saved desktop icon collapse, section navigation,
+organization context, fullscreen, and a mobile drawer with backdrop, Escape
+dismissal and focus trap. Logout destroys the shared host session and returns
+to the Smart Super Admin login page. Sidebar collapse is stored under
+`smartSuperAdmin.sidebarCollapsed`, separately from ERP preferences. Shell
+styles are in `public/smart-super-admin/css/shell.css`.
 
 ## Verification
 

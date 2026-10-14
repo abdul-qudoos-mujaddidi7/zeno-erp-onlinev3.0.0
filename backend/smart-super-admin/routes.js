@@ -1,7 +1,8 @@
 const express = require("express");
-module.exports = (db) => {
+module.exports = (db, pool) => {
   const router = express.Router(),
     controllers = {};
+  router.use(require("./superadmin")(pool));
   for (const name of [
     "dashboard",
     "organizations",
