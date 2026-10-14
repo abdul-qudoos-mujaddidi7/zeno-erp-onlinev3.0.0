@@ -1,5 +1,8 @@
 {
   "en": {
+    "Your subscription ends soon": "Your subscription ends soon",
+    "Your free trial ends soon": "Your free trial ends soon",
+    "View subscription": "View subscription",
     "Show Bills": "By Bill",
     "Total Quantity": "Total Quantity",
     "Final Amount": "Final Amount",
@@ -1404,6 +1407,9 @@
     "Payment Amount": "مبلغ پرداخت",
     "Subscription": "اشتراک",
     "Subscription Overview": "نمایش کلی اشتراک",
+    "Your subscription ends soon": "اشتراک شما به‌زودی پایان می‌یابد",
+    "Your free trial ends soon": "دوره آزمایشی رایگان شما به‌زودی پایان می‌یابد",
+    "View subscription": "مشاهده اشتراک",
     "trial": "تجربه",
     "days remaining": "تعداد روزهای باقیمانده",
     "Storage": "مخازن",
@@ -3008,6 +3014,9 @@
     "Payment Amount": "د تادیاتو اندازه",
     "Subscription": "ګډون",
     "Subscription Overview": "د ګډون کتنه",
+    "Your subscription ends soon": "ستاسو ګډون به ژر پای ته ورسېږي",
+    "Your free trial ends soon": "ستاسو وړیا آزمایښتي موده به ژر پای ته ورسېږي",
+    "View subscription": "ګډون وګورئ",
     "trial": "محاکمه",
     "days remaining": "پاتې ورځې",
     "Storage": "ذخیره کول",

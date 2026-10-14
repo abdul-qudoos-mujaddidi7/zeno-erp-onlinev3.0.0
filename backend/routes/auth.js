@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 const { generateToken } = require("../utils/token");
+const authMiddleware = require("../middleware/auth");
 const crypto = require("crypto");
 const unitCategoryRepository = require("../repositories/unit-category.repository");
 const { generateLocalId } = require("../utils/generateLocalId");
@@ -279,6 +280,28 @@ router.post("/logout", async (req, res) => {
   res.json({ success: true });
 });
 
+router.get("/subscription", authMiddleware, async (req, res) => {
+  const subscription = { ...req.subscription };
+  delete subscription.access_status;
+
+  const [features] = await db.execute(
+    `SELECT spf.*, f.name, f.type, f.icon
+     FROM subscription_features spf
+     JOIN features f ON f.id = spf.feature_id
+     WHERE spf.subscription_id = ?`,
+    [subscription.id],
+  );
+  const [plans] = await db.execute(
+    "SELECT * FROM subscription_plans WHERE id = ?",
+    [subscription.plan_id],
+  );
+
+  subscription.features = features;
+  subscription.subscription_plan = plans[0] || null;
+
+  res.json({ subscription });
+});
+
 router.post("/validate-register", async (req, res) => {
   const { username, email } = req.body;
 
@@ -390,7 +413,7 @@ router.post("/register", async (req, res) => {
         now,
         end_date,
         now,
-        plan_id == 1 ? "active" : "trial",
+        "trial",
         "true",
         trial_end_date,
         null,

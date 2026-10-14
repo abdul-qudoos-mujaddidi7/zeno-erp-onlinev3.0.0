@@ -7,10 +7,12 @@
   import AppDatePicker from '../components/common/AppDatePicker.svelte';
   import { theme } from '../stores/themeStore.js';
   import { dashboardApi } from '../api/dashboardApi.js';
+  import { subscriptionApi } from '../api/subscriptionApi.js';
   import { findTreasuryAccountId } from './accounts/AccountsHelper.js';
   import { auth } from '../auth/authStore';
   import { canViewDashboard, canViewDashboardCard, canViewModule } from '../auth/permissions.js';
   import { link } from 'svelte-spa-router';
+  import { getSubscriptionExpiryReminder } from '../utils/subscriptionExpiry.js';
 
   $: _lang = $lang;
   $: currentTheme = $theme;
@@ -20,6 +22,7 @@
   // no entry for a module keeps the legacy behaviour (visible), so a card only
   // disappears when its permission was explicitly unchecked.
   $: permissions = $auth.permissions;
+  $: subscriptionReminder = getSubscriptionExpiryReminder($auth.subscription);
   $: canViewDashboardPage = canViewDashboard(permissions);
   $: canViewBenefit = canViewModule(permissions, 'Benefit');
   $: canViewAccounts = canViewModule(permissions, 'Accounts');
@@ -210,8 +213,26 @@
     renderTrendChart();
   }
 
+  async function refreshSubscription() {
+    try {
+      const response = await subscriptionApi.getCurrent();
+      if (!response?.subscription) {
+        throw new Error('Subscription data was missing from the server response.');
+      }
+
+      localStorage.setItem('subscription', JSON.stringify(response.subscription));
+      auth.update((current) => ({
+        ...current,
+        subscription: response.subscription,
+      }));
+    } catch (subscriptionError) {
+      console.error('Failed to refresh dashboard subscription reminder:', subscriptionError);
+    }
+  }
+
   onMount(() => {
     refresh();
+    refreshSubscription();
     resolveTreasuryAccount();
   });
 
@@ -915,6 +936,19 @@
   </div>
 {:else}
   <div class="dashboard-shell">
+    {#if subscriptionReminder}
+      <aside class="subscription-expiry-notice" aria-live="polite">
+        <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+        <div class="subscription-expiry-notice__content">
+          <strong>{t(subscriptionReminder.status === 'trial' ? 'Your free trial ends soon' : 'Your subscription ends soon')}</strong>
+          <span>{subscriptionReminder.daysRemaining} {t('days remaining')}</span>
+        </div>
+        <a href="/dashboard/subscription" use:link class="subscription-expiry-notice__link">
+          {t('View subscription')}
+          <i class="bi bi-arrow-right" aria-hidden="true"></i>
+        </a>
+      </aside>
+    {/if}
     <section class="summary-grid">
       <DashboardAccentPanel />
       {#if cardBenefit}
@@ -1284,6 +1318,55 @@
     padding: 0;
     background: transparent;
     color: #172033;
+  }
+
+  .subscription-expiry-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin-bottom: var(--section-gap, 0.65rem);
+    padding: 0.85rem 1rem;
+    border: 1px solid #f2cf7a;
+    border-radius: 8px;
+    background: #fff8e6;
+    color: #593d00;
+  }
+
+  .subscription-expiry-notice > i {
+    flex: 0 0 auto;
+    color: #a66b00;
+    font-size: 1.25rem;
+  }
+
+  .subscription-expiry-notice__content {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .subscription-expiry-notice__content span {
+    color: #72551d;
+    font-size: 0.9rem;
+  }
+
+  .subscription-expiry-notice__link {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 44px;
+    padding: 0.4rem 0.65rem;
+    border-radius: 6px;
+    color: #704900;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .subscription-expiry-notice__link:hover,
+  .subscription-expiry-notice__link:focus-visible {
+    background: rgba(166, 107, 0, 0.1);
+    color: #4e3400;
   }
 
   .dashboard-loading {
@@ -2870,6 +2953,7 @@
 
   :global(html.dark) .loading-card,
   :global(html.dark) .dashboard-error,
+  :global(html.dark) .subscription-expiry-notice,
   :global(html.dark) .summary-card,
   :global(html.dark) .summary-metric-card,
   :global(html.dark) .summary-grid .summary-metric-card,
@@ -2878,6 +2962,21 @@
     background: var(--erp-surface);
     color: var(--erp-text);
     box-shadow: var(--erp-shadow-sm);
+  }
+
+  :global(html.dark) .subscription-expiry-notice {
+    border-color: rgba(245, 185, 66, 0.45);
+    background: rgba(120, 78, 9, 0.2);
+    color: #f8dfaa;
+  }
+
+  :global(html.dark) .subscription-expiry-notice > i,
+  :global(html.dark) .subscription-expiry-notice__link {
+    color: #f5c76a;
+  }
+
+  :global(html.dark) .subscription-expiry-notice__content span {
+    color: #e6d2a6;
   }
 
   :global(html.dark) .card-link:hover {
