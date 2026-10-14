@@ -632,12 +632,14 @@ test("all requested templates compile and Smart Super Admin uses the session gat
       path.join(__dirname, "../public/smart-super-admin/css/modern.css"),
       "utf8",
     );
-  assert.match(sharedHead, /assets\/css\/modern\.css\?v=4/);
-  assert.match(login, /assets\/css\/modern\.css\?v=4/);
+  assert.match(sharedHead, /assets\/css\/modern\.css\?v=7/);
+  assert.match(login, /assets\/css\/modern\.css\?v=7/);
   assert.match(design, /\.smart-sidebar nav a\.active/);
   assert.match(design, /\.data-table th/);
   assert.match(design, /\.dashboard-metric/);
   assert.match(design, /\.form-actions/);
+  assert.match(design, /\.dashboard-table \.badge\.bg-primary/);
+  assert.doesNotMatch(design, /data-theme="dark"|login-theme-toggle/);
   assert.match(design, /--smart-primary:\s*#297aa0/);
   assert.match(
     fs.readFileSync(
@@ -653,6 +655,8 @@ test("all requested templates compile and Smart Super Admin uses the session gat
     ),
     /background:\s*#297aa0/,
   );
+  assert.doesNotMatch(sharedHead, /theme\.js/);
+  assert.doesNotMatch(login, /theme\.js|data-theme-toggle/);
   assert.doesNotMatch(design, /#2563eb|#1d4ed8|#0f6efd/);
   const table = fs.readFileSync(
     path.join(

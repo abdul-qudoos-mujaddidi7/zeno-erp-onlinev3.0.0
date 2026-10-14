@@ -48,7 +48,7 @@ deployment runtime has not been supplied and its compatibility remains unverifie
   transactions; payments lock their invoice and use SQL DECIMAL calculations.
   Invoice form dates use Kabul time and are stored as UTC.
 - Local MDB 7.2.0 LTR/RTL styles with original license headers, existing Bootstrap
-  Icons and Vazirmatn assets, primary `#1e6ca5`, background `#f5f6f9`, responsive
+  Icons and Vazirmatn assets, primary `#297aa0`, responsive
   sidebar, and English/Dari/Pashto shared navigation and actions.
 
 `routes.js` defines the complete requested route map. Controllers build view
@@ -69,8 +69,9 @@ language and logout, saved desktop icon collapse, section navigation,
 organization context, fullscreen, and a mobile drawer with backdrop, Escape
 dismissal and focus trap. Logout destroys the shared host session and returns
 to the Smart Super Admin login page. Sidebar collapse is stored under
-`smartSuperAdmin.sidebarCollapsed`, separately from ERP preferences. Shell
-styles are in `public/smart-super-admin/css/shell.css`.
+`smartSuperAdmin.sidebarCollapsed`, separately from ERP preferences. The
+`#297aa0` accent is used throughout the light theme. Shell styles are in
+`public/smart-super-admin/css/shell.css`.
 
 ## Verification
 

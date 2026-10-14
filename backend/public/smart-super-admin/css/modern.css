@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --smart-primary: #297aa0;
   --smart-primary-hover: #216581;
   --smart-primary-soft: #eaf2f6;
@@ -372,10 +373,12 @@ h3 {
 }
 
 .data-table .badge.bg-primary,
-.data-table .badge.bg-info {
-  border-color: #d1e0e1;
-  background: var(--smart-primary-soft) !important;
-  color: var(--smart-primary-hover);
+.data-table .badge.bg-info,
+.dashboard-table .badge.bg-primary,
+.dashboard-table .badge.bg-info {
+  border-color: var(--smart-primary);
+  background: var(--smart-primary) !important;
+  color: #fff;
 }
 
 .row-action {
