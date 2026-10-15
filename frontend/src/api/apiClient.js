@@ -43,6 +43,18 @@ const getCache = new Map();
 const inflightGets = new Map();
 let invalidatedToken = null;
 
+/*
+ * Which session the two maps above belong to.
+ *
+ * Both are keyed by path alone, so without this a request made after a token
+ * change - a sign-out followed by a different sign-in, or the stored token
+ * simply being replaced - could be answered from the previous session's cache
+ * entry, or could join a request that session had already started. Comparing
+ * the token on every request is enough: it changes exactly when the answer
+ * must not be reused, and nothing else has to remember to call anything.
+ */
+let cacheScope;
+
 function getToken() {
   return localStorage.getItem('token');
 }
@@ -70,8 +82,15 @@ function invalidateAuthentication(token, error) {
   );
 }
 
+/*
+ * Forget everything held for the current session: stored answers and the
+ * requests still in flight. Both, because an in-flight request carries the
+ * caller's Authorization header, so sharing one across a sign-out would hand
+ * the new caller the previous session's response.
+ */
 export function invalidateApiCache() {
   getCache.clear();
+  inflightGets.clear();
 }
 
 async function parseResponse(response) {
@@ -104,6 +123,13 @@ async function request(
   } = {},
 ) {
   const token = getToken();
+
+  if (cacheScope !== token) {
+    cacheScope = token;
+    getCache.clear();
+    inflightGets.clear();
+  }
+
   /*
    * Sharing an in-flight request is always safe: two callers asking for the
    * same thing at the same moment get the one answer the server sent. Keeping

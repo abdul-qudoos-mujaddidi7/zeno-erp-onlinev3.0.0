@@ -1,3 +1,7 @@
+const {
+  paginateSelect,
+} = require('../utils/pagination');
+
 const STOCK_TRANSACTION_FIELDS = [
   'warehouse_id',
   'product_id',
@@ -64,13 +68,12 @@ const STOCK_TRANSACTION_COLUMNS = `
   updated_at
 `;
 
-async function findAll(
-  executor,
-  {
-    orgId,
-    filters = {},
-  },
-) {
+/*
+ * The list filters live in one builder so the unpaginated read (used by the
+ * edit/delete modals and by every internal reconciliation) and the paginated
+ * read the index page uses can never drift apart.
+ */
+function buildListQuery({ orgId, filters = {} }) {
   const conditions = [
     'org_id = ?',
   ];
@@ -87,7 +90,7 @@ async function findAll(
     reference_type,
     transaction_type,
     reference_id,
-    limit,
+    search,
   } = filters;
 
   if (
@@ -138,16 +141,87 @@ async function findAll(
     values.push(reference_id);
   }
 
+  /*
+   * The index page searches descriptions. The comparison is deliberately left
+   * to the column's own collation: MySQL's default is case-insensitive, which
+   * is what the browser-side filter it replaces did. Whitespace is trimmed
+   * before the test, so a box holding only spaces does not add a `LIKE '%%'`
+   * condition that would defeat the index for the page.
+   */
+  const searchTerm = String(search ?? '').trim();
+
+  if (searchTerm) {
+    conditions.push('description LIKE ?');
+    values.push(`%${searchTerm}%`);
+  }
+
+  return {
+    whereSql: conditions.join(' AND '),
+    values,
+  };
+}
+
+/*
+ * Sortable columns, mapped to the physical column each one means. The list is a
+ * whitelist because the value reaches an ORDER BY clause that cannot be a bind
+ * parameter.
+ */
+const LIST_SORT_COLUMNS = {
+  id: 'local_id',
+  local_id: 'local_id',
+  date: 'date',
+  created_at: 'created_at',
+  updated_at: 'updated_at',
+  transaction_type: 'transaction_type',
+  reference_type: 'reference_type',
+  reference_id: 'reference_id',
+  quantity: 'quantity',
+  unit_cost: 'unit_cost',
+  total_cost: 'total_cost',
+  status: 'status',
+};
+
+/*
+ * Newest first. `created_at` is the default because that is the order the index
+ * page has always shown - it sorted the rows it had downloaded by created_at -
+ * and local_id keeps that order stable when two rows share a timestamp.
+ */
+const LIST_DEFAULT_ORDER = 'created_at DESC, local_id DESC';
+
+function listOrderBy(filters = {}) {
+  const column = LIST_SORT_COLUMNS[filters.sort];
+  if (!column) return LIST_DEFAULT_ORDER;
+
+  const direction =
+    String(filters.direction || '').toLowerCase() === 'asc'
+      ? 'ASC'
+      : 'DESC';
+
+  /* local_id is already the tiebreak, so it is not repeated for itself. */
+  if (column === 'local_id') return `local_id ${direction}`;
+
+  return `${column} ${direction}, local_id DESC`;
+}
+
+async function findAll(
+  executor,
+  {
+    orgId,
+    filters = {},
+  },
+) {
+  const { whereSql, values } = buildListQuery({ orgId, filters });
+
   let sql = `
     SELECT
       ${STOCK_TRANSACTION_COLUMNS}
     FROM stock_transactions
-    WHERE ${conditions.join(' AND ')}
+    WHERE ${whereSql}
     ORDER BY date DESC, local_id DESC
   `;
 
-  if (limit) {
-    sql += ` LIMIT ${Number(limit)}`;
+  if (filters.limit) {
+    sql += ` LIMIT ${Number(filters.limit)}`;
   }
 
   const [rows] = await executor.execute(
@@ -156,6 +230,34 @@ async function findAll(
   );
 
   return rows;
+}
+
+/*
+ * One page of transactions plus the filtered total the footer reports.
+ *
+ * Only reached when a caller actually asks for a page, so the unpaginated read
+ * above keeps serving the modals and the internal reconciliations unchanged.
+ */
+async function findPage(
+  executor,
+  {
+    orgId,
+    filters = {},
+    pagination = null,
+  },
+) {
+  const { whereSql, values } = buildListQuery({ orgId, filters });
+
+  return paginateSelect(executor, {
+    tableSql: 'stock_transactions',
+    whereSql,
+    values,
+    orderBySql: `ORDER BY ${listOrderBy(filters)}`,
+    columnsSql: STOCK_TRANSACTION_COLUMNS,
+    pagination,
+    skipCount:
+      filters.skipCount === true || Number(filters.skip_count) === 1,
+  });
 }
 
 async function findByLocalId(
@@ -465,6 +567,9 @@ async function recordMovements(
 
 module.exports = {
   findAll,
+  findPage,
+  buildListQuery,
+  listOrderBy,
   findByLocalId,
   create,
   update,

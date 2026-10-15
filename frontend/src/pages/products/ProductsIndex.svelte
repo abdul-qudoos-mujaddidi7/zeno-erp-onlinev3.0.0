@@ -33,7 +33,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 
   let openFoodAPIModalRef;
 
-  import { toast } from '../../ToastUI/toast.js';
+import { toast } from '../../ToastUI/toast.js';
 import { currencyApi } from '../../api/currencyApi.js';
 import { warehouseApi } from '../../api/warehouseApi.js';
 import { saleItemApi } from '../../api/saleItemApi.js';

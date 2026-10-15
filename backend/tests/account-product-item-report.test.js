@@ -22,6 +22,39 @@ test('product sales queries include only confirmed invoices, matching sales summ
   assert.ok(query.values.includes('2026-08-22'));
 });
 
+/*
+ * `purchases` has no invoice-level discount columns, unlike `sales`. The
+ * purchase side used to select p.discount_type / p.discount_amount, which made
+ * MySQL reject the statement outright (Unknown column 'p.discount_type'), so
+ * the whole purchase-side report failed at runtime. A fake executor cannot
+ * notice a column that does not exist, so the SQL text itself is asserted here.
+ */
+test('the purchase side never selects a purchase-invoice discount column', async () => {
+  let sql;
+  await findByAccount(
+    { async execute(query) { sql = query; return [[]]; } },
+    { orgId: 206, itemType: 'purchase' },
+  );
+
+  assert.doesNotMatch(sql, /p\.discount/);
+
+  /* The line-item discount a purchase does carry is still selected. */
+  assert.match(sql, /pi\.discount_type/);
+  assert.match(sql, /NULL AS invoice_discount_type/);
+  assert.match(sql, /NULL AS invoice_discount_amount/);
+});
+
+test('the sale side keeps the invoice discount it really has', async () => {
+  let sql;
+  await findByAccount(
+    { async execute(query) { sql = query; return [[]]; } },
+    { orgId: 206, itemType: 'sale' },
+  );
+
+  assert.match(sql, /s\.discount_type AS invoice_discount_type/);
+  assert.match(sql, /s\.discount_amount AS invoice_discount_amount/);
+});
+
 test('purchase queries keep their existing status policy', async () => {
   let sql;
   await findByAccount({ async execute(query) { sql = query; return [[]]; } }, {

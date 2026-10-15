@@ -6,7 +6,7 @@ const {
 } = require('../utils/requestContext');
 
 async function list(req, res) {
-  const stockTransactions =
+  const { data, meta } =
     await stockTransactionService.listStockTransactions({
       user: req.user,
       filters: req.validated.query,
@@ -14,7 +14,12 @@ async function list(req, res) {
 
   res.status(200).json({
     success: true,
-    data: stockTransactions,
+    data,
+    /*
+     * `meta` is only present for a paged request. Callers that fetch the whole
+     * history keep the response shape they have always had.
+     */
+    ...(meta ? { meta } : {}),
   });
 }
 

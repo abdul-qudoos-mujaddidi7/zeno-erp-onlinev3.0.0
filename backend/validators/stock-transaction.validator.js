@@ -148,6 +148,53 @@ const stockTransactionListQuerySchema = z.object({
     .min(1)
     .max(1000)
     .optional(),
+
+  page: z
+    .coerce
+    .number()
+    .int()
+    .min(1)
+    .optional(),
+
+  offset: z
+    .coerce
+    .number()
+    .int()
+    .min(0)
+    .optional(),
+
+  search: z.string().trim().max(255).optional(),
+
+  /*
+   * Whitelisted: the value reaches an ORDER BY clause, which cannot take a
+   * bind parameter. Anything outside this list is rejected before it is used.
+   */
+  sort: z
+    .enum([
+      'id',
+      'local_id',
+      'date',
+      'created_at',
+      'updated_at',
+      'transaction_type',
+      'reference_type',
+      'reference_id',
+      'quantity',
+      'unit_cost',
+      'total_cost',
+      'status',
+    ])
+    .optional(),
+
+  direction: z.enum(['asc', 'desc', 'ASC', 'DESC']).optional(),
+
+  skip_count: z
+    .coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1)
+    .optional(),
 });
 
 module.exports = {

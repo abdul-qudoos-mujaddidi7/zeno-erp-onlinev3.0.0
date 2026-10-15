@@ -1,8 +1,15 @@
 import { api } from './apiClient.js';
+import { appendPaginationParams } from '../lib/pagination.js';
 
 const BASE_URL = '/api/v2/stock-transactions';
 
 export const stockTransactionApi = {
+  /*
+   * A caller that passes `page` (or `offset`) gets one page plus a `meta`
+   * block with the filtered total; everything else still receives the whole
+   * filtered history, which is what the edit/delete modals filter in the
+   * browser.
+   */
   getAll({
     status,
     product_id,
@@ -11,6 +18,11 @@ export const stockTransactionApi = {
     reference_type,
     transaction_type,
     reference_id,
+    search,
+    sort,
+    direction,
+    page,
+    offset,
     limit,
   } = {}) {
     const params = new URLSearchParams();
@@ -46,7 +58,25 @@ export const stockTransactionApi = {
       params.set('reference_id', String(reference_id));
     }
 
-    if (limit) {
+    if (search) {
+      params.set('search', String(search).trim());
+    }
+
+    if (sort) {
+      params.set('sort', String(sort));
+    }
+
+    if (direction) {
+      params.set('direction', String(direction));
+    }
+
+    if (page != null || offset != null) {
+      appendPaginationParams(params, { page, limit });
+
+      if (offset != null) {
+        params.set('offset', String(offset));
+      }
+    } else if (limit) {
       params.set('limit', String(limit));
     }
 

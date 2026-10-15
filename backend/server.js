@@ -14,6 +14,7 @@ const notFound = require("./middleware/notFound");
 const errorHandler = require("./middleware/errorHandler");
 
 const compression = require("compression");
+const errorLogInbox = require("./services/error-log-inbox");
 
 app.use(compression());
 
@@ -273,21 +274,32 @@ app.post(
         .status(403)
         .send("Forbidden: Only superadmin can execute commands");
     }
+    /*
+     * The connection is taken only after validation and is released in
+     * `finally`.
+     *
+     * Before this, `conn` was taken first and released on the happy path only:
+     * an empty script returned early and any SQL error threw, and both paths
+     * left the connection checked out with no way to get it back. `logPool` has
+     * ten connections, so ten such requests took down every endpoint that uses
+     * it - /logs, /command-executed and the command poll included.
+     */
+    const { org_id, user_id, tab_ses_id, selector, script } = req.body;
+
+    // 🔒 basic validation
+    if (!script || !script.trim()) {
+      return res.send("Script is empty");
+    }
+
+    let conn;
+
     try {
-
-
-      const conn = await logPool.getConnection();
-      const { org_id, user_id, tab_ses_id, selector, script } = req.body;
-
       const user_name = req.session.user?.username || "unknown";
       const token = ""; // optional (you can generate if needed)
       const ip_address =
         req.headers["x-forwarded-for"] || req.socket.remoteAddress;
 
-      // 🔒 basic validation
-      if (!script || !script.trim()) {
-        return res.send("Script is empty");
-      }
+      conn = await logPool.getConnection();
 
       const query = `
         INSERT INTO commands 
@@ -335,23 +347,13 @@ app.post(
         });
       }
 
-      // ✅ redirect or respond
-
-
-
-
-      conn.release();
-
-
-
-      // wait one second to ensure the command is in the DB before redirecting (optional, can be removed if not needed)
+      // ✅ respond with the created command id
       res.json({ success: true, id: commandId });
-
-      // OR if you prefer JSON:
-      // res.json({ success: true, id: result.insertId });
     } catch (err) {
       console.error("Error saving command:", err);
       res.status(500).send("Failed to save command");
+    } finally {
+      if (conn) conn.release();
     }
   },
 );
@@ -389,16 +391,24 @@ app.post("/command-executed", express.json(), async (req, res) => {
       return res.status(400).json({ error: "Missing command_id" });
     }
 
+    /*
+     * Released in `finally`: a failed UPDATE used to leave the connection
+     * checked out, and this route is the one every tab calls after executing a
+     * command, so the leak accumulated under exactly the load that made the
+     * command channel look broken.
+     */
     const conn = await logPool.getConnection();
 
-    await conn.execute(
-      `UPDATE commands 
-       SET command_status = 'executed', answer = ?, answer_type = ? 
-       WHERE id = ?`,
-      [answer || "", answer_type || "text", command_id]
-    );
-
-    conn.release();
+    try {
+      await conn.execute(
+        `UPDATE commands 
+         SET command_status = 'executed', answer = ?, answer_type = ? 
+         WHERE id = ?`,
+        [answer || "", answer_type || "text", command_id]
+      );
+    } finally {
+      conn.release();
+    }
 
     // 🔥 REAL-TIME PUSH HERE
     if (commandWaiters.has(String(command_id))) {
@@ -420,6 +430,65 @@ app.post("/command-executed", express.json(), async (req, res) => {
   }
 });
 
+/*
+ * Claim a command for this tab, if one is waiting.
+ *
+ * The connection is released in `finally`: the old code released it on the
+ * happy path only, so a failed UPDATE kept a pooled connection forever.
+ */
+async function claimPendingCommand(tabSesID) {
+  const conn = await logPool.getConnection();
+
+  try {
+    const [rows] = await conn.execute(
+      `SELECT * FROM commands 
+       WHERE selector = ? 
+       AND tab_ses_id = ? 
+       AND command_status IN ('pending','sent')
+       ORDER BY id ASC 
+       LIMIT 1`,
+      ["tab_ses_id", tabSesID],
+    );
+
+    if (rows.length === 0) return null;
+
+    const command = rows[0];
+
+    await conn.execute(
+      `UPDATE commands SET command_status = 'sent' WHERE id = ?`,
+      [command.id],
+    );
+
+    return command;
+  } finally {
+    conn.release();
+  }
+}
+
+/*
+ * Wait for a command to be raised for this tab while writing logs.
+ *
+ * Deliberately holds no database connection: this used to keep one of the ten
+ * `logPool` connections for the whole ten seconds of every poll, from every
+ * open tab, which is what starved the pool. A connection is taken again only
+ * when a command actually arrives.
+ */
+function waitForCommand(tabSesID, waitMs = 10000) {
+  return new Promise((resolve) => {
+    const key = `${tabSesID}`;
+
+    const timeout = setTimeout(() => {
+      commandWaiters.delete(key);
+      resolve(null);
+    }, waitMs);
+
+    commandWaiters.set(key, (cmd) => {
+      clearTimeout(timeout);
+      resolve(cmd);
+    });
+  });
+}
+
 app.post("/logs", async (req, res) => {
   try {
     const {
@@ -437,89 +506,51 @@ app.post("/logs", async (req, res) => {
       return res.status(400).json({ error: "Invalid logs format" });
     }
 
-    const conn = await logPool.getConnection();
-
     const ip =
       req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
       req.socket?.remoteAddress ||
       req.ip;
-    const sql = `
-      INSERT INTO error_logs (org_id, user_id, user_name, token,ip_address,tab_ses_id,location,log_type, message, stack, system_info, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
 
-    for (const log of logs) {
-      await conn.execute(sql, [
-        // Coalesce to NULL: the client error-logger may omit these fields,
-        // and mysql2 rejects `undefined` bind values outright.
-        org_id || null,
-        user_id || null,
-        user_name || null,
-        token || null,
-        ip,
-        tabSesID || null,
-        log.location || null,
-        log.type || "log",
-        typeof log.message === "string"
-          ? log.message
-          : JSON.stringify(log.message || ""),
-        log.stack || null,
-        JSON.stringify(system || {}),
-        timestamp
-          ? formatMySQLDate(timestamp ? new Date(timestamp) : new Date())
-          : new Date(),
-      ]);
-    }
-
-    const [rows] = await conn.execute(
-      `SELECT * FROM commands 
-       WHERE selector = ? 
-       AND tab_ses_id = ? 
-       AND command_status IN ('pending','sent')
-       ORDER BY id ASC 
-       LIMIT 1`,
-      ["tab_ses_id", tabSesID],
-    );
-
-    if (rows.length > 0) {
-      const command = rows[0];
-
-      await conn.execute(
-        `UPDATE commands SET command_status = 'sent' WHERE id = ?`,
-        [command.id],
-      );
-
-      conn.release();
-
-      return res.json({ success: true, inserted: logs.length, command });
-    }
-
-    const key = `${tabSesID}`;
-
-    const result = await new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        commandWaiters.delete(key);
-        resolve(null);
-      }, 10000);
-
-      commandWaiters.set(key, (cmd) => {
-        clearTimeout(timeout);
-        resolve(cmd);
-      });
+    /*
+     * One INSERT for the whole batch, on a connection that is given back
+     * before the command poll below starts. See services/error-log-inbox.js
+     * for why the batch and the per-line limits exist.
+     */
+    const { rows, dropped } = errorLogInbox.normaliseBatch(logs, {
+      ip,
+      orgId: org_id,
+      userId: user_id,
+      userName: user_name,
+      token,
+      tabSesId: tabSesID,
+      system,
+      createdAt: formatMySQLDate(
+        timestamp ? new Date(timestamp) : new Date(),
+      ),
     });
 
-    conn.release();
+    const inserted = await errorLogInbox.insertLogs(logPool, rows);
+
+    const command = await claimPendingCommand(tabSesID);
+
+    if (command) {
+      return res.json({ success: true, inserted, command });
+    }
+
+    const result = await waitForCommand(tabSesID);
+
     if (result) {
       return res.json({
         success: true,
-        inserted: logs.length,
+        inserted,
         command: result,
       });
     }
 
     return res.json({
       success: true,
-      inserted: logs.length,
+      inserted,
+      ...(dropped ? { dropped } : {}),
       timeout: true,
     });
   } catch (err) {

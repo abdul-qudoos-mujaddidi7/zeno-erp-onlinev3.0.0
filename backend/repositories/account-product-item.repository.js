@@ -201,6 +201,14 @@ function buildPurchaseQuery({
   // LIMIT as string: MySQL 8.0.22+ rejects DOUBLE binds for LIMIT (ER_WRONG_ARGUMENTS).
   values.push(String(Number(offset)), String(Number(limit)));
 
+  /*
+   * A purchase carries its discount on the line items; the purchases table
+   * itself has no invoice-level discount_type or discount_amount column, unlike
+   * sales. Selecting those two columns made MySQL reject the whole statement
+   * (Unknown column 'p.discount_type'), so every purchase-side read of this
+   * report failed. They are returned as NULL, the same way the other columns a
+   * purchase does not have (buy_price, fifo_cost, profit, invoice_status) are.
+   */
   return {
     sql: `      SELECT
         pi.local_id AS id,
@@ -218,8 +226,8 @@ function buildPurchaseQuery({
         pi.subtotal,
         pi.discount_type,
         pi.discount_amount,
-        p.discount_type AS invoice_discount_type,
-        p.discount_amount AS invoice_discount_amount,
+        NULL AS invoice_discount_type,
+        NULL AS invoice_discount_amount,
         p.total_amount AS invoice_total_amount,
         p.expense_amount AS invoice_expense_amount,
         NULL AS fifo_cost,

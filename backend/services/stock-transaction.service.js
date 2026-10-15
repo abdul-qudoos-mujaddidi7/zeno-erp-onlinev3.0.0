@@ -7,6 +7,10 @@ const AppError =
 const stockTransactionRepository =
   require('../repositories/stock-transaction.repository');
 
+const {
+  resolvePagination,
+} = require('../utils/pagination');
+
 const productRepository =
   require('../repositories/product.repository');
 
@@ -802,13 +806,37 @@ async function listStockTransactions({
     orgId,
   } = getAuthenticatedIdentity(user);
 
-  return stockTransactionRepository.findAll(
+  /*
+   * Only a caller that asks for a page gets one. The edit/delete modals and
+   * every internal reconciliation call this endpoint without a page and must
+   * keep receiving the whole (filtered) movement history they filter in the
+   * browser, so those requests stay on the unpaginated read.
+   */
+  const wantsPage = filters.page != null || filters.offset != null;
+  const pagination = wantsPage ? resolvePagination(filters) : null;
+
+  if (!pagination) {
+    const rows = await stockTransactionRepository.findAll(
+      db,
+      {
+        orgId,
+        filters,
+      },
+    );
+
+    return { data: rows, meta: null };
+  }
+
+  const result = await stockTransactionRepository.findPage(
     db,
     {
       orgId,
       filters,
+      pagination,
     },
   );
+
+  return { data: result.data, meta: result.meta };
 }
 
 async function getStockTransaction({

@@ -13,6 +13,8 @@
  *   4. That window ends, and any write clears the cache outright.
  *   5. `cache: false` opts a caller out of sharing entirely.
  *   6. Paginated reads keep their own behaviour and are never shared.
+ *   7. Nothing survives a change of session: a new token never reads the
+ *      previous session's answer, in the cache or in flight.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -178,5 +180,72 @@ describe('a signed-in tab shares its reads', () => {
     await second;
 
     expect(mock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('nothing outlives the session that asked for it', () => {
+  it('does not serve a new session the previous one cached configuration', async () => {
+    signedIn();
+
+    const mock = vi.fn(async () => jsonResponse({ data: ['first-org'] }));
+    globalThis.fetch = mock;
+
+    await api.get('/api/v2/settings?status=1');
+    expect(mock).toHaveBeenCalledTimes(1);
+
+    /* The stored token is replaced: a different user, a different org. */
+    storage.set('token', 'second-user-token');
+
+    globalThis.fetch = vi.fn(async () => jsonResponse({ data: ['second-org'] }));
+
+    expect(await api.get('/api/v2/settings?status=1')).toEqual({
+      data: ['second-org'],
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not let a new session join the previous session\'s request', async () => {
+    signedIn();
+
+    const { mock, release } = deferredFetch();
+    globalThis.fetch = mock;
+
+    const previousSession = api.get('/api/v2/settings?status=1');
+
+    /* Signing out and in while that request is still on the wire. */
+    storage.set('token', 'second-user-token');
+
+    const secondFetch = vi.fn(async () => jsonResponse({ data: ['new-session'] }));
+    globalThis.fetch = secondFetch;
+
+    expect(await api.get('/api/v2/settings?status=1')).toEqual({
+      data: ['new-session'],
+    });
+    expect(secondFetch).toHaveBeenCalledTimes(1);
+
+    release();
+    await previousSession;
+  });
+
+  it('drops pending requests when the cache is invalidated', async () => {
+    signedIn();
+
+    const { mock, release } = deferredFetch();
+    globalThis.fetch = mock;
+
+    const inFlight = api.get('/api/v2/account-types?status=1');
+
+    invalidateApiCache();
+
+    const after = vi.fn(async () => jsonResponse({ data: ['fresh'] }));
+    globalThis.fetch = after;
+
+    expect(await api.get('/api/v2/account-types?status=1')).toEqual({
+      data: ['fresh'],
+    });
+    expect(after).toHaveBeenCalledTimes(1);
+
+    release();
+    await inFlight;
   });
 });
