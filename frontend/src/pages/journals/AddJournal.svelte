@@ -2042,7 +2042,6 @@ import { purchaseApi } from '../../api/purchaseApi.js';
   .journal-mode-group {
     min-width: 0;
     flex: 0 1 auto;
-    order: -1;
     direction: rtl;
   }
 
