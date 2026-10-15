@@ -79,7 +79,48 @@ app.use((req, res, next) => {
 // Serve uploaded images
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-app.use("/", express.static(path.join(__dirname, "public")));
+/*
+ * Static delivery of the built frontend.
+ *
+ * express.static defaults to `Cache-Control: public, max-age=0`, which makes
+ * the browser revalidate every chunk on every page load: a full round trip
+ * per asset for files whose names already change when their content does.
+ * The rules below give each kind of file the caching it can safely have.
+ *
+ *   assets/*            content-hashed by the build -> a year, immutable
+ *   css|js|fonts|img/*  stable names, replaced on deploy -> an hour
+ *   the app shell       never cached, so a deploy is picked up at once
+ */
+const HASHED_ASSET_PATTERN =
+  /\/assets\/[^/]+-[A-Za-z0-9_-]{6,}\.(?:js|css|woff2?|ttf|otf|png|jpe?g|svg)$/;
+const STABLE_STATIC_PATTERN = /\/(?:css|js|fonts|img)\//;
+
+function setStaticCacheHeaders(res, filePath) {
+  const normalized = String(filePath).replace(/\\/g, "/");
+
+  if (HASHED_ASSET_PATTERN.test(normalized)) {
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=31536000, immutable",
+    );
+    return;
+  }
+
+  if (STABLE_STATIC_PATTERN.test(normalized)) {
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    return;
+  }
+
+  // index.html and the service worker: always revalidated, never pinned.
+  res.setHeader("Cache-Control", "no-cache");
+}
+
+app.use(
+  "/",
+  express.static(path.join(__dirname, "public"), {
+    setHeaders: setStaticCacheHeaders,
+  }),
+);
 
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/user", require("./routes/user"));
