@@ -1,3 +1,7 @@
+const {
+  paginateSelect,
+} = require('../utils/pagination');
+
 const WAREHOUSE_PRODUCT_COLUMNS = `
   local_id AS id,
   local_id,
@@ -22,6 +26,7 @@ async function findAll(
     status = 1,
     warehouseId = null,
     productId = null,
+    pagination = null,
   },
 ) {
   const conditions = [
@@ -44,18 +49,23 @@ async function findAll(
     values.push(productId);
   }
 
-  const [rows] = await executor.execute(
-    `
-      SELECT
-        ${WAREHOUSE_PRODUCT_COLUMNS}
-      FROM warehouse_products
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY warehouse_id ASC, product_id ASC
-    `,
+  /*
+   * One page plus its `meta` total when the caller asked for a page, the whole
+   * filtered list when it did not.
+   *
+   * The ~20 form lookups (sale, purchase, POS, BOM, production, prescriptions,
+   * inventory records, stock adjustments) call this without pagination and must
+   * keep receiving every row - `resolvePagination` returns null for them, so
+   * paginateSelect runs the same statement it always did.
+   */
+  return paginateSelect(executor, {
+    tableSql: 'warehouse_products',
+    whereSql: conditions.join(' AND '),
     values,
-  );
-
-  return rows;
+    orderBySql: 'ORDER BY warehouse_id ASC, product_id ASC',
+    columnsSql: WAREHOUSE_PRODUCT_COLUMNS,
+    pagination,
+  });
 }
 
 async function findByLocalId(

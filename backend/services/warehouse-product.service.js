@@ -13,6 +13,10 @@ const {
   generateLocalId,
 } = require('../utils/generateLocalId');
 
+const {
+  resolvePagination,
+} = require('../utils/pagination');
+
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -60,6 +64,8 @@ async function listWarehouseProducts({
       status: filters.status,
       warehouseId: filters.warehouse_id,
       productId: filters.product_id,
+      /* null unless the caller sent page/limit/offset. */
+      pagination: resolvePagination(filters),
     },
   );
 }

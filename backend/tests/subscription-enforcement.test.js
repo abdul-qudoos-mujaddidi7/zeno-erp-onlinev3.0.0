@@ -34,7 +34,17 @@ function makeDatabase(subscriptionStatus, tokenUserPk = 17) {
     calls,
     async execute(sql, params = []) {
       calls.push({ sql, params });
-      if (/SELECT u\.\*, t\.token/.test(sql)) return [[user]];
+      /*
+       * Two statements resolve the token now: the primary-key branch, which is
+       * the only one that can match a token with a user_pk, and the legacy
+       * branch, which runs only while user_pk is NULL.
+       */
+      if (/JOIN users u\s+ON u\.id = t\.user_pk/.test(sql)) {
+        return tokenUserPk === null ? [[]] : [[user]];
+      }
+      if (/JOIN users u\s+ON u\.local_id = t\.user_id/.test(sql)) {
+        return tokenUserPk === null ? [[user]] : [[]];
+      }
       if (/FROM subscriptions s/.test(sql)) {
         return [[{
           id: 31,
@@ -109,7 +119,7 @@ test("a legacy token matching users in multiple organizations is rejected", asyn
   const db = makeDatabase("active", null);
   const originalExecute = db.execute.bind(db);
   db.execute = async (sql, params = []) => {
-    if (/SELECT u\.\*, t\.token/.test(sql)) {
+    if (/JOIN users u\s+ON u\.local_id = t\.user_id/.test(sql)) {
       db.calls.push({ sql, params });
       return [[
         { id: 17, local_id: 5, org_id: 206, auth_user_pk: null },
@@ -170,4 +180,62 @@ test("direct protected API requests are blocked for inactive organizations", asy
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("subscription feature metadata is re-read on every request", async () => {
+  const featureQuery =
+    /FROM subscription_features|FROM features WHERE status = 1|FROM subscription_plan_features/;
+
+  const db = makeDatabase("active", 17);
+  const featureQueries = () =>
+    db.calls.filter(({ sql }) => featureQuery.test(sql)).length;
+
+  assert.equal((await runAuth(db)).nextCalled, true);
+  assert.equal(
+    featureQueries(),
+    3,
+    "the first request reads the three feature tables",
+  );
+
+  assert.equal((await runAuth(db)).nextCalled, true);
+  assert.equal(
+    featureQueries(),
+    6,
+    "an admin change must reach the very next request, so this is never cached",
+  );
+
+  const attached = await runAuth(db);
+  assert.equal(attached.nextCalled, true);
+  assert.ok(Array.isArray(attached.req.subscription.features));
+  assert.ok(Array.isArray(attached.req.subscription.feature_catalog));
+  assert.ok(Array.isArray(attached.req.subscription.plan_features));
+});
+
+test("the token lookup resolves through the users primary key", async () => {
+  const byPrimaryKey = /JOIN users u\s+ON u\.id = t\.user_pk/;
+  const byLocalId = /JOIN users u\s+ON u\.local_id = t\.user_id/;
+
+  const modern = makeDatabase("active", 17);
+  const { nextCalled } = await runAuth(modern);
+  assert.equal(nextCalled, true);
+  assert.ok(
+    modern.calls.some(({ sql }) => byPrimaryKey.test(sql)),
+    "an ordinary token is resolved by primary key",
+  );
+  assert.equal(
+    modern.calls.some(({ sql }) => byLocalId.test(sql)),
+    false,
+    "the fallback branch never runs for an ordinary token",
+  );
+
+  const legacy = makeDatabase("active", null);
+  assert.equal((await runAuth(legacy)).nextCalled, true);
+  assert.ok(
+    legacy.calls.some(({ sql }) => byPrimaryKey.test(sql)),
+    "the primary-key branch is tried first",
+  );
+  assert.ok(
+    legacy.calls.some(({ sql }) => byLocalId.test(sql)),
+    "the legacy branch runs only when the first branch found nothing",
+  );
 });

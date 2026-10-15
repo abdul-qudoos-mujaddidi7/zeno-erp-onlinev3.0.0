@@ -1,0 +1,43 @@
+-- Index for the warehouse-products list: filter + order in one range read.
+--
+-- Why this migration exists
+-- -------------------------
+-- The list query is
+--
+--   SELECT ... FROM warehouse_products
+--   WHERE org_id = ? AND status = ? [AND warehouse_id = ?] [AND product_id = ?]
+--   ORDER BY warehouse_id ASC, product_id ASC
+--
+-- and the only organisation-scoped index on the table was `org_local
+-- (org_id, local_id)`, which cannot answer that order. MySQL therefore read
+-- every row of the organisation and sorted it in a temporary table - `Using
+-- filesort` - for the whole-list fetch the form lookups make AND for every page
+-- of the (now available) paginated read.
+--
+-- Measured on the beta database, org 163, the busiest warehouse (3,217 rows),
+-- read-only, median of five runs, `SQL_NO_CACHE`:
+--
+--   whole warehouse (unpaginated lookups)
+--     before .......... key=org_local  rows=6,434  Using filesort   14.8 ms
+--     after ........... key=idx_warehouse_products_org_status_warehouse
+--                                                            no filesort   6.7 ms
+--   page 1 (LIMIT 15)
+--     before .......... Using filesort                             9.1 ms
+--     after ........... no filesort                                0.8 ms  (11x)
+--   page 20 (LIMIT 15 OFFSET 285)
+--     before .......... Using filesort                             9.9 ms
+--     after ........... no filesort                                0.8 ms  (12x)
+--
+-- Column order matches the code exactly: `org_id` and `status` are always
+-- present, `warehouse_id` and `product_id` are the optional filters, and the
+-- last two also carry the ORDER BY, so the sort disappears as well.
+--
+-- Additive only and idempotent: the runner skips an index that already exists by
+-- name, and refuses anything that is not CREATE VIEW/TABLE/INDEX or ADD COLUMN.
+-- No row is read or written. The build itself took 139 ms on the beta table.
+--
+-- Cost, stated plainly: one more index on a table written by every stock-moving
+-- operation (sale, purchase, adjustment, transfer, production, waste).
+
+CREATE INDEX idx_warehouse_products_org_status_warehouse
+  ON warehouse_products (org_id, status, warehouse_id, product_id);

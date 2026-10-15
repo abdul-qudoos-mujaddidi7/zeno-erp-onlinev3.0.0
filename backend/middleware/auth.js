@@ -3,6 +3,76 @@ const {
 } = require("../services/subscription-access");
 const { isModuleFeatureEnabled, moduleForApiPath } = require('../services/subscription-features');
 
+/*
+ * NOTE: the subscription feature metadata (subscription_features, the features
+ * catalogue, subscription_plan_features) is deliberately NOT cached here, even
+ * though it is three queries on every request.
+ *
+ * It is read-only configuration, so caching it looks attractive - and it does
+ * cost only about 4 ms per request on this database - but a plan or tenant
+ * feature change has to reach the very next request. A short TTL would make an
+ * administrator's "disable Accounts for this tenant" sit unnoticed for up to a
+ * minute, which is exactly the guarantee the subscription tests pin down. The
+ * three queries stay; only the token lookup below was worth rewriting.
+ */
+
+/*
+ * Token -> user, resolved by primary key.
+ *
+ * The old single statement joined on
+ *
+ *   ON u.id = t.user_pk OR (t.user_pk IS NULL AND u.local_id = t.user_id)
+ *
+ * An OR spanning two tables cannot be driven by an index, so MySQL resolved it
+ * by scanning every row of `users` with a block-nested-loop join on **every
+ * authenticated request** - plan: `u type=ALL ... Using join buffer` - and
+ * `SELECT u.*` then reads all 25 columns of each of them. A page that issues
+ * about eighteen API calls paid for eighteen full user scans before any handler
+ * ran.
+ *
+ * The two halves are split instead of ORed, which is exactly equivalent:
+ * `u.id = t.user_pk` can only match when the token's user_pk is not NULL
+ * (comparing to NULL is never true), and the legacy branch requires user_pk IS
+ * NULL. For one token, only one of the two can ever apply, so the pair of
+ * statements returns the same rows the single statement did - including the
+ * ambiguity case, which can only arise on the legacy branch where local_id is
+ * not unique across organisations.
+ */
+const TOKEN_USER_BY_PK_SQL = `
+  SELECT u.*, t.token, t.user_pk AS auth_user_pk
+  FROM auth_tokens t
+  JOIN users u
+    ON u.id = t.user_pk
+  WHERE t.token = ?
+    AND t.expires_at > NOW()
+  LIMIT 2
+`;
+
+const TOKEN_USER_BY_LOCAL_ID_SQL = `
+  SELECT u.*, t.token, t.user_pk AS auth_user_pk
+  FROM auth_tokens t
+  JOIN users u
+    ON u.local_id = t.user_id
+  WHERE t.token = ?
+    AND t.expires_at > NOW()
+    AND t.user_pk IS NULL
+  LIMIT 2
+`;
+
+/*
+ * @returns {Promise<Array>} up to two user rows for this token
+ */
+async function findTokenUser(db, token) {
+  const [rows] = await db.execute(TOKEN_USER_BY_PK_SQL, [token]);
+
+  if (rows.length > 0) return rows;
+
+  /* Only reached for legacy tokens that have never been upgraded. */
+  const [legacyRows] = await db.execute(TOKEN_USER_BY_LOCAL_ID_SQL, [token]);
+
+  return legacyRows;
+}
+
 function createAuth(db) {
   return async function auth(req, res, next) {
     try {
@@ -24,17 +94,7 @@ function createAuth(db) {
         });
       }
 
-      const [rows] = await db.execute(
-        `SELECT u.*, t.token, t.user_pk AS auth_user_pk
-         FROM auth_tokens t
-         JOIN users u
-           ON u.id = t.user_pk
-           OR (t.user_pk IS NULL AND u.local_id = t.user_id)
-         WHERE t.token = ?
-           AND t.expires_at > NOW()
-         LIMIT 2`,
-        [token],
-      );
+      const rows = await findTokenUser(db, token);
 
       if (rows.length !== 1) {
         if (rows.length > 1) {
@@ -114,5 +174,7 @@ function auth(req, res, next) {
 }
 
 auth.createAuth = createAuth;
+auth.TOKEN_USER_BY_PK_SQL = TOKEN_USER_BY_PK_SQL;
+auth.TOKEN_USER_BY_LOCAL_ID_SQL = TOKEN_USER_BY_LOCAL_ID_SQL;
 
 module.exports = auth;

@@ -5,17 +5,22 @@ const {
   getRequestContext,
 } = require('../utils/requestContext');
 
+const {
+  sendListResponse,
+} = require('../utils/listResponse');
+
 async function list(req, res) {
-  const warehouseProducts =
+  const result =
     await warehouseProductService.listWarehouseProducts({
       user: req.user,
       filters: req.validated.query,
     });
 
-  res.status(200).json({
-    success: true,
-    data: warehouseProducts,
-  });
+  /*
+   * Without page/limit this answers exactly `{ success, data }`, as before; with
+   * a page it adds `meta` (total/page/limit/totalPages) for the paging controls.
+   */
+  return sendListResponse(res, result);
 }
 
 async function getById(req, res) {
