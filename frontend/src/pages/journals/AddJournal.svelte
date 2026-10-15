@@ -106,6 +106,7 @@
   
   let date = new Date().toISOString().slice(0, 10);
   let description = '';
+  let reference = '';
   let currency = '';
   let first_entry_account = '';
   let first_entry_debit = null;
@@ -189,6 +190,7 @@
         date = journal.date.slice(0, 10);
         console.log(date);
         description = journal.description;
+        reference = journal.reference || '';
         currency = journal.currency;
         first_entry_account = journal.first_entry_account;
         first_entry_debit = journal.first_entry_debit;
@@ -328,6 +330,7 @@
   const data = {
     date,
     description,
+    reference: reference.trim() || null,
     reference_id,
     reference_type,
     /*
@@ -410,6 +413,7 @@
   function resetForm() {
     date = new Date().toISOString().slice(0, 10);
     description = '';
+    reference = '';
 
     first_entry_debit = null;
     first_entry_credit = null;
@@ -1312,56 +1316,85 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                 bind:value={description} />
             </div>
           </div>
-          <div class="col-md-5 journal-mode-field">
-            <div class="journal-mode-actions">
-              {#if !general}
-                <button
-                  id="second_entry_account_search"
-                  class="journal-mode-btn"
-                  class:journal-mode-btn--active={second_entry_account == track_ID}
-                  class:journal-mode-btn--track={second_entry_account == track_ID}
-                  type="button"
-                  on:click={() => {
-                    filteredSecondAccounts = accounts;
-                    showTrackModal = true;
-                  }}>
-                  <i class="bi bi-check-circle"></i>
-                  {#if second_entry_account == track_ID}
-                    {getAccountName(track_ID)}
-                  {:else}
-                    {t('Track')}
-                  {/if}
-                </button>
-              {/if}
-              {#if enable_notrack || general}
-                <button
-                  class="journal-mode-btn"
-                  class:journal-mode-btn--active={second_entry_account == notrack_ID}
-                  class:journal-mode-btn--notrack={second_entry_account == notrack_ID}
-                  type="button"
-                  on:click={() => {
-                    second_entry_account = notrack_ID;
-                  }}>
-                  <i class="bi bi-x-circle"></i>
-                  {t('No Track')}
-                </button>
-              {/if}
-              {#if !general}
-                <button
-                  class="journal-mode-btn"
-                  class:journal-mode-btn--active={second_entry_account == treasury_ID}
-                  class:journal-mode-btn--treasury={second_entry_account == treasury_ID}
-                  type="button"
-                  on:click={() => {
-                    second_entry_account = treasury_ID;
-                  }}>
-                  <i class="bi bi-box"></i>
-                  {t('Treasury')}
-                </button>
-              {/if}
+          <div class="col-md-3 journal-reference-field">
+            <label class="journal-field-label">{t('Reference')}</label>
+            <div class="journal-unified-input-group">
+              <input
+                id="c-reference"
+                class="form-control form-control-sm"
+                type="text"
+                maxlength="255"
+                placeholder={t('Reference')}
+                bind:value={reference} />
             </div>
-            <div class="form-text mt-0 text-end journal-balance-text">
-              {@html second_entry_account != notrack_ID ? calculateAccountBalance(second_entry_account, currency) : ''}
+          </div>
+          <div class="col-md-5 journal-submit-field">
+            <div class="journal-footer-actions">
+              <button
+                type="button"
+                class="btn btn-primary btn-sm journal-submit-btn"
+                disabled={saving}
+                aria-busy={saving}
+                on:click={saveJournal}>
+                <i class="bi {saving ? 'bi-arrow-repeat journal-submit-spinner' : 'bi-check-circle'}"></i>
+                {saving
+                  ? t('Saving...')
+                  : journalId
+                    ? t('Update Journal')
+                    : t('Add Journal')}
+              </button>
+              <div class="journal-mode-group">
+                <div class="journal-mode-actions">
+                  {#if !general}
+                    <button
+                      id="second_entry_account_search"
+                      class="journal-mode-btn"
+                      class:journal-mode-btn--active={second_entry_account == track_ID}
+                      class:journal-mode-btn--track={second_entry_account == track_ID}
+                      type="button"
+                      on:click={() => {
+                        filteredSecondAccounts = accounts;
+                        showTrackModal = true;
+                      }}>
+                      <i class="bi bi-check-circle"></i>
+                      {#if second_entry_account == track_ID}
+                        {getAccountName(track_ID)}
+                      {:else}
+                        {t('Track')}
+                      {/if}
+                    </button>
+                  {/if}
+                  {#if enable_notrack || general}
+                    <button
+                      class="journal-mode-btn"
+                      class:journal-mode-btn--active={second_entry_account == notrack_ID}
+                      class:journal-mode-btn--notrack={second_entry_account == notrack_ID}
+                      type="button"
+                      on:click={() => {
+                        second_entry_account = notrack_ID;
+                      }}>
+                      <i class="bi bi-x-circle"></i>
+                      {t('No Track')}
+                    </button>
+                  {/if}
+                  {#if !general}
+                    <button
+                      class="journal-mode-btn"
+                      class:journal-mode-btn--active={second_entry_account == treasury_ID}
+                      class:journal-mode-btn--treasury={second_entry_account == treasury_ID}
+                      type="button"
+                      on:click={() => {
+                        second_entry_account = treasury_ID;
+                      }}>
+                      <i class="bi bi-box"></i>
+                      {t('Treasury')}
+                    </button>
+                  {/if}
+                </div>
+                <div class="form-text mt-0 text-end journal-balance-text">
+                  {@html second_entry_account != notrack_ID ? calculateAccountBalance(second_entry_account, currency) : ''}
+                </div>
+              </div>
             </div>
             {#if showTrackModal}
               <div
@@ -1488,21 +1521,6 @@ import { purchaseApi } from '../../api/purchaseApi.js';
               class="form-control"
               bind:value={second_entry_credit}
               on:input={(e) => onSecondCreditInput(e.target.value)} />
-          </div>
-          <div class="col-md-3 d-flex align-items-start gap-2 journal-submit-field">
-            <button
-              type="button"
-              class="btn btn-primary btn-sm w-100 journal-submit-btn"
-              disabled={saving}
-              aria-busy={saving}
-              on:click={saveJournal}>
-              <i class="bi {saving ? 'bi-arrow-repeat journal-submit-spinner' : 'bi-check-circle'}"></i>
-              {saving
-                ? t('Saving...')
-                : journalId
-                  ? t('Update Journal')
-                  : t('Add Journal')}
-            </button>
           </div>
         </div>
       </div>
@@ -2002,6 +2020,32 @@ import { purchaseApi } from '../../api/purchaseApi.js';
     padding-top: var(--journal-label-offset);
   }
 
+  .journal-submit-field {
+    margin-right: auto;
+  }
+
+  .journal-footer-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 0.75rem;
+    direction: ltr;
+    /*
+     * Fill the field it sits in. The field is a flex row whose start is the
+     * right in RTL, so a content-sized footer would be packed against that
+     * right edge; filling it lets `justify-content: flex-start` put the mode
+     * controls and the submit button together at the left edge instead.
+     */
+    width: 100%;
+  }
+
+  .journal-mode-group {
+    min-width: 0;
+    flex: 0 1 auto;
+    order: -1;
+    direction: rtl;
+  }
+
   .journal-mode-actions {
     display: flex;
     flex-wrap: wrap;
@@ -2456,6 +2500,18 @@ import { purchaseApi } from '../../api/purchaseApi.js';
     .journal-mode-field,
     .journal-submit-field {
       padding-top: 0;
+    }
+
+    .journal-submit-field {
+      margin-right: 0;
+    }
+
+    .journal-footer-actions {
+      flex-wrap: wrap;
+    }
+
+    .journal-footer-actions .journal-submit-btn {
+      flex: 1 1 100%;
     }
   }
 

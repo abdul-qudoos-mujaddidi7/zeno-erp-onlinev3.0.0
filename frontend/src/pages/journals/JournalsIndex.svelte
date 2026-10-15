@@ -708,22 +708,29 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
                   {/if}
                 </td>
                 <td>
-                  {#if j.reference_type}
-                    {#if getJournalReferenceRoute(j)}
-                      <StatusBadge tone="info">
-                        <button
-                          type="button"
-                          class="cell-link reference-link"
-                          title={`${t('View')}: ${t(j.reference_type)}`}
-                          aria-label={`${t('View')}: ${t(j.reference_type)}`}
-                          on:click={() => openJournalReference(j)}>
-                          <span>{t(j.reference_type)}</span>
-                          <i class="bi bi-box-arrow-up-left" aria-hidden="true"></i>
-                        </button>
-                      </StatusBadge>
-                    {:else}
-                      <StatusBadge tone="info">{t(j.reference_type)}</StatusBadge>
-                    {/if}
+                  {#if j.reference || j.reference_type}
+                    <div class="d-flex flex-column align-items-center gap-1">
+                      {#if j.reference}
+                        <span class="fw-semibold" dir="auto">{j.reference}</span>
+                      {/if}
+                      {#if j.reference_type}
+                        {#if getJournalReferenceRoute(j)}
+                          <StatusBadge tone="info">
+                            <button
+                              type="button"
+                              class="cell-link reference-link"
+                              title={`${t('View')}: ${t(j.reference_type)}`}
+                              aria-label={`${t('View')}: ${t(j.reference_type)}`}
+                              on:click={() => openJournalReference(j)}>
+                              <span>{t(j.reference_type)}</span>
+                              <i class="bi bi-box-arrow-up-left" aria-hidden="true"></i>
+                            </button>
+                          </StatusBadge>
+                        {:else}
+                          <StatusBadge tone="info">{t(j.reference_type)}</StatusBadge>
+                        {/if}
+                      {/if}
+                    </div>
                   {:else}
                     <span class="muted-dash">—</span>
                   {/if}

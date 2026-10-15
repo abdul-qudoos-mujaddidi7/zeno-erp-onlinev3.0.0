@@ -344,6 +344,25 @@
     max-width: none !important;
   }
 
+  /*
+   * The mode controls (Track / No Track / Treasury) and the Add/Update Journal
+   * button are one cluster.
+   *
+   * The blanket `span 6` rule above leaves this field half-width and alone on
+   * its last row, where the grid - being RTL - places it at its start, so the
+   * cluster sat in the middle of the form. Spanning the row gives the field the
+   * full width, and its contents (`.journal-footer-actions`, which is
+   * `direction: ltr` with `justify-content: flex-start`) then pack together at
+   * the first edge of the form, which is what the operator asked for.
+   */
+  .quick-entry-modal--journal
+    .quick-entry-modal__content
+    :global(.journal-form-row > .journal-submit-field) {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+
   .quick-entry-modal--journal
     .quick-entry-modal__content
     :global(.journal-form-card .row > [class*='col-md-']) {
@@ -448,7 +467,13 @@
     width: auto !important;
     min-width: 8.5rem;
     min-height: 2.5rem;
-    margin-inline-start: auto;
+    /*
+     * No `auto` start margin: it used to pin the button to the far end of the
+     * footer, away from the Track/No Track/Treasury controls. The two now sit
+     * together at the form's first edge (the `.journal-submit-field` rule above
+     * spans the row, so that edge is the left one).
+     */
+    margin-inline-start: 0;
     padding-inline: 1.2rem;
     border-radius: 0.5rem;
     border-color: var(--journal-modal-primary) !important;

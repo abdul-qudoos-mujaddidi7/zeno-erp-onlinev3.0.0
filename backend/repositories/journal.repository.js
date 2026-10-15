@@ -6,6 +6,7 @@ const JOURNAL_COLUMNS = `
   local_id AS id,
   local_id,
   date,
+  \`reference\`,
   reference_id,
   reference_type,
   description,
@@ -76,12 +77,14 @@ async function findAll(
     conditions.push(`
       (
         description LIKE ?
+        OR \`reference\` LIKE ?
         OR reference_type LIKE ?
         OR currency LIKE ?
       )
     `);
 
     values.push(
+      searchPattern,
       searchPattern,
       searchPattern,
       searchPattern,
@@ -273,11 +276,12 @@ async function findSummary(
     conditions.push(`
       (
         j.description LIKE ?
+        OR j.\`reference\` LIKE ?
         OR j.reference_type LIKE ?
         OR j.currency LIKE ?
       )
     `);
-    values.push(searchPattern, searchPattern, searchPattern);
+    values.push(searchPattern, searchPattern, searchPattern, searchPattern);
   }
 
   if (referenceId !== undefined && referenceId !== null) {
@@ -419,6 +423,7 @@ async function create(
         org_id,
         local_id,
         date,
+        \`reference\`,
         reference_id,
         reference_type,
         description,
@@ -448,6 +453,7 @@ async function create(
         ?,
         ?,
         ?,
+        ?,
         1,
         ?,
         ?
@@ -457,6 +463,7 @@ async function create(
       orgId,
       localId,
       storageCalendarDay(data.date),
+      data.reference || null,
       data.reference_id ?? null,
       data.reference_type || null,
       data.description || null,
@@ -504,6 +511,7 @@ async function update(
 
   const columnMap = {
     date: 'date',
+    reference: '`reference`',
     reference_id: 'reference_id',
     reference_type: 'reference_type',
     description: 'description',

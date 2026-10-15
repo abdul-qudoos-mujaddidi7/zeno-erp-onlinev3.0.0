@@ -38,6 +38,7 @@ const nullableNumber = () =>
 
 const journalBodySchema = z.object({
   date: nullableString(50),
+  reference: nullableString(255),
   reference_id: nullableNumber(),
   reference_type: nullableString(50),
   description: nullableString(65535),
