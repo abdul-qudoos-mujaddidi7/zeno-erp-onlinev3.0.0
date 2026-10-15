@@ -4,6 +4,7 @@
   import Topbar from '../components/Topbar.svelte';
   import AsyncPage from '../components/AsyncPage.svelte';
   import { auth } from '../auth/authStore';
+  import { isSubscriptionFeatureEnabled, moduleForFrontendPath } from '../auth/permissions.js';
   import { push } from 'svelte-spa-router';
   import { onMount } from 'svelte';
   import { setLanguage, isRTL, lang } from '../i18n/i18n';
@@ -90,6 +91,8 @@
 
   $: loc = $location ? $location.replace(/\/+$/g, '') : '';
   $: locPath = loc.split('?')[0];
+  $: routeFeature = moduleForFrontendPath(locPath);
+  $: routeFeatureEnabled = !routeFeature || isSubscriptionFeatureEnabled(routeFeature, $auth.subscription);
   $: currentLang = $lang;
   $: applyLanguageDirection(currentLang);
 
@@ -206,7 +209,11 @@
         loc.startsWith('/dashboard/account-purchase-form/') ||
         loc.startsWith('/dashboard/stock-transfer-form/')}>
       {#key currentLang}
-      {#if loc === '/dashboard'}
+      {#if !routeFeatureEnabled}
+        <section class="m-4 alert alert-warning" role="alert">
+          This feature is not included in your organization’s subscription.
+        </section>
+      {:else if loc === '/dashboard'}
         <AsyncPage loader={loadDashboard} />
       {:else if loc === '/dashboard/2'}
         <AsyncPage loader={loadDashboard2} />

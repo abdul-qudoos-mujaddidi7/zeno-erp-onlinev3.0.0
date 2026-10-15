@@ -1,6 +1,7 @@
 const {
   enforceOrganizationSubscription,
 } = require("../services/subscription-access");
+const { isModuleFeatureEnabled, moduleForApiPath } = require('../services/subscription-features');
 
 function createAuth(db) {
   return async function auth(req, res, next) {
@@ -69,6 +70,38 @@ function createAuth(db) {
 
       req.user = user;
       req.subscription = access.subscription;
+      if (req.subscription) {
+        const [features] = await db.execute(
+          `SELECT sf.feature_id, sf.value, sf.unit, sf.status,
+                  f.feature_key, f.name, f.type, f.icon
+           FROM subscription_features sf
+           JOIN features f ON f.id = sf.feature_id
+           WHERE sf.subscription_id = ?`,
+          [req.subscription.id],
+        );
+        const [catalog] = await db.execute(
+          'SELECT id, feature_key, name FROM features WHERE status = 1',
+        );
+        const [planFeatures] = await db.execute(
+          `SELECT pf.feature_id, pf.status, f.feature_key, f.name
+           FROM subscription_plan_features pf
+           JOIN features f ON f.id = pf.feature_id
+           WHERE pf.plan_id = ?`,
+          [req.subscription.plan_id],
+        );
+        req.subscription.features = features;
+        req.subscription.feature_catalog = catalog;
+        req.subscription.plan_features = planFeatures;
+        const moduleCode = moduleForApiPath(req.originalUrl);
+        if (moduleCode && !isModuleFeatureEnabled(req.subscription, moduleCode)) {
+          return res.status(403).json({
+            success: false,
+            message: `The ${moduleCode} feature is not included in this organization's subscription.`,
+            code: 'SUBSCRIPTION_FEATURE_DISABLED',
+            feature: moduleCode,
+          });
+        }
+      }
       return next();
     } catch (error) {
       return next(error);

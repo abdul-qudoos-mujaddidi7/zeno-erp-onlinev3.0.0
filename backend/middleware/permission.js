@@ -1,4 +1,5 @@
 const AppError = require('../errors/AppError');
+const { isModuleFeatureEnabled } = require('../services/subscription-features');
 
 /*
  * Module permission guard.
@@ -157,6 +158,15 @@ function requireModulePermission(moduleCode, options = {}) {
 
     if (!user) {
       return next(new AppError('Unauthorized', 401, 'UNAUTHORIZED'));
+    }
+
+    if (!isModuleFeatureEnabled(req.subscription, moduleCode)) {
+      return next(new AppError(
+        `The ${moduleCode} feature is not included in this organization's subscription.`,
+        403,
+        'SUBSCRIPTION_FEATURE_DISABLED',
+        { feature: moduleCode },
+      ));
     }
 
     if (options.selfService && isSelfRequest(req, user)) {

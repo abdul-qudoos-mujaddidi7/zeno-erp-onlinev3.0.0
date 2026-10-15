@@ -159,13 +159,25 @@ router.post("/login", async (req, res) => {
   if (mainSubscription) {
     delete mainSubscription.access_status;
     const [features_result] = await db.execute(
-      `SELECT spf.*, f.name, f.type, f.icon
+      `SELECT spf.*, f.name, f.feature_key, f.type, f.icon
        FROM subscription_features spf
        JOIN features f ON f.id = spf.feature_id
        WHERE spf.subscription_id = ?`,
       [mainSubscription.id],
     );
     mainSubscription.features = features_result;
+    const [featureCatalog] = await db.execute(
+      'SELECT id, feature_key, name FROM features WHERE status = 1',
+    );
+    mainSubscription.feature_catalog = featureCatalog;
+    const [planFeatures] = await db.execute(
+      `SELECT pf.feature_id, pf.status, f.feature_key, f.name
+       FROM subscription_plan_features pf
+       JOIN features f ON f.id = pf.feature_id
+       WHERE pf.plan_id = ?`,
+      [mainSubscription.plan_id],
+    );
+    mainSubscription.plan_features = planFeatures;
 
     const subscription_plan = await db.execute(
       "SELECT * FROM subscription_plans WHERE id = ?",
@@ -285,7 +297,7 @@ router.get("/subscription", authMiddleware, async (req, res) => {
   delete subscription.access_status;
 
   const [features] = await db.execute(
-    `SELECT spf.*, f.name, f.type, f.icon
+    `SELECT spf.*, f.name, f.feature_key, f.type, f.icon
      FROM subscription_features spf
      JOIN features f ON f.id = spf.feature_id
      WHERE spf.subscription_id = ?`,
@@ -297,6 +309,18 @@ router.get("/subscription", authMiddleware, async (req, res) => {
   );
 
   subscription.features = features;
+  const [featureCatalog] = await db.execute(
+    'SELECT id, feature_key, name FROM features WHERE status = 1',
+  );
+  subscription.feature_catalog = featureCatalog;
+  const [planFeatures] = await db.execute(
+    `SELECT pf.feature_id, pf.status, f.feature_key, f.name
+     FROM subscription_plan_features pf
+     JOIN features f ON f.id = pf.feature_id
+     WHERE pf.plan_id = ?`,
+    [subscription.plan_id],
+  );
+  subscription.plan_features = planFeatures;
   subscription.subscription_plan = plans[0] || null;
 
   res.json({ subscription });

@@ -43,6 +43,9 @@ function makeDatabase(subscriptionStatus, tokenUserPk = 17) {
           access_status: subscriptionStatus,
         }]];
       }
+      if (/SELECT sf\.feature_id/.test(sql)) return [[]];
+      if (/SELECT id, feature_key, name FROM features/.test(sql)) return [[]];
+      if (/SELECT pf\.feature_id/.test(sql)) return [[]];
       if (/UPDATE subscriptions/.test(sql)) return [{ affectedRows: 1 }];
       if (/DELETE FROM auth_tokens/.test(sql)) return [{ affectedRows: 1 }];
       if (/UPDATE auth_tokens/.test(sql)) return [{ affectedRows: 1 }];

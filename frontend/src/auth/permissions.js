@@ -15,6 +15,77 @@ export function parsePermissions(value) {
   }
 }
 
+function normalizeFeatureIdentifier(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function readSubscription() {
+  try {
+    return JSON.parse(localStorage.getItem('subscription') || 'null');
+  } catch {
+    return null;
+  }
+}
+
+export function isSubscriptionFeatureEnabled(code, subscription = readSubscription()) {
+  const catalog = subscription?.feature_catalog;
+  if (!Array.isArray(catalog)) return true;
+  const key = normalizeFeatureIdentifier(code);
+  const matching = catalog.filter((feature) =>
+    [feature?.feature_key, feature?.name].some((value) => {
+      const candidate = normalizeFeatureIdentifier(value);
+      const singular = (item) => item.endsWith('ies') ? `${item.slice(0, -3)}y` : item.endsWith('s') ? item.slice(0, -1) : item;
+      return candidate === key || singular(candidate) === singular(key);
+    }),
+  );
+  if (!matching.length) return true;
+  const assigned = Array.isArray(subscription?.features) ? subscription.features : [];
+  const planFeatures = Array.isArray(subscription?.plan_features)
+    ? subscription.plan_features
+    : [];
+  const active = (item) =>
+    item.status === undefined || item.status === null || Number(item.status) === 1;
+  return matching.some((feature) => assigned.some((item) =>
+    Number(item.feature_id) === Number(feature.id) &&
+    active(item) && planFeatures.some((planFeature) =>
+      Number(planFeature.feature_id) === Number(feature.id) && active(planFeature),
+    ),
+  ));
+}
+
+export function permissionsWithSubscriptionFeatures(permissions, subscription = readSubscription()) {
+  const list = Array.isArray(permissions) ? permissions : parsePermissions(permissions);
+  return list.filter((entry) => isSubscriptionFeatureEnabled(entry?.code, subscription));
+}
+
+const FRONTEND_MODULES = [
+  ['/dashboard/2', 'Dashboard'],
+  ['/dashboard/stock', 'Products'], ['/dashboard/product', 'Products'],
+  ['/dashboard/warehouse', 'Products'], ['/dashboard/stock-', 'Products'],
+  ['/dashboard/product-alerts', 'Products'], ['/dashboard/wastes', 'Products'],
+  ['/dashboard/purchases', 'Purchases'], ['/dashboard/purchase-', 'Purchases'],
+  ['/dashboard/account-purchase-', 'Purchases'], ['/dashboard/journals', 'Journals'],
+  ['/dashboard/fiscal-years', 'Journals'], ['/dashboard/accounts', 'Accounts'],
+  ['/dashboard/account/', 'Accounts'], ['/dashboard/account-types', 'Accounts'],
+  ['/dashboard/treasury', 'Accounts'], ['/dashboard/transfers', 'Accounts'],
+  ['/dashboard/reconciliation', 'Accounts'],
+  ['/dashboard/sales', 'Sales'], ['/dashboard/sale-', 'Sales'],
+  ['/dashboard/account-sale-', 'Sales'], ['/dashboard/exchanges', 'Exchange'],
+  ['/dashboard/master-exchanges', 'Exchange'], ['/dashboard/users', 'Users'],
+  ['/dashboard/settings', 'Settings'], ['/dashboard/work-centers', 'WorkCenters'],
+  ['/dashboard/boms', 'Boms'], ['/dashboard/productions', 'Productions'],
+  ['/dashboard/patients', 'Patients'], ['/dashboard/patient-types', 'PatientTypes'],
+  ['/dashboard/appointments', 'Appointments'], ['/dashboard/appointment/', 'Appointments'],
+  ['/dashboard/prescriptions', 'Prescriptions'], ['/dashboard/prescription-', 'Prescriptions'],
+  ['/dashboard/labtests', 'Labtests'], ['/dashboard/departments', 'Departments'],
+  ['/dashboard/apartments', 'Apartments'], ['/dashboard/leases', 'Leases'],
+];
+
+export function moduleForFrontendPath(path) {
+  const route = String(path || '').split('?')[0];
+  return FRONTEND_MODULES.find(([prefix]) => route.startsWith(prefix))?.[1] || null;
+}
+
 /**
  * Dashboard visibility.
  *
@@ -26,6 +97,7 @@ export function parsePermissions(value) {
  * cards themselves stay permission-gated.
  */
 export function canViewDashboard(permissions) {
+  if (!isSubscriptionFeatureEnabled('Dashboard')) return false;
   const list = Array.isArray(permissions) ? permissions : parsePermissions(permissions);
   const dashboard = list.find((item) => item && item.code === 'Dashboard');
 
@@ -54,6 +126,7 @@ export function canViewDashboard(permissions) {
  * lock an existing user out of screens they could already open.
  */
 export function canViewModule(permissions, code) {
+  if (!isSubscriptionFeatureEnabled(code)) return false;
   const list = Array.isArray(permissions) ? permissions : parsePermissions(permissions);
   const entry = list.find((item) => item && item.code === code);
 

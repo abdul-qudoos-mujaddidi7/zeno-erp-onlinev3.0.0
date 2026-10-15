@@ -7,14 +7,15 @@
   $: _translate_org_type = $translate_org_type;
 
   import { auth } from "../auth/authStore"
-  import { canViewDashboard } from '../auth/permissions.js';
+  import { canViewDashboard, isSubscriptionFeatureEnabled, moduleForFrontendPath, permissionsWithSubscriptionFeatures } from '../auth/permissions.js';
   import { logout, logoutClear } from '../auth/authService.js';
   import { confirmModal } from './common/confirmModal.js';
   import { theme, toggleTheme } from '../stores/themeStore.js';
 import { userApi } from '../api/userApi.js';
 import { settingsApi } from '../api/settingsApi.js';
+import { subscriptionApi } from '../api/subscriptionApi.js';
 
-  $: permissions = $auth.permissions;
+  $: permissions = permissionsWithSubscriptionFeatures($auth.permissions, $auth.subscription);
   // Dashboard visibility follows its own permission; a permission set without
   // a Dashboard entry keeps the legacy behaviour (visible), unless the set
   // denies every module it mentions — a locked-down account.
@@ -41,7 +42,19 @@ import { settingsApi } from '../api/settingsApi.js';
   let reportsMenuOpen = false;
   let isDesktop = true;
   let desktopMedia;
+  let subscriptionRefreshTimer;
   let syncDesktop = () => {};
+
+  async function refreshSubscriptionFeatures() {
+    try {
+      const response = await subscriptionApi.getCurrent();
+      if (!response?.subscription) return;
+      localStorage.setItem('subscription', JSON.stringify(response.subscription));
+      auth.update((current) => ({ ...current, subscription: response.subscription }));
+    } catch (error) {
+      // A transient refresh failure should not sign the user out.
+    }
+  }
 
   function toggleProfileMenu() {
     profileMenuOpen = !profileMenuOpen;
@@ -109,9 +122,11 @@ import { settingsApi } from '../api/settingsApi.js';
     updateSidebarWidth();
   }
 
-  function sidebarMenuLabels(node) {
+  function sidebarMenuLabels(node, subscription) {
     const apply = () => {
       node.querySelectorAll('.list-group-item').forEach((link) => {
+        const feature = moduleForFrontendPath(link.getAttribute('href'));
+        link.hidden = Boolean(feature && !isSubscriptionFeatureEnabled(feature, subscription));
         const label = link.textContent.replace(/\s+/g, ' ').trim();
         if (label) {
           link.setAttribute('data-sidebar-label', label);
@@ -121,7 +136,12 @@ import { settingsApi } from '../api/settingsApi.js';
 
     apply();
 
-    return { update: apply };
+    return {
+      update(nextSubscription) {
+        subscription = nextSubscription;
+        apply();
+      },
+    };
   }
 
   $: sidebarCollapsed, isDesktop, updateSidebarWidth();
@@ -169,9 +189,14 @@ import { settingsApi } from '../api/settingsApi.js';
     if (desktopMedia) {
       desktopMedia.removeEventListener('change', syncDesktop);
     }
+    if (subscriptionRefreshTimer) clearInterval(subscriptionRefreshTimer);
+    window.removeEventListener('focus', refreshSubscriptionFeatures);
   });
 
   onMount(async () => {
+    refreshSubscriptionFeatures();
+    subscriptionRefreshTimer = setInterval(refreshSubscriptionFeatures, 30000);
+    window.addEventListener('focus', refreshSubscriptionFeatures);
     desktopMedia = window.matchMedia('(min-width: 992px)');
     syncDesktop = () => {
       isDesktop = desktopMedia.matches;
@@ -232,7 +257,7 @@ import { settingsApi } from '../api/settingsApi.js';
         </button>
       </div>
     </div>
-    <div class="list-group list-group-flush sidebar-menu mt-2" use:sidebarMenuLabels>
+    <div class="list-group list-group-flush sidebar-menu mt-2" use:sidebarMenuLabels={$auth.subscription}>
       {#if showDashboard}
         <a
           use:link
