@@ -40,6 +40,20 @@ function requireAuth(req, res, next) {
   next();
 }
 
+/*
+ * Several of these pages are async functions that were called without being
+ * awaited: a rejected promise (a bad sort column reaching SQL, for instance)
+ * then escaped Express and terminated the whole server. Handing the rejection
+ * to the error handler keeps one broken page from taking the ERP offline.
+ */
+const safe = (handler) => async (req, res, next) => {
+  try {
+    await handler(req, res, db);
+  } catch (error) {
+    next(error);
+  }
+};
+
 router.get("/", async (req, res) => {
   Login(req, res, db);
 });
@@ -184,17 +198,13 @@ router.post(
 router.get(
   "/list/:tableName/:sortcolumn/:sortdir/:org/:limit/:page/",
   requireAuth,
-  (req, res) => {
-    ListItems(req, res, db);
-  },
+  safe(ListItems),
 );
 
 router.get(
   "/list-error-logs/:logtype/:sortcolumn/:sortdir/:org/:limit/:page/",
   requireAuth,
-  (req, res) => {
-    ListErrorLogs(req, res, db);
-  },
+  safe(ListErrorLogs),
 );
 
 const formatMySQLDate = (date) => {
@@ -204,42 +214,32 @@ const formatMySQLDate = (date) => {
 router.get(
   "/list-commands/:command_status/:sortcolumn/:sortdir/:org/:limit/:page/",
   requireAuth,
-  (req, res) => {
-    ListCommands(req, res, db);
-  },
+  safe(ListCommands),
 );
 
 router.get(
   "/command/:command_id/:org_id/:user_id/:tab_ses_id/:selector/",
   requireAuth,
-  (req, res) => {
-    Command(req, res, db);
-  },
+  safe(Command),
 );
 
 router.get(
   "/list-subscription-plans/:plan_type/:sortcolumn/:sortdir/:org/:limit/:page/",
   requireAuth,
-  (req, res) => {
-    ListSubscriptionPlans(req, res, db);
-  },
+  safe(ListSubscriptionPlans),
 );
 
 
 router.get(
   "/list-subscriptions/:subscription_status/:sortcolumn/:sortdir/:org/:limit/:page/",
   requireAuth,
-  (req, res) => {
-    ListSubscriptions(req, res, db);
-  },
+  safe(ListSubscriptions),
 );
 
 router.get(
   "/subscription-plan/:subscription_plan_id/",
   requireAuth,
-  (req, res) => {
-    SubscriptionPlan(req, res, db);
-  },
+  safe(SubscriptionPlan),
 );
 
 router.get(
@@ -264,9 +264,7 @@ router.get(
 router.get(
   "/subscription/:subscription_id/:org_id",
   requireAuth,
-  (req, res) => {
-    Subscription(req, res, db);
-  },
+  safe(Subscription),
 );
 
 
@@ -584,14 +582,10 @@ router.post("/payment/save",
 router.get(
   "/list-org-types/:type_status/:sortcolumn/:sortdir/:org/:limit/:page/",
   requireAuth,
-  (req, res) => {
-    ListOrgTypes(req, res, db);
-  },
+  safe(ListOrgTypes),
 );
 
-router.get("/org-type/:org_type_id/", requireAuth, (req, res) => {
-  OrgType(req, res, db);
-});
+router.get("/org-type/:org_type_id/", requireAuth, safe(OrgType));
 
 router.post(
   "/org-type/",
@@ -659,14 +653,10 @@ router.post(
 router.get(
   "/list-features/:type_status/:sortcolumn/:sortdir/:org/:limit/:page/",
   requireAuth,
-  (req, res) => {
-    ListFeatures(req, res, db);
-  },
+  safe(ListFeatures),
 );
 
-router.get("/feature/:feature_id/", requireAuth, (req, res) => {
-  Feature(req, res, db);
-});
+router.get("/feature/:feature_id/", requireAuth, safe(Feature));
 
 router.post(
   "/feature/",
@@ -728,18 +718,12 @@ router.post(
 router.get(
   "/organization-list/:sortcolumn/:sortdir/:type/:limit/:page",
   requireAuth,
-  (req, res) => {
-    OrganizationList(req, res, db);
-  },
+  safe(OrganizationList),
 );
 
-router.get("/view/:tableName/:id", requireAuth, (req, res) => {
-  ViewItem(req, res, db);
-});
+router.get("/view/:tableName/:id", requireAuth, safe(ViewItem));
 
-router.get("/view-error-log/:tableName/:id", requireAuth, (req, res) => {
-  ViewErrorLog(req, res, db);
-});
+router.get("/view-error-log/:tableName/:id", requireAuth, safe(ViewErrorLog));
 
 router.get("/logout", (req, res) => {
   req.session.destroy(() => {

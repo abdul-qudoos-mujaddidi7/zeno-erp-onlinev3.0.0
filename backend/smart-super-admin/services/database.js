@@ -93,13 +93,24 @@ module.exports = function createDatabase(pool) {
   async function schema(table) {
     if (!TABLES.includes(table)) fail("Unknown table", 404);
     if (!cache.has(table)) {
+      // IS_GENERATED is a MariaDB-only column: asking MySQL for it fails with
+      // ER_BAD_FIELD_ERROR, which took every table page down on a MySQL server.
+      // Both servers do report the same thing in EXTRA ("STORED GENERATED",
+      // "VIRTUAL GENERATED"), so the flag is derived from there instead.
       const [rows] = await pool.execute(
-        "SELECT column_name AS name, data_type AS type, extra, is_generated AS generated, is_nullable AS nullable, character_maximum_length AS maxLength FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? ORDER BY ordinal_position",
+        "SELECT column_name AS name, data_type AS type, extra, is_nullable AS nullable, character_maximum_length AS maxLength FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? ORDER BY ordinal_position",
         [table],
       );
-      const columns = rows.filter(
-        (row) => !/password|token|secret/i.test(row.name),
-      );
+      const columns = rows
+        .filter((row) => !/password|token|secret/i.test(row.name))
+        .map(({ extra, ...column }) => ({
+          ...column,
+          // Only virtual/stored columns are read-only; DEFAULT_GENERATED (MySQL's
+          // marker for a CURRENT_TIMESTAMP default) is an ordinary column.
+          generated: /(?:VIRTUAL|STORED|PERSISTENT)\s+GENERATED/i.test(extra || "")
+            ? "ALWAYS"
+            : "NEVER",
+        }));
       if (!columns.length) fail("Table is unavailable", 404);
       cache.set(table, columns);
     }

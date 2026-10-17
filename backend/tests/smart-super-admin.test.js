@@ -1033,3 +1033,37 @@ test("table search refreshes results live after typing and resets pagination", a
   );
   dom.window.close();
 });
+
+test("column metadata is read the same way from MySQL and MariaDB", async () => {
+  const statements = [];
+  const db = database({
+    execute: async (sql) => {
+      statements.push(sql);
+      if (/information_schema/i.test(sql))
+        return [
+          [
+            { name: "id", type: "int", extra: "auto_increment", nullable: "NO", maxLength: null },
+            { name: "name", type: "varchar", extra: "", nullable: "YES", maxLength: 255 },
+            { name: "total", type: "decimal", extra: "STORED GENERATED", nullable: "YES", maxLength: null },
+            { name: "computed", type: "int", extra: "VIRTUAL GENERATED", nullable: "YES", maxLength: null },
+            { name: "created_at", type: "timestamp", extra: "DEFAULT_GENERATED", nullable: "YES", maxLength: null },
+            { name: "password_hash", type: "varchar", extra: "", nullable: "YES", maxLength: 255 },
+          ],
+        ];
+      return [[]];
+    },
+  });
+
+  const editable = await db.editableColumns("users");
+
+  assert.equal(
+    /is_generated/i.test(statements[0]),
+    false,
+    "MySQL has no IS_GENERATED column, so requesting it breaks every table page",
+  );
+  assert.deepEqual(
+    editable.map((column) => column.name),
+    ["name", "created_at"],
+    "generated, auto-increment and credential columns stay out of forms",
+  );
+});

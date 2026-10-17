@@ -148,12 +148,16 @@ export default defineConfig(({ mode }) => {
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           navigateFallback: 'index.html',
           // Never answer API/upload/backup/log requests from the app shell.
+          // /smart-super-admin is a separate server-rendered panel: without its
+          // own entry every visit to it was answered with this app's index.html,
+          // so the panel's login page never reached the browser.
           navigateFallbackDenylist: [
             /^\/api\//,
             /^\/uploads\//,
             /^\/logs/,
             /^\/backup\//,
             /^\/command-executed/,
+            /^\/smart-super-admin(\/|$)/,
           ],
           cleanupOutdatedCaches: true,
           clientsClaim: true,

@@ -16,6 +16,15 @@ const errorHandler = require("./middleware/errorHandler");
 const compression = require("compression");
 const errorLogInbox = require("./services/error-log-inbox");
 
+/*
+ * A rejected promise nobody awaited used to end the process (Node exits on an
+ * unhandled rejection), so one failing page could take the whole ERP down.
+ * Log it and keep serving: the request that caused it fails on its own.
+ */
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason);
+});
+
 app.use(compression());
 
 const session = require("express-session");
