@@ -221,7 +221,11 @@ module.exports = function createDatabase(pool) {
       page = Math.min(requested, totalPages);
     const [rows] = await pool.execute(
       `SELECT ${[...names.map((n) => "`" + n + "`"), ...Object.entries(computed).map(([name, expression]) => expression + " AS `" + name + "`")].join(",")} FROM \`${table}\`${where} ORDER BY \`${sort}\` ${direction}${sort !== "id" ? ", id " + direction : ""} LIMIT ? OFFSET ?`,
-      [...values, limit, (page - 1) * limit],
+      // MySQL 8.0.22+ rejects DOUBLE-typed binds for integer-only positions
+      // such as LIMIT/OFFSET (mysql2 sends JS numbers as DOUBLE), throwing
+      // ER_WRONG_ARGUMENTS: "Incorrect arguments to mysqld_stmt_execute".
+      // Send them as strings instead - every list page failed without this.
+      [...values, String(limit), String((page - 1) * limit)],
     );
     return {
       tableName: table,

@@ -77,6 +77,7 @@ module.exports = function createSmartSuperAdmin({
       console.error(
         "Smart Super Admin operation failed:",
         error.code || "UNAVAILABLE",
+        error.message,
       );
     if (
       req.path.startsWith("/subscription-plan-features/") ||

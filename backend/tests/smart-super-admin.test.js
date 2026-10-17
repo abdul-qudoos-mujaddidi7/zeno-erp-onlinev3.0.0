@@ -595,11 +595,63 @@ test("generic schema browsing rejects identifiers, bounds limits, and excludes c
   assert.equal(result.columns.length, 2);
   const listing = calls.find((call) => call.sql.includes("LIMIT ? OFFSET ?"));
   assert.doesNotMatch(listing.sql, /password_hash|token|SELECT \*/);
-  assert.deepEqual(listing.values.slice(-2), [10, 10]);
+  // LIMIT/OFFSET must be strings: MySQL 8.0.22+ rejects DOUBLE binds there.
+  assert.deepEqual(listing.values.slice(-2), ["10", "10"]);
   assert.equal(listing.values[0], "%50!%!_!!%");
   await assert.rejects(() => db.list("users; DROP TABLE users", { limit: 20 }));
   await assert.rejects(() => db.list("users", { sortcolumn: "password_hash" }));
   await assert.rejects(() => db.list("users", { limit: 251 }));
+});
+
+test("list pages bind LIMIT/OFFSET as strings so MySQL 8 does not reject them", async () => {
+  // MySQL 8.0.22+ treats LIMIT/OFFSET as integer-only positions and rejects
+  // DOUBLE binds with ER_WRONG_ARGUMENTS. mysql2 sends every JS number as
+  // DOUBLE, so a numeric limit/offset broke every Smart Super Admin list page
+  // in production while MariaDB (the dev database) silently accepted it.
+  const express = require("express");
+  const parent = express();
+  parent.use(
+    "/smart-super-admin",
+    require("../smart-super-admin/app")({
+      skipAccessControl: true,
+      pool: {
+        execute: async (sql, params = []) => {
+          if (/information_schema/.test(sql))
+            return [
+              [
+                { name: "id", type: "bigint" },
+                { name: "name", type: "varchar" },
+                { name: "type_status", type: "varchar" },
+              ],
+            ];
+          if (/COUNT\(\*\)/.test(sql)) return [[{ count: 1 }]];
+          if (/LIMIT \? OFFSET \?/.test(sql)) {
+            const [limit, offset] = params.slice(-2);
+            for (const value of [limit, offset])
+              if (typeof value !== "string")
+                throw Object.assign(
+                  new Error("Incorrect arguments to mysqld_stmt_execute"),
+                  { code: "ER_WRONG_ARGUMENTS" },
+                );
+          }
+          return [[{ id: 7, name: "Hospital", type_status: "active" }]];
+        },
+      },
+    }),
+  );
+  const server = parent.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${server.address().port}/smart-super-admin/list-org-types/id/DESC/0/20/1`,
+    );
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /Hospital/);
+    assert.doesNotMatch(html, /database operation could not be completed/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 test("all requested templates compile and Smart Super Admin uses the session gate", () => {
@@ -816,8 +868,8 @@ test("list date range filters bind to the table's temporal column in Kabul time"
   assert.deepEqual(query.params, [
     "2026-09-30 19:30:00.000",
     "2026-10-02 08:00:00.000",
-    20,
-    0,
+    "20",
+    "0",
   ]);
 });
 
