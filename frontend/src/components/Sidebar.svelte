@@ -35,14 +35,6 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     code,
     label: LANGUAGE_LABELS[code],
   }));
-  $: subscriptionPlanLabel = (() => {
-    const subscription = $auth.subscription;
-    if (!subscription) return '';
-    const plan = subscription.subscription_plan;
-    const status = t(subscription.subscription_status);
-    if (!plan) return status;
-    return (currentLang === 'fa' ? plan.name_fa : plan.name) || plan.name_fa || plan.name || status;
-  })();
   
   export let sidebarOpen = false;
   export let sidebarCollapsed = false;
@@ -651,24 +643,14 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
             </span>
           </div>
 
-          <div class="pm-group">
-            <a
-              use:link
-              href="/dashboard/subscription"
-              class="pm-row"
-              on:click={() => (profileMenuOpen = false)}>
-              <i class="bi bi-patch-check"></i>
-              <span class="pm-label">{t('Subscription')}</span>
-              {#if subscriptionPlanLabel}<span class="pm-value">{subscriptionPlanLabel}</span>{/if}
-              <i class="bi bi-chevron-down pm-chevron" aria-hidden="true"></i>
-            </a>
-            {#if shiftPressed && ctrlPressed}
+          {#if shiftPressed && ctrlPressed}
+            <div class="pm-group">
               <button type="button" class="pm-row pm-row-warn" on:click={handleLogoutClear}>
                 <i class="bi bi-trash"></i>
                 <span class="pm-label">{t('Logout Clear')}</span>
               </button>
-            {/if}
-          </div>
+            </div>
+          {/if}
 
           <div class="pm-foot">
             <nav class="pm-langs" aria-label={t('Language')}>
