@@ -1,0 +1,337 @@
+{
+  "meta": {
+    "name": "Zeno ERP Dashboard",
+    "version": "1.0",
+    "direction": "rtl",
+    "languages": [
+      "fa-AF (Dari)",
+      "ps (Pashto)",
+      "en"
+    ]
+  },
+  "color": {
+    "brand": {
+      "primary": "#2F6FED",
+      "primarySoft": "#E3ECFF",
+      "primary300": "#93B7F7",
+      "navy": "#0B1530",
+      "navy2": "#132042",
+      "gold": "#C9A44C",
+      "gold2": "#F3DE9B"
+    },
+    "light": {
+      "bg": "#EEF2F8",
+      "surface": "#FFFFFF",
+      "surface2": "#F8FAFC",
+      "surface3": "#F1F5F9",
+      "hover": "#F5F9FF",
+      "border": "#E1E7F0",
+      "borderSoft": "#EEF2F7",
+      "borderStrong": "#DCE6F8",
+      "ink": "#0B1530",
+      "text": "#475569",
+      "muted": "#64748B",
+      "subtle": "#94A3B8",
+      "link": "#2F6FED"
+    },
+    "dark": {
+      "bg": "#070D1F",
+      "surface": "#0F1A35",
+      "surface2": "#132042",
+      "surface3": "#1A2848",
+      "hover": "#15244A",
+      "border": "#1E2C4F",
+      "borderSoft": "#18254A",
+      "borderStrong": "#2A3B66",
+      "ink": "#F1F5FB",
+      "text": "#B4C0DA",
+      "muted": "#8A96B8",
+      "subtle": "#6B79A0",
+      "link": "#7FA7F8"
+    },
+    "status": {
+      "ok": "#15803D",
+      "okSoft": "#DCFCE7",
+      "danger": "#B91C1C",
+      "dangerSoft": "#FEE2E2",
+      "warn": "#92400E",
+      "warnSoft": "#FEF3C7",
+      "debit": "#DC2626",
+      "debitSoft": "#FDECEC",
+      "credit": "#16A34A",
+      "creditSoft": "#E7F6EC"
+    },
+    "module": {
+      "sale": "#4F46E5",
+      "receive": "#059669",
+      "purchase": "#F97316",
+      "purchaseKpi": "#EA580C",
+      "product": "#C026D3",
+      "expense": "#334155",
+      "exchange": "#0891B2",
+      "profit": "#7C3AED"
+    },
+    "alert": {
+      "expiry": "#D97706",
+      "lowStock": "#DC2626",
+      "lateBills": "#D97706",
+      "drafts": "#64748B"
+    },
+    "sidebar": {
+      "bg": "#0B1530",
+      "item": "#B7C1DB",
+      "itemHoverBg": "#132042",
+      "activeGradient": "linear-gradient(90deg, rgba(47,111,237,.10), rgba(47,111,237,.32))",
+      "group": "#6B79A0",
+      "divider": "#1B2A52"
+    },
+    "tintRule": "matte tint = color-mix(in srgb, <hue> 8%, surface); border = <hue> 14%; icon tile = <hue> 13-16% on surface"
+  },
+  "font": {
+    "ui": "Vazirmatn, 'Noto Sans Arabic', system-ui, sans-serif",
+    "numbers": "Inter, Vazirmatn, sans-serif",
+    "icons": "Material Symbols Rounded (FILL 0/1, wght 500)",
+    "size": {
+      "2xs": "10px",
+      "xs": "10.5px",
+      "sm": "11.5px",
+      "base": "12.5px",
+      "md": "13px",
+      "lg": "14px",
+      "xl": "17px",
+      "2xl": "22px"
+    },
+    "weight": {
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700,
+      "heavy": 800,
+      "black": 900
+    },
+    "lineHeight": 1.55
+  },
+  "space": {
+    "1": "2px",
+    "2": "4px",
+    "3": "6px",
+    "4": "8px",
+    "5": "10px",
+    "6": "12px",
+    "7": "14px",
+    "8": "16px",
+    "10": "20px",
+    "12": "24px"
+  },
+  "radius": {
+    "xs": "6px",
+    "sm": "8px",
+    "md": "10px",
+    "lg": "12px",
+    "xl": "14px",
+    "2xl": "16px",
+    "pill": "999px"
+  },
+  "shadow": {
+    "1": "0 1px 2px rgba(11,21,48,.04)",
+    "2": "0 1px 2px rgba(15,23,42,.04), 0 4px 12px -8px rgba(15,23,42,.12)",
+    "pop": "0 18px 44px -14px rgba(11,21,48,.40)",
+    "modal": "0 40px 90px -24px rgba(11,21,48,.60)",
+    "brand": "0 8px 18px -8px rgba(47,111,237,.90)",
+    "focusRing": "0 0 0 3px rgba(47,111,237,.14)"
+  },
+  "layout": {
+    "sidebarWidth": "232px",
+    "contentMax": "1400px",
+    "gutter": "12px",
+    "sectionGap": "14px",
+    "cardGap": "8px",
+    "rowGap": "12px",
+    "breakpoints": {
+      "stackRows": "1100px",
+      "hideSidebar": "860px"
+    }
+  },
+  "components": {
+    "navItem": {
+      "height": "38px",
+      "padding": "0 10px",
+      "radius": "10px",
+      "gap": "10px",
+      "font": "13px/500 (active 700)",
+      "icon": "20px"
+    },
+    "badge": {
+      "size": "20px",
+      "radius": "10px",
+      "font": "10.5px/700 Inter"
+    },
+    "posButton": {
+      "height": "38px",
+      "radius": "10px",
+      "font": "13px/700",
+      "shadow": "brand"
+    },
+    "sectionTitle": {
+      "font": "14px/800",
+      "color": "ink",
+      "minHeight": "30px"
+    },
+    "clock": {
+      "height": "34px",
+      "time": "13px/800 Inter, letter-spacing .3px",
+      "date": "12px/600 muted",
+      "icon": "16px brand"
+    },
+    "kpiCard": {
+      "padding": "11px 13px",
+      "radius": "14px",
+      "gap": "10px",
+      "tile": "34x34 r10",
+      "label": "11.5px/600 (hue 70% + ink)",
+      "value": "17px/800 Inter, never truncate",
+      "unit": "10.5px muted",
+      "sub": "11px muted, numbers 800 Inter",
+      "grid": "auto-fit minmax(220px,1fr) gap 8px"
+    },
+    "quickAction": {
+      "minHeight": "50px",
+      "padding": "8px 14px 8px 10px",
+      "radius": "14px",
+      "border": "1px borderSoft",
+      "bg": "surface",
+      "label": "12.5px/800",
+      "icon": "34x34 r11, icon 18px, bg hue 13%",
+      "hover": "translateY(-2px), border hue 40%, shadow 0 10px 22px -14px hue",
+      "grid": "auto-fit minmax(150px,1fr) gap 8px"
+    },
+    "search": {
+      "width": "280px",
+      "height": "36px",
+      "radius": "12px",
+      "iconTile": "28x28 r9",
+      "input": "12.5px/500",
+      "focus": "border brand + focusRing, icon tile filled brand"
+    },
+    "card": {
+      "padding": "12px 14px",
+      "radius": "16px",
+      "gap": "8px",
+      "title": "13.5px/800",
+      "titleIcon": "28x28 r9, icon 16px"
+    },
+    "treasuryCard": {
+      "bg": "linear-gradient(160deg,#0B1530,#132042)",
+      "radius": "14px",
+      "hero": "22px/800 Inter"
+    },
+    "alertTile": {
+      "padding": "8px 10px",
+      "radius": "12px",
+      "count": "17px/800 Inter",
+      "title": "12px/700",
+      "sub": "10.5px hue",
+      "selected": "border hue 45% + ring 3px hue 12%",
+      "grid": "auto-fit minmax(128px,1fr)"
+    },
+    "listRow": {
+      "minHeight": "38px",
+      "padding": "4px 6px",
+      "radius": "9px",
+      "avatar": "24px circle",
+      "bar": "3px"
+    },
+    "collapse": {
+      "summaryPadding": "4px 2px 10px",
+      "underline": "1px border + 2px brand accent 56px→140px on hover/open",
+      "chevron": "28px circle",
+      "body": "padding 14px, radius 14px, margin-top 12px"
+    },
+    "button": {
+      "height": "32px",
+      "padding": "0 12px",
+      "radius": "8px",
+      "font": "12px/700",
+      "icon": "17px"
+    },
+    "chip": {
+      "height": "20px",
+      "padding": "0 8px",
+      "radius": "999px",
+      "font": "10.5px/700"
+    },
+    "lineTabs": {
+      "height": "38px",
+      "gap": "18px",
+      "font": "13px/600 (active 800)",
+      "indicator": "3px brand + glow; hover grows from center"
+    },
+    "modal": {
+      "width": "640px",
+      "radius": "18px",
+      "shadow": "modal",
+      "backdrop": "rgba(11,21,48,.45) + blur 3px"
+    }
+  },
+  "icons": {
+    "nav": {
+      "داشبورد": "space_dashboard",
+      "فروش‌ها": "shopping_cart",
+      "خریدها": "shopping_bag",
+      "ادویه‌جات": "inventory_2",
+      "حساب‌ها": "group",
+      "روزنامچه": "menu_book",
+      "صرافی": "currency_exchange",
+      "گزارشات": "bar_chart_4_bars",
+      "تنظیمات": "settings",
+      "POS": "point_of_sale"
+    },
+    "kpi": {
+      "فروش امروز": "shopping_cart",
+      "خرید امروز": "shopping_bag",
+      "مصارف امروز": "receipt_long",
+      "مفاد امروز": "trending_up"
+    },
+    "quickActions": {
+      "فروش جدید": "add_shopping_cart",
+      "دریافت پول": "payments",
+      "خرید جدید": "shopping_bag",
+      "محصول جدید": "add_box",
+      "ثبت مصرف": "receipt_long",
+      "تبادله": "currency_exchange"
+    },
+    "cards": {
+      "خزانه": "account_balance_wallet",
+      "قرضداران": "person_search",
+      "نرخ ارز": "currency_exchange",
+      "روند مالی": "monitoring",
+      "برگشت و ضایعات": "assignment_return",
+      "گدام‌ها": "warehouse",
+      "پرفروش‌ترین‌ها": "emoji_events",
+      "گزارش‌های بیشتر": "dashboard"
+    },
+    "misc": {
+      "clock": "schedule",
+      "search": "search",
+      "filter": "tune",
+      "download": "download",
+      "print": "print",
+      "more": "more_vert",
+      "close": "close",
+      "edit": "edit",
+      "delete": "delete",
+      "pin": "keep",
+      "chevron": "expand_more"
+    }
+  },
+  "rules": [
+    "RTL everywhere; close buttons on the right (start).",
+    "Currency sign left of amount: '؋ 1,250' (LTR isolate).",
+    "Numbers, codes, dates in Inter with tabular-nums.",
+    "One-word titles; no duplicated info.",
+    "Filters live inside an icon (tune).",
+    "Void, never delete (button may read حذف but performs ابطال).",
+    "Debit = red, Credit (طلبکار) = green.",
+    "KPI values never truncate."
+  ]
+}

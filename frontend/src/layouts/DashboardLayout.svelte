@@ -203,6 +203,7 @@
 
     <main
       class="erp-page-main"
+      class:dashboard-page={loc === '/dashboard'}
       class:erp-form-route={loc.startsWith('/dashboard/sale-form/') ||
         loc.startsWith('/dashboard/account-sale-form/') ||
         loc.startsWith('/dashboard/purchase-form/') ||
@@ -368,8 +369,14 @@
     background: var(--erp-bg);
   }
 
+  /* The dashboard board uses the design's own surface colour; every other
+     route keeps the shared --erp-bg. */
   .content-wrapper.dashboard-surface {
-    background: var(--erp-bg);
+    background: #eef2f8;
+  }
+
+  :global(html.dark) .content-wrapper.dashboard-surface {
+    background: #070d1f !important;
   }
 
   main {
@@ -391,6 +398,22 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+
+  /* Zeno dashboard geometry (measured from Main.dc.html at 1440): the board
+     is capped at 1400px with a 14/20px gutter and owns the page scroll. */
+  .erp-page-main.dashboard-page {
+    max-width: 1400px;
+    padding: 0 20px 32px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  @media (max-width: 860px) {
+    .erp-page-main.dashboard-page {
+      padding: 0 12px 92px;
+    }
   }
   
 

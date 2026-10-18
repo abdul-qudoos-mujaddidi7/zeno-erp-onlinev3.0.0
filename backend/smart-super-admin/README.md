@@ -55,7 +55,9 @@ deployment runtime has not been supplied and its compatibility remains unverifie
 models, services query existing tables, and `services/database.js` validates
 identifiers, sort fields, filters, page limits, and values. Templates are in
 `backend/views/smart-super-admin`; browser code and styles are in
-`backend/public/smart-super-admin`, served at `/smart-super-admin/assets`.
+`backend/smart-super-admin/assets`, served at `/smart-super-admin/assets`.
+These assets live beside the panel code, not in `backend/public`, because a
+frontend deploy replaces `backend/public` and used to delete them.
 Templates use escaped Handlebars output. JavaScript is external to templates.
 
 List and index styling follows the existing ERP Svelte `IndexPageLayout`,
@@ -71,7 +73,7 @@ dismissal and focus trap. Logout destroys the shared host session and returns
 to the Smart Super Admin login page. Sidebar collapse is stored under
 `smartSuperAdmin.sidebarCollapsed`, separately from ERP preferences. The
 `#297aa0` accent is used throughout the light theme. Shell styles are in
-`public/smart-super-admin/css/shell.css`.
+`smart-super-admin/assets/css/shell.css`.
 
 ## Verification
 
