@@ -254,21 +254,11 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
       <div class="brand-main">
         <div class="brand-mark" aria-hidden="true">Z</div>
         <div class="brand-text">
-          <div class="brand-name">ZENO</div>
-          <div class="brand-ver">ERP · v{app_version}</div>
+          <img class="brand-logo" src="/img/logo.png" alt="Zeno ERP" />
+          <div class="brand-ver">{app_version}</div>
         </div>
       </div>
       <div class="brand-toolbar">
-        <button
-          type="button"
-          class="sidebar-collapse-icon-btn d-none d-lg-inline-flex"
-          on:click={toggleSidebarCollapse}
-          aria-controls="erp-sidebar"
-          aria-expanded={!railCollapsed}
-          aria-label={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}
-          title={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}>
-          <i class={sidebarCollapsed ? 'bi bi-grid' : 'bi bi-list'}></i>
-        </button>
         <button
           class="btn btn-sm btn-outline-secondary d-lg-none"
           on:click={() => (sidebarOpen = false)}
@@ -698,6 +688,16 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
       {/if}
     </div>
   </div>
+  <button
+    type="button"
+    class="sidebar-collapse-icon-btn d-none d-lg-inline-flex"
+    on:click={toggleSidebarCollapse}
+    aria-controls="erp-sidebar"
+    aria-expanded={!railCollapsed}
+    aria-label={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}
+    title={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}>
+    <i class="bi bi-list"></i>
+  </button>
 </nav>
 
 <style>
@@ -740,11 +740,11 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   .sidebar-brand {
-    position: static;
+    position: relative;
     display: flex;
     gap: 9px;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     min-height: 56px;
     padding: 14px 16px 10px;
     border: 0;
@@ -758,32 +758,39 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     display: flex;
     gap: 0.65rem;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     min-width: 0;
-    flex: 1;
+    flex: 0 1 auto;
   }
 
   .brand-toolbar {
-    position: static;
+    position: absolute;
+    inset-inline-end: 16px;
+    top: 50%;
     display: flex;
     gap: 0.35rem;
     align-items: center;
     flex-shrink: 0;
+    transform: translateY(-50%);
   }
 
   .sidebar-collapse-icon-btn {
-    z-index: 20;
+    position: absolute;
+    top: 30px;
+    inset-inline-end: -12px;
+    z-index: 1051;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
+    width: 24px;
+    height: 24px;
     padding: 0;
-    border: 1px solid #1b2a52;
-    border-radius: 8px;
-    background: #132042;
-    color: #8a96b8;
-    box-shadow: none;
+    border: 1px solid #edf1f7;
+    border-radius: 7px;
+    background: #fff;
+    color: #a0aaba;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.14);
+    transform: translateY(0);
     transition:
       border-color 0.2s ease,
       color 0.2s ease,
@@ -791,15 +798,15 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   .sidebar-collapse-icon-btn:hover {
-    border-color: #1b2a52;
-    background: #1b2a52;
-    color: #fff;
-    transform: none;
+    border-color: #e2e8f0;
+    background: #f8fafc;
+    color: #64748b;
+    transform: translateY(0);
   }
 
   .sidebar-collapse-icon-btn i {
     margin: 0 !important;
-    font-size: 18px;
+    font-size: 14px;
     line-height: 1;
   }
 
@@ -817,27 +824,33 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     font-size: 16px;
     font-weight: 800;
     line-height: 1;
+    display: none;
   }
 
   .brand-text {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     line-height: 1.15;
   }
 
-  .brand-name {
-    color: #fff;
-    font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
-    font-size: 15px;
-    font-weight: 800;
-    letter-spacing: 0.6px;
+  .brand-logo {
+    display: block;
+    width: 98px;
+    height: 24px;
+    object-fit: contain;
+    object-position: left center;
+    filter: brightness(0) invert(1);
   }
 
   .brand-ver {
+    margin-top: 2px;
+    transform: translateX(28px);
     color: #8a96b8;
     font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
     font-size: 10.5px;
     font-weight: 600;
+    line-height: 1.2;
+    text-align: center;
     white-space: nowrap;
   }
 
@@ -1391,6 +1404,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   #erp-sidebar.collapsed .sidebar-brand {
+    position: static;
     justify-content: space-between;
     gap: 4px;
     padding: 10px 4px;
@@ -1401,9 +1415,11 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   #erp-sidebar.collapsed .brand-mark {
-    width: 28px;
-    height: 28px;
+    display: none;
   }
+
+  #erp-sidebar.collapsed .brand-logo,
+  #erp-sidebar.collapsed .brand-ver { display: none; }
 
   #erp-sidebar.collapsed .brand-text,
   #erp-sidebar.collapsed .sidebar-group-label,
@@ -1412,13 +1428,20 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   #erp-sidebar.collapsed .brand-toolbar {
+    position: static;
     display: flex;
     gap: 0;
+    transform: none;
   }
 
   #erp-sidebar.collapsed .sidebar-collapse-icon-btn {
-    width: 28px;
-    height: 28px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
+
+  #erp-sidebar.collapsed .sidebar-collapse-icon-btn:hover {
+    transform: translateX(-50%);
   }
 
   #erp-sidebar.collapsed .pos-shortcut {
@@ -1452,23 +1475,8 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   #erp-sidebar.collapsed .sidebar-menu :global(.list-group-item[data-sidebar-label]:hover::after) {
-    content: attr(data-sidebar-label);
-    position: absolute;
-    inset-inline-start: calc(100% + 0.55rem);
-    top: 50%;
-    z-index: 20;
-    transform: translateY(-50%);
-    padding: 0.42rem 0.7rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.55rem;
-    background: #0f172a;
-    color: #fff;
-    font-size: 0.78rem;
-    font-weight: 700;
-    line-height: 1.2;
-    white-space: nowrap;
-    pointer-events: none;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+    display: none;
+    content: none;
   }
 
   #erp-sidebar.collapsed .sidebar-profile-trigger {
