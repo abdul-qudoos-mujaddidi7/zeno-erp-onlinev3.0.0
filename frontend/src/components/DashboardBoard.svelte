@@ -247,64 +247,6 @@
       </div>
 
       <div class="zb-sec-tools">
-        <div class="zb-filter">
-          <button
-            type="button"
-            class="zb-filter-btn"
-            aria-haspopup="menu"
-            aria-expanded={showPeriodMenu}
-            title={t('Filter')}
-            on:click={() => (showPeriodMenu = !showPeriodMenu)}>
-            <i class="bi bi-funnel" aria-hidden="true"></i>
-            <span>{currentPeriodLabel}</span>
-            <i class="bi bi-chevron-down zb-filter-chev" aria-hidden="true"></i>
-          </button>
-
-          {#if showPeriodMenu}
-            <div class="zb-menu" role="menu">
-              {#each PERIODS as option}
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={period === option}
-                  class:on={period === option}
-                  on:click={() => pickPeriod(option)}>
-                  <span>{periodLabels[option]}</span>
-                  {#if period === option}<i class="bi bi-check2" aria-hidden="true"></i>{/if}
-                </button>
-              {/each}
-
-              <button type="button" class="zb-menu-custom" on:click={toggleCustomDates}>
-                <span><i class="bi bi-calendar3" aria-hidden="true"></i>{t('Custom')}</span>
-                <i class:rotated={showCustomDates} class="bi bi-chevron-down" aria-hidden="true"></i>
-              </button>
-
-              {#if showCustomDates}
-                <div class="zb-custom">
-                  <AppDatePicker bind:value={fromDate} label={t('From Date')} />
-                  <AppDatePicker bind:value={toDate} label={t('To Date')} min={fromDate || '1921-03-22'} />
-                  <button
-                    type="button"
-                    class="zb-btn primary"
-                    disabled={!fromDate || !toDate || fromDate > toDate}
-                    on:click={applyCustom}>
-                    {t('Apply')}
-                  </button>
-                </div>
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <button
-          type="button"
-          class="zb-icon-btn"
-          title={t('Refresh')}
-          aria-label={t('Refresh')}
-          on:click={() => dispatch('refresh')}>
-          <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
-        </button>
-
         <div class="zb-clock" role="timer" aria-label={clockDate} title={`${clockTime} · ${clockDate}`}>
           <i class="bi bi-clock" aria-hidden="true"></i>
           <b dir="ltr" class="zb-clock-time">{clockTime}</b>
@@ -911,6 +853,22 @@
   .zb-section[aria-labelledby='zb-kpi-title'] .zb-sec-title,
   .zb-section[aria-labelledby='zb-qa-title'] .zb-sec-title {
     font-size: var(--z-fs-lg, 14px) !important;
+  }
+
+  .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock,
+  .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock-time,
+  .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock-date {
+    font-size: var(--z-fs-lg, 14px) !important;
+  }
+
+  .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .zb-count {

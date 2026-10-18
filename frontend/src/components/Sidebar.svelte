@@ -785,11 +785,11 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     width: 24px;
     height: 24px;
     padding: 0;
-    border: 1px solid #edf1f7;
+    border: 1px solid #1b2a52;
     border-radius: 7px;
-    background: #fff;
-    color: #a0aaba;
-    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.14);
+    background: rgb(19, 32, 66);
+    color: rgb(138, 150, 184);
+    box-shadow: 0 3px 10px rgba(3, 8, 22, 0.24);
     transform: translateY(0);
     transition:
       border-color 0.2s ease,
@@ -798,15 +798,15 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   .sidebar-collapse-icon-btn:hover {
-    border-color: #e2e8f0;
-    background: #f8fafc;
-    color: #64748b;
+    border-color: #26385f;
+    background: #1b2a52;
+    color: rgb(138, 150, 184);
     transform: translateY(0);
   }
 
   .sidebar-collapse-icon-btn i {
     margin: 0 !important;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1;
   }
 
@@ -880,7 +880,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   .pos-shortcut i {
-    font-size: 19px;
+    font-size: 16px;
     line-height: 1;
   }
 
@@ -959,7 +959,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     border-radius: 0;
     background: transparent;
     color: inherit;
-    font-size: 19px;
+    font-size: 16px;
     text-align: center;
     transition: color 0.15s ease;
   }
@@ -1407,7 +1407,8 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     position: static;
     justify-content: space-between;
     gap: 4px;
-    padding: 10px 4px;
+    min-height: 42px;
+    padding: 6px 4px 4px;
   }
 
   #erp-sidebar.collapsed .brand-main {
@@ -1435,13 +1436,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   #erp-sidebar.collapsed .sidebar-collapse-icon-btn {
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-  }
-
-  #erp-sidebar.collapsed .sidebar-collapse-icon-btn:hover {
-    transform: translateX(-50%);
+    top: 30px;
   }
 
   #erp-sidebar.collapsed .pos-shortcut {
@@ -1463,7 +1458,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
 
   #erp-sidebar.collapsed .sidebar-menu :global(.list-group-item i) {
     margin: 0 !important;
-    font-size: 19px;
+    font-size: 16px;
   }
 
   #erp-sidebar.collapsed .sidebar-menu :global(.list-group-item:hover) {
