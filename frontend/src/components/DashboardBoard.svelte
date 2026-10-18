@@ -812,8 +812,8 @@
 
   .zb-section[aria-labelledby='zb-kpi-title'] .zb-sec-hd {
     justify-content: space-between;
-    gap: 20px;
-    min-height: 50px;
+    gap: 8px;
+    min-height: 30px;
     padding: 0 4px;
   }
 
@@ -855,10 +855,43 @@
     font-size: var(--z-fs-lg, 14px) !important;
   }
 
-  .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock,
-  .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock-time,
+  .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--ink);
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock > i:first-child {
+    color: var(--brand);
+    font-size: 16px;
+  }
+
+  .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock-time {
+    font-size: 13px !important;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+  }
+
+  .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock-sep {
+    width: 1px;
+    height: 14px;
+    background: var(--border);
+  }
+
   .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock-date {
-    font-size: var(--z-fs-lg, 14px) !important;
+    color: var(--muted);
+    font-size: 12px !important;
+    font-weight: 600;
   }
 
   .zb-section[aria-labelledby='zb-kpi-title'] .zb-clock {
@@ -2815,7 +2848,8 @@
       justify-content: space-between;
     }
 
-    .zb-clock-date {
+    .zb-clock-date,
+    .zb-clock-sep {
       display: none;
     }
 
