@@ -784,8 +784,8 @@
     --text: #475569;
     --muted: #64748b;
     --subtle: #94a3b8;
-    --brand: #2f6fed;
-    --brand-soft: #e3ecff;
+    --brand: var(--erp-primary, #1479df);
+    --brand-soft: var(--erp-primary-soft, #e6f2fc);
     --navy: #0b1530;
     --navy-2: #132042;
     --ok: #15803d;
@@ -1151,7 +1151,7 @@
     box-shadow: 0 14px 28px -18px var(--c);
   }
 
-  .zb-kpi[data-hue='sale'] { --c: #3267e8; }
+  .zb-kpi[data-hue='sale'] { --c: var(--erp-primary, #1479df); }
   .zb-kpi[data-hue='purchase'] { --c: #ea580c; }
   .zb-kpi[data-hue='expense'] { --c: #334155; }
   .zb-kpi[data-hue='profit'] { --c: #009f74; }
@@ -1291,7 +1291,7 @@
   }
 
   .zb-qa[data-hue='sale'] {
-    --g: #0878e8;
+    --g: var(--erp-primary, #1479df);
     border-color: transparent;
     background: linear-gradient(135deg, #2868e8 0%, #008bd1 100%);
     color: #fff;

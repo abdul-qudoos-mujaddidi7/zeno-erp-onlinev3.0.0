@@ -829,7 +829,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     flex-shrink: 0;
     border: 0;
     border-radius: 9px;
-    background: #2f6fed;
+    background: var(--erp-primary, #1479df);
     color: #fff;
     font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
     font-size: 16px;
@@ -873,7 +873,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     padding: 0 10px;
     border: 0;
     border-radius: 10px;
-    background: #2f6fed;
+    background: var(--erp-primary, #1479df);
     color: #fff;
     box-shadow: 0 8px 18px -8px rgba(47, 111, 237, 0.9);
     font-size: 13px;
@@ -881,7 +881,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   .pos-shortcut:hover {
-    background: #245fcf;
+    background: var(--erp-primary-hover, #0f68c2);
   }
 
   .pos-shortcut i {
@@ -1110,7 +1110,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     flex-shrink: 0;
     place-items: center;
     border-radius: 50%;
-    background: #2f6fed;
+    background: var(--erp-primary, #1479df);
     color: #fff;
     font-size: 12px;
     font-weight: 800;
