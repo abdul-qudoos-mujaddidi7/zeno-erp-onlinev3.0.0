@@ -1138,9 +1138,11 @@
     height: 75.52px;
     min-height: 75.52px;
     padding: 8px 12px;
-    border: 1px solid color-mix(in srgb, var(--c) 24%, transparent);
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--c) 12%, var(--surface));
+    border: 1px solid var(--c);
+    border-radius: 12px;
+    background: var(--c);
+    box-shadow: 0 2px 5px rgba(11, 21, 48, 0.025);
+    color: #fff;
     transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease), background 0.18s;
   }
 
@@ -1164,7 +1166,7 @@
     width: 36px;
     height: 36px;
     border-radius: 11px;
-    background: var(--c);
+    background: rgba(255, 255, 255, 0.18);
     color: #fff;
     font-size: 17px;
     transform: translateY(-50%);
@@ -1183,7 +1185,7 @@
   }
 
   .zb-kpi-label {
-    color: color-mix(in srgb, var(--c) 70%, var(--ink));
+    color: #fff;
     font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
@@ -1198,7 +1200,7 @@
   }
 
   .zb-kpi-value {
-    color: var(--ink);
+    color: #fff;
     font-family: var(--num);
     font-size: 21px;
     font-weight: 900;
@@ -1208,7 +1210,7 @@
   }
 
   .zb-kpi-unit {
-    color: var(--muted);
+    color: rgba(255, 255, 255, 0.82);
     font-size: 11px;
     font-weight: 500;
     white-space: nowrap;
@@ -1220,7 +1222,7 @@
     flex-wrap: wrap;
     gap: 4px;
     overflow: visible;
-    color: var(--muted);
+    color: rgba(255, 255, 255, 0.88);
     font-size: 10px;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1232,11 +1234,11 @@
     min-height: 20px;
     padding: 0 7px;
     border-radius: 999px;
-    background: color-mix(in srgb, #fff 78%, transparent);
+    background: rgba(255, 255, 255, 0.2);
   }
 
   .zb-kpi-sub b {
-    color: var(--ink);
+    color: #fff;
     font-family: var(--num);
     font-size: 10px;
     font-weight: 800;
