@@ -43,6 +43,8 @@ const {
 
 const accountService =
   require('./account.service');
+const dashboardService =
+  require('./dashboard.service');
 
 const paymentPosting =
   require('./payment-posting.service');
@@ -1309,6 +1311,7 @@ async function createSale({
     await connection.commit();
 
     accountService.invalidateAccountAggregates(orgId);
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return {
       ...sale,
@@ -2047,6 +2050,7 @@ async function updateSale({
     await connection.commit();
 
     accountService.invalidateAccountAggregates(orgId);
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return updatedSale;
   } catch (error) {
@@ -2406,6 +2410,7 @@ async function deleteSale({
     await connection.commit();
 
     accountService.invalidateAccountAggregates(orgId);
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedSale;
   } catch (error) {
@@ -2495,6 +2500,7 @@ async function createPayment({
     await connection.commit();
 
     accountService.invalidateAccountAggregates(orgId);
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return payment;
   } catch (error) {
@@ -2592,6 +2598,7 @@ async function deletePayment({
     await connection.commit();
 
     accountService.invalidateAccountAggregates(orgId);
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedPayment;
   } catch (error) {
@@ -2853,6 +2860,7 @@ async function createReturn({
     await connection.commit();
 
     accountService.invalidateAccountAggregates(orgId);
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return {
       ...saleReturn,
@@ -3104,6 +3112,7 @@ async function deleteReturn({
     await connection.commit();
 
     accountService.invalidateAccountAggregates(orgId);
+    dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedReturn;
   } catch (error) {

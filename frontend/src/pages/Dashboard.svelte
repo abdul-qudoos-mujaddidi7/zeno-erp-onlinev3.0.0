@@ -952,7 +952,7 @@
     return [
       {
         label: t('New Sale'),
-        icon: 'bi-cart-plus-fill',
+        icon: 'bi-cart-fill',
         hue: 'sale',
         href: '/dashboard/sale-form/0',
         show: canViewSales,

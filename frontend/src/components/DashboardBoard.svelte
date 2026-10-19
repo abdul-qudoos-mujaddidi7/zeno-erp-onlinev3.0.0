@@ -3286,8 +3286,9 @@
   .zb .zb-qa[data-hue='product'] { --g: #c026d3; }
   .zb .zb-qa[data-hue='expense'] { --g: #334155; }
   .zb .zb-qa[data-hue='exchange'] { --g: #0891b2; }
-  .zb .zb-qa-ic { width: 34px; height: 34px; border-radius: 11px; background: color-mix(in srgb, var(--g) 13%, var(--surface)); color: var(--g); }
-  .zb .zb-qa-ic i { font-size: 19px; }
+  .zb .zb-qa-ic { width: 34px; height: 34px; border-radius: 11px; background: var(--g); color: #fff; }
+  .zb .zb-qa-ic i { display: flex; align-items: center; justify-content: center; width: 19px; height: 19px; font-size: 19px; line-height: 1; }
+  .zb .zb-qa[data-hue='sale'] .zb-qa-ic { background: var(--g); color: #fff; }
   @media (max-width: 767px) {
     .zb .zb-kpi { width: 100%; height: 75.52px; min-height: 75.52px; padding: 11px 13px; border-radius: 14px; }
     .zb .zb-kpi-ic { position: static; inset: auto; width: 34px; height: 34px; border-radius: 10px; }
