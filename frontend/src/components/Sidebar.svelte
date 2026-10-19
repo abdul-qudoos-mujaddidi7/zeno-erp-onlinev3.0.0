@@ -155,6 +155,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
         const label = link.textContent.replace(/\s+/g, ' ').trim();
         if (label) {
           link.setAttribute('data-sidebar-label', label);
+          link.setAttribute('title', label);
         }
       });
     };
@@ -260,11 +261,21 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
       </div>
       <div class="brand-toolbar">
         <button
-          class="btn btn-sm btn-outline-secondary d-lg-none"
+          class="sidebar-close-btn btn btn-sm btn-outline-secondary"
           on:click={() => (sidebarOpen = false)}
           aria-label="Close sidebar"
           title="Close sidebar">
           <i class="bi bi-x-lg"></i>
+        </button>
+        <button
+          type="button"
+          class="sidebar-collapse-icon-btn"
+          on:click={toggleSidebarCollapse}
+          aria-controls="erp-sidebar"
+          aria-expanded={!railCollapsed}
+          aria-label={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}
+          title={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}>
+          <i class="bi bi-list" aria-hidden="true"></i>
         </button>
       </div>
     </div>
@@ -688,16 +699,6 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
       {/if}
     </div>
   </div>
-  <button
-    type="button"
-    class="sidebar-collapse-icon-btn d-none d-lg-inline-flex"
-    on:click={toggleSidebarCollapse}
-    aria-controls="erp-sidebar"
-    aria-expanded={!railCollapsed}
-    aria-label={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}
-    title={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}>
-    <i class="bi bi-list"></i>
-  </button>
 </nav>
 
 <style>
@@ -710,7 +711,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     height: 100dvh;
     z-index: 1050;
     transition:
-      width 0.3s ease,
+      width 0.2s ease,
       transform 0.3s ease,
       box-shadow 0.3s ease;
     overflow: visible;
@@ -765,33 +766,49 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   .brand-toolbar {
-    position: absolute;
-    inset-inline-end: 16px;
-    top: 50%;
+    position: static;
     display: flex;
     gap: 0.35rem;
     align-items: center;
     flex-shrink: 0;
-    transform: translateY(-50%);
+  }
+
+  .sidebar-close-btn {
+    display: none;
+  }
+
+  @media (min-width: 768px) and (max-width: 1100px) {
+    .sidebar-collapse-icon-btn {
+      display: none;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .sidebar-close-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sidebar-collapse-icon-btn {
+      display: none;
+    }
   }
 
   .sidebar-collapse-icon-btn {
-    position: absolute;
-    top: 13px;
-    inset-inline-end: 16px;
-    z-index: 1051;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 30px;
     height: 30px;
+    flex: 0 0 30px;
     padding: 0;
     border: 1px solid #1b2a52;
     border-radius: 8px;
     background: rgb(19, 32, 66);
     color: rgb(138, 150, 184);
-    box-shadow: 0 3px 10px rgba(3, 8, 22, 0.24);
-    transform: translateY(0);
+    box-shadow: none;
+    cursor: pointer;
     transition:
       border-color 0.2s ease,
       color 0.2s ease,
@@ -802,12 +819,16 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     border-color: #26385f;
     background: #1b2a52;
     color: rgb(138, 150, 184);
-    transform: translateY(0);
+  }
+
+  .sidebar-collapse-icon-btn:focus-visible {
+    outline: 2px solid #2f6fed;
+    outline-offset: 2px;
   }
 
   .sidebar-collapse-icon-btn i {
     margin: 0 !important;
-    font-size: 16px;
+    font-size: 18px;
     line-height: 1;
   }
 
@@ -1408,11 +1429,12 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     justify-content: space-between;
     gap: 4px;
     min-height: 42px;
-    padding: 6px 4px 4px;
+    padding: 6px 3px 4px;
   }
 
   #erp-sidebar.collapsed .brand-main {
     flex: 0 0 auto;
+    gap: 0;
   }
 
   #erp-sidebar.collapsed .brand-ver { display: none; }
@@ -1430,10 +1452,6 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     transform: none;
   }
 
-  #erp-sidebar.collapsed .sidebar-collapse-icon-btn {
-    top: 30px;
-  }
-
   #erp-sidebar.collapsed .pos-shortcut {
     padding-inline: 0;
   }
@@ -1449,6 +1467,11 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     gap: 0;
     padding-inline: 0;
     font-size: 0;
+  }
+
+  #erp-sidebar.collapsed .sidebar-menu :global(.badge),
+  #erp-sidebar.collapsed .sidebar-report-chevron {
+    display: none;
   }
 
   #erp-sidebar.collapsed .sidebar-menu :global(.list-group-item i) {
