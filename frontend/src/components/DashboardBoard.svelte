@@ -426,12 +426,12 @@
                         <span class="zb-panel-title">{row.title}</span>
                         {#if row.meta}<span class="zb-panel-meta">{row.meta}</span>{/if}
                       </span>
-                      <span class="zb-panel-value" class:negative={row.negative} dir="ltr">{row.value}</span>
+                      <span class="zb-panel-value" data-hue={row.hue} class:negative={row.negative} dir="ltr">{row.value}</span>
                       <span class="zb-panel-actions">
-                        <a class="zb-panel-open" href={row.href || activePanel.href} use:link title={t('Open')} aria-label={`${t('Open')}: ${row.title}`}>
+                        <a class="zb-panel-open" href={activePanel.href} use:link title={t('Open')} aria-label={`${t('Open')}: ${activePanel.title}`}>
                           <i class="bi bi-box-arrow-up-left" aria-hidden="true"></i>
                         </a>
-                        <a class="zb-panel-review" href={activePanel.href} use:link>{t('Review')}</a>
+                        <a class="zb-panel-review" href={row.href || activePanel.href} use:link aria-label={`${t('Review')}: ${row.title}`}>{t('Review')}</a>
                       </span>
                     </div>
                   {/each}
@@ -874,10 +874,13 @@
     --navy-2: #132042;
     --ok: #15803d;
     --ok-soft: #dcfce7;
+    --ok-text: #15803d;
     --danger: #b91c1c;
     --danger-soft: #fee2e2;
+    --danger-text: #b91c1c;
     --warn: #92400e;
     --warn-soft: #fef3c7;
+    --warn-text: #92400e;
     --num: 'Inter', 'Vazirmatn', ui-sans-serif, system-ui, sans-serif;
     --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
@@ -903,8 +906,11 @@
     --subtle: #6b79a0;
     --brand-soft: #16295a;
     --ok-soft: #0f3324;
+    --ok-text: #4ade80;
     --danger-soft: #3b1219;
+    --danger-text: #f87171;
     --warn-soft: #3a2a0a;
+    --warn-text: #fbbf24;
   }
 
   .zb *,
@@ -1738,12 +1744,15 @@
 
   .zb-tile {
     --c: #d97706;
+    --c-soft: var(--warn-soft);
+    --c-text: var(--warn-text);
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    align-items: flex-start;
+    gap: 3px;
     box-sizing: border-box;
-    width: 155.67px;
-    height: 81.75px;
+    min-width: 0;
+    min-height: 0;
     padding: 8px 10px;
     border: 1px solid transparent;
     border-radius: 12px;
@@ -1752,13 +1761,36 @@
     font-family: inherit;
     text-align: start;
     cursor: pointer;
-    transition: border-color 0.18s, box-shadow 0.18s;
+    transition: border-color 0.18s, background 0.18s;
   }
 
-  .zb-tile[data-hue='expiry'] { --c: #d97706; }
-  .zb-tile[data-hue='stock'] { --c: #dc2626; }
-  .zb-tile[data-hue='returns'] { --c: #2563eb; }
-  .zb-tile[data-hue='wastes'] { --c: #64748b; }
+  .zb-tile:hover {
+    background: color-mix(in srgb, var(--c) 11%, var(--surface));
+  }
+
+  .zb-tile[data-hue='expiry'] {
+    --c: #d97706;
+    --c-soft: var(--warn-soft);
+    --c-text: var(--warn-text);
+  }
+
+  .zb-tile[data-hue='stock'] {
+    --c: #dc2626;
+    --c-soft: var(--danger-soft);
+    --c-text: var(--danger-text);
+  }
+
+  .zb-tile[data-hue='returns'] {
+    --c: #2563eb;
+    --c-soft: var(--brand-soft);
+    --c-text: var(--brand);
+  }
+
+  .zb-tile[data-hue='wastes'] {
+    --c: #64748b;
+    --c-soft: var(--surface-3);
+    --c-text: var(--text);
+  }
 
   .zb-tile[aria-selected='true'] {
     border-color: color-mix(in srgb, var(--c) 55%, transparent);
@@ -1778,8 +1810,8 @@
     width: 24px;
     height: 24px;
     border-radius: 7px;
-    background: color-mix(in srgb, var(--c) 12%, var(--surface));
-    color: var(--c);
+    background: var(--c-soft);
+    color: var(--c-text);
     font-size: 14px;
   }
 
@@ -1798,9 +1830,13 @@
   }
 
   .zb-tile-note {
-    color: color-mix(in srgb, var(--c) 85%, var(--text));
+    overflow: hidden;
+    max-width: 100%;
+    color: var(--c-text);
     font-size: 11px;
     font-weight: 500;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .zb-panel {
@@ -1839,7 +1875,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 6px 10px;
+    padding: 4px 10px;
     border-radius: 10px;
     flex-wrap: wrap;
     transition: background 0.15s;
@@ -1850,22 +1886,36 @@
   }
 
   .zb-panel-lead {
-    --c: #64748b;
     display: grid;
     flex-shrink: 0;
     place-items: center;
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     border-radius: 8px;
-    background: color-mix(in srgb, var(--c) 12%, var(--surface));
-    color: var(--c);
-    font-size: 13px;
+    background: var(--surface-3);
+    color: var(--text);
+    font-size: 14px;
   }
 
-  .zb-panel-lead[data-hue='warn'] { --c: #d97706; }
-  .zb-panel-lead[data-hue='danger'] { --c: #dc2626; }
-  .zb-panel-lead[data-hue='ok'] { --c: #15803d; }
-  .zb-panel-lead[data-hue='muted'] { --c: #64748b; }
+  .zb-panel-lead[data-hue='warn'] {
+    background: var(--warn-soft);
+    color: var(--warn-text);
+  }
+
+  .zb-panel-lead[data-hue='danger'] {
+    background: var(--danger-soft);
+    color: var(--danger-text);
+  }
+
+  .zb-panel-lead[data-hue='ok'] {
+    background: var(--ok-soft);
+    color: var(--ok-text);
+  }
+
+  .zb-panel-lead[data-hue='muted'] {
+    background: var(--surface-3);
+    color: var(--text);
+  }
 
   .zb-panel-copy {
     display: flex;
@@ -1892,17 +1942,42 @@
     text-overflow: ellipsis;
   }
 
+  /* Value chip: the reference marks every alert row with a small tinted pill,
+     so the eye can rank rows without reading the number. */
   .zb-panel-value {
-    color: var(--ink);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--text);
     font-family: var(--num);
-    font-size: 12.5px;
-    font-weight: 800;
+    font-size: 11px;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
+  .zb-panel-value[data-hue='warn'] {
+    background: var(--warn-soft);
+    color: var(--warn-text);
+  }
+
+  .zb-panel-value[data-hue='danger'],
   .zb-panel-value.negative {
-    color: #dc2626;
+    background: var(--danger-soft);
+    color: var(--danger-text);
+  }
+
+  .zb-panel-value[data-hue='ok'] {
+    background: var(--ok-soft);
+    color: var(--ok-text);
+  }
+
+  .zb-panel-value[data-hue='muted'] {
+    background: var(--surface-3);
+    color: var(--text);
   }
 
   .zb-panel-actions {
@@ -1912,7 +1987,7 @@
     gap: 4px;
   }
 
-  .zb-panel-open {
+  .zb a.zb-panel-open {
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
@@ -1924,31 +1999,32 @@
     text-decoration: none;
   }
 
-  .zb-panel-open:hover {
+  .zb a.zb-panel-open:hover {
     background: var(--surface);
     color: var(--brand);
   }
 
-  .zb-panel-review {
+  .zb a.zb-panel-review {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 4px;
     height: 28px;
     padding: 0 9px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--brand);
     border-radius: 8px;
-    background: var(--surface);
-    color: var(--text);
+    background: var(--brand);
+    color: #ffffff;
     font-size: 11.5px;
     font-weight: 700;
     text-decoration: none;
     white-space: nowrap;
   }
 
-  .zb-panel-review:hover {
-    border-color: var(--border-strong);
-    color: var(--ink);
+  .zb a.zb-panel-review:hover {
+    border-color: #245ed6;
+    background: #245ed6;
+    color: #ffffff;
   }
 
   /* ---------- generic cards ---------- */

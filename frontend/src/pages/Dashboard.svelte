@@ -872,9 +872,44 @@
 
   $: treasuryTotal = treasuryTotalOf(treasuryBalance, defaultCurrency, marketRates);
 
-  $: kpiCards = buildKpiCards();
+  /*
+   * Svelte only tracks the identifiers it can see in a reactive statement.
+   * A call such as `buildKpiCards()` hides every value read inside the
+   * function, so the cards were computed once (with the empty initial state)
+   * and never again when the summary arrived. Passing the inputs in keeps the
+   * dependency graph honest.
+   */
+  $: kpiCards = buildKpiCards({
+    metricDataTotal,
+    metricDataCount,
+    defaultCurrency,
+    benefitTotal,
+    expenseTotal,
+    netProfit,
+    marginPercent,
+    canViewSales,
+    canViewPurchases,
+    canViewBenefit,
+    canViewAccounts,
+    cardExpenses,
+    cardNetProfit,
+  });
 
-  function buildKpiCards() {
+  function buildKpiCards({
+    metricDataTotal,
+    metricDataCount,
+    defaultCurrency,
+    benefitTotal,
+    expenseTotal,
+    netProfit,
+    marginPercent,
+    canViewSales,
+    canViewPurchases,
+    canViewBenefit,
+    canViewAccounts,
+    cardExpenses,
+    cardNetProfit,
+  }) {
     const cards = [];
 
     if (canViewSales) {
@@ -946,9 +981,21 @@
     return cards;
   }
 
-  $: quickActions = buildQuickActions();
+  $: quickActions = buildQuickActions({
+    canViewSales,
+    canViewJournals,
+    canViewPurchases,
+    canViewProducts,
+    canViewExchange,
+  });
 
-  function buildQuickActions() {
+  function buildQuickActions({
+    canViewSales,
+    canViewJournals,
+    canViewPurchases,
+    canViewProducts,
+    canViewExchange,
+  }) {
     return [
       {
         label: t('New Sale'),
@@ -1002,9 +1049,39 @@
   $: negativeStockCount = lowStockProducts.filter(
     (product) => Number(product.totalQty) <= 0,
   ).length;
-  $: alertTiles = buildAlertTiles();
+  $: alertTiles = buildAlertTiles({
+    cardStockAlerts,
+    enable_expiry_date,
+    expiringTotal,
+    expiredCount,
+    nearExpiryCount,
+    negativeStockCount,
+    lowStockTotal,
+    canViewSales,
+    enable_sales_due_date,
+    canViewPurchases,
+    enable_purchase_due_date,
+    overdueBills,
+    draftBills,
+    defaultCurrency,
+  });
 
-  function buildAlertTiles() {
+  function buildAlertTiles({
+    cardStockAlerts,
+    enable_expiry_date,
+    expiringTotal,
+    expiredCount,
+    nearExpiryCount,
+    negativeStockCount,
+    lowStockTotal,
+    canViewSales,
+    enable_sales_due_date,
+    canViewPurchases,
+    enable_purchase_due_date,
+    overdueBills,
+    draftBills,
+    defaultCurrency,
+  }) {
     const tiles = [];
 
     if (cardStockAlerts && enable_expiry_date) {
@@ -1054,9 +1131,33 @@
     return tiles;
   }
 
-  $: alertPanels = buildAlertPanels();
+  $: alertPanels = buildAlertPanels({
+    cardStockAlerts,
+    enable_expiry_date,
+    expiringProducts,
+    lowStockProducts,
+    canViewSales,
+    enable_sales_due_date,
+    canViewPurchases,
+    enable_purchase_due_date,
+    overdueBills,
+    draftBills,
+    defaultCurrency,
+  });
 
-  function buildAlertPanels() {
+  function buildAlertPanels({
+    cardStockAlerts,
+    enable_expiry_date,
+    expiringProducts,
+    lowStockProducts,
+    canViewSales,
+    enable_sales_due_date,
+    canViewPurchases,
+    enable_purchase_due_date,
+    overdueBills,
+    draftBills,
+    defaultCurrency,
+  }) {
     const panels = {};
 
     if (cardStockAlerts && enable_expiry_date) {
@@ -1138,15 +1239,25 @@
     return 'bi-folder-fill';
   }
 
-  function accountTypeLabel(type) {
-    if (_lang === 'ps') return type.name_ps || type.name_fa || type.name || '';
-    if (_lang === 'fa') return type.name_fa || type.name || '';
+  function accountTypeLabel(type, language = _lang) {
+    if (language === 'ps') return type.name_ps || type.name_fa || type.name || '';
+    if (language === 'fa') return type.name_fa || type.name || '';
     return type.name || type.name_fa || '';
   }
 
-  $: accountTiles = buildAccountTiles();
+  $: accountTiles = buildAccountTiles({
+    canViewAccounts,
+    marketAccounts,
+    marketAccountTypes,
+    language: _lang,
+  });
 
-  function buildAccountTiles() {
+  function buildAccountTiles({
+    canViewAccounts,
+    marketAccounts,
+    marketAccountTypes,
+    language,
+  }) {
     if (!canViewAccounts || !marketAccounts.length) return [];
 
     const counts = new Map();
@@ -1172,7 +1283,7 @@
       .slice(0, 6)
       .map(([typeId, entry], index) => {
         const type = marketAccountTypes.find((item) => Number(item.id) === Number(typeId)) || {};
-        const label = accountTypeLabel(type) || `${t('Accounts')} ${typeId}`;
+        const label = accountTypeLabel(type, language) || `${t('Accounts')} ${typeId}`;
 
         return {
           label,
