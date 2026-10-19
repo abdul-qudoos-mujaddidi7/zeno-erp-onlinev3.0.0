@@ -774,6 +774,14 @@
     -webkit-backdrop-filter: none;
   }
 
+  /* The Zeno dashboard owns its own header row; the shell's header is only
+     kept on small screens, where it carries the drawer toggle. */
+  @media (min-width: 992px) {
+    .erp-topbar.dashboard-topbar {
+      display: none;
+    }
+  }
+
   .topbar-page-title {
     min-width: 0;
     color: #172033;

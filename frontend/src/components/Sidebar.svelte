@@ -1,7 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { link, location, querystring } from 'svelte-spa-router';
-  import { t, lang, settings_all, translate_org_type, supported, setLanguage, isRTL } from '../i18n/i18n';
+  import { app_version } from '../config.js';
+  import { t, lang, settings_all, translate_org_type, setLanguage, isRTL } from '../i18n/i18n';
   
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -20,6 +21,20 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   // a Dashboard entry keeps the legacy behaviour (visible), unless the set
   // denies every module it mentions — a locked-down account.
   $: showDashboard = canViewDashboard(permissions);
+
+  /* Profile popup: the greeting follows the clock, the language switcher keeps the
+     design's order (Dari, Pashto, English) and the subscription line reuses the
+     plan/status already held in the auth store. */
+  $: greetingHour = new Date().getHours();
+  $: greetingKey = greetingHour < 12 ? 'Good morning' : greetingHour < 17 ? 'Good day' : 'Good evening';
+  $: greetingSeparator = currentLang === 'en' ? ', ' : '، ';
+  /* Self-names stay short as in the design (دری / پښتو / EN) so the three-way
+     switcher fits one row inside the 244px popup. */
+  const LANGUAGE_LABELS = { fa: 'دری', ps: 'پښتو', en: 'EN' };
+  $: languageOptions = ['fa', 'ps', 'en'].map((code) => ({
+    code,
+    label: LANGUAGE_LABELS[code],
+  }));
   
   export let sidebarOpen = false;
   export let sidebarCollapsed = false;
@@ -42,6 +57,10 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   let reportsMenuOpen = false;
   let isDesktop = true;
   let desktopMedia;
+  /* The design narrows the rail to 72px on tablet (768–1100px) and only
+     restores labels above that, independent of the user's own collapse. */
+  let isTabletRail = false;
+  let tabletMedia;
   let subscriptionRefreshTimer;
   let syncDesktop = () => {};
 
@@ -82,6 +101,11 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     logoutClear();
   }
 
+  async function pickLanguage(code) {
+    profileMenuOpen = false;
+    await changeLanguage(code);
+  }
+
   async function changeLanguage(code) {
     setLanguage(code);
     const shouldRtl = isRTL(code);
@@ -109,9 +133,10 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     }
   }
 
+  $: railCollapsed = (isDesktop && sidebarCollapsed) || isTabletRail;
+
   function updateSidebarWidth() {
-    const width =
-      isDesktop && sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH;
+    const width = railCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH;
     document.documentElement.style.setProperty('--sidebar-width', width);
   }
 
@@ -144,7 +169,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     };
   }
 
-  $: sidebarCollapsed, isDesktop, updateSidebarWidth();
+  $: railCollapsed, updateSidebarWidth();
 
   $: console.log('settings updated:', $settings_all);
   $: enable_master_exchanges = $settings_all.find((s) => s.key === 'enable_master_exchanges')?.value == 1;
@@ -189,6 +214,9 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     if (desktopMedia) {
       desktopMedia.removeEventListener('change', syncDesktop);
     }
+    if (tabletMedia) {
+      tabletMedia.removeEventListener('change', syncDesktop);
+    }
     if (subscriptionRefreshTimer) clearInterval(subscriptionRefreshTimer);
     window.removeEventListener('focus', refreshSubscriptionFeatures);
   });
@@ -198,11 +226,14 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     subscriptionRefreshTimer = setInterval(refreshSubscriptionFeatures, 30000);
     window.addEventListener('focus', refreshSubscriptionFeatures);
     desktopMedia = window.matchMedia('(min-width: 992px)');
+    tabletMedia = window.matchMedia('(min-width: 768px) and (max-width: 1100px)');
     syncDesktop = () => {
       isDesktop = desktopMedia.matches;
+      isTabletRail = tabletMedia.matches;
     };
     syncDesktop();
     desktopMedia.addEventListener('change', syncDesktop);
+    tabletMedia.addEventListener('change', syncDesktop);
 
     sidebarCollapsed = localStorage.getItem('sidebar_collapsed') === '1';
     updateSidebarWidth();
@@ -217,37 +248,17 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   });
 </script>
 
-<nav id="erp-sidebar" class:show={sidebarOpen} class:collapsed={sidebarCollapsed && isDesktop} class:dashboard-sidebar={loc === '/dashboard'}>
+<nav id="erp-sidebar" class:show={sidebarOpen} class:collapsed={railCollapsed} class:dashboard-sidebar={loc === '/dashboard'}>
   <div class="sidebar-shell">
     <div class="sidebar-brand">
       <div class="brand-main">
-        <div class="brand-mark">
-          <img src="/img/logo.png" alt="ZENO ERP" />
+        <div class="brand-mark" aria-hidden="true">Z</div>
+        <div class="brand-text">
+          <img class="brand-logo" src="/img/logo.png" alt="Zeno ERP" />
+          <div class="brand-ver">{app_version}</div>
         </div>
       </div>
       <div class="brand-toolbar">
-        {#if permissions?.some(p => p.code === "POS" && p.view)}
-          <a
-            use:link
-            href="/pos"
-            class="btn btn-sm btn-primary fw-bold px-2 d-none d-lg-inline-flex align-items-center pos-shortcut {_translate_org_type ==
-            'exchange'
-              ? 'd-none d-lg-none'
-              : ''}"
-            class:active={$location === '/pos'}
-            title="POS">
-            <i class="bi bi-cart3"></i>
-            <span>POS</span>
-          </a>
-        {/if}
-        <button
-          type="button"
-          class="sidebar-collapse-icon-btn d-none d-lg-inline-flex"
-          on:click={toggleSidebarCollapse}
-          aria-label={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}
-          title={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}>
-          <i class={sidebarCollapsed ? 'bi bi-grid' : 'bi bi-list'}></i>
-        </button>
         <button
           class="btn btn-sm btn-outline-secondary d-lg-none"
           on:click={() => (sidebarOpen = false)}
@@ -257,15 +268,33 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
         </button>
       </div>
     </div>
-    <div class="list-group list-group-flush sidebar-menu mt-2" use:sidebarMenuLabels={$auth.subscription}>
+
+    {#if permissions?.some(p => p.code === "POS" && p.view)}
+      <div class="sidebar-pos-row {_translate_org_type == 'exchange' ? 'd-none' : ''}">
+        <a
+          use:link
+          href="/pos"
+          class="pos-shortcut"
+          class:active={$location === '/pos'}
+          title="POS">
+          <i class="bi bi-shop-window"></i>
+          <span class="pos-label">POS</span>
+        </a>
+      </div>
+    {/if}
+
+    <div class="list-group list-group-flush sidebar-menu" use:sidebarMenuLabels={$auth.subscription}>
+      <div class="sidebar-group-label">{t('General')}</div>
+
       {#if showDashboard}
         <a
           use:link
           href="/dashboard"
           class="list-group-item list-group-item-action"
-          class:active={$location === '/dashboard'}>
-          <i class="bi bi-speedometer2 me-2"></i>
-          {t('Dashboard')}
+          class:active={$location === '/dashboard'}
+          aria-current={$location === '/dashboard' ? 'page' : undefined}>
+          <i class="bi bi-speedometer2" aria-hidden="true"></i>
+          <span class="nav-text">{t('Dashboard')}</span>
         </a>
       {/if}
       <a
@@ -273,8 +302,8 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
         href="/dashboard/2"
         class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
         class:active={$location === '/dashboard/2'}>
-        <i class="bi bi-grid-fill me-2"></i>
-        {t('Dashboard')} 2
+        <i class="bi bi-grid-fill" aria-hidden="true"></i>
+        <span class="nav-text">{t('Dashboard')} 2</span>
       </a>
       <a
         use:link
@@ -285,8 +314,8 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
           ? ''
           : 'd-none'}"
         class:active={loc.startsWith('/dashboard/patients/') || loc.startsWith('/dashboard/patient/')}>
-        <i class="bi bi-people me-2"></i>
-        {t('Patients')}
+        <i class="bi bi-people" aria-hidden="true"></i>
+        <span class="nav-text">{t('Patients')}</span>
       </a>
       <a
         use:link
@@ -297,97 +326,55 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
           ? ''
           : 'd-none'}"
         class:active={loc.startsWith('/dashboard/appointments')||loc.startsWith('/dashboard/appointment')}>
-        <i class="bi bi-calendar-check me-2"></i>
-        {t('Appointments')}
+        <i class="bi bi-calendar-check" aria-hidden="true"></i>
+        <span class="nav-text">{t('Appointments')}</span>
       </a>
       <a
         use:link
-        href="/dashboard/treasury"
-        class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
-        class:active={$location === '/dashboard/treasury'}>
-        <i class="bi bi-cash-coin me-2"></i>
-        {t('Treasury')}
+        href="/dashboard/labtests"
+        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+          localStorage.getItem('org_type') == 'hospital') ||
+        (shiftPressed && ctrlPressed)
+          ? ''
+          : 'd-none'}"
+        class:active={loc.startsWith('/dashboard/labtests')||loc.startsWith('/dashboard/labtests')}>
+        <i class="bi bi-capsule" aria-hidden="true"></i>
+        <span class="nav-text">{t('Lab Tests')}</span>
       </a>
       <a
         use:link
-        href="/dashboard/account-types"
-        class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
-        class:active={$location === '/dashboard/account-types'}>
-        <i class="bi bi-people me-2"></i>
-        {t('Account Types')}
+        href="/dashboard/prescriptions"
+        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+          localStorage.getItem('org_type') == 'hospital') ||
+        (shiftPressed && ctrlPressed)
+          ? ''
+          : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
+        class:active={$location === '/dashboard/prescriptions'}>
+        <i class="bi bi-prescription" aria-hidden="true"></i>
+        <span class="nav-text">{t('Prescriptions')}</span>
       </a>
-      {#if permissions?.some(p => p.code === "Accounts" && p.view)}
-        <a
-          use:link
-          href="/dashboard/accounts/list"
-          class="list-group-item list-group-item-action {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-          class:active={!reportsMenuActive && (loc.startsWith('/dashboard/accounts/') || loc.startsWith('/dashboard/account/'))}>
-          <i class="bi bi-people me-2"></i>
-          {t('Accounts')}
-        </a>
-      {/if}
       <a
         use:link
         href="/dashboard/patient-types"
         class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
         class:active={$location === '/dashboard/patient-types'}>
-        <i class="bi bi-people me-2"></i>
-        {t('Patient Types')}
+        <i class="bi bi-person-lines-fill" aria-hidden="true"></i>
+        <span class="nav-text">{t('Patient Types')}</span>
       </a>
-
-
-      {#if permissions?.some(p => p.code === "Journals" && p.view)}
-        <a
-          use:link
-          href="/dashboard/journals/list"
-          class="list-group-item list-group-item-action  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-          class:active={loc.startsWith('/dashboard/journals')}>
-          <i class="bi bi-journal-text me-2"></i>
-          {t('Journals')}
-        </a>
-      {/if}
-      <a
-        use:link
-        href="/dashboard/work-centers"
+      <a use:link href="/dashboard/apartments/list"
         class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-          localStorage.getItem('org_type') == 'manufacturing') ||
-        (shiftPressed && ctrlPressed)
-          ? ''
-          : 'd-none'} "
-        class:active={loc.startsWith('/dashboard/work-centers') || $location === '/dashboard/work-centers'}>
-        <i class="bi bi-person-workspace me-2"></i>
-        {t('Work Centers')}
-      </a>
-      <a use:link
-        href="/dashboard/boms"
-        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') && localStorage.getItem('org_type') == 'manufacturing') || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-        class:active={loc.startsWith('/dashboard/boms') || $location === '/dashboard/boms'}>
-        <i class="bi bi-receipt me-2"></i>
-        {t('Bill of Materials')}
-      </a>
-      <a use:link href="/dashboard/productions"
-        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-          localStorage.getItem('org_type') == 'manufacturing') ||
+          localStorage.getItem('org_type') == 'apartment') ||
         (shiftPressed && ctrlPressed)
           ? ''
           : 'd-none'}"
-        class:active={loc.startsWith('/dashboard/productions') || $location === '/dashboard/productions'}>
-        <i class="bi bi-gear-wide-connected me-2"></i>
-        {t('Productions')}
+        class:active={loc.startsWith('/dashboard/apartments') ||
+          $location === '/dashboard/apartments/list'}>
+        <i class="bi bi-building-fill" aria-hidden="true"></i>
+        <span class="nav-text">{t('Apartments')}</span>
       </a>
 
-      {#if permissions?.some(p => p.code === "Exchange" && p.view)}
-        <a
-          use:link
-          href="/dashboard/exchanges/list"
-          class="list-group-item list-group-item-action {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-          class:active={loc.startsWith('/dashboard/exchanges')}>
-          <i class="bi bi-cash-coin me-2"></i>
-          {t('Exchanges')}
-        </a>
-      {/if}
+      <div class="sidebar-group-label">{t('Trade')}</div>
 
-      
       {#if permissions?.some(p => p.code === "Sales" && p.view)}
         <a
           use:link
@@ -399,38 +386,10 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
             ? ''
             : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
           class:active={$location === '/dashboard/sales' && salesTab !== 'products'}>
-          <i class="bi bi-cart-check me-2"></i>
-          {t('Sales')}
+          <i class="bi bi-cart-check" aria-hidden="true"></i>
+          <span class="nav-text">{t('Sales')}</span>
         </a>
       {/if}
-
-
-      <a
-        use:link
-        href="/dashboard/labtests"
-        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-          localStorage.getItem('org_type') == 'hospital') ||
-        (shiftPressed && ctrlPressed)
-          ? ''
-          : 'd-none'}"
-        class:active={loc.startsWith('/dashboard/labtests')||loc.startsWith('/dashboard/labtests')}>
-        <i class="bi bi-capsule me-2"></i>
-        {t('Lab Tests')}
-      </a>
-
-      <a
-        use:link
-        href="/dashboard/prescriptions"
-        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-          localStorage.getItem('org_type') == 'hospital') ||
-        (shiftPressed && ctrlPressed)
-          ? ''
-          : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-        class:active={$location === '/dashboard/prescriptions'}>
-        <i class="bi bi-prescription me-2"></i>
-        {t('Prescriptions')}
-      </a>
-
       {#if permissions?.some(p => p.code === "Purchases" && p.view)}
         <a
           use:link
@@ -441,157 +400,206 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
             ? ''
             : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
           class:active={$location === '/dashboard/purchases'}>
-          <i class="bi bi-bag-plus me-2"></i>
-          {t('Purchases')}
+          <i class="bi bi-bag-plus" aria-hidden="true"></i>
+          <span class="nav-text">{t('Purchases')}</span>
         </a>
       {/if}
-      <!-- 
-    <a
-      use:link
-      href="/dashboard/wastes"
-      class="list-group-item list-group-item-action"
-      class:active={$location === "/dashboard/wastes"}
-    >
-      <i class="bi bi-trash me-2"></i> {t('Wastes')}
-    </a>
-
-    <a
-      use:link
-      href="/dashboard/stock-transfers"
-      class="list-group-item list-group-item-action"
-      class:active={$location === "/dashboard/stock-transfers"}
-    >
-      <i class="bi bi-box2 me-2"></i> {t('Stock Transfers')}
-    </a> -->
-
-
-
-        {#if permissions?.some(p => p.code === "Products" && p.view)}
-          <a use:link href="/dashboard/stock"
+      {#if permissions?.some(p => p.code === "Products" && p.view)}
+        <a use:link href="/dashboard/stock"
+          class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+            localStorage.getItem('org_type') != 'exchange') ||
+          (shiftPressed && ctrlPressed)
+            ? ''
+            : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
+          class:active={$location === '/dashboard/stock'}>
+          <i class="bi bi-box-seam" aria-hidden="true"></i>
+          <span class="nav-text">{t('Products')}</span>
+        </a>
+      {/if}
+      {#if permissions?.some(p => p.code === "Services" && p.view)}
+        {#if enable_services || (shiftPressed && ctrlPressed)}
+          <a use:link href="/dashboard/services"
             class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-              localStorage.getItem('org_type') != 'exchange') ||
-            (shiftPressed && ctrlPressed)
+              localStorage.getItem('org_type') != 'exchange')
               ? ''
-              : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-            class:active={$location === '/dashboard/stock'}>
-            <i class="bi bi-box-seam me-2"></i>
-                {t('Products')}
+              : 'd-none'}"
+            class:active={$location === '/dashboard/services'}>
+            <i class="bi bi-person-vcard" aria-hidden="true"></i>
+            <span class="nav-text">{t('Services')}</span>
           </a>
         {/if}
-        {#if permissions?.some(p => p.code === "Services" && p.view)}
-          {#if enable_services || (shiftPressed && ctrlPressed)}
-            <a use:link href="/dashboard/services"
-              class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-                localStorage.getItem('org_type') != 'exchange')
-                ? ''
-                : 'd-none'}"
-              class:active={$location === '/dashboard/services'}>
-              <i class="bi bi-person-vcard me-2"></i>
-                  {t('Services')}
+      {/if}
+      <a use:link href="/dashboard/stock-transactions"
+        class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
+        class:active={$location === '/dashboard/stock-transactions'}>
+        <i class="bi bi-box-seam" aria-hidden="true"></i>
+        <span class="nav-text">{t('Stock Transactions')}</span>
+      </a>
+
+      <div class="sidebar-group-label">{t('Finance')}</div>
+
+      {#if permissions?.some(p => p.code === "Accounts" && p.view)}
+        <a
+          use:link
+          href="/dashboard/accounts/list"
+          class="list-group-item list-group-item-action {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
+          class:active={!reportsMenuActive && (loc.startsWith('/dashboard/accounts/') || loc.startsWith('/dashboard/account/'))}>
+          <i class="bi bi-people" aria-hidden="true"></i>
+          <span class="nav-text">{t('Accounts')}</span>
+        </a>
+      {/if}
+      {#if permissions?.some(p => p.code === "Journals" && p.view)}
+        <a
+          use:link
+          href="/dashboard/journals/list"
+          class="list-group-item list-group-item-action  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
+          class:active={loc.startsWith('/dashboard/journals')}>
+          <i class="bi bi-journal-text" aria-hidden="true"></i>
+          <span class="nav-text">{t('Journals')}</span>
+        </a>
+      {/if}
+      {#if permissions?.some(p => p.code === "Exchange" && p.view)}
+        <a
+          use:link
+          href="/dashboard/exchanges/list"
+          class="list-group-item list-group-item-action {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
+          class:active={loc.startsWith('/dashboard/exchanges')}>
+          <i class="bi bi-currency-exchange" aria-hidden="true"></i>
+          <span class="nav-text">{t('Exchanges')}</span>
+        </a>
+      {/if}
+      <a use:link href="/dashboard/transfers/list"
+        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+          localStorage.getItem('org_type') == 'exchange') ||
+        (shiftPressed && ctrlPressed)
+          ? ''
+          : 'd-none'}"
+        class:active={loc.startsWith('/dashboard/transfers') || $location === '/dashboard/transfers/list'}>
+        <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
+        <span class="nav-text">{t('Transfers')}</span>
+      </a>
+      <a use:link href="/dashboard/master-exchanges/list"
+        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+          localStorage.getItem('org_type') == 'exchange' &&
+          enable_master_exchanges) ||
+        (shiftPressed && ctrlPressed)
+          ? ''
+          : 'd-none'}"
+        class:active={loc.startsWith('/dashboard/master-exchanges') ||
+          $location === '/dashboard/master-exchanges/list'}>
+        <i class="bi bi-safe" aria-hidden="true"></i>
+        <span class="nav-text">{t('Master Exchanges')}</span>
+      </a>
+      <a
+        use:link
+        href="/dashboard/treasury"
+        class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
+        class:active={$location === '/dashboard/treasury'}>
+        <i class="bi bi-cash-coin" aria-hidden="true"></i>
+        <span class="nav-text">{t('Treasury')}</span>
+      </a>
+      <a
+        use:link
+        href="/dashboard/account-types"
+        class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
+        class:active={$location === '/dashboard/account-types'}>
+        <i class="bi bi-diagram-3" aria-hidden="true"></i>
+        <span class="nav-text">{t('Account Types')}</span>
+      </a>
+
+      <div class="sidebar-group-label">{t('Management')}</div>
+
+      <a
+        use:link
+        href="/dashboard/work-centers"
+        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+          localStorage.getItem('org_type') == 'manufacturing') ||
+        (shiftPressed && ctrlPressed)
+          ? ''
+          : 'd-none'} "
+        class:active={loc.startsWith('/dashboard/work-centers') || $location === '/dashboard/work-centers'}>
+        <i class="bi bi-person-workspace" aria-hidden="true"></i>
+        <span class="nav-text">{t('Work Centers')}</span>
+      </a>
+      <a use:link
+        href="/dashboard/boms"
+        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') && localStorage.getItem('org_type') == 'manufacturing') || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
+        class:active={loc.startsWith('/dashboard/boms') || $location === '/dashboard/boms'}>
+        <i class="bi bi-receipt" aria-hidden="true"></i>
+        <span class="nav-text">{t('Bill of Materials')}</span>
+      </a>
+      <a use:link href="/dashboard/productions"
+        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+          localStorage.getItem('org_type') == 'manufacturing') ||
+        (shiftPressed && ctrlPressed)
+          ? ''
+          : 'd-none'}"
+        class:active={loc.startsWith('/dashboard/productions') || $location === '/dashboard/productions'}>
+        <i class="bi bi-gear-wide-connected" aria-hidden="true"></i>
+        <span class="nav-text">{t('Productions')}</span>
+      </a>
+      <div class="sidebar-report-group" class:open={reportsMenuOpen}>
+        <button
+          type="button"
+          class="list-group-item list-group-item-action sidebar-report-toggle"
+          class:active={reportsMenuActive}
+          aria-expanded={reportsMenuOpen}
+          on:click={toggleReportsMenu}>
+          <i class="bi bi-bar-chart" aria-hidden="true"></i>
+          <span class="nav-text">{t('Reports')}</span>
+          <i class="bi bi-chevron-down sidebar-report-chevron" aria-hidden="true"></i>
+        </button>
+        {#if reportsMenuOpen}
+          <div class="sidebar-report-links">
+            {#if permissions?.some(p => p.code === "Products" && p.view)}
+              <a use:link href="/dashboard/stock-adjustments"
+                class="list-group-item list-group-item-action"
+                class:active={loc === '/dashboard/stock-adjustments'}>
+                <i class="bi bi-sliders" aria-hidden="true"></i>
+                {t('Stock adjustments')}
+              </a>
+            {/if}
+            <a use:link href="/dashboard/fiscal-years"
+              class="list-group-item list-group-item-action"
+              class:active={loc === '/dashboard/fiscal-years'}>
+              <i class="bi bi-calendar-range" aria-hidden="true"></i>
+              {t('Fiscal years')}
             </a>
-          {/if}
+            <a use:link href="/dashboard/accounts/report"
+              class="list-group-item list-group-item-action"
+              class:active={loc === '/dashboard/accounts/report'}>
+              <i class="bi bi-person-lines-fill" aria-hidden="true"></i>
+              {t('Report')}
+            </a>
+            <a use:link href="/dashboard/accounts/general-report"
+              class="list-group-item list-group-item-action"
+              class:active={loc === '/dashboard/accounts/general-report'}>
+              <i class="bi bi-journal-text" aria-hidden="true"></i>
+              {t('General Report')}
+            </a>
+            <a use:link href="/dashboard/sales?tab=products"
+              class="list-group-item list-group-item-action"
+              class:active={loc === '/dashboard/sales' && salesTab === 'products'}>
+              <i class="bi bi-box-seam" aria-hidden="true"></i>
+              {t('Products Report')}
+            </a>
+          </div>
         {/if}
-        <a use:link href="/dashboard/transfers/list"
-          class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-            localStorage.getItem('org_type') == 'exchange') ||
-          (shiftPressed && ctrlPressed)
-            ? ''
-            : 'd-none'}"
-          class:active={loc.startsWith('/dashboard/transfers') || $location === '/dashboard/transfers/list'}>
-          <i class="bi bi-arrow-left-right me-2"></i>
-          {t('Transfers')}
+      </div>
+      {#if permissions?.some(p => p.code === "Settings" && p.view)}
+        <a use:link href="/dashboard/settings/main"
+          class="list-group-item list-group-item-action"
+          class:active={loc.startsWith('/dashboard/settings')}>
+          <i class="bi bi-gear" aria-hidden="true"></i>
+          <span class="nav-text">{t('Settings')}</span>
         </a>
-        <a use:link href="/dashboard/master-exchanges/list"
-          class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-            localStorage.getItem('org_type') == 'exchange' &&
-            enable_master_exchanges) ||
-          (shiftPressed && ctrlPressed)
-            ? ''
-            : 'd-none'}"
-          class:active={loc.startsWith('/dashboard/master-exchanges') ||
-            $location === '/dashboard/master-exchanges/list'}>
-          <i class="bi bi-safe me-2"></i>
-          {t('Master Exchanges')}
-        </a>
-        <a use:link href="/dashboard/apartments/list"
-          class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-            localStorage.getItem('org_type') == 'apartment') ||
-          (shiftPressed && ctrlPressed)
-            ? ''
-            : 'd-none'}"
-          class:active={loc.startsWith('/dashboard/apartments') ||
-            $location === '/dashboard/apartments/list'}>
-          <i class="bi bi-building-fill me-2"></i>
-          {t('Apartments')}
-        </a>
-        <a use:link href="/dashboard/stock-transactions"
-          class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
-          class:active={$location === '/dashboard/stock-transactions'}>
-          <i class="bi bi-box-seam me-2"></i>
-          {t('Stock Transactions')}
-        </a>
-        <div class="sidebar-report-group" class:open={reportsMenuOpen}>
-          <button
-            type="button"
-            class="list-group-item list-group-item-action sidebar-report-toggle"
-            class:active={reportsMenuActive}
-            aria-expanded={reportsMenuOpen}
-            on:click={toggleReportsMenu}>
-            <i class="bi bi-file-bar-graph me-2"></i>
-            <span>{t('Reports')}</span>
-            <i class="bi bi-chevron-down sidebar-report-chevron" aria-hidden="true"></i>
-          </button>
-          {#if reportsMenuOpen}
-            <div class="sidebar-report-links">
-              {#if permissions?.some(p => p.code === "Products" && p.view)}
-                <a use:link href="/dashboard/stock-adjustments"
-                  class="list-group-item list-group-item-action"
-                  class:active={loc === '/dashboard/stock-adjustments'}>
-                  <i class="bi bi-sliders me-2"></i>
-                  {t('Stock adjustments')}
-                </a>
-              {/if}
-              <a use:link href="/dashboard/fiscal-years"
-                class="list-group-item list-group-item-action"
-                class:active={loc === '/dashboard/fiscal-years'}>
-                <i class="bi bi-calendar-range me-2"></i>
-                {t('Fiscal years')}
-              </a>
-              <a use:link href="/dashboard/accounts/report"
-                class="list-group-item list-group-item-action"
-                class:active={loc === '/dashboard/accounts/report'}>
-                <i class="bi bi-person-lines-fill me-2"></i>
-                {t('Report')}
-              </a>
-              <a use:link href="/dashboard/accounts/general-report"
-                class="list-group-item list-group-item-action"
-                class:active={loc === '/dashboard/accounts/general-report'}>
-                <i class="bi bi-journal-text me-2"></i>
-                {t('General Report')}
-              </a>
-              <a use:link href="/dashboard/sales?tab=products"
-                class="list-group-item list-group-item-action"
-                class:active={loc === '/dashboard/sales' && salesTab === 'products'}>
-                <i class="bi bi-box-seam me-2"></i>
-                {t('Products Report')}
-              </a>
-            </div>
-          {/if}
-        </div>
-        {#if permissions?.some(p => p.code === "Settings" && p.view)}
-          <a use:link href="/dashboard/settings/main"
-            class="list-group-item list-group-item-action"
-            class:active={loc.startsWith('/dashboard/settings')}>
-            <i class="bi bi-gear me-2"></i>
-            {t('Settings')}
-          </a>
-        {/if}
-        <a use:link href="/dashboard/users"
-          class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
-          class:active={$location === '/dashboard/users'}>
-          <i class="bi bi-person-badge me-2"></i>
-          {t('Users')}
-        </a>
+      {/if}
+      <a use:link href="/dashboard/users"
+        class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
+        class:active={$location === '/dashboard/users'}>
+        <i class="bi bi-person-badge" aria-hidden="true"></i>
+        <span class="nav-text">{t('Users')}</span>
+      </a>
     </div>
     <div class="sidebar-profile">
       <button
@@ -605,45 +613,91 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
           <strong>{localStorage.getItem('username') || t('User')}</strong>
           <small>{t('Administrator')}</small>
         </span>
-        <i class="bi bi-chevron-up profile-chevron" class:open={profileMenuOpen}></i>
+        <i
+          class="bi {profileMenuOpen ? 'bi-chevron-contract' : 'bi-chevron-expand'} profile-chevron"
+          aria-hidden="true"></i>
       </button>
       {#if profileMenuOpen}
-        <div class="sidebar-profile-menu">
-          <div class="sidebar-profile-lang">
-            <label for="sidebar-lang-select">{t('Language')}</label>
-            <select
-              id="sidebar-lang-select"
-              class="form-select form-select-sm"
-              bind:value={currentLang}
-              on:change={(e) => changeLanguage(e.currentTarget.value)}>
-              {#each supported as s}
-                <option value={s.code}>{s.label}</option>
-              {/each}
-            </select>
+        <div class="sidebar-profile-menu" role="dialog" aria-label={t('Profile')}>
+          <div class="pm-head">
+            <span class="pm-avatar" aria-hidden="true">
+              {(localStorage.getItem('username') || 'U').slice(0, 1).toUpperCase()}
+              <span class="pm-presence"></span>
+            </span>
+            <span class="pm-meta">
+              <strong
+                >{t(greetingKey)}{greetingSeparator}{localStorage.getItem('username') ||
+                  t('User')}</strong
+              >
+              <small>{t('Administrator')}</small>
+            </span>
           </div>
-          <button type="button" class="sidebar-theme-toggle" on:click={toggleTheme}>
-            <span>
-              <i class={$theme === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill'}></i>
-              {t('Dark Mode')}
-            </span>
-            <span class="theme-switch" class:active={$theme === 'dark'} aria-hidden="true">
-              <span></span>
-            </span>
-          </button>
+
           {#if shiftPressed && ctrlPressed}
-            <button type="button" class="sidebar-profile-logout sidebar-profile-logout-clear" on:click={handleLogoutClear}>
-              <i class="bi bi-trash"></i>
-              {t('Logout Clear')}
-            </button>
+            <div class="pm-group">
+              <button type="button" class="pm-row pm-row-warn" on:click={handleLogoutClear}>
+                <i class="bi bi-trash"></i>
+                <span class="pm-label">{t('Logout Clear')}</span>
+              </button>
+            </div>
           {/if}
-          <button type="button" class="sidebar-profile-logout" on:click={handleLogout}>
-            <i class="bi bi-box-arrow-right"></i>
-            {t('Logout')}
-          </button>
+
+          <div class="pm-foot">
+            <nav class="pm-langs" aria-label={t('Language')}>
+              {#each languageOptions as option}
+                <button
+                  type="button"
+                  class="pm-lang"
+                  class:active={currentLang === option.code}
+                  lang={option.code}
+                  aria-pressed={currentLang === option.code}
+                  on:click={() => pickLanguage(option.code)}>
+                  {option.label}
+                </button>
+              {/each}
+            </nav>
+            <button
+              type="button"
+              class="pm-ic"
+              on:click={toggleTheme}
+              title={$theme === 'dark' ? t('Light Mode') : t('Dark Mode')}
+              aria-label={$theme === 'dark' ? t('Light Mode') : t('Dark Mode')}>
+              <i class={$theme === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars'}></i>
+            </button>
+            {#if permissions?.some((p) => p.code === 'Settings' && p.view)}
+              <a
+                use:link
+                href="/dashboard/settings/main"
+                class="pm-ic"
+                on:click={() => (profileMenuOpen = false)}
+                title={t('Settings')}
+                aria-label={t('Settings')}>
+                <i class="bi bi-gear"></i>
+              </a>
+            {/if}
+            <button
+              type="button"
+              class="pm-ic pm-ic-danger"
+              on:click={handleLogout}
+              title={t('Logout')}
+              aria-label={t('Logout')}>
+              <i class="bi bi-box-arrow-right"></i>
+            </button>
+          </div>
         </div>
       {/if}
     </div>
   </div>
+  <button
+    type="button"
+    class="sidebar-collapse-icon-btn d-none d-lg-inline-flex"
+    on:click={toggleSidebarCollapse}
+    aria-controls="erp-sidebar"
+    aria-expanded={!railCollapsed}
+    aria-label={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}
+    title={sidebarCollapsed ? t('Expand sidebar') : t('Collapse sidebar')}>
+    <i class="bi bi-list"></i>
+  </button>
 </nav>
 
 <style>
@@ -660,36 +714,39 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
       transform 0.3s ease,
       box-shadow 0.3s ease;
     overflow: visible;
-    border-inline-end: 0;
-    background: #fff;
-    box-shadow: 10px 0 28px rgba(15, 23, 42, 0.04);
+    border-inline-end: 1px solid #0b1530;
+    background: #0b1530;
+    box-shadow: none;
   }
 
   :global(html.dark) #erp-sidebar,
   :global(html.dark) #erp-sidebar.dashboard-sidebar {
-    background: #111827;
-    box-shadow: 10px 0 28px rgba(0, 0, 0, 0.28);
+    background: #050a18;
+    border-color: #050a18;
+    box-shadow: none;
   }
 
   #erp-sidebar.dashboard-sidebar {
-    background: #fff;
+    background: #0b1530;
   }
 
   .sidebar-shell {
     height: 100%;
     display: flex;
     flex-direction: column;
-    padding: 0.45rem 1rem 1rem;
+    /* Each section owns the rail gutter (design: 12px) so the shell adds none. */
+    padding: 0;
     min-width: 0;
   }
 
   .sidebar-brand {
-    position: static;
+    position: relative;
     display: flex;
-    gap: 0.75rem;
+    gap: 9px;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 0.15rem 0.25rem;
+    justify-content: center;
+    min-height: 56px;
+    padding: 14px 16px 10px;
     border: 0;
     border-radius: 0;
     background: transparent;
@@ -703,115 +760,151 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     align-items: center;
     justify-content: center;
     min-width: 0;
-    flex: 1;
+    flex: 0 1 auto;
   }
 
   .brand-toolbar {
     position: absolute;
-    top: 0;
-    inset-inline: 0;
+    inset-inline-end: 16px;
+    top: 50%;
     display: flex;
     gap: 0.35rem;
     align-items: center;
     flex-shrink: 0;
+    transform: translateY(-50%);
   }
 
   .sidebar-collapse-icon-btn {
     position: absolute;
-    top: 2.45rem;
-    inset-inline-end: -0.8rem;
-    z-index: 20;
+    top: 30px;
+    inset-inline-end: -12px;
+    z-index: 1051;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.7rem;
-    height: 1.7rem;
+    width: 24px;
+    height: 24px;
     padding: 0;
-    border: 1px solid #edf1f6;
-    border-radius: 0.45rem;
-    background: #fff;
-    color: #6f7782;
-    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.1);
+    border: 1px solid #1b2a52;
+    border-radius: 7px;
+    background: rgb(19, 32, 66);
+    color: rgb(138, 150, 184);
+    box-shadow: 0 3px 10px rgba(3, 8, 22, 0.24);
+    transform: translateY(0);
     transition:
       border-color 0.2s ease,
       color 0.2s ease,
-      background 0.2s ease,
-      box-shadow 0.2s ease,
-      transform 0.2s ease;
+      background 0.2s ease;
   }
 
   .sidebar-collapse-icon-btn:hover {
-    border-color: #d8e2ee;
-    background: #fff;
-    color: #0f6efd;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
-    transform: translateY(-1px);
-  }
-
-  :global(html.dark) .sidebar-collapse-icon-btn {
-    border-color: #263447;
-    background: #172033;
-    color: #cbd5e1;
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
-  }
-
-  :global(html.dark) .sidebar-collapse-icon-btn:hover {
-    border-color: rgba(96, 165, 250, 0.45);
-    background: #1e293b;
-    color: #60a5fa;
+    border-color: #26385f;
+    background: #1b2a52;
+    color: rgb(138, 150, 184);
+    transform: translateY(0);
   }
 
   .sidebar-collapse-icon-btn i {
     margin: 0 !important;
-    font-size: 0.82rem;
+    font-size: 16px;
     line-height: 1;
   }
 
   .brand-mark {
-    width: 8.2rem;
-    height: 3.5rem;
+    width: 32px;
+    height: 32px;
     display: grid;
     place-items: center;
-    overflow: hidden;
     flex-shrink: 0;
     border: 0;
-    border-radius: 0;
-    background: transparent;
+    border-radius: 9px;
+    background: var(--erp-primary, #1479df);
+    color: #fff;
+    font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1;
+    display: none;
   }
 
-  .brand-mark img {
-    max-width: 100%;
-    max-height: 100%;
+  .brand-text {
+    flex: 0 1 auto;
+    min-width: 0;
+    line-height: 1.15;
+  }
+
+  .brand-logo {
+    display: block;
+    width: 98px;
+    height: 24px;
     object-fit: contain;
+    object-position: left center;
+    filter: brightness(0) invert(1);
+  }
+
+  .brand-ver {
+    margin-top: 2px;
+    transform: translateX(28px);
+    color: #8a96b8;
+    font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .sidebar-pos-row {
+    padding: 0 12px 4px;
   }
 
   .pos-shortcut {
-    position: absolute;
-    top: 0;
-    inset-inline-start: auto;
-    inset-inline-end: 0;
-    gap: 0.28rem;
-    min-width: 3.2rem;
-    min-height: 1.75rem;
+    display: flex;
+    gap: 7px;
+    align-items: center;
     justify-content: center;
+    width: 100%;
+    min-height: 38px;
+    padding: 0 10px;
     border: 0;
-    border-radius: 0 0 0.6rem 0;
-    background: #0f6efd;
+    border-radius: 10px;
+    background: var(--erp-primary, #1479df);
     color: #fff;
-    box-shadow: 0 6px 14px rgba(15, 110, 253, 0.16);
-    font-size: 0.68rem;
-    font-weight: 900;
+    box-shadow: 0 8px 18px -8px rgba(47, 111, 237, 0.9);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .pos-shortcut:hover {
+    background: var(--erp-primary-hover, #0f68c2);
   }
 
   .pos-shortcut i {
-    font-size: 0.78rem;
+    font-size: 16px;
     line-height: 1;
+  }
+
+  .sidebar-group-label {
+    flex: 0 0 auto;
+    padding: 12px 10px 4px;
+    color: #5e6b8e;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+  }
+
+  .sidebar-group-label:first-child {
+    padding-top: 12px;
   }
 
   .sidebar-menu {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
     overflow-y: auto;
-    padding: 0;
+    margin-top: 0;
+    padding: 2px 12px 10px;
     scrollbar-width: thin;
     scrollbar-width: none;
   }
@@ -827,22 +920,21 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   .sidebar-menu :global(.list-group-item) {
     position: relative;
     display: flex;
-    gap: 0.85rem;
+    gap: 10px;
     align-items: center;
-    min-height: 2.75rem;
-    margin: 0.08rem 0;
-    padding: 0.52rem 0.9rem;
+    flex: 0 0 auto;
+    min-height: 38px;
+    margin: 0;
+    padding: 0 10px;
     border: 0;
-    border-radius: 0.7rem !important;
+    border-radius: 10px !important;
     background: transparent;
-    color: #526176;
-    font-size: 0.8rem;
-    font-weight: 800;
+    color: #b7c1db;
+    font-size: 13px;
+    font-weight: 500;
     transition:
-      background 0.16s ease,
-      color 0.16s ease,
-      transform 0.16s ease,
-      box-shadow 0.16s ease;
+      background 0.15s ease,
+      color 0.15s ease;
   }
 
   :global(html.dark) .sidebar-menu {
@@ -854,78 +946,63 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   :global(html.dark) .sidebar-menu :global(.list-group-item) {
-    color: #cbd5e1;
-  }
-
-  :global(html.dark) .sidebar-menu :global(.list-group-item i) {
-    color: #94a3b8;
-  }
-
-  .sidebar-menu :global(.list-group-item::before) {
-    content: '';
-    position: absolute;
-    inset-block: 0.62rem;
-    inset-inline-start: -0.1rem;
-    width: 3px;
-    border-radius: 0 3px 3px 0;
-    background: transparent;
-    transition: background 0.2s ease;
+    color: #b7c1db;
   }
 
   .sidebar-menu :global(.list-group-item i) {
-    width: 1.9rem;
-    height: 1.9rem;
+    width: 20px;
+    height: 20px;
     display: inline-grid;
     place-items: center;
     flex: 0 0 auto;
     margin: 0 !important;
     border-radius: 0;
     background: transparent;
-    color: #526176;
-    font-size: 0.96rem;
+    color: inherit;
+    font-size: 16px;
     text-align: center;
-    transition: color 0.2s ease;
+    transition: color 0.15s ease;
   }
 
   .sidebar-menu :global(.list-group-item:hover) {
-    transform: translateX(-1px);
-    background: #f4f8ff;
-    color: #0f6efd;
-  }
-
-  :global(html.dark) .sidebar-menu :global(.list-group-item:hover) {
-    background: rgba(96, 165, 250, 0.12);
-    color: #93c5fd;
+    background: #132042;
+    color: #fff;
+    transform: none;
   }
 
   :global(html[dir='ltr']) .sidebar-menu :global(.list-group-item:hover) {
-    transform: translateX(1px);
+    transform: none;
   }
 
   .sidebar-menu :global(.list-group-item:hover i),
   .sidebar-menu :global(.list-group-item.active i) {
     background: transparent;
-    color: #0f6efd;
+    color: inherit;
   }
 
   .sidebar-menu :global(.list-group-item.active) {
-    background: #eaf3ff;
-    color: #0f6efd;
+    background: linear-gradient(90deg, rgba(47, 111, 237, 0.1), rgba(47, 111, 237, 0.32));
+    color: #fff;
+    font-weight: 700;
     box-shadow: none;
   }
 
-  :global(html.dark) .sidebar-menu :global(.list-group-item:hover i),
-  :global(html.dark) .sidebar-menu :global(.list-group-item.active i) {
-    color: #93c5fd;
+  .sidebar-menu :global(.list-group-item.active)::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: -12px;
+    top: 9px;
+    bottom: 9px;
+    width: 3px;
+    border-radius: 3px;
+    background: #5b8df6;
   }
 
-  :global(html.dark) .sidebar-menu :global(.list-group-item.active) {
-    background: rgba(59, 130, 246, 0.18);
-    color: #bfdbfe;
-  }
-
-  .sidebar-menu :global(.list-group-item.active::before) {
-    background: transparent;
+  .sidebar-menu :global(.nav-text) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .sidebar-report-group {
@@ -954,22 +1031,36 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     transform: rotate(180deg);
   }
 
+  .sidebar-report-group {
+    margin-top: 0.08rem;
+  }
+
   .sidebar-report-links {
-    margin: 0.15rem 0 0.35rem;
-    padding-inline-start: 0.8rem;
-    border-inline-start: 1px solid #dbe5f1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin: 2px 0 4px;
+    /* Design: the rule sits 19px inside the gutter, the labels 12px after it. */
+    margin-inline-start: 19px;
+    border-inline-start: 1px solid #1b2a52;
   }
 
   .sidebar-report-links :global(.list-group-item) {
-    min-height: 2.35rem;
-    margin: 0.04rem 0;
-    padding-block: 0.38rem;
-    font-size: 0.74rem;
+    color: #8a96b8;
   }
 
-  :global(html.dark) .sidebar-report-links {
-    border-color: #475569;
+  .sidebar-report-links :global(.list-group-item:hover) {
+    color: #fff;
   }
+
+  .sidebar-report-links :global(.list-group-item) {
+    min-height: 32px;
+    margin: 0;
+    padding: 0 12px;
+    border-radius: 8px !important;
+    font-size: 12.5px;
+  }
+
 
   #erp-sidebar.collapsed .sidebar-report-links {
     display: none;
@@ -977,71 +1068,69 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
 
   .sidebar-profile {
     position: relative;
-    margin-top: 0.5rem;
-    padding-top: 0.65rem;
-    border-top: 1px solid #e8edf4;
+    margin-top: 0;
+    padding: 6px 12px 10px;
+    border-top: 1px solid #1b2a52;
   }
 
-  :global(html.dark) .sidebar-profile {
-    border-top-color: #253247;
-  }
-
+  /* Design: a bare 44px row inside the rail gutter — no card frame; the row
+     itself fills on hover/open, with a round brand avatar and a presence dot. */
   .sidebar-profile-trigger {
     display: flex;
-    gap: 0.65rem;
+    gap: 10px;
     align-items: center;
     width: 100%;
-    padding: 0.6rem;
-    border: 1px solid #e3e9f1;
+    min-height: 44px;
+    padding: 0 10px;
+    border: 0;
     border-radius: 10px;
-    background: #fbfcfe;
-    color: #172033;
+    background: transparent;
+    color: #fff;
     text-align: start;
     transition:
-      border-color 0.2s ease,
-      background 0.2s ease;
-  }
-
-  :global(html.dark) .sidebar-profile-trigger {
-    border-color: #263447;
-    background: #172033;
-    color: #e5edf7;
+      background 0.2s ease,
+      color 0.2s ease;
   }
 
   .sidebar-profile-trigger:hover,
   .sidebar-profile-trigger[aria-expanded='true'] {
-    border-color: #bfd2ef;
-    background: #f3f7fc;
-  }
-
-  :global(html.dark) .sidebar-profile-trigger:hover,
-  :global(html.dark) .sidebar-profile-trigger[aria-expanded='true'] {
-    border-color: rgba(96, 165, 250, 0.42);
-    background: #1e293b;
+    background: #132042;
   }
 
   .user-avatar {
-    width: 36px;
-    height: 36px;
+    position: relative;
+    width: 26px;
+    height: 26px;
     display: grid;
     flex-shrink: 0;
     place-items: center;
-    border-radius: 9px;
-    background: #eaf2ff;
-    color: #2f6fed;
-    font-size: 0.95rem;
-    font-weight: 900;
+    border-radius: 50%;
+    background: var(--erp-primary, #1479df);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
   }
 
-  :global(html.dark) .user-avatar {
-    background: rgba(96, 165, 250, 0.16);
-    color: #93c5fd;
+  .user-avatar::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    inset-inline-end: -1px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #16a34a;
+    border: 2px solid #0b1530;
+  }
+
+  :global(html.dark) .user-avatar::after {
+    border-color: #050a18;
   }
 
   .user-meta {
     min-width: 0;
     flex: 1;
-    line-height: 1.1;
+    line-height: 1.25;
   }
 
   .user-meta strong,
@@ -1051,236 +1140,325 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
 
   .user-meta strong {
     overflow: hidden;
-    color: #172033;
-    font-size: 0.8rem;
-    font-weight: 850;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  :global(html.dark) .user-meta strong {
-    color: #f8fafc;
-  }
-
-  :global(html.dark) .user-meta small,
-  :global(html.dark) .profile-chevron {
-    color: #94a3b8;
-  }
-
   .user-meta small {
-    color: #8a98ab;
-    font-size: 0.66rem;
-    font-weight: 700;
+    color: #8a96b8;
+    font-size: 10.5px;
+    font-weight: 400;
   }
 
   .profile-chevron {
-    color: #94a3b8;
-    font-size: 0.8rem;
-    transition: transform 0.2s ease;
+    color: #8a96b8;
+    font-size: 18px;
   }
 
-  .profile-chevron.open {
-    transform: rotate(180deg);
-  }
-
+  /* Design: a 244px floating panel (rail width + 12px) anchored above the rail
+     bottom, holding the greeting header, a grouped row list and the quick actions. */
   .sidebar-profile-menu {
     position: absolute;
-    right: 0;
-    bottom: calc(100% + 0.45rem);
-    left: 0;
-    z-index: 10;
-    overflow: hidden;
+    inset-inline-start: calc(100% + 12px);
+    bottom: 12px;
+    z-index: 60;
+    width: 244px;
+    padding: 10px;
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
+    border-radius: 16px;
     background: #fff;
-    box-shadow: 0 16px 34px rgba(21, 32, 51, 0.14);
+    box-shadow: 0 18px 40px -18px rgba(11, 21, 48, 0.35);
   }
 
   :global(html.dark) .sidebar-profile-menu {
     border-color: #263447;
     background: #172033;
-    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+    box-shadow: 0 18px 42px -18px rgba(0, 0, 0, 0.6);
   }
 
-  .sidebar-profile-lang {
-    padding: 0.65rem 0.75rem 0.45rem;
-    border-bottom: 1px solid #f1f5f9;
+  .pm-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 4px 4px 10px;
   }
 
-  :global(html.dark) .sidebar-profile-lang {
-    border-bottom-color: #253247;
-  }
-
-  .sidebar-profile-lang label {
-    display: block;
-    margin-bottom: 0.35rem;
-    color: #64748b;
-    font-size: 0.68rem;
+  .pm-avatar {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: #0f6efd;
+    color: #fff;
+    font-size: 13px;
     font-weight: 800;
   }
 
-  :global(html.dark) .sidebar-profile-lang label {
-    color: #cbd5e1;
+  .pm-presence {
+    position: absolute;
+    bottom: -2px;
+    inset-inline-end: -2px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #16a34a;
+    box-shadow: 0 0 0 2px #fff;
   }
 
-  :global(html.dark) .sidebar-profile-lang :global(.form-select) {
-    border-color: #334155;
-    background-color: #0f172a;
+  :global(html.dark) .pm-presence {
+    box-shadow: 0 0 0 2px #172033;
+  }
+
+  .pm-meta {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.35;
+  }
+
+  .pm-meta strong,
+  .pm-meta small {
+    display: block;
+  }
+
+  .pm-meta strong {
+    overflow: hidden;
+    color: #172033;
+    font-size: 12.5px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  :global(html.dark) .pm-meta strong {
+    color: #f8fafc;
+  }
+
+  .pm-meta small {
+    color: #8a98ab;
+    font-size: 10.5px;
+  }
+
+  .pm-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px;
+    border-radius: 12px;
+    background: #f4f6fa;
+  }
+
+  :global(html.dark) .pm-group {
+    background: #0f172a;
+  }
+
+  .pm-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #3f4b5f;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: start;
+  }
+
+  .pm-row > i {
+    color: #8a98ab;
+    font-size: 17px;
+  }
+
+  .pm-row:hover {
+    background: #fff;
+    color: #172033;
+  }
+
+  :global(html.dark) .pm-row:hover {
+    background: rgba(96, 165, 250, 0.12);
     color: #e5edf7;
   }
 
-  .sidebar-theme-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    width: 100%;
-    padding: 0.72rem 0.85rem;
-    border: 0;
-    border-bottom: 1px solid #f1f5f9;
-    background: transparent;
-    color: #334155;
-    font-size: 0.8rem;
-    font-weight: 750;
-    text-align: start;
-    transition:
-      background 0.2s ease,
-      color 0.2s ease;
+  .pm-label {
+    flex: 1;
+    min-width: 0;
   }
 
-  .sidebar-theme-toggle:hover {
-    background: #f8fafc;
-    color: #0f6efd;
-  }
-
-  .sidebar-theme-toggle > span:first-child {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-  }
-
-  .theme-switch {
-    position: relative;
-    width: 2.35rem;
-    height: 1.25rem;
-    flex: 0 0 auto;
-    border: 1px solid #dbe4ef;
-    border-radius: 999px;
-    background: #e8eef6;
-    transition:
-      background 0.2s ease,
-      border-color 0.2s ease;
-  }
-
-  .theme-switch span {
-    position: absolute;
-    top: 0.14rem;
-    left: 0.16rem;
-    width: 0.86rem;
-    height: 0.86rem;
-    border-radius: 999px;
-    background: #fff;
-    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.18);
-    transition: transform 0.2s ease;
-  }
-
-  .theme-switch.active {
-    border-color: #60a5fa;
-    background: #2563eb;
-  }
-
-  .theme-switch.active span {
-    transform: translateX(1.05rem);
-  }
-
-  :global(html.dark) .sidebar-theme-toggle {
-    border-bottom-color: #253247;
-    color: #dbeafe;
-  }
-
-  :global(html.dark) .sidebar-theme-toggle:hover {
-    background: rgba(96, 165, 250, 0.1);
-    color: #93c5fd;
-  }
-
-  .sidebar-profile-lang :global(.form-select) {
-    min-height: 34px;
-    border-color: #e2e8f0;
-    border-radius: 8px;
-    font-size: 0.78rem;
+  .pm-value {
+    color: #172033;
+    font-size: 11.5px;
     font-weight: 700;
   }
 
-  .sidebar-profile-logout-clear {
-    color: #b45309 !important;
-    border-bottom: 1px solid #f1f5f9;
+  :global(html.dark) .pm-value {
+    color: #e5edf7;
   }
 
-  .sidebar-profile-logout-clear:hover {
-    background: #fffbeb !important;
+  .pm-chevron {
+    font-size: 15px;
+    color: #94a3b8;
   }
 
-  .sidebar-profile-logout {
+  .pm-row-warn,
+  .pm-row-warn > i {
+    color: #b45309;
+  }
+
+  .pm-foot {
     display: flex;
-    gap: 0.55rem;
     align-items: center;
-    width: 100%;
-    padding: 0.7rem 0.85rem;
+    gap: 6px;
+    padding: 8px 0 0;
+  }
+
+  .pm-langs {
+    flex: 1;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 9px;
+    background: #eef1f6;
+  }
+
+  :global(html.dark) .pm-langs {
+    background: #0f172a;
+  }
+
+  .pm-lang {
+    flex: 1;
+    min-height: 26px;
     border: 0;
+    border-radius: 7px;
     background: transparent;
+    color: #64748b;
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .pm-lang.active {
+    background: #fff;
+    color: #172033;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.09);
+  }
+
+  :global(html.dark) .pm-lang {
+    color: #94a3b8;
+  }
+
+  :global(html.dark) .pm-lang.active {
+    background: #1e293b;
+    color: #f8fafc;
+  }
+
+  .pm-ic {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    display: inline-grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background: #eef1f6;
+    color: #3f4b5f;
+  }
+
+  :global(html.dark) .pm-ic {
+    background: #0f172a;
+    color: #cbd5e1;
+  }
+
+  .pm-ic:hover {
+    background: #e3ecff;
+    color: #0f6efd;
+  }
+
+  .pm-ic i {
+    font-size: 17px;
+  }
+
+  .pm-ic-danger {
     color: #dc2626;
-    font-size: 0.8rem;
-    font-weight: 750;
-    text-align: start;
-    transition: background 0.2s ease;
   }
 
-  .sidebar-profile-logout:hover {
-    background: #fef2f2;
-  }
-
-  .sidebar-profile-logout i {
-    font-size: 1rem;
+  /* On a phone the rail is a drawer, so the panel sits inside it, above the row. */
+  @media (max-width: 991px) {
+    .sidebar-profile-menu {
+      inset-inline-start: 8px;
+      inset-inline-end: 8px;
+      bottom: 76px;
+      width: auto;
+    }
   }
 
   #erp-sidebar.collapsed .sidebar-brand {
-    justify-content: center;
-    padding: 0.55rem;
+    position: static;
+    justify-content: space-between;
+    gap: 4px;
+    min-height: 42px;
+    padding: 6px 4px 4px;
   }
 
-  #erp-sidebar.collapsed .brand-main,
-  #erp-sidebar.collapsed .pos-shortcut {
-    display: none !important;
+  #erp-sidebar.collapsed .brand-main {
+    flex: 0 0 auto;
+  }
+
+  #erp-sidebar.collapsed .brand-mark {
+    display: none;
+  }
+
+  #erp-sidebar.collapsed .brand-logo,
+  #erp-sidebar.collapsed .brand-ver { display: none; }
+
+  #erp-sidebar.collapsed .brand-text,
+  #erp-sidebar.collapsed .sidebar-group-label,
+  #erp-sidebar.collapsed .sidebar-pos-row .pos-label {
+    display: none;
   }
 
   #erp-sidebar.collapsed .brand-toolbar {
-    width: 100%;
-    justify-content: center;
+    position: static;
+    display: flex;
+    gap: 0;
+    transform: none;
   }
+
+  #erp-sidebar.collapsed .sidebar-collapse-icon-btn {
+    top: 30px;
+  }
+
+  #erp-sidebar.collapsed .pos-shortcut {
+    padding-inline: 0;
+  }
+
 
   #erp-sidebar.collapsed .user-meta,
   #erp-sidebar.collapsed .profile-chevron {
     display: none;
   }
 
-  #erp-sidebar.collapsed .sidebar-shell {
-    padding-inline: 0.55rem;
-  }
-
   #erp-sidebar.collapsed .sidebar-menu :global(.list-group-item) {
     justify-content: center;
     gap: 0;
-    padding-inline: 0.35rem;
+    padding-inline: 0;
     font-size: 0;
   }
 
   #erp-sidebar.collapsed .sidebar-menu :global(.list-group-item i) {
     margin: 0 !important;
-    font-size: 0.95rem;
-  }
-
-  #erp-sidebar.collapsed .sidebar-menu :global(.list-group-item::before) {
-    inset-inline-start: 0.08rem;
+    font-size: 16px;
   }
 
   #erp-sidebar.collapsed .sidebar-menu :global(.list-group-item:hover) {
@@ -1292,35 +1470,13 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   #erp-sidebar.collapsed .sidebar-menu :global(.list-group-item[data-sidebar-label]:hover::after) {
-    content: attr(data-sidebar-label);
-    position: absolute;
-    inset-inline-start: calc(100% + 0.55rem);
-    top: 50%;
-    z-index: 20;
-    transform: translateY(-50%);
-    padding: 0.42rem 0.7rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.55rem;
-    background: #0f172a;
-    color: #fff;
-    font-size: 0.78rem;
-    font-weight: 700;
-    line-height: 1.2;
-    white-space: nowrap;
-    pointer-events: none;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+    display: none;
+    content: none;
   }
 
   #erp-sidebar.collapsed .sidebar-profile-trigger {
     justify-content: center;
     padding-inline: 0.45rem;
-  }
-
-  #erp-sidebar.collapsed .sidebar-profile-menu {
-    inset-inline-start: calc(100% + 0.45rem);
-    inset-inline-end: auto;
-    bottom: 0;
-    width: 180px;
   }
 
   :global(html[dir='ltr']) #erp-sidebar {
@@ -1330,7 +1486,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
 
   @media (max-width: 991px) {
     #erp-sidebar {
-      width: min(17.5rem, 86vw) !important;
+      width: min(264px, 86vw) !important;
       box-shadow: 0 18px 46px rgba(15, 23, 42, 0.16);
     }
 
