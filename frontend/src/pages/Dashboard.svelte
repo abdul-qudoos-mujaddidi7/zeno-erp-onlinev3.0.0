@@ -1098,7 +1098,7 @@
     if (cardStockAlerts) {
       tiles.push({
         key: 'stock',
-        icon: 'bi-box-seam',
+        symbol: '−',
         hue: 'stock',
         label: t('Low Stock'),
         count: fmt(lowStockTotal),
@@ -1182,10 +1182,9 @@
         href: '/dashboard/product-alerts?tab=quantity',
         rows: lowStockProducts.slice(0, 6).map((product) => ({
           title: product.name,
-          meta: t('Low Stock'),
           value: fmt(product.totalQty),
           negative: Number(product.totalQty) <= 0,
-          icon: 'bi-box-seam',
+          lead: '−',
           hue: Number(product.totalQty) <= 0 ? 'danger' : 'warn',
           href: '/dashboard/product-alerts?tab=quantity',
         })),
@@ -1213,17 +1212,40 @@
         title: t('Drafts'),
         href: canViewSales ? '/dashboard/sales' : '/dashboard/purchases',
         rows: draftBills.slice(0, 6).map((bill) => ({
-          title: `${t(bill.kind === 'sale' ? 'Sales' : 'Purchases')} · ${bill.number}`,
-          meta: `${bill.party} · ${bill.date || '—'}`,
-          value: `${fmt(bill.amount)} ${t(bill.currency || defaultCurrency)}`,
-          icon: 'bi-pencil-square',
-          hue: 'muted',
+          title: [t(bill.kind === 'sale' ? 'Sales' : 'Purchases'), bill.number, bill.party === '—' ? '' : bill.party]
+            .filter(Boolean)
+            .join(' · '),
+          meta: draftMetaOf(bill),
+          value: `${fmt(bill.amount)} ${currencySymbol(bill.currency || defaultCurrency)}`,
+          lead: t(bill.kind === 'sale' ? 'Sales' : 'Purchases').trim().slice(0, 1),
+          hue: bill.kind === 'sale' ? 'draft-sale' : 'draft-purchase',
+          actionLabel: t('Complete'),
           href: bill.href,
         })),
       };
     }
 
     return panels;
+  }
+
+  function relativeDraftTime(value) {
+    if (!value) return '';
+    const timestamp = new Date(value).getTime();
+    if (!Number.isFinite(timestamp)) return '';
+    const seconds = (timestamp - Date.now()) / 1000;
+    const units = [
+      ['year', 31536000], ['month', 2592000], ['week', 604800],
+      ['day', 86400], ['hour', 3600], ['minute', 60],
+    ];
+    const [unit, size] = units.find(([, size]) => Math.abs(seconds) >= size) || ['minute', 60];
+    const locale = _lang === 'fa' ? 'fa-IR' : _lang === 'ps' ? 'ps-AF' : 'en';
+    return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(Math.round(seconds / size), unit);
+  }
+
+  function draftMetaOf(bill) {
+    const creator = bill.created_by?.name || bill.created_by?.username || bill.user?.name || bill.user?.username || bill.created_by_name;
+    const time = relativeDraftTime(bill.created_at || bill.date);
+    return [creator, time].filter(Boolean).join(' · ');
   }
 
   const ACCOUNT_HUES = ['emerald', 'blue', 'orange', 'violet', 'cyan', 'slate'];

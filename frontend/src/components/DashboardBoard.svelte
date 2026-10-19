@@ -395,7 +395,9 @@
                   aria-selected={activeAlert === tile.key}
                   on:click={() => selectAlert(tile.key)}>
                   <span class="zb-tile-top">
-                    <span class="zb-tile-ic"><i class="bi {tile.icon}" aria-hidden="true"></i></span>
+                    <span class="zb-tile-ic" class:text={tile.symbol} aria-hidden="true">
+                      {#if tile.symbol}{tile.symbol}{:else}<i class="bi {tile.icon}"></i>{/if}
+                    </span>
                     <span class="zb-tile-count" dir="ltr">{tile.count}</span>
                   </span>
                   <span class="zb-tile-label">{tile.label}</span>
@@ -420,8 +422,10 @@
                   <span class="zb-empty">{t('No Data')}</span>
                 {:else}
                   {#each filteredPanelRows as row, index (index)}
-                    <div class="zb-panel-row" role="listitem">
-                      <span class="zb-panel-lead" data-hue={row.hue}><i class="bi {row.icon}" aria-hidden="true"></i></span>
+                    <div class="zb-panel-row" class:draft={row.actionLabel} role="listitem">
+                      <span class="zb-panel-lead" class:text={row.lead} data-hue={row.hue} aria-hidden="true">
+                        {#if row.lead}{row.lead}{:else}<i class="bi {row.icon}"></i>{/if}
+                      </span>
                       <span class="zb-panel-copy">
                         <span class="zb-panel-title">{row.title}</span>
                         {#if row.meta}<span class="zb-panel-meta">{row.meta}</span>{/if}
@@ -431,7 +435,7 @@
                         <a class="zb-panel-open" href={activePanel.href} use:link title={t('Open')} aria-label={`${t('Open')}: ${activePanel.title}`}>
                           <i class="bi bi-box-arrow-up-left" aria-hidden="true"></i>
                         </a>
-                        <a class="zb-panel-review" href={row.href || activePanel.href} use:link aria-label={`${t('Review')}: ${row.title}`}>{t('Review')}</a>
+                        <a class="zb-panel-review" href={row.href || activePanel.href} use:link aria-label={`${row.actionLabel || t('Review')}: ${row.title}`}>{row.actionLabel || t('Review')}</a>
                       </span>
                     </div>
                   {/each}
@@ -1815,6 +1819,12 @@
     font-size: 14px;
   }
 
+  .zb-tile-ic.text {
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
   .zb-tile-count {
     color: var(--ink);
     font-family: var(--num);
@@ -1885,6 +1895,10 @@
     background: var(--surface);
   }
 
+  .zb-panel-row.draft:hover {
+    background: transparent;
+  }
+
   .zb-panel-lead {
     display: grid;
     flex-shrink: 0;
@@ -1915,6 +1929,22 @@
   .zb-panel-lead[data-hue='muted'] {
     background: var(--surface-3);
     color: var(--text);
+  }
+
+  .zb-panel-lead[data-hue='draft-sale'] {
+    background: #e0ebff;
+    color: #2563eb;
+  }
+
+  .zb-panel-lead[data-hue='draft-purchase'] {
+    background: #f1f5f9;
+    color: #475569;
+  }
+
+  .zb-panel-lead.text {
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
   }
 
   .zb-panel-copy {
