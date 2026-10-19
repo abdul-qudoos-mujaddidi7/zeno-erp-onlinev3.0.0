@@ -518,7 +518,7 @@ async function findExpiringProducts(executor, orgId, limit = 10) {
       WHERE org_id = ?
         AND status = 1
         AND expiry_date IS NOT NULL
-        AND DATEDIFF(expiry_date, CURDATE()) <= COALESCE(alarm_expiry_days, 30)
+        AND DATEDIFF(expiry_date, CURDATE()) <= GREATEST(COALESCE(alarm_expiry_days, 0), 30)
       ORDER BY expiry_date ASC, local_id ASC
       LIMIT ${safeLimit}
     `,

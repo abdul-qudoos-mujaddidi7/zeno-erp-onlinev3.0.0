@@ -1164,15 +1164,21 @@
       panels.expiry = {
         title: t('Expiry'),
         href: '/dashboard/product-alerts?tab=expiry',
-        rows: expiringProducts.slice(0, 6).map((product) => ({
-          title: product.name,
-          meta: `${t('Expiry')}: ${product.expiry_date || '—'}`,
-          value: `${fmt(product.remaining_days)} ${t('days')}`,
-          negative: Number(product.remaining_days) <= 0,
-          icon: 'bi-hourglass-split',
-          hue: 'warn',
-          href: '/dashboard/product-alerts?tab=expiry',
-        })),
+        rows: expiringProducts.slice(0, 6).map((product) => {
+          const expired = Number(product.remaining_days) <= 0;
+          const quantityMeta = `${fmt(product.totalQty)} ${_lang === 'en' ? 'pcs' : 'عدد'}`;
+          return {
+            title: product.name,
+            meta: expired
+              ? `${relativeDraftTime(product.expiry_date) || product.expiry_date || '—'} · ${quantityMeta}`
+              : `${t('Expiry')}: ${product.expiry_date || '—'} · ${quantityMeta}`,
+            value: expired ? t('Expired') : `${fmt(product.remaining_days)} ${t('days')}`,
+            negative: expired,
+            lead: expired ? '!' : fmt(product.remaining_days),
+            hue: expired ? 'danger' : 'warn',
+            href: '/dashboard/product-alerts?tab=expiry',
+          };
+        }),
       };
     }
 

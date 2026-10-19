@@ -484,7 +484,7 @@ async function buildOverviewPayload({
     dashboardRepository.loadAccountMeta(db, orgId),
     dashboardRepository.findInventoryValueByCurrency(db, orgId),
     dashboardRepository.findLowStockProducts(db, orgId, 10),
-    dashboardRepository.findExpiringProducts(db, orgId, 10),
+    dashboardRepository.findExpiringProducts(db, orgId, 50),
   ]);
 
   const bucketRows =
