@@ -370,6 +370,14 @@
     return `${day} ${month}`;
   }
 
+  function formatExpiryDay(value) {
+    if (!value) return '—';
+    const date = new Date(`${String(value).slice(0, 10)}T12:00:00`);
+    if (!Number.isFinite(date.getTime())) return value;
+    if (_lang === 'fa' || _lang === 'ps') return formatPersianDay(date);
+    return new Intl.DateTimeFormat(_lang || 'en', { day: 'numeric', month: 'short' }).format(date);
+  }
+
   async function refresh() {
     const startTime = Date.now();
     error = '';
@@ -1169,9 +1177,7 @@
           const quantityMeta = `${fmt(product.totalQty)} ${_lang === 'en' ? 'pcs' : 'عدد'}`;
           return {
             title: product.name,
-            meta: expired
-              ? `${relativeDraftTime(product.expiry_date) || product.expiry_date || '—'} · ${quantityMeta}`
-              : `${t('Expiry')}: ${product.expiry_date || '—'} · ${quantityMeta}`,
+            meta: `${t('Expiry')} ${formatExpiryDay(product.expiry_date)} · ${quantityMeta}`,
             value: expired ? t('Expired') : `${fmt(product.remaining_days)} ${t('days')}`,
             negative: expired,
             lead: expired ? '!' : fmt(product.remaining_days),
