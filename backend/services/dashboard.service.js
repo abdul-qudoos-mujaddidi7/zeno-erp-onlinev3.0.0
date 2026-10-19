@@ -253,6 +253,8 @@ async function buildMetricsPayload({
     wasteRows,
     expenseRows,
     productRows,
+    salesTrendRows,
+    purchaseTrendRows,
     benefitTrendRows,
     expenseTrendRows,
   ] = await Promise.all([
@@ -268,6 +270,14 @@ async function buildMetricsPayload({
     dashboardRepository.topProducts(db, {
       ...range,
       limit: 40,
+    }),
+    dashboardRepository.trendSales(db, {
+      ...range,
+      granularity,
+    }),
+    dashboardRepository.trendPurchases(db, {
+      ...range,
+      granularity,
     }),
     dashboardRepository.trendBenefit(db, {
       ...range,
@@ -389,12 +399,34 @@ async function buildMetricsPayload({
     if (!trendMap.has(key)) {
       trendMap.set(key, {
         bucket: key,
+        sales: 0,
+        purchases: 0,
         benefit: 0,
         expenses: 0,
       });
     }
     return trendMap.get(key);
   };
+
+  for (const row of salesTrendRows || []) {
+    const entry = ensureBucket(row.bucket);
+    entry.sales += convertAmount(
+      Number(row.amount) || 0,
+      row.currency || defaultCurrency,
+      defaultCurrency,
+      rateMap,
+    );
+  }
+
+  for (const row of purchaseTrendRows || []) {
+    const entry = ensureBucket(row.bucket);
+    entry.purchases += convertAmount(
+      Number(row.amount) || 0,
+      row.currency || defaultCurrency,
+      defaultCurrency,
+      rateMap,
+    );
+  }
 
   for (const row of benefitTrendRows || []) {
     const entry = ensureBucket(row.bucket);

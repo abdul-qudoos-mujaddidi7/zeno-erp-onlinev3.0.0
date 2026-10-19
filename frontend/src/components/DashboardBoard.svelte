@@ -2,7 +2,6 @@
   import { onMount, createEventDispatcher } from 'svelte';
   import { link } from 'svelte-spa-router';
   import { t, lang } from '../i18n/i18n';
-  import AppDatePicker from './common/AppDatePicker.svelte';
 
   /*
    * Presentation half of the dashboard.
@@ -148,7 +147,11 @@
   const CHART_H = 220;
   const CHART_TOP = 10;
 
-  let visible = [true, true];
+  let visible = [true, true, true, true];
+  let transactionFilter = 'all';
+  $: filteredTransactions = (data?.transactions || []).filter((row) =>
+    transactionFilter === 'all' || row.kind === transactionFilter,
+  );
 
   function toggleSeries(index) {
     visible = visible.map((item, itemIndex) => (itemIndex === index ? !item : item));
@@ -165,7 +168,8 @@
   }
 
   $: chartMax = niceMax(
-    Math.max(0, ...(trend.benefit || []).map(Number), ...(trend.expenses || []).map(Number)),
+    Math.max(0, ...(trend.sales || []).map(Number), ...(trend.purchases || []).map(Number),
+      ...(trend.benefit || []).map(Number), ...(trend.expenses || []).map(Number)),
   );
 
   function chartY(value) {
@@ -204,6 +208,22 @@
 
   $: benefitTotal = (trend.benefit || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
   $: expenseTotal = (trend.expenses || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  $: salesTotal = (trend.sales || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  $: purchasesTotal = (trend.purchases || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  $: returnsTotal = (data?.reports?.returns || []).reduce((sum, row) => sum + (Number(row.value) || 0), 0);
+
+  function returnSegment(index) {
+    const rows = data?.reports?.returns || [];
+    const circumference = 251.327;
+    const amount = Math.max(0, Number(rows[index]?.value) || 0);
+    const prior = rows.slice(0, index).reduce((sum, row) => sum + Math.max(0, Number(row.value) || 0), 0);
+    const ratio = returnsTotal ? amount / returnsTotal : 0;
+    return `stroke-dasharray:${ratio * circumference} ${circumference};stroke-dashoffset:${-prior / (returnsTotal || 1) * circumference}`;
+  }
+
+  function returnPercent(value) {
+    return returnsTotal > 0 ? `${Math.round((Number(value) || 0) / returnsTotal * 100)}%` : '0%';
+  }
 
   /* ---------- formatting ---------- */
   function fmt(value) {
@@ -572,12 +592,19 @@
             {t('Financial Trend')}
           </h3>
 
-          <div class="zb-block-row">
             <section class="zb-trend" aria-label={t('Financial Trend')}>
               <header class="zb-trend-hd">
                 <div class="zb-trend-title">
                   <b>{t('Sales')} / {t('Expenses')}</b>
                   <small>{t(data.currency)} · {currentPeriodLabel}</small>
+                </div>
+                <div class="zb-period-group" role="group" aria-label={t('Chart range')}>
+                  {#each PERIODS as range (range)}
+                    <button type="button" class:active={period === range} aria-pressed={period === range}
+                      on:click={() => pickPeriod(range)}>{periodLabels[range]}</button>
+                  {/each}
+                  <button type="button" class:active={showCustomDates} aria-expanded={showCustomDates}
+                    on:click={toggleCustomDates}>{periodLabels.custom}</button>
                 </div>
                 <div class="zb-legend">
                   <button
@@ -585,19 +612,44 @@
                     class:off={!visible[0]}
                     aria-pressed={visible[0]}
                     on:click={() => toggleSeries(0)}>
-                    <span class="dot benefit"></span>
-                    {t('Benefit')}
+                    <span class="dot sales"></span>
+                    {t('Sales')}
                   </button>
                   <button
                     type="button"
                     class:off={!visible[1]}
                     aria-pressed={visible[1]}
                     on:click={() => toggleSeries(1)}>
+                    <span class="dot purchases"></span>
+                    {t('Purchases')}
+                  </button>
+                  <button
+                    type="button"
+                    class:off={!visible[2]}
+                    aria-pressed={visible[2]}
+                    on:click={() => toggleSeries(2)}>
+                    <span class="dot benefit"></span>
+                    {t('Benefit')}
+                  </button>
+                  <button
+                    type="button"
+                    class:off={!visible[3]}
+                    aria-pressed={visible[3]}
+                    on:click={() => toggleSeries(3)}>
                     <span class="dot expense"></span>
                     {t('Expenses')}
                   </button>
                 </div>
               </header>
+
+              {#if showCustomDates}
+                <div class="zb-custom-range" role="group" aria-label={t('Custom date range')}>
+                  <label>{t('From')}<input type="date" bind:value={fromDate} /></label>
+                  <label>{t('To')}<input type="date" bind:value={toDate} /></label>
+                  <button type="button" class="apply" on:click={applyCustom}>{t('Apply')}</button>
+                  <button type="button" aria-label={t('Close')} on:click={() => (showCustomDates = false)}><i class="bi bi-x-lg"></i></button>
+                </div>
+              {/if}
 
               <div class="zb-chart" dir="ltr">
                 <div class="zb-chart-plot">
@@ -613,14 +665,20 @@
                   <div class="zb-chart-svg">
                     {#if visible[0]}
                       <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="none" aria-hidden="true">
-                        <path class="zb-area" d={areaPath(trend.benefit)}></path>
+                        <path class="zb-area" d={areaPath(trend.sales)}></path>
                       </svg>
                     {/if}
                     <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="none" aria-hidden="true">
                       {#if visible[0]}
-                        <polyline class="zb-line benefit" points={linePoints(trend.benefit)}></polyline>
+                        <polyline class="zb-line sales" points={linePoints(trend.sales)}></polyline>
                       {/if}
                       {#if visible[1]}
+                        <polyline class="zb-line purchases" points={linePoints(trend.purchases)}></polyline>
+                      {/if}
+                      {#if visible[2]}
+                        <polyline class="zb-line benefit" points={linePoints(trend.benefit)}></polyline>
+                      {/if}
+                      {#if visible[3]}
                         <polyline class="zb-line expense" points={linePoints(trend.expenses)}></polyline>
                       {/if}
                     </svg>
@@ -636,6 +694,14 @@
 
               <div class="zb-trend-totals">
                 <div>
+                  <span><i class="dot sales"></i>{t('Sales')}</span>
+                  <b dir="ltr">{fmt(salesTotal)} <small>{t(data.currency)}</small></b>
+                </div>
+                <div>
+                  <span><i class="dot purchases"></i>{t('Purchases')}</span>
+                  <b dir="ltr">{fmt(purchasesTotal)} <small>{t(data.currency)}</small></b>
+                </div>
+                <div>
                   <span><i class="dot benefit"></i>{t('Benefit')}</span>
                   <b dir="ltr">{fmt(data.totals?.benefit ?? benefitTotal)} <small>{t(data.currency)}</small></b>
                 </div>
@@ -643,37 +709,61 @@
                   <span><i class="dot expense"></i>{t('Expenses')}</span>
                   <b dir="ltr">{fmt(data.totals?.expenses ?? expenseTotal)} <small>{t(data.currency)}</small></b>
                 </div>
-                <div>
-                  <span><i class="dot net"></i>{t('Net Profit')}</span>
-                  <b dir="ltr">{fmt(data.totals?.net ?? benefitTotal - expenseTotal)} <small>{t(data.currency)}</small></b>
-                </div>
               </div>
             </section>
 
+          </div>
+
+        <div class="zb-block">
+          <h3 class="zb-block-title"><i class="bi bi-boxes" aria-hidden="true"></i>{t('Inventory & Returns')}</h3>
+          <div class="zb-block-row">
             <section class="zb-returns" aria-label={t('Returns & Wastes')}>
               <h4 class="zb-returns-title">
                 <span class="zb-card-ic" data-hue="orange"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></span>
                 {t('Returns & Wastes')}
               </h4>
 
-              <div class="zb-returns-rows">
-                {#each data.reports.returns as row (row.label)}
-                  <a class="zb-returns-row" href={row.href} use:link>
-                    <span>{row.label}</span>
-                    <b dir="ltr">{fmt(row.value)} <small>{t(data.currency)}</small></b>
-                    <em dir="ltr">{row.count}</em>
+              <div class="zb-return-content">
+                <div class="zb-return-donut" aria-hidden="true">
+                  <svg viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="40" class="zb-return-track"></circle>
+                    {#each data.reports.returns as row, index (row.label)}
+                      <circle cx="50" cy="50" r="40" class="zb-return-segment" class:seg-0={index === 0} class:seg-1={index === 1} class:seg-2={index === 2} style={returnSegment(index)}></circle>
+                    {/each}
+                  </svg>
+                  <div><small>{t('Total')}</small><b>{fmt(returnsTotal)}</b><small>{t(data.currency)}</small></div>
+                </div>
+                <div class="zb-returns-rows">
+                  {#each data.reports.returns as row (row.label)}
+                    <a class="zb-returns-row" href={row.href} use:link>
+                      <span>{row.label}<small>{fmt(row.count)} {t('Bills')}</small></span>
+                      <b dir="ltr">{fmt(row.value)} <small>{t(data.currency)}</small></b>
+                      <em dir="ltr">{returnPercent(row.value)}</em>
+                    </a>
+                  {/each}
+                </div>
+              </div>
+            </section>
+
+          <section class="zb-card zb-warehouse" aria-label={t('Warehouses')}>
+            <header class="zb-warehouse-hd">
+              <span>{t('Warehouse stock value')}</span>
+              <small>{t(data.currency)} · {t('Current')}</small>
+            </header>
+            {#if data.inventory?.warehouses?.length}
+              <div class="zb-warehouse-list">
+                {#each data.inventory.warehouses as warehouse (warehouse.id)}
+                  <a class="zb-warehouse-row" href={warehouse.href} use:link>
+                    <span class="zb-warehouse-name">{warehouse.name}</span>
+                    <span class="zb-warehouse-bar"><i style={`width:${warehouse.share}%`}></i></span>
+                    <b dir="ltr">{warehouse.value == null ? '—' : fmt(warehouse.value)} {#if warehouse.value != null}<small>{t(data.currency)}</small>{/if}</b>
                   </a>
                 {/each}
               </div>
-
-              <div class="zb-returns-total">
-                <span>{t('Total')}</span>
-                <b dir="ltr">
-                  {fmt((data.reports.returns || []).reduce((sum, row) => sum + (Number(row.value) || 0), 0))}
-                  <small>{t(data.currency)}</small>
-                </b>
-              </div>
-            </section>
+            {:else}
+              <span class="zb-empty">{t('No Data')}</span>
+            {/if}
+          </section>
           </div>
         </div>
 
@@ -706,9 +796,56 @@
             </section>
           </div>
         {/if}
+
+        <div class="zb-block">
+          <h3 class="zb-block-title"><i class="bi bi-receipt" aria-hidden="true"></i>{t('Transactions')}</h3>
+          <section class="zb-card zb-transactions" aria-label={t('Transactions')}>
+            <div class="zb-transaction-tabs" role="tablist" aria-label={t('Transaction type')}>
+              {#each [
+                { key: 'all', label: t('All') },
+                { key: 'sale', label: t('Sales') },
+                { key: 'purchase', label: t('Purchases') },
+                { key: 'journal', label: t('Journals') },
+                { key: 'exchange', label: t('Exchange') },
+              ] as filter (filter.key)}
+                <button type="button" role="tab" aria-selected={transactionFilter === filter.key}
+                  on:click={() => (transactionFilter = filter.key)}>{filter.label}</button>
+              {/each}
+            </div>
+            <div class="zb-transaction-scroll">
+              <table>
+                <thead><tr>
+                  <th>{t('Type')}</th><th>{t('Number')}</th><th>{t('Account')}</th>
+                  <th>{t('Date')}</th><th>{t('Status')}</th><th>{t('Amount')}</th>
+                </tr></thead>
+                <tbody>
+                  {#if filteredTransactions.length}
+                    {#each filteredTransactions as row (`${row.kind}-${row.id}`)}
+                      <tr>
+                        <td><span class="zb-transaction-type" data-kind={row.kind}>{row.label}</span></td>
+                        <td dir="ltr">{row.number}</td>
+                        <td>{row.party}</td>
+                        <td dir="ltr">{row.date ? new Intl.DateTimeFormat(_lang || 'en', { dateStyle: 'short' }).format(new Date(row.date)) : '—'}</td>
+                        <td>{row.status ?? '—'}</td>
+                        <td dir="ltr"><a href={row.href} use:link>{fmt(row.amount)} <small>{t(row.currency)}</small></a></td>
+                      </tr>
+                    {/each}
+                  {:else}
+                    <tr><td class="zb-table-empty" colspan="6">{t('No Data')}</td></tr>
+                  {/if}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </div>
     </details>
   {/if}
+
+  <footer class="zb-footer">
+    <span><i aria-hidden="true"></i>{t('Online')} · {clockTime}</span>
+    <span>{t('Zeno ERP')} {data?.appVersion}</span>
+  </footer>
 </div>
 
 <style>
@@ -726,8 +863,8 @@
     --text: #475569;
     --muted: #64748b;
     --subtle: #94a3b8;
-    --brand: var(--erp-primary, #1479df);
-    --brand-soft: var(--erp-primary-soft, #e6f2fc);
+    --brand: #2f6fed;
+    --brand-soft: #e3ecff;
     --navy: #0b1530;
     --navy-2: #132042;
     --ok: #15803d;
@@ -742,6 +879,7 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+    padding: 14px 0 32px;
     min-width: 0;
     color: var(--text);
     font-size: 13px;
@@ -2358,6 +2496,15 @@
     gap: 6px;
   }
 
+  .zb-period-group { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 9px; background: var(--surface-3); }
+  .zb-period-group button { min-height: 26px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+  .zb-period-group button.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(11,21,48,.08); }
+  .zb-custom-range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+  .zb-custom-range label { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11.5px; }
+  .zb-custom-range input { width: 136px; height: 28px; padding: 0 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-size: 11.5px; }
+  .zb-custom-range button { height: 28px; padding: 0 11px; border: 0; border-radius: 7px; background: var(--surface-3); color: var(--text); font: inherit; font-size: 11.5px; cursor: pointer; }
+  .zb-custom-range button.apply { background: var(--brand); color: #fff; font-weight: 700; }
+
   .zb-legend button {
     display: inline-flex;
     align-items: center;
@@ -2392,6 +2539,8 @@
   }
 
   .dot.expense { background: #d97706; }
+  .dot.sales { background: #2f6fed; }
+  .dot.purchases { background: #64748b; }
   .dot.net { background: #16a34a; }
 
   .zb-chart {
@@ -2459,9 +2608,12 @@
   }
 
   .zb-line.benefit {
-    stroke: #2f6fed;
-    stroke-width: 2.5;
+    stroke: #16a34a;
+    stroke-width: 2;
   }
+
+  .zb-line.sales { stroke: #2f6fed; stroke-width: 2.5; }
+  .zb-line.purchases { stroke: #64748b; stroke-width: 2; }
 
   .zb-line.expense {
     stroke: #d97706;
@@ -2546,9 +2698,24 @@
 
   .zb-returns-rows {
     display: flex;
+    flex: 1 1 140px;
     flex-direction: column;
     gap: 6px;
+    min-width: 0;
   }
+
+  .zb-return-content { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; }
+  .zb-return-donut { position: relative; flex: 0 0 132px; width: 132px; height: 132px; }
+  .zb-return-donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .zb-return-donut circle { fill: none; stroke-width: 13; }
+  .zb-return-track { stroke: var(--surface-3); }
+  .zb-return-segment { stroke-linecap: butt; }
+  .zb-return-segment.seg-0 { stroke: #d97706; }
+  .zb-return-segment.seg-1 { stroke: #64748b; }
+  .zb-return-segment.seg-2 { stroke: #dc2626; }
+  .zb-return-donut > div { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; line-height: 1.2; }
+  .zb-return-donut small { color: var(--muted); font-size: 10.5px; }
+  .zb-return-donut b { color: var(--ink); font-family: var(--num); font-size: 16px; font-weight: 800; }
 
   .zb-returns-row {
     display: flex;
@@ -2628,6 +2795,127 @@
     font-size: 10.5px;
     font-weight: 500;
   }
+
+  .zb-warehouse {
+    gap: 8px;
+  }
+
+  .zb-warehouse-hd,
+  .zb-warehouse-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .zb-warehouse-hd {
+    justify-content: space-between;
+    color: var(--ink);
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  .zb-warehouse-hd small,
+  .zb-warehouse-row b small {
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 500;
+  }
+
+  .zb-warehouse-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 6px;
+  }
+
+  .zb-warehouse-row {
+    min-width: 0;
+    padding: 7px 9px;
+    border-radius: 9px;
+    background: var(--surface-2);
+  }
+
+  .zb-warehouse-name {
+    flex: 0 1 110px;
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .zb-warehouse-bar {
+    flex: 1;
+    height: 4px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--surface-3);
+  }
+
+  .zb-warehouse-bar i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: #2f6fed;
+  }
+
+  .zb-warehouse-row b {
+    color: var(--ink);
+    font-family: var(--num);
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .zb-transactions {
+    gap: 8px;
+  }
+
+  .zb-transaction-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background: var(--surface-3);
+    align-self: flex-start;
+  }
+
+  .zb-transaction-tabs button {
+    min-height: 28px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .zb-transaction-tabs button[aria-selected='true'] {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, .08);
+  }
+
+  .zb-transaction-scroll { overflow-x: auto; }
+  .zb-transactions table { width: 100%; min-width: 620px; border-collapse: separate; border-spacing: 0; text-align: start; font-size: 12px; }
+  .zb-transactions th { padding: 7px 10px; background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .zb-transactions th:first-child { border-start-start-radius: 8px; }
+  .zb-transactions th:last-child { border-start-end-radius: 8px; text-align: end; }
+  .zb-transactions td { padding: 8px 10px; border-bottom: 1px solid var(--border-soft); color: var(--text); white-space: nowrap; }
+  .zb-transactions td:nth-child(3) { color: var(--ink); font-weight: 600; }
+  .zb-transactions td:last-child { text-align: end; color: var(--ink); font-family: var(--num); font-weight: 800; }
+  .zb-transactions td:last-child a { color: inherit; }
+  .zb-transactions td:last-child small { color: var(--muted); font-family: inherit; font-size: 10.5px; font-weight: 500; }
+  .zb-transaction-type { display: inline-flex; align-items: center; gap: 5px; }
+  .zb-transaction-type::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #2f6fed; }
+  .zb-transaction-type[data-kind='purchase']::before { background: #64748b; }
+  .zb-transaction-type[data-kind='journal']::before { background: #d97706; }
+  .zb-transaction-type[data-kind='exchange']::before { background: #0891b2; }
+  .zb-table-empty { padding: 20px !important; text-align: center; color: var(--muted) !important; }
 
   /* ---------- top products ---------- */
   .zb-products {
@@ -2758,6 +3046,10 @@
     font-weight: 700;
   }
 
+  .zb-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; color: var(--subtle); font-size: 11px; }
+  .zb-footer span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+  .zb-footer span:first-child i { width: 7px; height: 7px; border-radius: 50%; background: #16a34a; }
+
   /* ---------- responsive ---------- */
   @media (max-width: 1100px) {
     .zb-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2865,5 +3157,76 @@
     .zb-chart-x {
       padding-inline-start: 30px;
     }
+  }
+
+  /* Reference token alignment: the KPI and action cards use the light matte
+     treatment from zeno-tokens.css while retaining SVSale's Bootstrap icons
+     and the application's inherited typeface. */
+  .zb .zb-kpi {
+    --c: #4f46e5;
+    display: flex;
+    position: static;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    padding: 11px 13px;
+    border: 1px solid color-mix(in srgb, var(--c) 14%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--c) 8%, var(--surface));
+    box-shadow: none;
+    color: var(--ink);
+    transform: none;
+  }
+
+  .zb .zb-kpi:hover { transform: translateY(-2px); box-shadow: 0 10px 22px -14px var(--c); }
+  .zb .zb-kpi[data-hue='sale'] { --c: #4f46e5; }
+  .zb .zb-kpi[data-hue='purchase'] { --c: #f97316; }
+  .zb .zb-kpi[data-hue='expense'] { --c: #334155; }
+  .zb .zb-kpi[data-hue='profit'] { --c: #7c3aed; }
+  .zb .zb-kpi-ic { position: static; inset: auto; top: auto; transform: none; width: 34px; height: 34px; border-radius: 10px; background: color-mix(in srgb, var(--c) 16%, var(--surface)); color: var(--c); font-size: 16px; }
+  .zb .zb-kpi-body { align-items: flex-start; justify-content: center; gap: 0; padding: 0; }
+  .zb .zb-kpi-label { color: color-mix(in srgb, var(--c) 70%, var(--ink)); font-size: 11.5px; font-weight: 600; }
+  .zb .zb-kpi-row { margin: 0; }
+  .zb .zb-kpi-value { color: var(--ink); font-size: 17px; font-weight: 800; line-height: 1.35; }
+  .zb .zb-kpi-unit { color: var(--muted); font-size: 10.5px; }
+  .zb .zb-kpi-sub { flex-wrap: nowrap; gap: 5px; color: var(--muted); font-size: 11px; }
+  .zb .zb-kpi-chip { min-height: 0; padding: 0; border-radius: 0; background: transparent; }
+  .zb .zb-kpi-chip + .zb-kpi-chip::before { content: ''; height: 10px; margin-inline-end: 5px; border-inline-start: 1px solid var(--border); }
+  .zb .zb-kpi-sub b { color: var(--ink); font-size: 11px; }
+
+  .zb .zb-qa-grid { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 8px; }
+  .zb .zb-qa {
+    --g: #4f46e5;
+    width: auto;
+    height: auto;
+    min-height: 50px;
+    padding: 8px 14px 8px 10px;
+    border: 1px solid var(--border-soft);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: 0 1px 2px rgba(11,21,48,.04);
+    color: var(--ink);
+    font-size: 12.5px;
+    text-align: start;
+  }
+  .zb .zb-qa[data-hue='sale'] { --g: #4f46e5; border-color: var(--border-soft); background: var(--surface); color: var(--ink); }
+  .zb .zb-qa[data-hue='receive'] { --g: #059669; }
+  .zb .zb-qa[data-hue='purchase'] { --g: #f97316; }
+  .zb .zb-qa[data-hue='product'] { --g: #c026d3; }
+  .zb .zb-qa[data-hue='expense'] { --g: #334155; }
+  .zb .zb-qa[data-hue='exchange'] { --g: #0891b2; }
+  .zb .zb-qa-ic { width: 34px; height: 34px; border-radius: 11px; background: color-mix(in srgb, var(--g) 13%, var(--surface)); color: var(--g); }
+
+  @media (max-width: 767px) {
+    .zb .zb-kpi { min-height: 0; padding: 11px 13px; border-radius: 14px; }
+    .zb .zb-kpi-ic { position: static; inset: auto; width: 34px; height: 34px; border-radius: 10px; }
+    .zb .zb-kpi-value { font-size: 17px; }
+    .zb .zb-kpi-label { font-size: 11.5px; }
+    .zb .zb-kpi-unit { font-size: 10.5px; }
+    .zb .zb-kpi-chip { min-height: 0; padding: 0; }
+    .zb .zb-qa { flex-direction: row; min-height: 50px; padding: 8px 10px; font-size: 12.5px; text-align: start; }
+    .zb .zb-qa-ic { width: 34px; height: 34px; }
   }
 </style>

@@ -250,6 +250,56 @@ async function trendBenefit(
   return rows;
 }
 
+async function trendSales(executor, { orgId, dateFrom, dateTo, granularity }) {
+  const bucketExpr =
+    granularity === 'hour'
+      ? `DATE_FORMAT(COALESCE(invoice_date, created_at), '%Y-%m-%dT%H:00:00')`
+      : granularity === 'month'
+        ? `DATE_FORMAT(COALESCE(invoice_date, created_at), '%Y-%m-01T00:00:00')`
+        : `DATE_FORMAT(COALESCE(invoice_date, created_at), '%Y-%m-%dT00:00:00')`;
+
+  const [rows] = await executor.execute(
+    `
+      SELECT ${bucketExpr} AS bucket, currency,
+        SUM(COALESCE(total_amount, 0)) AS amount
+      FROM sales
+      WHERE org_id = ? AND status = 1
+        AND COALESCE(invoice_date, created_at) >= ?
+        AND COALESCE(invoice_date, created_at) < DATE_ADD(?, INTERVAL 1 DAY)
+      GROUP BY bucket, currency
+      ORDER BY bucket ASC
+    `,
+    [orgId, dateFrom, dateTo],
+  );
+
+  return rows;
+}
+
+async function trendPurchases(executor, { orgId, dateFrom, dateTo, granularity }) {
+  const bucketExpr =
+    granularity === 'hour'
+      ? `DATE_FORMAT(COALESCE(bill_date, created_at), '%Y-%m-%dT%H:00:00')`
+      : granularity === 'month'
+        ? `DATE_FORMAT(COALESCE(bill_date, created_at), '%Y-%m-01T00:00:00')`
+        : `DATE_FORMAT(COALESCE(bill_date, created_at), '%Y-%m-%dT00:00:00')`;
+
+  const [rows] = await executor.execute(
+    `
+      SELECT ${bucketExpr} AS bucket, currency,
+        SUM(COALESCE(total_amount, 0)) AS amount
+      FROM purchases
+      WHERE org_id = ? AND status = 1
+        AND COALESCE(bill_date, created_at) >= ?
+        AND COALESCE(bill_date, created_at) < DATE_ADD(?, INTERVAL 1 DAY)
+      GROUP BY bucket, currency
+      ORDER BY bucket ASC
+    `,
+    [orgId, dateFrom, dateTo],
+  );
+
+  return rows;
+}
+
 async function trendExpenses(
   executor,
   {
@@ -724,6 +774,8 @@ module.exports = {
   sumExpenses,
   topProducts,
   trendBenefit,
+  trendSales,
+  trendPurchases,
   trendExpenses,
   findInventoryValueByCurrency,
   findInventoryValuation,

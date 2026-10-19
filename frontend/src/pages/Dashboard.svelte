@@ -3,6 +3,13 @@
   import { t, lang, settings_all } from '../i18n/i18n';
   import { toGregorian, toJalaali } from 'jalaali-js';
   import { dashboardApi } from '../api/dashboardApi.js';
+  import { saleApi } from '../api/saleApi.js';
+  import { purchaseApi } from '../api/purchaseApi.js';
+  import { journalApi } from '../api/journalApi.js';
+  import { exchangeApi } from '../api/exchangeApi.js';
+  import { warehouseApi } from '../api/warehouseApi.js';
+  import { warehouseProductApi } from '../api/warehouseProductApi.js';
+  import { productApi } from '../api/productApi.js';
   import { subscriptionApi } from '../api/subscriptionApi.js';
   import { accountApi } from '../api/accountApi.js';
   import { accountTypeApi } from '../api/accountTypeApi.js';
@@ -11,10 +18,13 @@
   import { auth } from '../auth/authStore';
   import { canViewDashboard, canViewDashboardCard, canViewModule } from '../auth/permissions.js';
   import { getSubscriptionExpiryReminder } from '../utils/subscriptionExpiry.js';
+  import { app_version } from '../config.js';
   import DashboardBoard from '../components/DashboardBoard.svelte';
 
   $: _lang = $lang;
   $: enable_expiry_date = $settings_all.find((s) => s.key === 'enable_expiry_date')?.value == 1;
+  $: enable_sales_due_date = $settings_all.find((s) => s.key === 'enable_due_date')?.value == 1;
+  $: enable_purchase_due_date = $settings_all.find((s) => s.key === 'enable_purchase_bill_due_date')?.value == 1;
 
   // Every card is gated by the module that owns its data. A permission set with
   // no entry for a module keeps the legacy behaviour (visible), so a card only
@@ -72,6 +82,10 @@
   let marketRates = null;
   let marketAccounts = [];
   let marketAccountTypes = [];
+  let warehouseRows = [];
+  let recentTransactions = [];
+  let overdueBills = [];
+  let draftBills = [];
 
   let metricDataTotal = {
     sales: 0,
@@ -93,6 +107,8 @@
 
   let trendData = {
     labels: [],
+    sales: [],
+    purchases: [],
     benefit: [],
     expenses: [],
   };
@@ -138,7 +154,142 @@
     refreshSubscription();
     resolveTreasuryAccount();
     loadMarket();
+    loadSupplementalReports();
   });
+
+  /* The detailed report cards use the existing operational APIs. The stock
+     card is a current inventory valuation; SVSale has no dated warehouse
+     valuation history endpoint, so it does not invent a time series. */
+  async function loadSupplementalReports() {
+    const [salesResult, purchasesResult, journalsResult, exchangesResult, overdueSalesResult, overduePurchasesResult, draftSalesResult, draftPurchasesResult, warehousesResult, productsResult, stockResult] = await Promise.allSettled([
+      canViewSales ? saleApi.getAll({ status: 1, relations: 1, limit: 6, sort_by: 'invoice_date', sort_dir: 'desc' }) : Promise.resolve(null),
+      canViewPurchases ? purchaseApi.getAll({ status: 1, relations: 1, limit: 6, sort_by: 'bill_date', sort_dir: 'desc' }) : Promise.resolve(null),
+      canViewJournals ? journalApi.getAll({ status: 1, page: 1, limit: 6 }) : Promise.resolve(null),
+      canViewExchange ? exchangeApi.getAll({ status: 1, page: 1, limit: 6 }) : Promise.resolve(null),
+      canViewSales && enable_sales_due_date ? saleApi.getAll({ status: 1, relations: 1, invoice_status: 'confirmed', payment_status: 'unpaid', page: 1, limit: 100, sort_by: 'due_date', sort_dir: 'asc' }) : Promise.resolve(null),
+      canViewPurchases && enable_purchase_due_date ? purchaseApi.getAll({ status: 1, relations: 1, bill_status: 'confirmed', payment_status: 'unpaid', page: 1, limit: 100, sort_by: 'due_date', sort_dir: 'asc' }) : Promise.resolve(null),
+      canViewSales ? saleApi.getAll({ status: 1, relations: 1, invoice_status: 'draft', page: 1, limit: 100, sort_by: 'invoice_date', sort_dir: 'desc' }) : Promise.resolve(null),
+      canViewPurchases ? purchaseApi.getAll({ status: 1, relations: 1, bill_status: 'draft', page: 1, limit: 100, sort_by: 'bill_date', sort_dir: 'desc' }) : Promise.resolve(null),
+      canViewProducts ? warehouseApi.getAll({ status: 1 }) : Promise.resolve(null),
+      canViewProducts ? productApi.getAll({ status: 1 }) : Promise.resolve(null),
+      canViewProducts ? warehouseProductApi.getAll({ status: 1 }) : Promise.resolve(null),
+    ]);
+
+    const rows = (result) => result.status === 'fulfilled' ? (result.value?.data || []) : [];
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    overdueBills = [
+      ...rows(overdueSalesResult).map((item) => ({ ...item, kind: 'sale', href: `/dashboard/sales/${item.id}`, number: item.invoice_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', amount: Number(item.remaining_amount ?? item.total_amount) || 0 })),
+      ...rows(overduePurchasesResult).map((item) => ({ ...item, kind: 'purchase', href: `/dashboard/purchases/${item.id}`, number: item.bill_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', amount: Number(item.remaining_amount ?? item.total_amount) || 0 })),
+    ].filter((item) => item.due_date && new Date(item.due_date).getTime() < todayStart.getTime());
+    draftBills = [
+      ...rows(draftSalesResult).map((item) => ({ ...item, kind: 'sale', href: `/dashboard/sales/${item.id}`, number: item.invoice_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', date: item.invoice_date || item.created_at, amount: Number(item.total_amount) || 0 })),
+      ...rows(draftPurchasesResult).map((item) => ({ ...item, kind: 'purchase', href: `/dashboard/purchases/${item.id}`, number: item.bill_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', date: item.bill_date || item.created_at, amount: Number(item.total_amount) || 0 })),
+    ].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    const sales = rows(salesResult).map((item) => ({
+      id: item.id,
+      kind: 'sale',
+      label: t('Sales'),
+      number: item.invoice_number || `#${item.id}`,
+      party: item.account?.name || item.account_name || '—',
+      date: item.invoice_date || item.created_at,
+      amount: Number(item.total_amount) || 0,
+      currency: item.currency || defaultCurrency,
+      status: item.invoice_status,
+      href: `/dashboard/sales/${item.id}`,
+    }));
+    const purchases = rows(purchasesResult).map((item) => ({
+      id: item.id,
+      kind: 'purchase',
+      label: t('Purchases'),
+      number: item.bill_number || `#${item.id}`,
+      party: item.account?.name || item.account_name || '—',
+      date: item.bill_date || item.created_at,
+      amount: Number(item.total_amount) || 0,
+      currency: item.currency || defaultCurrency,
+      status: item.bill_status,
+      href: `/dashboard/purchases/${item.id}`,
+    }));
+    const journals = rows(journalsResult).map((item) => ({
+      id: item.id,
+      kind: 'journal',
+      label: t('Journals'),
+      number: item.journal_number || item.reference_number || `#${item.id}`,
+      party: item.account?.name || item.account_name || item.description || '—',
+      date: item.date || item.created_at,
+      amount: Number(item.amount ?? item.total_amount) || 0,
+      currency: item.currency || defaultCurrency,
+      status: item.status,
+      href: '/dashboard/journals/list',
+    }));
+    const exchanges = rows(exchangesResult).map((item) => ({
+      id: item.id,
+      kind: 'exchange',
+      label: t('Exchange'),
+      number: item.exchange_number || item.reference_number || `#${item.id}`,
+      party: item.account?.name || item.account_name || item.description || '—',
+      date: item.date || item.created_at,
+      amount: Number(item.amount ?? item.total_amount) || 0,
+      currency: item.currency || defaultCurrency,
+      status: item.status,
+      href: '/dashboard/exchanges/list',
+    }));
+    recentTransactions = [...sales, ...purchases, ...journals, ...exchanges]
+      .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
+      .slice(0, 6);
+
+    if (productsResult.status === 'fulfilled' && stockResult.status === 'fulfilled' && warehousesResult.status === 'fulfilled') {
+      const products = rows(productsResult);
+      const warehouses = rows(warehousesResult);
+      const stock = rows(stockResult);
+      const productById = new Map(products.map((item) => [Number(item.id), item]));
+      const warehouseById = new Map(warehouses.map((item) => [Number(item.id), item]));
+      const totals = new Map();
+      for (const item of stock) {
+        const product = productById.get(Number(item.product_id));
+        const warehouse = warehouseById.get(Number(item.warehouse_id));
+        if (!warehouse) continue;
+        const current = totals.get(Number(warehouse.id)) || { value: 0, quantity: 0, unpriced: false };
+        const quantity = Number(item.quantity) || 0;
+        current.quantity += quantity;
+        if (product) {
+          const amount = quantity * Math.abs(Number(product.buy_price) || 0);
+          const value = convertInventoryValue(amount, product.buy_currency || defaultCurrency);
+          if (value == null) current.unpriced = true;
+          else current.value += value;
+        }
+        totals.set(Number(warehouse.id), current);
+      }
+      const maxValue = Math.max(1, ...Array.from(totals.values(), (item) => item.unpriced ? 0 : item.value));
+      warehouseRows = warehouses
+        .filter((warehouse) => totals.has(Number(warehouse.id)))
+        .map((warehouse) => ({
+          id: warehouse.id,
+          name: warehouse.name,
+          value: totals.get(Number(warehouse.id)).unpriced ? null : totals.get(Number(warehouse.id)).value,
+          quantity: totals.get(Number(warehouse.id)).quantity,
+          share: Math.max(3, ((totals.get(Number(warehouse.id)).unpriced ? 0 : totals.get(Number(warehouse.id)).value) / maxValue) * 100),
+          href: `/dashboard/warehouse/${warehouse.id}`,
+        }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 6);
+    }
+  }
+
+  function convertInventoryValue(amount, currency) {
+    const source = String(currency || defaultCurrency).toUpperCase();
+    const destination = String(defaultCurrency || 'AFN').toUpperCase();
+    if (source === destination) return amount;
+    const afnPerUnit = {
+      AFN: 1,
+      USD: Number(marketRates?.usdToAfn),
+      EUR: Number(marketRates?.eurToAfn),
+    };
+    const sourceRate = afnPerUnit[source];
+    const destinationRate = afnPerUnit[destination];
+    if (!Number.isFinite(sourceRate) || sourceRate <= 0 || !Number.isFinite(destinationRate) || destinationRate <= 0) return null;
+    return amount * sourceRate / destinationRate;
+  }
 
   /*
    * Treasury balances come from the summary endpoint as a currency map with no
@@ -534,6 +685,8 @@
   function buildTrendDataFromSummary(start, end, trendRows) {
     const buckets = buildBuckets(start, end);
     const labels = [];
+    const salesValues = [];
+    const purchaseValues = [];
     const benefitValues = [];
     const expenseValues = [];
 
@@ -541,6 +694,8 @@
       const bucketStart = new Date(row.bucket);
       return {
         start: bucketStart,
+        sales: Number(row.sales) || 0,
+        purchases: Number(row.purchases) || 0,
         benefit: Number(row.benefit) || 0,
         expenses: Number(row.expenses) || 0,
       };
@@ -551,21 +706,29 @@
 
       let benefit = 0;
       let expenses = 0;
+      let sales = 0;
+      let purchases = 0;
 
       for (const row of parsedTrend) {
         if (isNaN(row.start.getTime())) continue;
         if (row.start >= bucket.start && row.start < bucket.end) {
           benefit += row.benefit;
           expenses += row.expenses;
+          sales += row.sales;
+          purchases += row.purchases;
         }
       }
 
       benefitValues.push(benefit);
       expenseValues.push(expenses);
+      salesValues.push(sales);
+      purchaseValues.push(purchases);
     });
 
     trendData = {
       labels,
+      sales: salesValues,
+      purchases: purchaseValues,
       benefit: benefitValues,
       expenses: expenseValues,
     };
@@ -839,8 +1002,6 @@
   $: negativeStockCount = lowStockProducts.filter(
     (product) => Number(product.totalQty) <= 0,
   ).length;
-  $: returnCount = metricDataCount.saleReturns + metricDataCount.purchaseReturns;
-
   $: alertTiles = buildAlertTiles();
 
   function buildAlertTiles() {
@@ -868,25 +1029,25 @@
       });
     }
 
-    if (canViewSales || canViewPurchases) {
+    if ((canViewSales && enable_sales_due_date) || (canViewPurchases && enable_purchase_due_date)) {
       tiles.push({
-        key: 'returns',
-        icon: 'bi-arrow-counterclockwise',
-        hue: 'returns',
-        label: t('Returns'),
-        count: fmt(returnCount),
-        note: `${fmt(metricDataCount.saleReturns)} ${t('Sales')} · ${fmt(metricDataCount.purchaseReturns)} ${t('Purchases')}`,
+        key: 'late',
+        icon: 'bi-hourglass-split',
+        hue: 'expiry',
+        label: t('Late Bills'),
+        count: fmt(overdueBills.length),
+        note: `${fmt(overdueBills.reduce((sum, bill) => sum + (Number(bill.amount) || 0), 0))} ${t(defaultCurrency)}`,
       });
     }
 
-    if (canViewProducts) {
+    if (canViewSales || canViewPurchases) {
       tiles.push({
-        key: 'wastes',
-        icon: 'bi-trash3',
+        key: 'drafts',
+        icon: 'bi-pencil-square',
         hue: 'wastes',
-        label: t('Wastes'),
-        count: fmt(metricDataCount.wastes),
-        note: `${fmt(metricDataTotal.wastes)} ${t(defaultCurrency)}`,
+        label: t('Drafts'),
+        count: fmt(draftBills.length),
+        note: t('Unfinished'),
       });
     }
 
@@ -930,45 +1091,34 @@
       };
     }
 
-    if (canViewSales || canViewPurchases) {
-      panels.returns = {
-        title: t('Returns'),
-        href: '/dashboard/stock/returns',
-        rows: [
-          {
-            title: t('Sale Returns'),
-            meta: `${fmt(metricDataCount.saleReturns)} ${t('Bills')}`,
-            value: `${fmt(metricDataTotal.saleReturns)} ${t(defaultCurrency)}`,
-            icon: 'bi-arrow-counterclockwise',
-            hue: 'warn',
-            href: '/dashboard/stock/returns',
-          },
-          {
-            title: t('Purchase Returns'),
-            meta: `${fmt(metricDataCount.purchaseReturns)} ${t('Bills')}`,
-            value: `${fmt(metricDataTotal.purchaseReturns)} ${t(defaultCurrency)}`,
-            icon: 'bi-arrow-repeat',
-            hue: 'muted',
-            href: '/dashboard/stock/returns',
-          },
-        ],
+    if ((canViewSales && enable_sales_due_date) || (canViewPurchases && enable_purchase_due_date)) {
+      panels.late = {
+        title: t('Late Bills'),
+        href: canViewSales ? '/dashboard/sales' : '/dashboard/purchases',
+        rows: overdueBills.slice(0, 6).map((bill) => ({
+          title: `${t(bill.kind === 'sale' ? 'Sales' : 'Purchases')} · ${bill.number}`,
+          meta: `${bill.party} · ${bill.due_date}`,
+          value: `${fmt(bill.amount)} ${t(bill.currency || defaultCurrency)}`,
+          negative: true,
+          icon: 'bi-hourglass-split',
+          hue: 'danger',
+          href: bill.href,
+        })),
       };
     }
 
-    if (canViewProducts) {
-      panels.wastes = {
-        title: t('Wastes'),
-        href: '/dashboard/wastes',
-        rows: [
-          {
-            title: t('Wastes'),
-            meta: `${fmt(metricDataCount.wastes)} ${t('Bills')}`,
-            value: `${fmt(metricDataTotal.wastes)} ${t(defaultCurrency)}`,
-            icon: 'bi-trash3',
-            hue: 'muted',
-            href: '/dashboard/wastes',
-          },
-        ],
+    if (canViewSales || canViewPurchases) {
+      panels.drafts = {
+        title: t('Drafts'),
+        href: canViewSales ? '/dashboard/sales' : '/dashboard/purchases',
+        rows: draftBills.slice(0, 6).map((bill) => ({
+          title: `${t(bill.kind === 'sale' ? 'Sales' : 'Purchases')} · ${bill.number}`,
+          meta: `${bill.party} · ${bill.date || '—'}`,
+          value: `${fmt(bill.amount)} ${t(bill.currency || defaultCurrency)}`,
+          icon: 'bi-pencil-square',
+          hue: 'muted',
+          href: bill.href,
+        })),
       };
     }
 
@@ -1158,10 +1308,15 @@
           }
         : null,
     },
+    inventory: {
+      warehouses: warehouseRows,
+    },
+    transactions: recentTransactions,
+    appVersion: app_version,
     reports:
       cardTrend || cardTopProducts
         ? {
-            summary: `${t('Financial Trend')} · ${t('Returns & Wastes')} · ${t('Top Products')}`,
+            summary: `${t('Financial Trend')} · ${t('Inventory & Returns')} · ${t('Top Products')} · ${t('Transactions')}`,
             returns: returnRows,
             topProducts: cardTopProducts ? topProductRows : [],
           }
