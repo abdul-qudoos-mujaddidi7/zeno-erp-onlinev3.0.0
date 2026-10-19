@@ -476,7 +476,7 @@
         <section class="zb-card matte" data-hue="emerald" aria-label={t('Top Debtors')}>
           <header class="zb-card-hd">
             <h3 class="zb-card-title" data-hue="emerald">
-              <span class="zb-card-ic"><i class="bi bi-person-lines-fill" aria-hidden="true"></i></span>
+              <span class="zb-card-ic" data-hue="emerald"><i class="bi bi-person-lines-fill" aria-hidden="true"></i></span>
               {t('Top Debtors')}
             </h3>
             <span class="zb-chip" data-hue="emerald">
@@ -514,7 +514,7 @@
           {:else}
           <div class="zb-accounts-grid">
             {#each data.market.accounts.items as account (account.label)}
-              <a class="zb-account" href={account.href} use:link title={account.label}>
+              <a class="zb-account" data-hue={account.hue} href={account.href} use:link title={account.label}>
                 <span class="zb-account-top">
                   <span class="zb-account-ic" data-hue={account.hue}>
                     <i class="bi {account.icon}" aria-hidden="true"></i>
@@ -2118,6 +2118,7 @@
   }
 
   .zb-card-ic[data-hue='orange'] { --c: #ea580c; }
+  .zb-card-ic[data-hue='emerald'] { --c: #059669; }
 
   .zb-chip {
     --c: #059669;
@@ -2126,12 +2127,13 @@
     height: 20px;
     padding: 0 8px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--c) 12%, var(--surface));
+    background: color-mix(in srgb, var(--c) 14%, var(--surface));
     color: color-mix(in srgb, var(--c) 90%, var(--ink));
     font-size: 10.5px;
     font-weight: 700;
     white-space: nowrap;
   }
+
 
   .zb-btn {
     display: inline-flex;
@@ -2298,19 +2300,33 @@
     gap: 7px;
     min-width: 0;
     min-height: 58px;
-    padding: 9px 10px;
+    padding: 8px 12px;
     background: var(--surface);
     transition: background 0.15s;
   }
 
   .zb-account:hover {
-    background: var(--surface-2);
+    background: var(--hover-bg);
+  }
+
+  .zb-account[data-hue='blue'] { --c: #3b6fe0; }
+  .zb-account[data-hue='teal'] { --c: #14917f; }
+  .zb-account[data-hue='cyan'] { --c: #2a8bb5; }
+  .zb-account[data-hue='violet'] { --c: #7457d6; }
+  .zb-account[data-hue='orange'] { --c: #c27a1e; }
+  .zb-account[data-hue='slate'] { --c: #5b6b86; }
+  .zb-account[data-hue='emerald'] { --c: #2f9e5b; }
+  .zb-account[data-hue='rose'] { --c: #c24d6a; }
+
+  .zb-account:hover .zb-account-ic {
+    transform: scale(1.08);
+    box-shadow: 0 6px 14px -6px var(--c);
   }
 
   .zb-account-top {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
   }
 
   .zb-account-ic {
@@ -2318,19 +2334,23 @@
     display: grid;
     flex-shrink: 0;
     place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 9px;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
     background: color-mix(in srgb, var(--c) 12%, var(--surface));
     color: var(--c);
-    font-size: 15px;
+    font-size: 17px;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
   }
 
-  .zb-account-ic[data-hue='emerald'] { --c: #059669; }
-  .zb-account-ic[data-hue='orange'] { --c: #ea580c; }
-  .zb-account-ic[data-hue='violet'] { --c: #7c3aed; }
-  .zb-account-ic[data-hue='cyan'] { --c: #0891b2; }
-  .zb-account-ic[data-hue='slate'] { --c: #475569; }
+  .zb-account-ic[data-hue='blue'] { --c: #3b6fe0; }
+  .zb-account-ic[data-hue='teal'] { --c: #14917f; }
+  .zb-account-ic[data-hue='rose'] { --c: #c24d6a; }
+  .zb-account-ic[data-hue='emerald'] { --c: #2f9e5b; }
+  .zb-account-ic[data-hue='orange'] { --c: #c27a1e; }
+  .zb-account-ic[data-hue='violet'] { --c: #7457d6; }
+  .zb-account-ic[data-hue='cyan'] { --c: #2a8bb5; }
+  .zb-account-ic[data-hue='slate'] { --c: #5b6b86; }
 
   .zb-account-copy {
     display: flex;
@@ -2343,7 +2363,7 @@
   .zb-account-label {
     overflow: hidden;
     color: var(--muted);
-    font-size: 11px;
+    font-size: 11.5px;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
@@ -2357,7 +2377,7 @@
   .zb-account-value b {
     color: var(--ink);
     font-family: var(--num);
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
   }
@@ -2388,13 +2408,17 @@
     height: 100%;
     border-radius: 3px;
     background: var(--c);
+    opacity: 0.7;
   }
 
-  .zb-account-bar > span[data-hue='emerald'] { --c: #059669; }
-  .zb-account-bar > span[data-hue='orange'] { --c: #ea580c; }
-  .zb-account-bar > span[data-hue='violet'] { --c: #7c3aed; }
-  .zb-account-bar > span[data-hue='cyan'] { --c: #0891b2; }
-  .zb-account-bar > span[data-hue='slate'] { --c: #475569; }
+  .zb-account-bar > span[data-hue='blue'] { --c: #3b6fe0; }
+  .zb-account-bar > span[data-hue='teal'] { --c: #14917f; }
+  .zb-account-bar > span[data-hue='cyan'] { --c: #2a8bb5; }
+  .zb-account-bar > span[data-hue='violet'] { --c: #7457d6; }
+  .zb-account-bar > span[data-hue='orange'] { --c: #c27a1e; }
+  .zb-account-bar > span[data-hue='slate'] { --c: #5b6b86; }
+  .zb-account-bar > span[data-hue='emerald'] { --c: #2f9e5b; }
+  .zb-account-bar > span[data-hue='rose'] { --c: #c24d6a; }
 
   /* ---------- exchange rates ---------- */
   .zb-fx-time {
@@ -3306,7 +3330,7 @@
     }
 
     .zb-accounts-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .zb-chart-grid,
@@ -3352,10 +3376,10 @@
   .zb .zb-kpi-row { margin: 0; }
   .zb .zb-kpi-value { color: var(--ink); font-size: 17px; font-weight: 800; line-height: 1.35; }
   .zb .zb-kpi-unit { color: var(--muted); font-size: 10.5px; }
-  .zb .zb-kpi-sub { flex-wrap: nowrap; gap: 5px; color: var(--muted); font-size: 11px; }
+  .zb .zb-kpi-sub { flex-wrap: nowrap; gap: 4px; min-width: 0; overflow: hidden; color: var(--muted); font-size: 10.5px; }
   .zb .zb-kpi-chip { min-height: 0; padding: 0; border-radius: 0; background: transparent; }
-  .zb .zb-kpi-chip + .zb-kpi-chip::before { content: ''; height: 10px; margin-inline-end: 5px; border-inline-start: 1px solid var(--border); }
-  .zb .zb-kpi-sub b { color: var(--ink); font-size: 11px; }
+  .zb .zb-kpi-chip + .zb-kpi-chip::before { content: ''; height: 10px; margin-inline-end: 4px; border-inline-start: 1px solid var(--border); }
+  .zb .zb-kpi-sub b { color: var(--ink); font-size: 10.5px; }
 
   .zb .zb-qa-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
   .zb .zb-qa {

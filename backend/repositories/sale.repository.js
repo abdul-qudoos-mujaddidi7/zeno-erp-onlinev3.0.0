@@ -175,6 +175,7 @@ async function findAll(
     dateTo,
     invoiceStatus,
     paymentStatus,
+    dueBefore,
     skipCount = false,
     pagination = null,
     sortBy = 'created_at',
@@ -243,6 +244,11 @@ async function findAll(
     conditions.push('COALESCE(remaining, 0) <= 0');
   } else if (paymentStatus === 'unpaid') {
     conditions.push('COALESCE(remaining, 0) > 0');
+  }
+
+  if (dueBefore) {
+    conditions.push('due_date IS NOT NULL AND due_date <= ?');
+    values.push(dueBefore);
   }
 
   return paginateSelect(executor, {

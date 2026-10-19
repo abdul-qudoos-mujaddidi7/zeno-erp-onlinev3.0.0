@@ -59,6 +59,7 @@ function collapseCurrencyRows(rows, {
 } = {}) {
   let total = 0;
   let count = 0;
+  let paidCount = 0;
   const byCurrency = {};
 
   for (const row of rows || []) {
@@ -70,11 +71,13 @@ function collapseCurrencyRows(rows, {
       (byCurrency[currency] || 0) + amount;
     total += amount;
     count += rowCount;
+    paidCount += Number(row.paid_cnt) || 0;
   }
 
   return {
     total,
     count,
+    paid_count: paidCount,
     by_currency: byCurrency,
   };
 }
@@ -314,6 +317,8 @@ async function buildMetricsPayload({
         rateMap,
       ),
       count: sales.count,
+      cashCount: sales.paid_count,
+      creditCount: sales.count - sales.paid_count,
     },
     purchases: {
       value: sumConverted(
@@ -322,6 +327,8 @@ async function buildMetricsPayload({
         rateMap,
       ),
       count: purchases.count,
+      cashCount: purchases.paid_count,
+      creditCount: purchases.count - purchases.paid_count,
     },
     benefit: {
       value: sumConverted(
@@ -337,7 +344,7 @@ async function buildMetricsPayload({
         defaultCurrency,
         rateMap,
       ),
-      count: 0,
+      count: expenses.count,
     },
     saleReturns: {
       value: sumConverted(

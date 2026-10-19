@@ -26,6 +26,7 @@ async function sumSales(executor, { orgId, dateFrom, dateTo }) {
       SELECT
         currency,
         COUNT(*) AS cnt,
+        SUM(CASE WHEN COALESCE(remaining, 0) <= 0 THEN 1 ELSE 0 END) AS paid_cnt,
         SUM(COALESCE(total_amount, 0)) AS total,
         SUM(
           CASE
@@ -53,6 +54,7 @@ async function sumPurchases(executor, { orgId, dateFrom, dateTo }) {
       SELECT
         currency,
         COUNT(*) AS cnt,
+        SUM(CASE WHEN COALESCE(remaining, 0) <= 0 THEN 1 ELSE 0 END) AS paid_cnt,
         SUM(COALESCE(total_amount, 0)) AS total
       FROM purchases
       WHERE org_id = ?
@@ -142,6 +144,7 @@ async function sumExpenses(
     `
       SELECT
         currency,
+        COUNT(*) AS cnt,
         SUM(
           CASE
             WHEN first_entry_account = ?

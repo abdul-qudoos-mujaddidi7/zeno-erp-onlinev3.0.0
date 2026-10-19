@@ -18,6 +18,7 @@
   import { auth } from '../auth/authStore';
   import { canViewDashboard, canViewDashboardCard, canViewModule } from '../auth/permissions.js';
   import { getSubscriptionExpiryReminder } from '../utils/subscriptionExpiry.js';
+  import { toAccountingDateString } from '../utils/accountingDate.js';
   import { app_version } from '../config.js';
   import DashboardBoard from '../components/DashboardBoard.svelte';
 
@@ -99,7 +100,12 @@
 
   let metricDataCount = {
     sales: 0,
+    salesCash: 0,
+    salesCredit: 0,
     purchases: 0,
+    purchasesCash: 0,
+    purchasesCredit: 0,
+    expenses: 0,
     saleReturns: 0,
     purchaseReturns: 0,
     wastes: 0,
@@ -161,13 +167,17 @@
      card is a current inventory valuation; SVSale has no dated warehouse
      valuation history endpoint, so it does not invent a time series. */
   async function loadSupplementalReports() {
-    const [salesResult, purchasesResult, journalsResult, exchangesResult, overdueSalesResult, overduePurchasesResult, draftSalesResult, draftPurchasesResult, warehousesResult, productsResult, stockResult] = await Promise.allSettled([
+    /* Business-calendar cutoff for a bill that is seven days past due. */
+    const lateCutoff = new Date(`${toAccountingDateString()}T00:00:00Z`);
+    lateCutoff.setUTCDate(lateCutoff.getUTCDate() - 7);
+    const lateCutoffDate = lateCutoff.toISOString().slice(0, 10);
+
+    const [salesResult, purchasesResult, journalsResult, exchangesResult, overdueSalesResult, draftSalesResult, draftPurchasesResult, warehousesResult, productsResult, stockResult] = await Promise.allSettled([
       canViewSales ? saleApi.getAll({ status: 1, relations: 1, limit: 6, sort_by: 'invoice_date', sort_dir: 'desc' }) : Promise.resolve(null),
       canViewPurchases ? purchaseApi.getAll({ status: 1, relations: 1, limit: 6, sort_by: 'bill_date', sort_dir: 'desc' }) : Promise.resolve(null),
       canViewJournals ? journalApi.getAll({ status: 1, page: 1, limit: 6 }) : Promise.resolve(null),
       canViewExchange ? exchangeApi.getAll({ status: 1, page: 1, limit: 6 }) : Promise.resolve(null),
-      canViewSales && enable_sales_due_date ? saleApi.getAll({ status: 1, relations: 1, invoice_status: 'confirmed', payment_status: 'unpaid', page: 1, limit: 100, sort_by: 'due_date', sort_dir: 'asc' }) : Promise.resolve(null),
-      canViewPurchases && enable_purchase_due_date ? purchaseApi.getAll({ status: 1, relations: 1, bill_status: 'confirmed', payment_status: 'unpaid', page: 1, limit: 100, sort_by: 'due_date', sort_dir: 'asc' }) : Promise.resolve(null),
+      canViewSales && enable_sales_due_date ? saleApi.getAll({ status: 1, relations: 1, invoice_status: 'confirmed', payment_status: 'unpaid', due_before: lateCutoffDate, page: 1, limit: 100, sort_by: 'due_date', sort_dir: 'asc' }) : Promise.resolve(null),
       canViewSales ? saleApi.getAll({ status: 1, relations: 1, invoice_status: 'draft', page: 1, limit: 100, sort_by: 'invoice_date', sort_dir: 'desc' }) : Promise.resolve(null),
       canViewPurchases ? purchaseApi.getAll({ status: 1, relations: 1, bill_status: 'draft', page: 1, limit: 100, sort_by: 'bill_date', sort_dir: 'desc' }) : Promise.resolve(null),
       canViewProducts ? warehouseApi.getAll({ status: 1 }) : Promise.resolve(null),
@@ -176,12 +186,25 @@
     ]);
 
     const rows = (result) => result.status === 'fulfilled' ? (result.value?.data || []) : [];
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    overdueBills = [
-      ...rows(overdueSalesResult).map((item) => ({ ...item, kind: 'sale', href: `/dashboard/sales/${item.id}`, number: item.invoice_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', amount: Number(item.remaining_amount ?? item.total_amount) || 0 })),
-      ...rows(overduePurchasesResult).map((item) => ({ ...item, kind: 'purchase', href: `/dashboard/purchases/${item.id}`, number: item.bill_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', amount: Number(item.remaining_amount ?? item.total_amount) || 0 })),
-    ].filter((item) => item.due_date && new Date(item.due_date).getTime() < todayStart.getTime());
+    /*
+     * The late-bills tab is a sales collection list: only confirmed sale
+     * invoices that are still unpaid and whose due date passed at least seven
+     * days ago. Purchases are deliberately excluded.
+     */
+    overdueBills = rows(overdueSalesResult)
+      .map((item) => ({
+        ...item,
+        kind: 'sale',
+        href: `/dashboard/sales/${item.id}`,
+        number: item.invoice_number || `#${item.id}`,
+        party: item.account?.name || item.account_name || '—',
+        amount: Number(item.remaining_amount ?? item.total_amount) || 0,
+      }))
+      .filter(
+        (item) =>
+          item.due_date &&
+          String(item.due_date).slice(0, 10) <= lateCutoffDate,
+      );
     draftBills = [
       ...rows(draftSalesResult).map((item) => ({ ...item, kind: 'sale', href: `/dashboard/sales/${item.id}`, number: item.invoice_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', date: item.invoice_date || item.created_at, amount: Number(item.total_amount) || 0 })),
       ...rows(draftPurchasesResult).map((item) => ({ ...item, kind: 'purchase', href: `/dashboard/purchases/${item.id}`, number: item.bill_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', date: item.bill_date || item.created_at, amount: Number(item.total_amount) || 0 })),
@@ -484,7 +507,10 @@
     expiringProducts = snapshot.expiringProducts || [];
     expiringTotal = Number(snapshot.expiringTotal) || 0;
     metricDataTotal = snapshot.metricDataTotal || metricDataTotal;
-    metricDataCount = snapshot.metricDataCount || metricDataCount;
+    metricDataCount = {
+      ...metricDataCount,
+      ...(snapshot.metricDataCount || {}),
+    };
     plainTopProducts = snapshot.plainTopProducts || [];
     topDebtors = snapshot.topDebtors || topDebtors;
     trendData = snapshot.trendData || trendData;
@@ -673,7 +699,12 @@
 
     metricDataCount = {
       sales: Number(metrics.sales?.count) || 0,
+      salesCash: Number(metrics.sales?.cashCount) || 0,
+      salesCredit: Number(metrics.sales?.creditCount) || 0,
       purchases: Number(metrics.purchases?.count) || 0,
+      purchasesCash: Number(metrics.purchases?.cashCount) || 0,
+      purchasesCredit: Number(metrics.purchases?.creditCount) || 0,
+      expenses: Number(metrics.expenses?.count) || 0,
       saleReturns: Number(metrics.saleReturns?.count) || 0,
       purchaseReturns: Number(metrics.purchaseReturns?.count) || 0,
       wastes: Number(metrics.wastes?.count) || 0,
@@ -888,6 +919,7 @@
    * dependency graph honest.
    */
   $: kpiCards = buildKpiCards({
+    lang: _lang,
     metricDataTotal,
     metricDataCount,
     defaultCurrency,
@@ -904,6 +936,7 @@
   });
 
   function buildKpiCards({
+    lang,
     metricDataTotal,
     metricDataCount,
     defaultCurrency,
@@ -919,6 +952,8 @@
     cardNetProfit,
   }) {
     const cards = [];
+    /* Persian and Pashto keep the noun singular after a number. */
+    const billUnit = lang === 'en' ? t('Bills') : t('Bill');
 
     if (canViewSales) {
       cards.push({
@@ -931,7 +966,11 @@
         href: '/dashboard/sales',
         sub: [
           { text: fmt(metricDataCount.sales), bold: true },
-          { text: t('Bills') },
+          { text: billUnit },
+          { text: fmt(metricDataCount.salesCash), bold: true },
+          { text: t('Cash') },
+          { text: fmt(metricDataCount.salesCredit), bold: true },
+          { text: t('On Credit') },
         ],
       });
     }
@@ -947,7 +986,11 @@
         href: '/dashboard/purchases',
         sub: [
           { text: fmt(metricDataCount.purchases), bold: true },
-          { text: t('Bills') },
+          { text: billUnit },
+          { text: fmt(metricDataCount.purchasesCash), bold: true },
+          { text: t('Cash') },
+          { text: fmt(metricDataCount.purchasesCredit), bold: true },
+          { text: t('On Credit') },
         ],
       });
     }
@@ -962,8 +1005,9 @@
         hue: 'expense',
         href: '/dashboard/journals/list',
         sub: [
-          { text: t('Total Benefit Amount') },
-          { text: fmt(benefitTotal), bold: true },
+          { text: fmt(metricDataCount.expenses), bold: true },
+          { text: t('Voucher') },
+          ...(metricDataCount.expenses ? [] : [{ text: t('No Expense') }]),
         ],
       });
     }
@@ -978,10 +1022,10 @@
         hue: 'profit',
         href: '/dashboard/reports',
         sub: [
-          { text: `${fmt(Math.round(marginPercent * 10) / 10)}%`, bold: true },
           { text: t('Margin') },
+          { text: `${fmt(Math.round(marginPercent * 10) / 10)}%`, bold: true },
           { text: fmt(metricDataCount.sales), bold: true },
-          { text: t('Bills') },
+          { text: billUnit },
         ],
       });
     }
@@ -1114,7 +1158,7 @@
       });
     }
 
-    if ((canViewSales && enable_sales_due_date) || (canViewPurchases && enable_purchase_due_date)) {
+    if (canViewSales && enable_sales_due_date) {
       tiles.push({
         key: 'late',
         icon: 'bi-hourglass-split',
@@ -1212,12 +1256,12 @@
       };
     }
 
-    if ((canViewSales && enable_sales_due_date) || (canViewPurchases && enable_purchase_due_date)) {
+    if (canViewSales && enable_sales_due_date) {
       panels.late = {
         title: t('Late Bills'),
-        href: canViewSales ? '/dashboard/sales' : '/dashboard/purchases',
+        href: '/dashboard/sales',
         rows: overdueBills.slice(0, 6).map((bill) => ({
-          title: `${t(bill.kind === 'sale' ? 'Sales' : 'Purchases')} · ${bill.number}`,
+          title: `${t('Sales')} · ${bill.number}`,
           meta: `${bill.party} · ${bill.due_date}`,
           value: `${fmt(bill.amount)} ${t(bill.currency || defaultCurrency)}`,
           negative: true,
@@ -1270,6 +1314,26 @@
   }
 
   const ACCOUNT_HUES = ['emerald', 'blue', 'orange', 'violet', 'cyan', 'slate'];
+  const ACCOUNT_TYPE_ORDER = ['CUSTOMER', 'COMPANY', 'BOTH', 'EMPLOYEE', 'VISITOR', 'SHAREHOLDER', 'ASSET', 'BANK', 'LOAN', 'EXPENSE'];
+
+  function accountIconForType(type) {
+    const icons = {
+      CUSTOMER: 'bi-people-fill', COMPANY: 'bi-truck', BOTH: 'bi-arrow-left-right',
+      EMPLOYEE: 'bi-person-vcard-fill', VISITOR: 'bi-person-walking',
+      SHAREHOLDER: 'bi-people-fill', BANK: 'bi-bank', ASSET: 'bi-cash-stack',
+      INCOME: 'bi-cash-coin', LOAN: 'bi-file-earmark-text-fill', EXPENSE: 'bi-receipt-cutoff',
+    };
+    return icons[String(type.code || '').toUpperCase()] || accountIconFor(`${type.code || ''} ${type.name || ''} ${type.name_fa || ''}`);
+  }
+
+  function accountHueForType(type, index) {
+    const hues = {
+      CUSTOMER: 'blue', COMPANY: 'teal', BOTH: 'cyan', EMPLOYEE: 'violet',
+      VISITOR: 'orange', SHAREHOLDER: 'slate', BANK: 'cyan', ASSET: 'emerald',
+      INCOME: 'rose', LOAN: 'rose', EXPENSE: 'orange',
+    };
+    return hues[String(type.code || '').toUpperCase()] || ACCOUNT_HUES[index % ACCOUNT_HUES.length];
+  }
 
   function accountIconFor(name) {
     const label = String(name || '').toLowerCase();
@@ -1301,14 +1365,23 @@
     marketAccountTypes,
     language,
   }) {
-    if (!canViewAccounts || !marketAccounts.length) return [];
+    if (!canViewAccounts || !marketAccountTypes.length) return [];
 
     const counts = new Map();
-    const recent = Date.now() - 7 * 86400000;
+    const recent = new Date();
+    recent.setDate(1);
+    recent.setHours(0, 0, 0, 0);
+
+    for (const type of marketAccountTypes) {
+      if (String(type.code || '').toUpperCase() === 'INCOME') continue;
+      if (type.id != null) counts.set(type.id, { count: 0, added: 0 });
+    }
 
     for (const account of marketAccounts) {
       const typeId = account.account_type_id;
       if (typeId == null) continue;
+      const accountType = marketAccountTypes.find((item) => Number(item.id) === Number(typeId));
+      if (String(accountType?.code || '').toUpperCase() === 'INCOME') continue;
 
       const entry = counts.get(typeId) || { count: 0, added: 0 };
       entry.count += 1;
@@ -1322,8 +1395,13 @@
     const max = Math.max(1, ...Array.from(counts.values(), (entry) => entry.count));
 
     return Array.from(counts.entries())
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 6)
+      .sort((a, b) => {
+        const typeA = marketAccountTypes.find((item) => Number(item.id) === Number(a[0])) || {};
+        const typeB = marketAccountTypes.find((item) => Number(item.id) === Number(b[0])) || {};
+        const orderA = ACCOUNT_TYPE_ORDER.indexOf(String(typeA.code || '').toUpperCase());
+        const orderB = ACCOUNT_TYPE_ORDER.indexOf(String(typeB.code || '').toUpperCase());
+        return (orderA < 0 ? ACCOUNT_TYPE_ORDER.length : orderA) - (orderB < 0 ? ACCOUNT_TYPE_ORDER.length : orderB);
+      })
       .map(([typeId, entry], index) => {
         const type = marketAccountTypes.find((item) => Number(item.id) === Number(typeId)) || {};
         const label = accountTypeLabel(type, language) || `${t('Accounts')} ${typeId}`;
@@ -1333,8 +1411,8 @@
           count: fmt(entry.count),
           added: entry.added,
           share: Math.max(6, (entry.count / max) * 100),
-          icon: accountIconFor(`${type.code || ''} ${type.name || ''} ${type.name_fa || ''}`),
-          hue: ACCOUNT_HUES[index % ACCOUNT_HUES.length],
+          icon: accountIconForType(type),
+          hue: accountHueForType(type, index),
           href: `/dashboard/accounts/list?type=${typeId}`,
         };
       });

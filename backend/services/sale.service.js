@@ -414,6 +414,7 @@ async function listSales({
       dateTo: filters.date_to,
       invoiceStatus: filters.invoice_status,
       paymentStatus: filters.payment_status,
+      dueBefore: filters.due_before,
       skipCount: Number(filters.skip_count) === 1,
       pagination,
       sortBy: filters.sort_by,

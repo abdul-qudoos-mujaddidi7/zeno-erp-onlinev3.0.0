@@ -259,6 +259,11 @@ const saleListQuerySchema = z.object({
     .enum(['paid', 'unpaid'])
     .optional(),
 
+  due_before: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'due_before must be YYYY-MM-DD')
+    .optional(),
+
   ids: z
     .string()
     .trim()

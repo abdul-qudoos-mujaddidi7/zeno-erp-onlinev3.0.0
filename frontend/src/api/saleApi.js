@@ -19,6 +19,7 @@ export const saleApi = {
     sort_dir,
     invoice_status,
     payment_status,
+    due_before,
     ids = '',
   } = {}) {
     const params = new URLSearchParams();
@@ -57,6 +58,10 @@ export const saleApi = {
 
     if (payment_status && payment_status !== 'all') {
       params.set('payment_status', String(payment_status));
+    }
+
+    if (due_before) {
+      params.set('due_before', String(due_before));
     }
 
     if (skip_count) {
