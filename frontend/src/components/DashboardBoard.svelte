@@ -1414,9 +1414,9 @@
   }
 
   .zb-qa:hover {
-    transform: translateY(-3px);
-    border-color: color-mix(in srgb, var(--g) 42%, #dce5f0);
-    box-shadow: 0 12px 24px -16px var(--g);
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--g) 40%, transparent);
+    box-shadow: 0 10px 22px -14px var(--g);
   }
 
   .zb-qa[data-hue='sale'] {
@@ -3168,9 +3168,10 @@
     position: static;
     align-items: center;
     gap: 10px;
-    width: 100%;
-    height: auto;
-    min-height: 0;
+    box-sizing: border-box;
+    width: 244px;
+    height: 75.52px;
+    min-height: 75.52px;
     padding: 11px 13px;
     border: 1px solid color-mix(in srgb, var(--c) 14%, transparent);
     border-radius: 14px;
@@ -3196,20 +3197,37 @@
   .zb .zb-kpi-chip + .zb-kpi-chip::before { content: ''; height: 10px; margin-inline-end: 5px; border-inline-start: 1px solid var(--border); }
   .zb .zb-kpi-sub b { color: var(--ink); font-size: 11px; }
 
-  .zb .zb-qa-grid { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 8px; }
+  .zb .zb-qa-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
   .zb .zb-qa {
     --g: #4f46e5;
-    width: auto;
-    height: auto;
-    min-height: 50px;
-    padding: 8px 14px 8px 10px;
+    justify-content: flex-start;
+    box-sizing: border-box;
+    width: 160px;
+    height: 65.33px;
+    min-height: 65.33px;
+    padding: 8px 10px 8px 14px;
     border: 1px solid var(--border-soft);
     border-radius: 14px;
     background: var(--surface);
     box-shadow: 0 1px 2px rgba(11,21,48,.04);
     color: var(--ink);
-    font-size: 12.5px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: .1px;
     text-align: start;
+    transition: border-color .18s, box-shadow .18s, transform .18s;
+  }
+  .zb .zb-qa:hover {
+    background: var(--surface);
+    border-color: color-mix(in srgb, var(--g) 40%, transparent);
+    box-shadow: 0 10px 22px -14px var(--g);
+    transform: translateY(-2px);
+  }
+  .zb .zb-qa > span:last-child {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: .1px;
+    text-shadow: 0 1px 1px rgba(0,0,0,.12);
   }
   .zb .zb-qa[data-hue='sale'] { --g: #4f46e5; border-color: var(--border-soft); background: var(--surface); color: var(--ink); }
   .zb .zb-qa[data-hue='receive'] { --g: #059669; }
@@ -3218,15 +3236,15 @@
   .zb .zb-qa[data-hue='expense'] { --g: #334155; }
   .zb .zb-qa[data-hue='exchange'] { --g: #0891b2; }
   .zb .zb-qa-ic { width: 34px; height: 34px; border-radius: 11px; background: color-mix(in srgb, var(--g) 13%, var(--surface)); color: var(--g); }
-
+  .zb .zb-qa-ic i { font-size: 19px; }
   @media (max-width: 767px) {
-    .zb .zb-kpi { min-height: 0; padding: 11px 13px; border-radius: 14px; }
+    .zb .zb-kpi { width: 100%; height: 75.52px; min-height: 75.52px; padding: 11px 13px; border-radius: 14px; }
     .zb .zb-kpi-ic { position: static; inset: auto; width: 34px; height: 34px; border-radius: 10px; }
     .zb .zb-kpi-value { font-size: 17px; }
     .zb .zb-kpi-label { font-size: 11.5px; }
     .zb .zb-kpi-unit { font-size: 10.5px; }
     .zb .zb-kpi-chip { min-height: 0; padding: 0; }
-    .zb .zb-qa { flex-direction: row; min-height: 50px; padding: 8px 10px; font-size: 12.5px; text-align: start; }
+    .zb .zb-qa { flex-direction: row; min-height: 48px; padding: 8px 10px 8px 14px; font-size: 13px; text-align: start; }
     .zb .zb-qa-ic { width: 34px; height: 34px; }
   }
 </style>
