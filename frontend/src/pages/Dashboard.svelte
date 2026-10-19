@@ -1192,14 +1192,23 @@
       panels.stock = {
         title: t('Low Stock'),
         href: '/dashboard/product-alerts?tab=quantity',
-        rows: lowStockProducts.slice(0, 6).map((product) => ({
-          title: product.name,
-          value: fmt(product.totalQty),
-          negative: Number(product.totalQty) <= 0,
-          lead: '−',
-          hue: Number(product.totalQty) <= 0 ? 'danger' : 'warn',
-          href: '/dashboard/product-alerts?tab=quantity',
-        })),
+        rows: lowStockProducts.slice(0, 6).map((product) => {
+          const negative = Number(product.totalQty) < 0;
+          return {
+            title: product.name,
+            meta: negative
+              ? (_lang === 'en' ? 'Negative stock' : _lang === 'ps' ? 'منفي ذخیره' : 'موجودی منفی')
+              : t('Low Stock'),
+            value: fmt(product.totalQty),
+            negative,
+            lead: '−',
+            hue: 'danger',
+            kind: 'stock',
+            actionLabel: _lang === 'en' ? 'Order' : _lang === 'ps' ? 'امر' : 'سفارش',
+            actionHref: '/dashboard/purchase-form/0',
+            href: '/dashboard/product-alerts?tab=quantity',
+          };
+        }),
       };
     }
 

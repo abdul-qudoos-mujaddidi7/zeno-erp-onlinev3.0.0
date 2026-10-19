@@ -422,7 +422,7 @@
                   <span class="zb-empty">{t('No Data')}</span>
                 {:else}
                   {#each filteredPanelRows as row, index (index)}
-                    <div class="zb-panel-row" class:draft={row.actionLabel} role="listitem">
+                    <div class="zb-panel-row" class:draft={row.hue === 'draft-sale' || row.hue === 'draft-purchase'} class:stock={row.kind === 'stock'} role="listitem">
                       <span class="zb-panel-lead" class:text={row.lead} data-hue={row.hue} aria-hidden="true">
                         {#if row.lead}{row.lead}{:else}<i class="bi {row.icon}"></i>{/if}
                       </span>
@@ -435,7 +435,7 @@
                         <a class="zb-panel-open" href={activePanel.href} use:link title={t('Open')} aria-label={`${t('Open')}: ${activePanel.title}`}>
                           <i class="bi bi-box-arrow-up-left" aria-hidden="true"></i>
                         </a>
-                        <a class="zb-panel-review" href={row.href || activePanel.href} use:link aria-label={`${row.actionLabel || t('Review')}: ${row.title}`}>{row.actionLabel || t('Review')}</a>
+                        <a class="zb-panel-review" href={row.actionHref || row.href || activePanel.href} use:link aria-label={`${row.actionLabel || t('Review')}: ${row.title}`}>{row.actionLabel || t('Review')}</a>
                       </span>
                     </div>
                   {/each}
@@ -1896,6 +1896,10 @@
   }
 
   .zb-panel-row.draft:hover {
+    background: transparent;
+  }
+
+  .zb-panel-row.stock:hover {
     background: transparent;
   }
 
