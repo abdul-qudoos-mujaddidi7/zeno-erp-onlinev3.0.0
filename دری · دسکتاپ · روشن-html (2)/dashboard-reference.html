@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zeno · داشبورد (Reference)</title>
+<link rel="stylesheet" href="zeno-tokens.css">
+</head>
+<body>
+<div class="z-app">
+
+  <!-- ===== Sidebar ===== -->
+  <aside class="z-sidebar">
+    <div class="z-brand"><span class="z-brand-logo">Z</span><span><div class="z-brand-name">ZENO</div><div class="z-brand-ver">ERP · v3.2.6</div></span></div>
+    <button class="z-pos"><span class="ms f">point_of_sale</span>POS</button>
+    <nav class="z-nav">
+      <div class="z-nav-group">اصلی</div>
+      <a class="z-nav-item is-active" href="#"><span class="ms f">space_dashboard</span>داشبورد</a>
+      <div class="z-nav-group">تجارت</div>
+      <a class="z-nav-item" href="#"><span class="ms">shopping_cart</span>فروش‌ها<span class="z-badge">2</span></a>
+      <a class="z-nav-item" href="#"><span class="ms">shopping_bag</span>خریدها<span class="z-badge">1</span></a>
+      <a class="z-nav-item" href="#"><span class="ms">inventory_2</span>ادویه‌جات</a>
+      <div class="z-nav-group">مالی</div>
+      <a class="z-nav-item" href="#"><span class="ms">group</span>حساب‌ها</a>
+      <a class="z-nav-item" href="#"><span class="ms">menu_book</span>روزنامچه</a>
+      <a class="z-nav-item" href="#"><span class="ms">currency_exchange</span>صرافی</a>
+      <div class="z-nav-group">مدیریت</div>
+      <a class="z-nav-item" href="#"><span class="ms">bar_chart_4_bars</span>گزارشات</a>
+      <a class="z-nav-item" href="#"><span class="ms">settings</span>تنظیمات</a>
+    </nav>
+    <div class="z-profile"><span class="z-avatar">H</span><span style="flex:1;line-height:1.25"><b style="font-size:13px">hewad</b><br><span style="font-size:10.5px;color:#8A96B8">مدیر سیستم</span></span><span class="z-badge danger">5</span></div>
+  </aside>
+
+  <!-- ===== Main ===== -->
+  <main class="z-main">
+    <div class="z-wrap">
+
+      <!-- KPI -->
+      <section>
+        <div class="z-sec-hd"><h2 class="z-sec-title">عملیات امروز</h2>
+          <div class="z-clock" role="timer"><span class="ms">schedule</span><b class="z-clock-time" dir="ltr">09:19</b><i></i><span class="z-clock-date">یکشنبه، 26 میزان 1405</span></div></div>
+        <div class="z-kpi-grid">
+          <article class="z-kpi" data-hue="sale"><span class="z-kpi-tile"><span class="ms f">shopping_cart</span></span><div class="z-kpi-body"><span class="z-kpi-label">فروش امروز</span><span class="z-kpi-row"><span class="z-kpi-value" dir="ltr">7,940</span><span class="z-kpi-unit">افغانی</span></span><span class="z-kpi-sub"><b>24</b> بل<i></i><b>18</b> نقد<i></i><b>6</b> قرض</span></div></article>
+          <article class="z-kpi" data-hue="purchase"><span class="z-kpi-tile"><span class="ms f">shopping_bag</span></span><div class="z-kpi-body"><span class="z-kpi-label">خرید امروز</span><span class="z-kpi-row"><span class="z-kpi-value" dir="ltr">5,060</span><span class="z-kpi-unit">افغانی</span></span><span class="z-kpi-sub"><b>2</b> بل<i></i><b>1</b> نقد<i></i><b>1</b> قرض</span></div></article>
+          <article class="z-kpi" data-hue="expense"><span class="z-kpi-tile"><span class="ms f">receipt_long</span></span><div class="z-kpi-body"><span class="z-kpi-label">مصارف امروز</span><span class="z-kpi-row"><span class="z-kpi-value" dir="ltr">0</span><span class="z-kpi-unit">افغانی</span></span><span class="z-kpi-sub"><b>0</b> سند<i></i>بدون مصرف</span></div></article>
+          <article class="z-kpi" data-hue="profit"><span class="z-kpi-tile"><span class="ms f">trending_up</span></span><div class="z-kpi-body"><span class="z-kpi-label">مفاد امروز</span><span class="z-kpi-row"><span class="z-kpi-value" dir="ltr">1,248.62</span><span class="z-kpi-unit">افغانی</span></span><span class="z-kpi-sub">حاشیه <b dir="ltr">15.7%</b><i></i><b>24</b> بل</span></div></article>
+        </div>
+      </section>
+
+      <!-- Quick actions -->
+      <section>
+        <div class="z-sec-hd"><h2 class="z-sec-title">دسترسی سریع</h2></div>
+        <div class="z-qa-grid">
+          <a class="z-qa" data-hue="sale" href="#"><span class="z-qa-ic"><span class="ms f">add_shopping_cart</span></span>فروش جدید</a>
+          <a class="z-qa" data-hue="receive" href="#"><span class="z-qa-ic"><span class="ms f">payments</span></span>دریافت پول</a>
+          <a class="z-qa" data-hue="purchase" href="#"><span class="z-qa-ic"><span class="ms f">shopping_bag</span></span>خرید جدید</a>
+          <a class="z-qa" data-hue="product" href="#"><span class="z-qa-ic"><span class="ms f">add_box</span></span>محصول جدید</a>
+          <a class="z-qa" data-hue="expense" href="#"><span class="z-qa-ic"><span class="ms f">receipt_long</span></span>ثبت مصرف</a>
+          <a class="z-qa" data-hue="exchange" href="#"><span class="z-qa-ic"><span class="ms f">currency_exchange</span></span>تبادله</a>
+        </div>
+      </section>
+
+      <!-- Alerts + treasury -->
+      <section>
+        <div class="z-sec-hd"><h2 class="z-sec-title">هشدارها و خزانه</h2>
+          <label class="z-search" style="margin-inline-start:auto"><span class="z-search-ic"><span class="ms">search</span></span><input type="search" placeholder="جستجو در هشدارها…"></label></div>
+        <div class="z-row-2" style="margin-top:8px">
+          <section class="z-card dark">
+            <div class="z-card-hd"><h3 class="z-card-title"><span class="z-card-ic"><span class="ms f">account_balance_wallet</span></span>خزانه</h3><a href="#" style="color:#93B7F7;font-size:12px;font-weight:700;text-decoration:none">جزئیات</a></div>
+            <span style="font-size:11px;color:#8A96B8">مجموع به افغانی</span>
+            <span dir="ltr" class="money z-hero"><span class="cur">؋</span>-224,115.42</span>
+          </section>
+          <section class="z-card">
+            <div class="z-att-grid">
+              <button class="z-att" data-k="exp"><span class="z-att-n">4</span><span class="z-att-t">انقضاء</span><span class="z-att-s">1 منقضی · 3 نزدیک</span></button>
+              <button class="z-att" data-k="stock" aria-selected="true"><span class="z-att-n">83</span><span class="z-att-t">موجودی کم</span><span class="z-att-s">5 منفی</span></button>
+              <button class="z-att" data-k="late"><span class="z-att-n">3</span><span class="z-att-t">بل‌های تاخیری</span><span class="z-att-s">؋ 3,590</span></button>
+              <button class="z-att" data-k="draft"><span class="z-att-n">3</span><span class="z-att-t">پیش‌نویس‌ها</span><span class="z-att-s">ناتمام</span></button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Accounts & market -->
+      <section>
+        <div class="z-sec-hd"><h2 class="z-sec-title">حسابات و بازار</h2></div>
+        <div class="z-row-3" style="margin-top:8px">
+          <section class="z-card matte" style="--c:var(--z-hue-receive)">
+            <div class="z-card-hd"><h3 class="z-card-title"><span class="z-card-ic"><span class="ms f">person_search</span></span>قرضداران</h3><span class="z-chip" style="background:color-mix(in srgb,var(--c) 14%,var(--z-surface));color:var(--c)">مجموع ؋ 9,740</span></div>
+            <a class="z-row" href="#"><span class="z-av">ع</span><span style="flex:1;min-width:0"><b style="font-size:12.5px;font-weight:600">عبدالصبور حسین خیل</b><div class="z-bar"><span style="width:90%"></span></div></span><span dir="ltr" class="money" style="font-size:12.5px"><span class="cur">؋</span>2,910</span></a>
+            <a class="z-row" href="#"><span class="z-av">ش</span><span style="flex:1;min-width:0"><b style="font-size:12.5px;font-weight:600">شاهد صافی</b><div class="z-bar"><span style="width:80%"></span></div></span><span dir="ltr" class="money" style="font-size:12.5px"><span class="cur">؋</span>2,560</span></a>
+          </section>
+          <section class="z-card"><div class="z-card-hd"><h3 class="z-card-title"><span class="z-card-ic"><span class="ms f">group</span></span>حساب‌ها</h3></div><span style="color:var(--z-muted);font-size:12px">کارت دو ستونه حساب‌ها (مشتریان، تامین‌کنندگان، …)</span></section>
+          <section class="z-card matte" style="--c:var(--z-hue-exchange)">
+            <div class="z-card-hd"><h3 class="z-card-title"><span class="z-card-ic"><span class="ms f">currency_exchange</span></span>نرخ ارز</h3><button class="z-btn" style="color:var(--c)"><span class="ms">edit</span>تعیین نرخ</button></div>
+            <a class="z-row" href="#"><span class="z-av">$</span><b style="flex:1">دالر</b><span dir="ltr" class="money"><span class="cur">؋</span>64.64</span></a>
+          </section>
+        </div>
+      </section>
+
+      <!-- Collapse -->
+      <details class="z-collapse">
+        <summary><span class="z-card-ic"><span class="ms f">dashboard</span></span><span class="z-collapse-title">گزارش‌های بیشتر</span><span class="z-collapse-sub">روند مالی · موجودی و برگشت‌ها · پرفروش‌ترین‌ها · تراکنش‌ها</span><span class="z-collapse-chev"><span class="ms">expand_more</span></span></summary>
+        <div class="z-collapse-body"><span style="color:var(--z-muted)">محتوای گزارش‌ها…</span></div>
+      </details>
+
+    </div>
+  </main>
+</div>
+</body>
+</html>

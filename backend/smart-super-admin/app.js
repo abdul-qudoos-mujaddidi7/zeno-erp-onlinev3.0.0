@@ -1,4 +1,5 @@
 const express = require("express");
+const fs = require("node:fs");
 const path = require("node:path");
 const { engine } = require("express-handlebars");
 module.exports = function createSmartSuperAdmin({
@@ -24,12 +25,43 @@ module.exports = function createSmartSuperAdmin({
   );
   app.set("view engine", "hbs");
   app.set("views", path.join(__dirname, "../views/smart-super-admin"));
-  app.use(
-    "/assets",
-    express.static(path.join(__dirname, "../public/smart-super-admin"), {
-      index: false,
-      dotfiles: "deny",
-    }),
+  /*
+   * The panel's stylesheets and scripts live next to this file, not in
+   * ../public: the public folder also holds the built SPA and is replaced
+   * whenever the frontend is deployed, which silently deleted these assets
+   * and left the login page unstyled. The legacy location is still consulted
+   * so deployments that have not been refreshed keep working.
+   */
+  const assetDirectories = [
+    path.join(__dirname, "assets"),
+    path.join(__dirname, "../public/smart-super-admin"),
+  ];
+
+  if (
+    !assetDirectories.some((directory) =>
+      fs.existsSync(path.join(directory, "css", "login.css")),
+    )
+  ) {
+    console.error(
+      `Smart Super Admin assets were not found in ${assetDirectories[0]}. ` +
+        "The panel will render without styles; deploy backend/smart-super-admin/assets.",
+    );
+  }
+
+  for (const directory of assetDirectories) {
+    app.use(
+      "/assets",
+      express.static(directory, { index: false, dotfiles: "deny" }),
+    );
+  }
+
+  /*
+   * An unknown stylesheet or script must answer with a plain 404. Falling
+   * through to the session gate turned it into a redirect, so the browser
+   * reported the asset as loaded-but-unstyled instead of missing.
+   */
+  app.use("/assets", (req, res) =>
+    res.status(404).type("text/plain").send("Not found"),
   );
   app.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
@@ -40,9 +72,9 @@ module.exports = function createSmartSuperAdmin({
     const {
       requireSameOriginForChanges,
       requireSuperAdminSession,
-    } = require("./middleware/access-control");
-    app.use((req, res, next) => {
+    } = require("./middleware/access-control");    app.use((req, res, next) => {
       if (req.path === "/login") return next();
+
       return requireSuperAdminSession(req, res, next);
     });
     app.use(requireSameOriginForChanges);

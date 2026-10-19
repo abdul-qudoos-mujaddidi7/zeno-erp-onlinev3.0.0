@@ -1,0 +1,240 @@
+/* ==========================================================================
+   Zeno ERP — Dashboard design tokens + components
+   RTL (Dari / Pashto) · Light + Dark · v1.0  (extracted from Main.dc.html)
+   Fonts: Vazirmatn (UI), Inter (numbers / codes), Material Symbols Rounded (icons)
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&display=swap');
+
+/* ---------- 1. TOKENS ---------- */
+:root {
+  /* brand */
+  --z-brand: #2F6FED;
+  --z-brand-soft: #E3ECFF;
+  --z-brand-300: #93B7F7;
+  --z-navy: #0B1530;           /* sidebar, treasury, print header */
+  --z-navy-2: #132042;
+  --z-gold: #C9A44C;           /* print / luxury accents */
+  --z-gold-2: #F3DE9B;
+
+  /* surfaces */
+  --z-bg: #EEF2F8;             /* page background */
+  --z-surface: #FFFFFF;        /* cards */
+  --z-surface-2: #F8FAFC;      /* inner panels, table header */
+  --z-surface-3: #F1F5F9;      /* segmented track, chips */
+  --z-hover: #F5F9FF;
+
+  /* borders */
+  --z-border: #E1E7F0;
+  --z-border-soft: #EEF2F7;
+  --z-border-strong: #DCE6F8;
+
+  /* text */
+  --z-ink: #0B1530;            /* headings, values */
+  --z-text: #475569;           /* body */
+  --z-muted: #64748B;          /* labels */
+  --z-subtle: #94A3B8;         /* placeholders, icons */
+  --z-link: #2F6FED;
+
+  /* status */
+  --z-ok: #15803D;      --z-ok-soft: #DCFCE7;
+  --z-danger: #B91C1C;  --z-danger-soft: #FEE2E2;
+  --z-warn: #92400E;    --z-warn-soft: #FEF3C7;
+  --z-debit: #DC2626;   --z-debit-soft: #FDECEC;   /* بدهکار */
+  --z-credit: #16A34A;  --z-credit-soft: #E7F6EC;  /* طلبکار */
+
+  /* quick-action / module hues (icon colour; tint = 13% on surface) */
+  --z-hue-sale: #4F46E5;      /* فروش جدید  · indigo   */
+  --z-hue-receive: #059669;   /* دریافت پول · emerald  */
+  --z-hue-purchase: #F97316;  /* خرید جدید  · orange   */
+  --z-hue-product: #C026D3;   /* محصول جدید · fuchsia  */
+  --z-hue-expense: #334155;   /* ثبت مصرف  · slate    */
+  --z-hue-exchange: #0891B2;  /* تبادله     · cyan     */
+  --z-hue-profit: #7C3AED;    /* مفاد       · violet   */
+
+  /* typography */
+  --z-font: 'Vazirmatn', 'Noto Sans Arabic', system-ui, sans-serif;
+  --z-font-num: 'Inter', 'Vazirmatn', sans-serif;
+  --z-fs-2xs: 10px;   /* tiny tags */
+  --z-fs-xs: 10.5px;  /* units, sub-labels, table head */
+  --z-fs-sm: 11.5px;  /* KPI labels, meta */
+  --z-fs-base: 12.5px;/* buttons, inputs, rows */
+  --z-fs-md: 13px;    /* body */
+  --z-fs-lg: 14px;    /* section titles */
+  --z-fs-xl: 17px;    /* KPI values */
+  --z-fs-2xl: 22px;   /* hero numbers (treasury) */
+  --z-fw-regular: 400; --z-fw-medium: 500; --z-fw-semibold: 600; --z-fw-bold: 700; --z-fw-heavy: 800; --z-fw-black: 900;
+  --z-lh: 1.55;
+
+  /* spacing (4-pt grid) */
+  --z-sp-1: 2px; --z-sp-2: 4px; --z-sp-3: 6px; --z-sp-4: 8px; --z-sp-5: 10px; --z-sp-6: 12px; --z-sp-7: 14px; --z-sp-8: 16px; --z-sp-10: 20px; --z-sp-12: 24px;
+
+  /* radii */
+  --z-r-xs: 6px; --z-r-sm: 8px; --z-r-md: 10px; --z-r-lg: 12px; --z-r-xl: 14px; --z-r-2xl: 16px; --z-r-pill: 999px;
+
+  /* shadows */
+  --z-sh-1: 0 1px 2px rgba(11, 21, 48, .04);
+  --z-sh-2: 0 1px 2px rgba(15, 23, 42, .04), 0 4px 12px -8px rgba(15, 23, 42, .12);
+  --z-sh-pop: 0 18px 44px -14px rgba(11, 21, 48, .40);
+  --z-sh-modal: 0 40px 90px -24px rgba(11, 21, 48, .60);
+  --z-sh-brand: 0 8px 18px -8px rgba(47, 111, 237, .90);
+  --z-ring: 0 0 0 3px rgba(47, 111, 237, .14);
+
+  /* layout */
+  --z-sidebar-w: 232px;
+  --z-content-max: 1400px;
+  --z-gutter: 12px;
+  --z-icon-sm: 16px; --z-icon-md: 18px; --z-icon-lg: 20px;
+  --z-ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+:root[data-theme="dark"] {
+  --z-bg: #070D1F; --z-surface: #0F1A35; --z-surface-2: #132042; --z-surface-3: #1A2848; --z-hover: #15244A;
+  --z-border: #1E2C4F; --z-border-soft: #18254A; --z-border-strong: #2A3B66;
+  --z-ink: #F1F5FB; --z-text: #B4C0DA; --z-muted: #8A96B8; --z-subtle: #6B79A0; --z-link: #7FA7F8;
+  --z-brand-soft: #16295A; --z-brand-300: #3E64B8;
+  --z-ok: #4ADE80; --z-ok-soft: #0F3324; --z-danger: #F87171; --z-danger-soft: #3B1219; --z-warn: #FBBF24; --z-warn-soft: #3A2A0A;
+}
+
+/* ---------- 2. BASE ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { direction: rtl; }
+body { margin: 0; background: var(--z-bg); color: var(--z-text); font: var(--z-fw-regular) var(--z-fs-md)/var(--z-lh) var(--z-font); -webkit-font-smoothing: antialiased; }
+.num, [dir="ltr"].num { font-family: var(--z-font-num); font-variant-numeric: tabular-nums; }
+.ms { font-family: 'Material Symbols Rounded'; font-weight: normal; font-style: normal; font-size: var(--z-icon-md); line-height: 1; display: inline-block; -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga'; font-variation-settings: 'FILL' 0, 'wght' 500; }
+.ms.f { font-variation-settings: 'FILL' 1, 'wght' 500; }
+/* money: currency sign ALWAYS left of the amount → "؋ 1,250" */
+.money { display: inline-flex; align-items: baseline; gap: 4px; direction: ltr; unicode-bidi: isolate; font-family: var(--z-font-num); font-weight: var(--z-fw-heavy); white-space: nowrap; }
+.money .cur { order: -1; color: var(--z-muted); font-weight: var(--z-fw-bold); font-size: .85em; }
+
+/* ---------- 3. SHELL ---------- */
+.z-app { display: flex; min-height: 100vh; }
+.z-sidebar { width: var(--z-sidebar-w); flex-shrink: 0; position: sticky; top: 0; height: 100vh; background: var(--z-navy); color: #B7C1DB; display: flex; flex-direction: column; }
+.z-brand { display: flex; align-items: center; gap: 9px; padding: 14px 16px 10px; }
+.z-brand-logo { width: 32px; height: 32px; border-radius: 10px; background: var(--z-brand); color: #fff; display: grid; place-items: center; font: 900 16px var(--z-font-num); }
+.z-brand-name { color: #fff; font: 900 15px var(--z-font-num); letter-spacing: .5px; line-height: 1.1; }
+.z-brand-ver { color: #8A96B8; font: 600 10px var(--z-font-num); }
+.z-pos { margin: 6px 12px 10px; height: 38px; border-radius: var(--z-r-md); background: var(--z-brand); color: #fff; border: 0; display: flex; align-items: center; justify-content: center; gap: 7px; font: 700 13px var(--z-font); box-shadow: var(--z-sh-brand); }
+.z-nav-group { padding: 10px 22px 4px; font-size: 10.5px; font-weight: 700; color: #6B79A0; }
+.z-nav { display: flex; flex-direction: column; gap: 1px; padding: 2px 12px 10px; overflow-y: auto; flex: 1; }
+.z-nav-item { position: relative; display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 10px; border-radius: var(--z-r-md); color: #B7C1DB; font: 500 13px var(--z-font); text-decoration: none; transition: background .15s, color .15s; }
+.z-nav-item .ms { font-size: 20px; }
+.z-nav-item:hover { background: #132042; color: #fff; }
+.z-nav-item.is-active { background: linear-gradient(90deg, rgba(47,111,237,.10), rgba(47,111,237,.32)); color: #fff; font-weight: 700; }
+.z-nav-item.is-active::before { content: ""; position: absolute; inset-inline-start: -12px; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--z-brand); }
+.z-badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--z-brand); color: #fff; font: 700 10.5px var(--z-font-num); display: inline-flex; align-items: center; justify-content: center; margin-inline-start: auto; }
+.z-badge.danger { background: #DC2626; }
+.z-profile { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid #1B2A52; color: #fff; }
+.z-avatar { position: relative; width: 26px; height: 26px; border-radius: 50%; background: var(--z-brand); color: #fff; display: grid; place-items: center; font: 800 12px var(--z-font-num); }
+.z-avatar::after { content: ""; position: absolute; bottom: -1px; inset-inline-end: -1px; width: 8px; height: 8px; border-radius: 50%; background: #16A34A; border: 2px solid var(--z-navy); }
+
+.z-main { flex: 1; min-width: 0; }
+.z-wrap { max-width: var(--z-content-max); margin: 0 auto; padding: 10px var(--z-gutter) 24px; display: flex; flex-direction: column; gap: 14px; }
+
+/* ---------- 4. SECTION HEADER + CLOCK ---------- */
+.z-sec-hd { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; min-height: 30px; }
+.z-sec-title { margin: 0; font: 800 var(--z-fs-lg)/1.4 var(--z-font); color: var(--z-ink); }
+.z-clock { display: inline-flex; align-items: center; gap: 8px; height: 34px; margin-inline-start: auto; color: var(--z-ink); font-size: 12px; white-space: nowrap; }
+.z-clock .ms { font-size: 16px; color: var(--z-brand); }
+.z-clock-time { font: 800 13px var(--z-font-num); letter-spacing: .3px; }
+.z-clock i { width: 1px; height: 14px; background: var(--z-border); }
+.z-clock-date { color: var(--z-muted); font-weight: 600; }
+
+/* ---------- 5. KPI CARDS (matte, hue per module) ---------- */
+.z-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.z-kpi { --c: var(--z-hue-sale); display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: var(--z-r-xl); background: color-mix(in srgb, var(--c) 8%, var(--z-surface)); border: 1px solid color-mix(in srgb, var(--c) 14%, transparent); min-width: 0; }
+.z-kpi[data-hue="purchase"] { --c: #EA580C; } .z-kpi[data-hue="expense"] { --c: var(--z-hue-expense); } .z-kpi[data-hue="profit"] { --c: var(--z-hue-profit); } .z-kpi[data-hue="receive"] { --c: var(--z-hue-receive); }
+.z-kpi-tile { width: 34px; height: 34px; border-radius: var(--z-r-md); flex-shrink: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 16%, var(--z-surface)); color: var(--c); }
+.z-kpi-tile .ms { font-size: 16px; }
+.z-kpi-body { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.z-kpi-label { font-size: var(--z-fs-sm); font-weight: 600; color: color-mix(in srgb, var(--c) 70%, var(--z-ink)); white-space: nowrap; }
+.z-kpi-row { display: flex; align-items: baseline; gap: 4px; }
+.z-kpi-value { font: 800 var(--z-fs-xl)/1.35 var(--z-font-num); color: var(--z-ink); white-space: nowrap; } /* never truncate */
+.z-kpi-unit { font-size: var(--z-fs-xs); color: var(--z-muted); }
+.z-kpi-sub { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--z-muted); white-space: nowrap; }
+.z-kpi-sub b { color: var(--z-ink); font: 800 11px var(--z-font-num); }
+.z-kpi-sub i { width: 1px; height: 10px; background: var(--z-border); }
+
+/* ---------- 6. QUICK ACTIONS (neutral card, coloured icon) ---------- */
+.z-qa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.z-qa { --g: var(--z-hue-sale); display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 8px 14px 8px 10px; border-radius: var(--z-r-xl); background: var(--z-surface); border: 1px solid var(--z-border-soft); box-shadow: var(--z-sh-1); color: var(--z-ink); text-decoration: none; font: 800 12.5px var(--z-font); letter-spacing: .1px; transition: border-color .18s, box-shadow .18s, transform .18s; }
+.z-qa:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--g) 40%, transparent); box-shadow: 0 10px 22px -14px var(--g); }
+.z-qa-ic { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0; background: color-mix(in srgb, var(--g) 13%, var(--z-surface)); color: var(--g); }
+.z-qa-ic .ms { font-size: 18px; }
+.z-qa[data-hue="receive"] { --g: var(--z-hue-receive); } .z-qa[data-hue="purchase"] { --g: var(--z-hue-purchase); } .z-qa[data-hue="product"] { --g: var(--z-hue-product); } .z-qa[data-hue="expense"] { --g: var(--z-hue-expense); } .z-qa[data-hue="exchange"] { --g: var(--z-hue-exchange); }
+
+/* ---------- 7. SEARCH ---------- */
+.z-search { display: flex; align-items: center; gap: 8px; width: 280px; max-width: 100%; height: 36px; padding: 0 4px 0 12px; border-radius: var(--z-r-lg); background: var(--z-surface); border: 1px solid color-mix(in srgb, var(--z-ink) 10%, transparent); box-shadow: var(--z-sh-2); color: var(--z-subtle); transition: border-color .18s, box-shadow .18s; }
+.z-search:hover { border-color: color-mix(in srgb, var(--z-brand) 35%, transparent); }
+.z-search:focus-within { border-color: var(--z-brand); box-shadow: var(--z-ring), 0 6px 16px -10px rgba(47,111,237,.45); }
+.z-search-ic { order: -1; width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; background: rgba(47,111,237,.09); color: var(--z-brand); transition: .18s; }
+.z-search-ic .ms { font-size: 17px; }
+.z-search:focus-within .z-search-ic { background: var(--z-brand); color: #fff; }
+.z-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font: 500 12.5px var(--z-font); color: var(--z-ink); }
+.z-search input::placeholder { color: color-mix(in srgb, var(--z-ink) 42%, transparent); font-weight: 400; }
+
+/* ---------- 8. CARDS ---------- */
+.z-card { --c: var(--z-brand); background: var(--z-surface); border: 1px solid var(--z-border-soft); border-radius: var(--z-r-2xl); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.z-card.matte { background: color-mix(in srgb, var(--c) 6%, var(--z-surface)); border-color: color-mix(in srgb, var(--c) 16%, transparent); }
+.z-card-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.z-card-title { margin: 0; display: flex; align-items: center; gap: 8px; font: 800 13.5px/1.4 var(--z-font); color: color-mix(in srgb, var(--c) 75%, var(--z-ink)); }
+.z-card-ic { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 16%, var(--z-surface)); color: var(--c); }
+.z-card-ic .ms { font-size: 16px; }
+.z-card.dark { background: linear-gradient(160deg, var(--z-navy) 0%, var(--z-navy-2) 100%); border: 0; color: #CBD5E1; border-radius: var(--z-r-xl); }
+.z-card.dark .z-card-title { color: #fff; } .z-card.dark .z-card-ic { background: rgba(255,255,255,.12); color: #fff; }
+.z-hero { font: 800 var(--z-fs-2xl)/1.2 var(--z-font-num); color: #FCA5A5; }
+
+/* list row (debtors, accounts) */
+.z-row { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 4px 6px; border-radius: 9px; color: var(--z-ink); text-decoration: none; transition: background .15s; }
+.z-row:hover { background: color-mix(in srgb, var(--c) 8%, transparent); }
+.z-av { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 800 11px var(--z-font); background: color-mix(in srgb, var(--c) 14%, var(--z-surface)); color: var(--c); flex-shrink: 0; }
+.z-bar { height: 3px; border-radius: 2px; background: var(--z-surface-3); margin-top: 3px; overflow: hidden; }
+.z-bar > span { display: block; height: 100%; background: var(--c); border-radius: 2px; }
+
+/* alert tiles */
+.z-att-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
+.z-att { --c: #D97706; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--z-r-lg); background: color-mix(in srgb, var(--c) 7%, var(--z-surface)); border: 1px solid transparent; text-align: start; cursor: pointer; font-family: var(--z-font); }
+.z-att[aria-selected="true"] { border-color: color-mix(in srgb, var(--c) 45%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 12%, transparent); }
+.z-att-n { font: 800 17px var(--z-font-num); color: var(--z-ink); }
+.z-att-t { font: 700 12px var(--z-font); color: var(--z-ink); }
+.z-att-s { font-size: 10.5px; color: var(--c); }
+.z-att[data-k="stock"] { --c: #DC2626; } .z-att[data-k="draft"] { --c: #64748B; }
+
+/* ---------- 9. COLLAPSE (underlined title) ---------- */
+.z-collapse > summary { list-style: none; position: relative; display: flex; align-items: center; gap: 10px; padding: 4px 2px 10px; border-bottom: 1px solid var(--z-border); cursor: pointer; user-select: none; }
+.z-collapse > summary::-webkit-details-marker { display: none; }
+.z-collapse > summary::after { content: ""; position: absolute; bottom: -1px; inset-inline-start: 0; width: 56px; height: 2px; border-radius: 2px; background: var(--z-brand); transition: width .3s var(--z-ease); }
+.z-collapse > summary:hover::after, .z-collapse[open] > summary::after { width: 140px; }
+.z-collapse-title { font: 800 14px var(--z-font); color: var(--z-ink); }
+.z-collapse-sub { flex: 1; font-size: 11px; color: var(--z-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.z-collapse-chev { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--z-surface); border: 1px solid var(--z-border-soft); color: var(--z-link); transition: transform .2s, border-color .2s; }
+.z-collapse > summary:hover .z-collapse-chev { border-color: var(--z-brand); }
+.z-collapse[open] .z-collapse-chev { transform: rotate(180deg); }
+.z-collapse-body { margin-top: 12px; padding: 14px; background: var(--z-surface); border: 1px solid var(--z-border-soft); border-radius: var(--z-r-xl); display: flex; flex-direction: column; gap: 16px; }
+
+/* ---------- 10. BUTTONS, CHIPS, TABS ---------- */
+.z-btn { height: 32px; display: inline-flex; align-items: center; gap: 5px; padding: 0 12px; border-radius: var(--z-r-sm); border: 1px solid var(--z-border); background: var(--z-surface); color: var(--z-ink); font: 700 12px var(--z-font); cursor: pointer; transition: background .15s, border-color .15s; }
+.z-btn:hover { background: var(--z-hover); border-color: var(--z-border-strong); }
+.z-btn.primary { background: var(--z-brand); border-color: transparent; color: #fff; box-shadow: 0 6px 14px -6px rgba(47,111,237,.6); }
+.z-btn.danger { color: var(--z-debit); border-color: color-mix(in srgb, var(--z-debit) 28%, transparent); background: color-mix(in srgb, var(--z-debit) 5%, var(--z-surface)); }
+.z-btn .ms { font-size: 17px; }
+.z-icon-btn { width: 32px; height: 32px; padding: 0; justify-content: center; }
+.z-chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: var(--z-r-pill); font: 700 10.5px var(--z-font); }
+.z-chip.ok { background: var(--z-ok-soft); color: var(--z-ok); } .z-chip.danger { background: var(--z-danger-soft); color: var(--z-danger); } .z-chip.warn { background: var(--z-warn-soft); color: var(--z-warn); } .z-chip.muted { background: var(--z-surface-3); color: var(--z-muted); }
+.z-chip.debit { background: var(--z-debit-soft); color: var(--z-debit); } .z-chip.credit { background: var(--z-credit-soft); color: var(--z-credit); }
+/* line tabs (not buttons) */
+.z-tabs { display: flex; gap: 18px; box-shadow: inset 0 -1px 0 var(--z-border); }
+.z-tab { position: relative; height: 38px; padding: 0 2px; border: 0; background: none; color: var(--z-text); font: 600 13px var(--z-font); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: color .2s; }
+.z-tab .ms { font-size: 16px; color: var(--z-muted); }
+.z-tab::after { content: ""; position: absolute; inset-inline: 0; bottom: 0; height: 2px; border-radius: 2px 2px 0 0; background: var(--z-brand); transform: scaleX(0); opacity: .35; transition: transform .25s var(--z-ease); }
+.z-tab:hover { color: var(--z-brand); } .z-tab:hover .ms { color: var(--z-brand); } .z-tab:hover::after { transform: scaleX(1); }
+.z-tab[aria-selected="true"] { color: var(--z-ink); font-weight: 800; }
+.z-tab[aria-selected="true"] .ms { color: var(--z-brand); font-variation-settings: 'FILL' 1; }
+.z-tab[aria-selected="true"]::after { height: 3px; transform: scaleX(1); opacity: 1; box-shadow: 0 2px 10px rgba(47,111,237,.55); }
+
+/* ---------- 11. LAYOUT ROWS ---------- */
+.z-row-2 { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 12px; align-items: stretch; }  /* treasury | alerts */
+.z-row-3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; } /* debtors | accounts | fx */
+@media (max-width: 1100px) { .z-row-2, .z-row-3 { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .z-sidebar { display: none; } .z-wrap { padding: 10px 12px 20px; } }

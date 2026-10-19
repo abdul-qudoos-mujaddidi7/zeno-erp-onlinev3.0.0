@@ -681,7 +681,7 @@ test("all requested templates compile and Smart Super Admin uses the session gat
       "utf8",
     ),
     design = fs.readFileSync(
-      path.join(__dirname, "../public/smart-super-admin/css/modern.css"),
+      path.join(__dirname, "../smart-super-admin/assets/css/modern.css"),
       "utf8",
     );
   assert.match(sharedHead, /assets\/css\/modern\.css\?v=7/);
@@ -695,14 +695,14 @@ test("all requested templates compile and Smart Super Admin uses the session gat
   assert.match(design, /--smart-primary:\s*#297aa0/);
   assert.match(
     fs.readFileSync(
-      path.join(__dirname, "../public/smart-super-admin/css/admin.css"),
+      path.join(__dirname, "../smart-super-admin/assets/css/admin.css"),
       "utf8",
     ),
     /--smart-primary:\s*#297aa0/,
   );
   assert.match(
     fs.readFileSync(
-      path.join(__dirname, "../public/smart-super-admin/css/login.css"),
+      path.join(__dirname, "../smart-super-admin/assets/css/login.css"),
       "utf8",
     ),
     /background:\s*#297aa0/,
@@ -751,7 +751,7 @@ test("all requested templates compile and Smart Super Admin uses the session gat
 
 test("Smart Super Admin index pages keep vertical scrolling inside the table or card", () => {
   const shell = fs.readFileSync(
-    path.join(__dirname, "../public/smart-super-admin/css/shell.css"),
+    path.join(__dirname, "../smart-super-admin/assets/css/shell.css"),
     "utf8",
   );
   assert.match(
@@ -785,7 +785,7 @@ test("browser feature editor adds/removes safe DOM rows without inline scripts",
   dom.window.matchMedia = () => ({ addEventListener() {} });
   dom.window.eval(
     fs.readFileSync(
-      path.join(__dirname, "../public/smart-super-admin/js/admin.js"),
+      path.join(__dirname, "../smart-super-admin/assets/js/admin.js"),
       "utf8",
     ),
   );
@@ -812,7 +812,7 @@ test("sidebar navigation restores its scroll position and expanded group", () =>
   );
   dom.window.eval(
     fs.readFileSync(
-      path.join(__dirname, "../public/smart-super-admin/js/admin.js"),
+      path.join(__dirname, "../smart-super-admin/assets/js/admin.js"),
       "utf8",
     ),
   );
@@ -993,7 +993,7 @@ test("table rows open their record on click and the action menu on right-click",
   dom.window.matchMedia = () => ({ addEventListener() {} });
   dom.window.eval(
     fs.readFileSync(
-      path.join(__dirname, "../public/smart-super-admin/js/admin.js"),
+      path.join(__dirname, "../smart-super-admin/assets/js/admin.js"),
       "utf8",
     ),
   );
@@ -1054,7 +1054,7 @@ test("table search refreshes results live after typing and resets pagination", a
   };
   dom.window.eval(
     fs.readFileSync(
-      path.join(__dirname, "../public/smart-super-admin/js/admin.js"),
+      path.join(__dirname, "../smart-super-admin/assets/js/admin.js"),
       "utf8",
     ),
   );
@@ -1118,4 +1118,51 @@ test("column metadata is read the same way from MySQL and MariaDB", async () => 
     ["name", "created_at"],
     "generated, auto-increment and credential columns stay out of forms",
   );
+});
+
+test("panel assets load without a session and unknown assets answer 404", async () => {
+  const express = require("express");
+  const parent = express();
+  parent.use(
+    "/smart-super-admin",
+    require("../smart-super-admin/app")({
+      pool: { execute: async () => [[]] },
+    }),
+  );
+  const server = parent.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  try {
+    const base = `http://127.0.0.1:${server.address().port}/smart-super-admin`;
+
+    // The login page is the first thing a visitor sees, so its stylesheets must
+    // be served before the session gate (a redirect here renders it unstyled).
+    for (const asset of [
+      "/assets/css/login.css",
+      "/assets/css/modern.css?v=7",
+      "/assets/css/admin.css",
+      "/assets/css/shell.css",
+      "/assets/js/admin.js",
+      "/assets/vendor/mdb/mdb.min.css",
+      "/assets/vendor/mdb/mdb.rtl.min.css",
+    ]) {
+      const response = await fetch(base + asset, { redirect: "manual" });
+      assert.equal(response.status, 200, asset);
+      assert.match(
+        String(response.headers.get("content-type")),
+        /text\/css|javascript/,
+        asset,
+      );
+    }
+
+    const missing = await fetch(`${base}/assets/css/does-not-exist.css`, {
+      redirect: "manual",
+    });
+    assert.equal(
+      missing.status,
+      404,
+      "a missing asset must 404 instead of redirecting to the login page",
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
