@@ -415,20 +415,25 @@
                 </a>
               </header>
 
-              <div class="zb-panel-rows">
+              <div class="zb-panel-rows" role="list">
                 {#if !filteredPanelRows.length}
                   <span class="zb-empty">{t('No Data')}</span>
                 {:else}
                   {#each filteredPanelRows as row, index (index)}
-                    <a class="zb-panel-row" href={row.href || activePanel.href} use:link>
+                    <div class="zb-panel-row" role="listitem">
                       <span class="zb-panel-lead" data-hue={row.hue}><i class="bi {row.icon}" aria-hidden="true"></i></span>
                       <span class="zb-panel-copy">
                         <span class="zb-panel-title">{row.title}</span>
                         {#if row.meta}<span class="zb-panel-meta">{row.meta}</span>{/if}
                       </span>
                       <span class="zb-panel-value" class:negative={row.negative} dir="ltr">{row.value}</span>
-                      <i class="bi bi-chevron-left zb-panel-go" aria-hidden="true"></i>
-                    </a>
+                      <span class="zb-panel-actions">
+                        <a class="zb-panel-open" href={row.href || activePanel.href} use:link title={t('Open')} aria-label={`${t('Open')}: ${row.title}`}>
+                          <i class="bi bi-box-arrow-up-left" aria-hidden="true"></i>
+                        </a>
+                        <a class="zb-panel-review" href={activePanel.href} use:link>{t('Review')}</a>
+                      </span>
+                    </div>
                   {/each}
                 {/if}
               </div>
@@ -1104,7 +1109,7 @@
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
-    transition: border-color 0.18s, box-shadow 0.18s;
+    transition: border-color 0.15s, background 0.15s;
   }
 
   .zb-filter-btn > i:first-child {
@@ -1736,6 +1741,9 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    box-sizing: border-box;
+    width: 155.67px;
+    height: 81.75px;
     padding: 8px 10px;
     border: 1px solid transparent;
     border-radius: 12px;
@@ -1753,8 +1761,8 @@
   .zb-tile[data-hue='wastes'] { --c: #64748b; }
 
   .zb-tile[aria-selected='true'] {
-    border-color: color-mix(in srgb, var(--c) 45%, transparent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 12%, transparent);
+    border-color: color-mix(in srgb, var(--c) 55%, transparent);
+    background: color-mix(in srgb, var(--c) 13%, var(--surface));
   }
 
   .zb-tile-top {
@@ -1832,7 +1840,8 @@
     align-items: center;
     gap: 10px;
     padding: 6px 10px;
-    border-radius: 9px;
+    border-radius: 10px;
+    flex-wrap: wrap;
     transition: background 0.15s;
   }
 
@@ -1860,7 +1869,7 @@
 
   .zb-panel-copy {
     display: flex;
-    flex: 1;
+    flex: 1 1 160px;
     flex-direction: column;
     min-width: 0;
     line-height: 1.35;
@@ -1896,9 +1905,50 @@
     color: #dc2626;
   }
 
-  .zb-panel-go {
-    color: var(--subtle);
-    font-size: 13px;
+  .zb-panel-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .zb-panel-open {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .zb-panel-open:hover {
+    background: var(--surface);
+    color: var(--brand);
+  }
+
+  .zb-panel-review {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 9px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 11.5px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .zb-panel-review:hover {
+    border-color: var(--border-strong);
+    color: var(--ink);
   }
 
   /* ---------- generic cards ---------- */
@@ -3226,6 +3276,7 @@
   .zb .zb-qa > span:last-child {
     font-size: 13px;
     font-weight: 800;
+    line-height: 1.3;
     letter-spacing: .1px;
     text-shadow: 0 1px 1px rgba(0,0,0,.12);
   }
