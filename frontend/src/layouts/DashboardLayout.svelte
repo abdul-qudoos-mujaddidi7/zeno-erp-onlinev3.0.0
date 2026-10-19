@@ -455,7 +455,7 @@
     margin-right: var(--sidebar-width);
     margin-left: 0;
   }
-  @media (max-width: 991px) {
+  @media (max-width: 767px) {
     .sidebar-backdrop {
       position: fixed;
       inset: 0;

@@ -254,8 +254,8 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
       <div class="brand-main">
         <div class="brand-mark" aria-hidden="true">Z</div>
         <div class="brand-text">
-          <img class="brand-logo" src="/img/logo.png" alt="Zeno ERP" />
-          <div class="brand-ver">{app_version}</div>
+          <div class="brand-name">ZENO</div>
+          <div class="brand-ver">ERP · {app_version}</div>
         </div>
       </div>
       <div class="brand-toolbar">
@@ -716,6 +716,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     overflow: visible;
     border-inline-end: 1px solid #0b1530;
     background: #0b1530;
+    color: #b7c1db;
     box-shadow: none;
   }
 
@@ -744,7 +745,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     display: flex;
     gap: 9px;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     min-height: 56px;
     padding: 14px 16px 10px;
     border: 0;
@@ -758,9 +759,9 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     display: flex;
     gap: 0.65rem;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     min-width: 0;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
   }
 
   .brand-toolbar {
@@ -776,17 +777,17 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
 
   .sidebar-collapse-icon-btn {
     position: absolute;
-    top: 30px;
-    inset-inline-end: -12px;
+    top: 13px;
+    inset-inline-end: 16px;
     z-index: 1051;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     border: 1px solid #1b2a52;
-    border-radius: 7px;
+    border-radius: 8px;
     background: rgb(19, 32, 66);
     color: rgb(138, 150, 184);
     box-shadow: 0 3px 10px rgba(3, 8, 22, 0.24);
@@ -818,13 +819,12 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     flex-shrink: 0;
     border: 0;
     border-radius: 9px;
-    background: var(--erp-primary, #1479df);
+    background: #2f6fed;
     color: #fff;
-    font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
+    font-family: inherit;
     font-size: 16px;
     font-weight: 800;
     line-height: 1;
-    display: none;
   }
 
   .brand-text {
@@ -833,18 +833,18 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     line-height: 1.15;
   }
 
-  .brand-logo {
-    display: block;
-    width: 98px;
-    height: 24px;
-    object-fit: contain;
-    object-position: left center;
-    filter: brightness(0) invert(1);
+  .brand-name {
+    color: #fff;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: 0.6px;
   }
 
   .brand-ver {
-    margin-top: 2px;
-    transform: translateX(28px);
+    margin-top: 0;
+    transform: none;
     color: #8a96b8;
     font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
     font-size: 10.5px;
@@ -868,7 +868,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     padding: 0 10px;
     border: 0;
     border-radius: 10px;
-    background: var(--erp-primary, #1479df);
+    background: #2f6fed;
     color: #fff;
     box-shadow: 0 8px 18px -8px rgba(47, 111, 237, 0.9);
     font-size: 13px;
@@ -876,7 +876,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   .pos-shortcut:hover {
-    background: var(--erp-primary-hover, #0f68c2);
+    background: #245fcf;
   }
 
   .pos-shortcut i {
@@ -1394,7 +1394,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   /* On a phone the rail is a drawer, so the panel sits inside it, above the row. */
-  @media (max-width: 991px) {
+  @media (max-width: 767px) {
     .sidebar-profile-menu {
       inset-inline-start: 8px;
       inset-inline-end: 8px;
@@ -1415,11 +1415,6 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     flex: 0 0 auto;
   }
 
-  #erp-sidebar.collapsed .brand-mark {
-    display: none;
-  }
-
-  #erp-sidebar.collapsed .brand-logo,
   #erp-sidebar.collapsed .brand-ver { display: none; }
 
   #erp-sidebar.collapsed .brand-text,
@@ -1484,7 +1479,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     transform: translateX(0);
   }
 
-  @media (max-width: 991px) {
+  @media (max-width: 767px) {
     #erp-sidebar {
       width: min(264px, 86vw) !important;
       box-shadow: 0 18px 46px rgba(15, 23, 42, 0.16);
@@ -1504,7 +1499,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     transform: translateX(0);
   }
 
-  @media (max-width: 991px) {
+  @media (max-width: 767px) {
     :global(html[dir='rtl']) #erp-sidebar {
       transform: translateX(100%);
     }
