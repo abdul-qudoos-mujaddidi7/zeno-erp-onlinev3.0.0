@@ -880,7 +880,7 @@
     if (canViewSales) {
       cards.push({
         key: 'sales',
-        label: t('Sales'),
+        label: t("Today's Sales (Dashboard Card)"),
         value: fmt(metricDataTotal.sales),
         unit: t(defaultCurrency),
         icon: 'bi-cart-fill',
@@ -896,7 +896,7 @@
     if (canViewPurchases) {
       cards.push({
         key: 'purchases',
-        label: t('Purchases'),
+        label: t("Today's Purchases (Dashboard Card)"),
         value: fmt(metricDataTotal.purchases),
         unit: t(defaultCurrency),
         icon: 'bi-bag-fill',
@@ -912,7 +912,7 @@
     if (cardExpenses) {
       cards.push({
         key: 'expenses',
-        label: t('Expenses'),
+        label: t("Today's Expenses (Dashboard Card)"),
         value: fmt(expenseTotal),
         unit: t(defaultCurrency),
         icon: 'bi-receipt',
@@ -928,7 +928,7 @@
     if (cardNetProfit && (canViewBenefit || canViewAccounts)) {
       cards.push({
         key: 'profit',
-        label: t('Net Profit'),
+        label: t("Today's Profit (Dashboard Card)"),
         value: fmt(netProfit),
         unit: t(defaultCurrency),
         icon: 'bi-graph-up-arrow',
