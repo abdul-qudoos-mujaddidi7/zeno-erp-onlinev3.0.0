@@ -1510,12 +1510,14 @@
           symbol: '$',
           name: t('Dollar'),
           rate: fmt(Math.round(marketRates.usdToAfn * 100) / 100),
+          unit: currencySymbol(defaultCurrency),
         },
         {
           code: 'EUR',
           symbol: '€',
           name: t('Euro'),
           rate: fmt(Math.round(marketRates.eurToAfn * 100) / 100),
+          unit: currencySymbol(defaultCurrency),
         },
       ]
     : [];

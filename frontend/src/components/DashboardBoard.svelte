@@ -548,12 +548,14 @@
       {#if hasFx}
         <section class="zb-card matte" data-hue="cyan" aria-label={t('Exchange Rate')}>
           <header class="zb-card-hd">
-            <h3 class="zb-card-title" data-hue="cyan">
-              <span class="zb-card-ic"><i class="bi bi-currency-exchange" aria-hidden="true"></i></span>
-              {t('Exchange Rate')}
+            <div class="zb-fx-title">
+              <h3 class="zb-card-title" data-hue="cyan">
+                <span class="zb-card-ic" data-hue="cyan"><i class="bi bi-currency-exchange" aria-hidden="true"></i></span>
+                {t('Exchange Rate')}
+              </h3>
               <span class="zb-fx-time" dir="ltr">{data.market.fx.updated}</span>
-            </h3>
-            <a href={data.market.fx.href} use:link class="zb-btn ghost">
+            </div>
+            <a href={data.market.fx.href} use:link class="zb-btn zb-fx-set">
               <i class="bi bi-pencil" aria-hidden="true"></i>
               {t('Set Rate')}
             </a>
@@ -570,19 +572,19 @@
                     <b>{rate.name}</b>
                     <small dir="ltr">1 {rate.code}</small>
                   </span>
-                  <span class="zb-fx-value" dir="ltr">
-                    {rate.rate}
-                    <small>{t(data.currency)}</small>
+                  <span class="zb-fx-value">
+                    <span class="zb-fx-rate">
+                      {rate.rate}
+                      <small>{rate.unit}</small>
+                    </span>
+                    <!-- The live feed carries a spot rate only; the reference's
+                         second line stays neutral instead of inventing a move. -->
+                    <span class="zb-fx-chg" dir="ltr">—</span>
                   </span>
                 </div>
               {/each}
             {/if}
           </div>
-
-          <span class="zb-fx-note">
-            <i class="bi bi-broadcast" aria-hidden="true"></i>
-            {t('Live rates')}
-          </span>
         </section>
       {/if}
     </div>
@@ -2114,7 +2116,7 @@
     align-items: center;
     gap: 8px;
     margin: 0;
-    color: color-mix(in srgb, var(--c) 72%, var(--ink));
+    color: color-mix(in srgb, var(--c) 75%, var(--ink));
     font-size: 13.5px;
     font-weight: 800;
     line-height: 1.4;
@@ -2131,13 +2133,14 @@
     width: 28px;
     height: 28px;
     border-radius: 9px;
-    background: color-mix(in srgb, var(--c) 15%, var(--surface));
+    background: color-mix(in srgb, var(--c) 16%, var(--surface));
     color: var(--c);
-    font-size: 15px;
+    font-size: 16px;
   }
 
   .zb-card-ic[data-hue='orange'] { --c: #ea580c; }
   .zb-card-ic[data-hue='emerald'] { --c: #059669; }
+  .zb-card-ic[data-hue='cyan'] { --c: #0891b2; }
 
   .zb-chip {
     --c: #059669;
@@ -2171,6 +2174,14 @@
 
   .zb-btn.ghost {
     color: var(--brand);
+  }
+
+  /* The exchange-rate card tints its action with the card accent, as the
+     reference does, instead of the default blue ghost button. */
+  .zb-btn.zb-fx-set {
+    border-color: color-mix(in srgb, var(--c) 30%, transparent);
+    background: color-mix(in srgb, var(--c) 6%, var(--surface));
+    color: var(--c);
   }
 
   .zb-btn.primary {
@@ -2460,6 +2471,13 @@
   .zb-account-bar > span[data-hue='rose'] { --c: #c24d6a; }
 
   /* ---------- exchange rates ---------- */
+  .zb-fx-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
   .zb-fx-time {
     color: var(--subtle);
     font-family: var(--num);
@@ -2482,26 +2500,15 @@
     background: var(--surface-2);
   }
 
-  .zb-fx-note {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    margin-top: auto;
-    padding-top: 2px;
-    color: var(--subtle);
-    font-size: 10.5px;
-    font-weight: 500;
-  }
-
   .zb-fx-badge {
     display: grid;
     flex-shrink: 0;
     place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 7px;
-    background: color-mix(in srgb, #0891b2 12%, var(--surface));
-    color: #0891b2;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--brand-soft);
+    color: var(--brand);
     font-family: var(--num);
     font-size: 12px;
     font-weight: 800;
@@ -2527,18 +2534,33 @@
   }
 
   .zb-fx-value {
-    color: var(--ink);
-    font-family: var(--num);
-    font-size: 13.5px;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+    line-height: 1.25;
     white-space: nowrap;
   }
 
-  .zb-fx-value small {
+  .zb-fx-rate {
+    color: var(--ink);
+    font-family: var(--num);
+    font-size: 14px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .zb-fx-rate small {
     color: var(--muted);
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
+  }
+
+  .zb-fx-chg {
+    color: var(--muted);
+    font-family: var(--num);
+    font-size: 10.5px;
+    font-weight: 700;
   }
 
   /* ---------- collapsed reports ---------- */
