@@ -1363,6 +1363,35 @@
   const ACCOUNT_HUES = ['emerald', 'blue', 'orange', 'violet', 'cyan', 'slate'];
   const ACCOUNT_TYPE_ORDER = ['CUSTOMER', 'COMPANY', 'BOTH', 'EMPLOYEE', 'VISITOR', 'SHAREHOLDER', 'ASSET', 'BANK', 'LOAN', 'EXPENSE'];
 
+  /*
+   * Account types in the wild are named rather than coded: a type created from
+   * the account dialog carries its English or Persian name and an empty code.
+   * The dashboard categories follow the reference design, so classify by code
+   * first and fall back to the names, or every tile would land in the fallback
+   * slot and lose its colour, icon and position.
+   */
+  function accountTypeKey(type) {
+    const code = String(type?.code || '').trim().toUpperCase();
+    if (code) return code;
+
+    const label = `${type?.name || ''} ${type?.name_fa || ''} ${type?.name_ps || ''}`.toLowerCase();
+    const has = (...parts) => parts.some((part) => label.includes(part));
+
+    if (has('both') || (has('مشتر') && has('تأمین', 'تامین'))) return 'BOTH';
+    if (has('customer', 'مشتر', 'پیرود')) return 'CUSTOMER';
+    if (has('company', 'supplier', 'شرکت', 'تأمین', 'تامین', 'عرضه')) return 'COMPANY';
+    if (has('employee', 'کارمند', 'کارکوون')) return 'EMPLOYEE';
+    if (has('visitor', 'ویزیتور', 'لیدونک')) return 'VISITOR';
+    if (has('shareholder', 'سهم', 'ونډه')) return 'SHAREHOLDER';
+    if (has('bank', 'بانک')) return 'BANK';
+    if (has('loan', 'قرض')) return 'LOAN';
+    if (has('asset', 'cash', 'treasury', 'سرمایه', 'خزانه')) return 'ASSET';
+    if (has('income', 'عاید')) return 'INCOME';
+    if (has('expense', 'مصرف', 'لګښت')) return 'EXPENSE';
+
+    return '';
+  }
+
   function accountIconForType(type) {
     const icons = {
       CUSTOMER: 'bi-people-fill', COMPANY: 'bi-truck', BOTH: 'bi-arrow-left-right',
@@ -1370,7 +1399,7 @@
       SHAREHOLDER: 'bi-people-fill', BANK: 'bi-bank', ASSET: 'bi-cash-stack',
       INCOME: 'bi-cash-coin', LOAN: 'bi-file-earmark-text-fill', EXPENSE: 'bi-receipt-cutoff',
     };
-    return icons[String(type.code || '').toUpperCase()] || accountIconFor(`${type.code || ''} ${type.name || ''} ${type.name_fa || ''}`);
+    return icons[accountTypeKey(type)] || accountIconFor(`${type.code || ''} ${type.name || ''} ${type.name_fa || ''}`);
   }
 
   function accountHueForType(type, index) {
@@ -1379,7 +1408,7 @@
       VISITOR: 'orange', SHAREHOLDER: 'slate', BANK: 'cyan', ASSET: 'emerald',
       INCOME: 'rose', LOAN: 'rose', EXPENSE: 'orange',
     };
-    return hues[String(type.code || '').toUpperCase()] || ACCOUNT_HUES[index % ACCOUNT_HUES.length];
+    return hues[accountTypeKey(type)] || ACCOUNT_HUES[index % ACCOUNT_HUES.length];
   }
 
   function accountIconFor(name) {
@@ -1427,7 +1456,7 @@
     recent.setHours(0, 0, 0, 0);
 
     for (const type of marketAccountTypes) {
-      if (String(type.code || '').toUpperCase() === 'INCOME') continue;
+      if (accountTypeKey(type) === 'INCOME') continue;
       if (type.id != null) counts.set(type.id, { count: 0, added: 0 });
     }
 
@@ -1435,7 +1464,7 @@
       const typeId = account.account_type_id;
       if (typeId == null) continue;
       const accountType = marketAccountTypes.find((item) => Number(item.id) === Number(typeId));
-      if (String(accountType?.code || '').toUpperCase() === 'INCOME') continue;
+      if (accountTypeKey(accountType) === 'INCOME') continue;
 
       const entry = counts.get(typeId) || { count: 0, added: 0 };
       entry.count += 1;
@@ -1452,8 +1481,8 @@
       .sort((a, b) => {
         const typeA = marketAccountTypes.find((item) => Number(item.id) === Number(a[0])) || {};
         const typeB = marketAccountTypes.find((item) => Number(item.id) === Number(b[0])) || {};
-        const orderA = ACCOUNT_TYPE_ORDER.indexOf(String(typeA.code || '').toUpperCase());
-        const orderB = ACCOUNT_TYPE_ORDER.indexOf(String(typeB.code || '').toUpperCase());
+        const orderA = ACCOUNT_TYPE_ORDER.indexOf(accountTypeKey(typeA));
+        const orderB = ACCOUNT_TYPE_ORDER.indexOf(accountTypeKey(typeB));
         return (orderA < 0 ? ACCOUNT_TYPE_ORDER.length : orderA) - (orderB < 0 ? ACCOUNT_TYPE_ORDER.length : orderB);
       })
       .map(([typeId, entry], index) => {
@@ -1464,7 +1493,9 @@
           label,
           count: fmt(entry.count),
           added: entry.added,
-          share: Math.max(6, (entry.count / max) * 100),
+          /* The reference sizes the bar by the square root of the share so a
+             dominant category does not flatten every other bar to a stub. */
+          share: Math.max(4, Math.round(Math.sqrt(entry.count / max) * 100)),
           icon: accountIconForType(type),
           hue: accountHueForType(type, index),
           href: `/dashboard/accounts/list?type=${typeId}`,

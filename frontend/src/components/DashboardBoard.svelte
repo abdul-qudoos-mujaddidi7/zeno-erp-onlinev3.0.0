@@ -519,7 +519,7 @@
           {:else}
           <div class="zb-accounts-grid">
             {#each data.market.accounts.items as account (account.label)}
-              <a class="zb-account" data-hue={account.hue} href={account.href} use:link title={account.label}>
+              <a class="zb-account" data-hue={account.hue} href={account.href} use:link title={account.label} aria-label={`${account.label} — ${account.count}`}>
                 <span class="zb-account-top">
                   <span class="zb-account-ic" data-hue={account.hue}>
                     <i class="bi {account.icon}" aria-hidden="true"></i>
@@ -2290,6 +2290,7 @@
   /* ---------- accounts ---------- */
   .zb-accounts {
     display: flex;
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     border: 1px solid var(--border-soft);
@@ -2316,16 +2317,20 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 7px;
+    gap: 8px;
     min-width: 0;
-    min-height: 58px;
     padding: 8px 12px;
     background: var(--surface);
-    transition: background 0.15s;
+    transition: background 0.18s ease;
   }
 
   .zb-account:hover {
     background: var(--hover-bg);
+  }
+
+  .zb-account:focus-visible {
+    outline: 2px solid #2f6fed;
+    outline-offset: -2px;
   }
 
   .zb-account[data-hue='blue'] { --c: #3b6fe0; }
@@ -2346,6 +2351,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    width: 100%;
   }
 
   .zb-account-ic {
@@ -2356,7 +2362,7 @@
     width: 34px;
     height: 34px;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--c) 12%, var(--surface));
+    background: color-mix(in srgb, var(--c) 14%, var(--surface));
     color: var(--c);
     font-size: 17px;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
@@ -2390,7 +2396,7 @@
   .zb-account-value {
     display: flex;
     align-items: baseline;
-    gap: 5px;
+    gap: 6px;
   }
 
   .zb-account-value b {
@@ -2408,8 +2414,22 @@
   }
 
   .zb-account-go {
-    color: var(--subtle);
-    font-size: 12px;
+    color: var(--c);
+    font-size: 16px;
+    line-height: 1;
+    opacity: 0;
+    transform: translateX(6px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+
+  :global([dir='ltr']) .zb-account-go {
+    transform: translateX(-6px);
+  }
+
+  .zb-account:hover .zb-account-go,
+  .zb-account:focus-visible .zb-account-go {
+    opacity: 1;
+    transform: none;
   }
 
   .zb-account-bar {
@@ -3265,6 +3285,12 @@
       grid-template-columns: 1fr;
     }
 
+    /* The reference folds the ten account cells into two rows of five on the
+       tablet breakpoint before they collapse back to two columns on phones. */
+    .zb-accounts-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
     .zb-search {
       margin-inline-start: 0;
       width: 100%;
@@ -3337,6 +3363,12 @@
     }
   }
 
+  @media (max-width: 767px) {
+    .zb-accounts-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
   @media (max-width: 640px) {
     .zb-sec-tools {
       width: 100%;
@@ -3346,10 +3378,6 @@
     .zb-clock-date,
     .zb-clock-sep {
       display: none;
-    }
-
-    .zb-accounts-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .zb-chart-grid,
