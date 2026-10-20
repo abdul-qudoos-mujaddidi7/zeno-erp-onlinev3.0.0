@@ -480,7 +480,7 @@
               {t('Top Debtors')}
             </h3>
             <span class="zb-chip" data-hue="emerald">
-              {t('Total')} {fmt(data.market.debtors.sum)} {t(data.market.debtors.currency)}
+              {t('Total')} {fmt(data.market.debtors.sum)} {data.market.debtors.currencySymbol}
             </span>
           </header>
 
@@ -497,7 +497,7 @@
                   </span>
                   <span class="zb-debtor-amount" dir="ltr">
                     {fmt(debtor.amount)}
-                    <small>{t(debtor.currency)}</small>
+                    <small>{debtor.currencySymbol}</small>
                   </span>
                   <i class="bi bi-chevron-left zb-go" aria-hidden="true"></i>
                 </a>

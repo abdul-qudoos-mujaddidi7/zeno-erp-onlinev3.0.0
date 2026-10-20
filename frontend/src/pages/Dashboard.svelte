@@ -1165,7 +1165,7 @@
         hue: 'expiry',
         label: t('Late Bills'),
         count: fmt(overdueBills.length),
-        note: `${fmt(overdueBills.reduce((sum, bill) => sum + (Number(bill.amount) || 0), 0))} ${t(defaultCurrency)}`,
+        note: `${fmt(overdueBills.reduce((sum, bill) => sum + (Number(bill.amount) || 0), 0))} ${currencySymbol(defaultCurrency)}`,
       });
     }
 
@@ -1263,7 +1263,7 @@
         rows: overdueBills.slice(0, 6).map((bill) => ({
           title: `${t('Sales')} · ${bill.number}`,
           meta: `${bill.party} · ${bill.due_date}`,
-          value: `${fmt(bill.amount)} ${t(bill.currency || defaultCurrency)}`,
+          value: `${fmt(bill.amount)} ${currencySymbol(bill.currency || defaultCurrency)}`,
           negative: true,
           icon: 'bi-hourglass-split',
           hue: 'danger',
@@ -1507,13 +1507,13 @@
       debtors: cardDebtors
         ? {
             sum: topDebtors.sum,
-            currency: topDebtors.default_currency || defaultCurrency,
+            currencySymbol: currencySymbol(topDebtors.default_currency || defaultCurrency),
             items: (topDebtors.items || []).slice(0, 6).map((debtor) => ({
               id: debtor.account_id,
               name: debtorName(debtor),
               initial: String(debtorName(debtor)).trim().charAt(0) || '#',
               amount: Number(debtor.amount) || 0,
-              currency: debtor.currency || defaultCurrency,
+              currencySymbol: currencySymbol(debtor.currency || defaultCurrency),
               share: Math.max(
                 6,
                 ((Number(debtor.amount) || 0) /
