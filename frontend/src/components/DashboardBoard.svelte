@@ -553,7 +553,6 @@
                 <span class="zb-card-ic" data-hue="cyan"><i class="bi bi-currency-exchange" aria-hidden="true"></i></span>
                 {t('Exchange Rate')}
               </h3>
-              <span class="zb-fx-time" dir="ltr">{data.market.fx.updated}</span>
             </div>
             <a href={data.market.fx.href} use:link class="zb-btn zb-fx-set">
               <i class="bi bi-pencil" aria-hidden="true"></i>
@@ -2473,13 +2472,6 @@
     align-items: center;
     gap: 6px;
     min-width: 0;
-  }
-
-  .zb-fx-time {
-    color: var(--subtle);
-    font-family: var(--num);
-    font-size: 11px;
-    font-weight: 500;
   }
 
   .zb-fx-list {

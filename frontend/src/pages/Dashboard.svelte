@@ -13,6 +13,7 @@
   import { subscriptionApi } from '../api/subscriptionApi.js';
   import { accountApi } from '../api/accountApi.js';
   import { accountTypeApi } from '../api/accountTypeApi.js';
+  import { currencyApi } from '../api/currencyApi.js';
   import { getDashboardExchangeRates } from '../services/marketRates.js';
   import { findTreasuryAccountId } from './accounts/AccountsHelper.js';
   import { auth } from '../auth/authStore';
@@ -78,9 +79,10 @@
   let customEndDate = new Date().toISOString().slice(0, 10);
   let lastRefreshed = null;
 
-  /* Market row: live USD/EUR rates plus the org's account counts. Both are
-     optional decorations on the dashboard, so a failure only hides its card. */
+  /* The exchange card reads configured currency rates. Live market rates remain
+     available for the dashboard's balance conversions. */
   let marketRates = null;
+  let systemCurrencies = [];
   let marketAccounts = [];
   let marketAccountTypes = [];
   let warehouseRows = [];
@@ -358,14 +360,19 @@
   }
 
   async function loadMarket() {
-    const [ratesResult, typesResult, accountsResult] = await Promise.allSettled([
+    const [ratesResult, currenciesResult, typesResult, accountsResult] = await Promise.allSettled([
       getDashboardExchangeRates(),
+      currencyApi.getAll({ status: 1 }),
       canViewAccounts ? accountTypeApi.getAll({ status: 1 }) : Promise.resolve(null),
       canViewAccounts ? accountApi.getAll({ status: 1, exclude_system: 1 }) : Promise.resolve(null),
     ]);
 
     if (ratesResult.status === 'fulfilled' && ratesResult.value) {
       marketRates = ratesResult.value;
+    }
+
+    if (currenciesResult.status === 'fulfilled' && currenciesResult.value) {
+      systemCurrencies = currenciesResult.value.data || [];
     }
 
     if (typesResult.status === 'fulfilled' && typesResult.value) {
@@ -1507,31 +1514,42 @@
       });
   }
 
-  $: fxItems = marketRates
-    ? [
-        {
-          code: 'USD',
-          symbol: '$',
-          name: t('Dollar'),
-          rate: fmt(Math.round(marketRates.usdToAfn * 100) / 100),
-          unit: currencySymbol(defaultCurrency),
-        },
-        {
-          code: 'EUR',
-          symbol: '€',
-          name: t('Euro'),
-          rate: fmt(Math.round(marketRates.eurToAfn * 100) / 100),
-          unit: currencySymbol(defaultCurrency),
-        },
-      ]
-    : [];
+  function configuredCurrencyRate(code, currencies, baseCurrency) {
+    const baseCode = String(baseCurrency || '').toUpperCase();
+    const currency = currencies.find(
+      (item) => String(item.code || '').toUpperCase() === code,
+    );
+    const base = currencies.find(
+      (item) => String(item.code || '').toUpperCase() === baseCode,
+    ) || currencies.find((item) => Number(item.isDefault) === 1);
+    const rate = Number(currency?.exchangeRate);
+    const baseRate = Number(base?.exchangeRate);
 
-  $: fxUpdated = marketRates?.updatedAt
-    ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(
-        new Date(marketRates.updatedAt),
-      )
-    : '—';
+    if (!currency || !Number.isFinite(rate) || rate <= 0) return null;
+    if (code === baseCode) return 1;
+    if (!Number.isFinite(baseRate) || baseRate <= 0) return null;
+    return rate / baseRate;
+  }
 
+  $: fxItems = ['USD', 'EUR'].flatMap((code) => {
+    const rate = configuredCurrencyRate(code, systemCurrencies, defaultCurrency);
+    if (rate == null) return [];
+    return [{
+      code,
+      symbol: code === 'USD' ? '$' : '€',
+      name: t(code === 'USD' ? 'Dollar' : 'Euro'),
+      rate: fmt(Math.round(rate * 100) / 100),
+      unit: currencySymbol(defaultCurrency),
+    }];
+  });
+
+  $: fxRateDate = systemCurrencies
+    .filter((item) => ['USD', 'EUR'].includes(String(item.code || '').toUpperCase()))
+    .map((item) => item.exchangeRateDate)
+    .filter(Boolean)
+    .sort()
+    .slice(-1)[0];
+  $: fxUpdated = fxRateDate || '—';
   $: topProductRows = plainTopProducts.slice(0, 6).map((product) => ({
     name: product.name,
     code: product.code,
