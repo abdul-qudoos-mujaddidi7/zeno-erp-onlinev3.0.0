@@ -2745,7 +2745,7 @@
   /* ---------- financial trend ---------- */
   .zb-trend {
     display: flex;
-    flex: 3 1 480px;
+    flex: 0 1 auto;
     flex-direction: column;
     gap: 10px;
     min-width: 0;
