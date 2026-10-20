@@ -198,7 +198,7 @@
         href: `/dashboard/sales/${item.id}`,
         number: item.invoice_number || `#${item.id}`,
         party: item.account?.name || item.account_name || '—',
-        amount: Number(item.remaining_amount ?? item.total_amount) || 0,
+        amount: Number(item.remaining) || 0,
       }))
       .filter(
         (item) =>
@@ -1274,12 +1274,13 @@
         rows: overdueBills.slice(0, 6).map((bill) => {
           const lateDays = daysOverdue(bill.due_date);
           const customerName = String(bill.party || '').trim();
+          const hasCustomer = customerName && customerName !== '—';
           return {
-            title: bill.number,
+            title: `${_lang === 'fa' ? 'بل' : t('Bill #')} ${bill.number}${hasCustomer ? ` · ${customerName}` : ''}`,
             meta: `${_lang === 'fa' ? 'سررسید' : t('Due Date')} ${formatExpiryDay(bill.due_date)}`,
             value: `${fmt(bill.amount)} ${currencySymbol(bill.currency || defaultCurrency)} · ${fmt(lateDays)} ${t('days')}`,
-            lead: customerName && customerName !== '—' ? customerName.charAt(0) : '',
-            hideLead: !customerName || customerName === '—',
+            lead: hasCustomer ? customerName.charAt(0) : '',
+            hideLead: !hasCustomer,
             hue: 'warn',
             valueHue: lateDays >= 30 ? 'danger' : 'warn',
             actionLabel: t('Reminder'),
