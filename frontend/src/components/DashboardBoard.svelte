@@ -766,12 +766,12 @@
                   <b class="zb-money"><small>{data.currencySymbol || t(data.currency)}</small>{fmt(purchasesTotal)}</b>
                 </div>
                 <div>
-                  <span><i class="dot benefit"></i>{t('Benefit')}</span>
-                  <b class="zb-money"><small>{data.currencySymbol || t(data.currency)}</small>{fmt(data.totals?.benefit ?? benefitTotal)}</b>
-                </div>
-                <div>
                   <span><i class="dot expense"></i>{t('Expenses')}</span>
                   <b class="zb-money"><small>{data.currencySymbol || t(data.currency)}</small>{fmt(data.totals?.expenses ?? expenseTotal)}</b>
+                </div>
+                <div>
+                  <span><i class="dot benefit"></i>{t('Benefit')}</span>
+                  <b class="zb-money"><small>{data.currencySymbol || t(data.currency)}</small>{fmt(data.totals?.benefit ?? benefitTotal)}</b>
                 </div>
               </div>
             </section>
@@ -2993,8 +2993,10 @@
   }
 
   .zb-trend-totals b.zb-money {
+    width: 100%;
     display: inline-flex;
     align-items: baseline;
+    justify-content: flex-end;
     gap: 4px;
     direction: ltr;
     unicode-bidi: isolate;
