@@ -796,15 +796,19 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   .sidebar-collapse-icon-btn {
+    position: absolute;
+    top: 13px;
+    inset-inline-end: -12px;
+    z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
-    flex: 0 0 30px;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
     padding: 0;
     border: 1px solid #1b2a52;
-    border-radius: 8px;
+    border-radius: 7px;
     background: rgb(19, 32, 66);
     color: rgb(138, 150, 184);
     box-shadow: none;
@@ -828,7 +832,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
 
   .sidebar-collapse-icon-btn i {
     margin: 0 !important;
-    font-size: 18px;
+    font-size: 15px;
     line-height: 1;
   }
 
