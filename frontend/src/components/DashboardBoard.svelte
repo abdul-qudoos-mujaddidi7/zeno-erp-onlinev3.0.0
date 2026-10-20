@@ -412,8 +412,8 @@
               <header class="zb-panel-hd">
                 <span>{activePanel.title}</span>
                 <a href={activePanel.href} use:link>
-                  {t('Open')}
-                  <i class="bi bi-box-arrow-up-left" aria-hidden="true"></i>
+                  {activePanel.linkLabel || t('Open')}
+                  <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
                 </a>
               </header>
 
@@ -423,19 +423,24 @@
                 {:else}
                   {#each filteredPanelRows as row, index (index)}
                     <div class="zb-panel-row" class:draft={row.hue === 'draft-sale' || row.hue === 'draft-purchase'} class:stock={row.kind === 'stock'} role="listitem">
-                      <span class="zb-panel-lead" class:text={row.lead} data-hue={row.hue} aria-hidden="true">
-                        {#if row.lead}{row.lead}{:else}<i class="bi {row.icon}"></i>{/if}
-                      </span>
+                      {#if !row.hideLead}
+                        <span class="zb-panel-lead" class:text={row.lead} data-hue={row.hue} aria-hidden="true">
+                          {#if row.lead}{row.lead}{:else}<i class="bi {row.icon}"></i>{/if}
+                        </span>
+                      {/if}
                       <span class="zb-panel-copy">
                         <span class="zb-panel-title">{row.title}</span>
                         {#if row.meta}<span class="zb-panel-meta">{row.meta}</span>{/if}
                       </span>
-                      <span class="zb-panel-value" data-hue={row.hue} class:negative={row.negative} dir="ltr">{row.value}</span>
+                      <span class="zb-panel-value" data-hue={row.valueHue || row.hue} class:negative={row.negative} dir="ltr">{row.value}</span>
                       <span class="zb-panel-actions">
-                        <a class="zb-panel-open" href={activePanel.href} use:link title={t('Open')} aria-label={`${t('Open')}: ${activePanel.title}`}>
-                          <i class="bi bi-box-arrow-up-left" aria-hidden="true"></i>
+                        <a class="zb-panel-open" href={row.href || activePanel.href} use:link title={t('Open')} aria-label={`${t('Open')}: ${row.title}`}>
+                          <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
                         </a>
-                        <a class="zb-panel-review" href={row.actionHref || row.href || activePanel.href} use:link aria-label={`${row.actionLabel || t('Review')}: ${row.title}`}>{row.actionLabel || t('Review')}</a>
+                        <a class="zb-panel-review" href={row.href || activePanel.href} use:link aria-label={`${t('Review')}: ${row.title}`}>{t('Review')}</a>
+                        {#if row.actionLabel}
+                          <a class="zb-panel-action" href={row.actionHref || row.href || activePanel.href} use:link aria-label={`${row.actionLabel}: ${row.title}`}>{row.actionLabel}</a>
+                        {/if}
                       </span>
                     </div>
                   {/each}
@@ -1753,7 +1758,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 3px;
+    gap: 2px;
     box-sizing: border-box;
     min-width: 0;
     min-height: 0;
@@ -1797,8 +1802,9 @@
   }
 
   .zb-tile[aria-selected='true'] {
-    border-color: color-mix(in srgb, var(--c) 55%, transparent);
+    border-color: color-mix(in srgb, var(--c) 45%, transparent);
     background: color-mix(in srgb, var(--c) 13%, var(--surface));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 12%, transparent);
   }
 
   .zb-tile-top {
@@ -2038,26 +2044,39 @@
     color: var(--brand);
   }
 
-  .zb a.zb-panel-review {
+  .zb a.zb-panel-review,
+  .zb a.zb-panel-action {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 4px;
     height: 28px;
     padding: 0 9px;
-    border: 1px solid var(--brand);
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: var(--brand);
-    color: #ffffff;
+    background: var(--surface);
+    color: var(--text);
     font-size: 11.5px;
     font-weight: 700;
     text-decoration: none;
     white-space: nowrap;
   }
 
-  .zb a.zb-panel-review:hover {
-    border-color: #245ed6;
-    background: #245ed6;
+  .zb a.zb-panel-review:hover,
+  .zb a.zb-panel-action:hover {
+    border-color: var(--border-strong);
+    color: var(--ink);
+  }
+
+  .zb a.zb-panel-action {
+    border-color: #2f6fed;
+    background: #2f6fed;
+    color: #ffffff;
+  }
+
+  .zb a.zb-panel-action:hover {
+    border-color: #245bd0;
+    background: #245bd0;
     color: #ffffff;
   }
 

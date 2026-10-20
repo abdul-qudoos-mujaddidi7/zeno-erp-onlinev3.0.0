@@ -401,6 +401,16 @@
     return new Intl.DateTimeFormat(_lang || 'en', { day: 'numeric', month: 'short' }).format(date);
   }
 
+  function daysOverdue(value) {
+    if (!value) return 0;
+    const [year, month, day] = String(value).slice(0, 10).split('-').map(Number);
+    if (!year || !month || !day) return 0;
+    const [todayYear, todayMonth, todayDay] = toAccountingDateString().split('-').map(Number);
+    const today = Date.UTC(todayYear, todayMonth - 1, todayDay);
+    const due = Date.UTC(year, month - 1, day);
+    return Math.max(0, Math.floor((today - due) / 86400000));
+  }
+
   async function refresh() {
     const startTime = Date.now();
     error = '';
@@ -1259,16 +1269,24 @@
     if (canViewSales && enable_sales_due_date) {
       panels.late = {
         title: t('Late Bills'),
+        linkLabel: t('All Bills'),
         href: '/dashboard/sales',
-        rows: overdueBills.slice(0, 6).map((bill) => ({
-          title: `${t('Sales')} · ${bill.number}`,
-          meta: `${bill.party} · ${bill.due_date}`,
-          value: `${fmt(bill.amount)} ${currencySymbol(bill.currency || defaultCurrency)}`,
-          negative: true,
-          icon: 'bi-hourglass-split',
-          hue: 'danger',
-          href: bill.href,
-        })),
+        rows: overdueBills.slice(0, 6).map((bill) => {
+          const lateDays = daysOverdue(bill.due_date);
+          const customerName = String(bill.party || '').trim();
+          return {
+            title: bill.number,
+            meta: `${_lang === 'fa' ? 'سررسید' : t('Due Date')} ${formatExpiryDay(bill.due_date)}`,
+            value: `${fmt(bill.amount)} ${currencySymbol(bill.currency || defaultCurrency)} · ${fmt(lateDays)} ${t('days')}`,
+            lead: customerName && customerName !== '—' ? customerName.charAt(0) : '',
+            hideLead: !customerName || customerName === '—',
+            hue: 'warn',
+            valueHue: lateDays >= 30 ? 'danger' : 'warn',
+            actionLabel: t('Reminder'),
+            actionHref: bill.href,
+            href: bill.href,
+          };
+        }),
       };
     }
 
