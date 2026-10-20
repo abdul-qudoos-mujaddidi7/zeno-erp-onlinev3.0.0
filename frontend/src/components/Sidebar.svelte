@@ -254,7 +254,9 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     <div class="sidebar-brand">
       <div class="brand-main">
         <img class="brand-logo" src="/img/logo.png" alt="Zeno ERP" />
-        <span class="brand-mark" aria-hidden="true">Z</span>
+        <span class="brand-mark" aria-hidden="true">
+          <img src="/img/logo.png" alt="" />
+        </span>
         <span class="brand-version">{app_version}</span>
       </div>
       <div class="brand-toolbar">
@@ -775,15 +777,20 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
 
   .brand-mark {
     display: none;
+    position: relative;
     width: 32px;
     height: 32px;
-    place-items: center;
-    border-radius: 9px;
-    background: #2f6fed;
-    color: #fff;
-    font-size: 16px;
-    font-weight: 800;
-    line-height: 1;
+    flex: 0 0 32px;
+    overflow: hidden;
+  }
+
+  .brand-mark img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 128px;
+    max-width: none;
+    height: auto;
   }
 
   .brand-version {
@@ -1437,7 +1444,7 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   #erp-sidebar.collapsed .brand-mark {
-    display: grid;
+    display: block;
   }
 
   #erp-sidebar.collapsed .brand-version {
