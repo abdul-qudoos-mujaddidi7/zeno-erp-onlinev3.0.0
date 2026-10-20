@@ -14,7 +14,7 @@
    */
   export let data;
   export let trend = { labels: [], benefit: [], expenses: [] };
-  export let period = 'today';
+  export let period = 'week';
   export let customStart = '';
   export let customEnd = '';
 
@@ -76,7 +76,7 @@
   });
 
   /* ---------- period filter ---------- */
-  const PERIODS = ['today', 'week', 'month', 'year'];
+  const PERIODS = ['week', 'month', 'year'];
 
   let showPeriodMenu = false;
   let showCustomDates = false;
@@ -245,6 +245,7 @@
 
   $: benefitTotal = (trend.benefit || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
   $: expenseTotal = (trend.expenses || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  $: benefitAfterExpenses = (Number(data?.totals?.benefit ?? benefitTotal) || 0) - (Number(data?.totals?.expenses ?? expenseTotal) || 0);
   $: salesTotal = (trend.sales || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
   $: purchasesTotal = (trend.purchases || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
   $: returnsTotal = (data?.reports?.returns || []).reduce((sum, row) => sum + (Number(row.value) || 0), 0);
@@ -771,7 +772,7 @@
                 </div>
                 <div>
                   <span><i class="dot benefit"></i>{t('Benefit')}</span>
-                  <b class="zb-money"><small>{data.currencySymbol || t(data.currency)}</small>{fmt(data.totals?.benefit ?? benefitTotal)}</b>
+                  <b class="zb-money"><small>{data.currencySymbol || t(data.currency)}</small>{fmt(benefitAfterExpenses)}</b>
                 </div>
               </div>
             </section>

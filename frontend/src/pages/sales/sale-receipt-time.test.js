@@ -1,52 +1,63 @@
 /**
  * The time on the sale receipt's date line.
  *
- * Stored timestamps reach the browser as the database's wall clock with a Z
- * on the end (the connection tells the driver the column is UTC), so the time
- * must be read from the digits rather than through Date and a time zone: a
- * converted value would print an hour the shop never saw. The slip shows a
- * 12-hour clock with the day period of its own language.
+ * The stored value is a UTC instant: `created_at` comes from `NOW()` on the
+ * database host, and on the online deployment that host runs in UTC, so the
+ * API hands the browser '2026-10-20T06:16:35.918Z' for a bill written at
+ * 10:46 in Kabul. The slip prints the SHOP's clock, so the instant is read
+ * through the business time zone (Asia/Kabul, UTC+04:30) instead of being
+ * printed digit for digit — that shortcut is what made a 10 am bill read as
+ * 6:16 ق.ظ. The clock is 12-hour, with the day period of the slip's language.
  */
 import { describe, expect, test } from 'vitest';
 import { receiptTime, toPersianDigits } from './saleReceiptLayout.js';
 
+/* 14:43 UTC is 19:13 in Kabul — the +04:30 shift the receipt must apply. */
 const DAM = '2026-09-27T14:43:30.968Z';
 
 describe('receiptTime', () => {
-  test('reads the time out of a stored timestamp as it was written', () => {
-    expect(receiptTime(DAM, 'en')).toBe('2:43 PM');
-    expect(receiptTime('2026-09-27 14:43:30', 'en')).toBe('2:43 PM');
+  test('prints the shop clock, not the database clock', () => {
+    expect(receiptTime(DAM, 'en')).toBe('7:13 PM');
+    expect(receiptTime('2026-09-27 14:43:30', 'en')).toBe('7:13 PM');
+  });
+
+  test('a bill written at 10:46 in Kabul prints 10:46, not 06:16', () => {
+    /* INV-46 on the online deployment, created 2026-10-20 10:46 Kabul. */
+    expect(receiptTime('2026-10-20T06:16:35.918Z', 'fa')).toBe('۱۰:۴۶ ق.ظ');
+    expect(receiptTime('2026-10-20T06:16:35.918Z', 'en')).toBe('10:46 AM');
+  });
+
+  test('the +04:30 shift crosses midnight and noon correctly', () => {
+    /* 20:00 UTC is 00:30 the next day in Kabul: 12:30 AM. */
+    expect(receiptTime('2026-09-27T20:00:00.000Z', 'en')).toBe('12:30 AM');
+    /* 07:30 UTC is 12:00 in Kabul: noon, not 7:30. */
+    expect(receiptTime('2026-09-27T07:30:00.000Z', 'en')).toBe('12:00 PM');
+    /* 17:30 UTC is 22:00 in Kabul. */
+    expect(receiptTime('2026-09-27T17:30:00.000Z', 'en')).toBe('10:00 PM');
   });
 
   test('prints a 12-hour clock, never the stored 24-hour hour', () => {
-    expect(receiptTime('2026-09-27T13:05:00.000Z', 'en')).toBe('1:05 PM');
-    expect(receiptTime('2026-09-27T23:59:59.999Z', 'en')).toBe('11:59 PM');
-    expect(receiptTime('2026-09-27T00:30:00.000Z', 'en')).toBe('12:30 AM');
-    expect(receiptTime('2026-09-27T00:01:59.000Z', 'en')).toBe('12:01 AM');
-  });
-
-  test('noon and midnight land on 12, with the right half of the day', () => {
-    expect(receiptTime('2026-09-27T12:00:00.000Z', 'en')).toBe('12:00 PM');
-    expect(receiptTime('2026-09-27T11:59:00.000Z', 'en')).toBe('11:59 AM');
+    expect(receiptTime('2026-09-27T13:05:00.000Z', 'en')).toBe('5:35 PM');
+    expect(receiptTime('2026-09-27T19:00:00.000Z', 'en')).toBe('11:30 PM');
   });
 
   test('a date-only row has no time to print', () => {
     expect(receiptTime('2026-09-27T00:00:00.000Z', 'en')).toBe('');
     expect(receiptTime('2026-09-27 00:00:00', 'fa')).toBe('');
     // The sentinel is the stored hour and minute, so stray seconds on a
-    // midnight stamp do not turn it into a printed 12:00 AM.
+    // midnight stamp do not turn it into a printed 04:30 AM.
     expect(receiptTime('2026-09-27T00:00:59.000Z', 'en')).toBe('');
   });
 
   test('the Persian slip prints Persian numerals and its own day period', () => {
-    expect(receiptTime(DAM, 'fa')).toBe('۲:۴۳ ب.ظ');
-    expect(receiptTime('2026-09-27T09:05:00.000Z', 'fa')).toBe('۹:۰۵ ق.ظ');
-    expect(receiptTime('2026-09-27T12:00:00.000Z', 'fa')).toBe('۱۲:۰۰ ب.ظ');
+    expect(receiptTime(DAM, 'fa')).toBe('۷:۱۳ ب.ظ');
+    expect(receiptTime('2026-09-27T09:05:00.000Z', 'fa')).toBe('۱:۳۵ ب.ظ');
+    expect(receiptTime('2026-09-27T12:00:00.000Z', 'fa')).toBe('۴:۳۰ ب.ظ');
   });
 
-  test('Pashto gets Pashto markers, and an unknown language falls back to fa', () => {
-    expect(receiptTime(DAM, 'ps')).toBe('۲:۴۳ غ.و');
-    expect(receiptTime('2026-09-27T09:05:00.000Z', 'ps')).toBe('۹:۰۵ غ.م');
+  test('Pashto gets its own numerals and markers, and an unknown language falls back to fa', () => {
+    expect(receiptTime(DAM, 'ps')).toBe('۷:۱۳ غ.و');
+    expect(receiptTime('2026-09-27T02:05:00.000Z', 'ps')).toBe('۶:۳۵ غ.م');
     expect(receiptTime(DAM)).toBe(receiptTime(DAM, 'fa'));
   });
 

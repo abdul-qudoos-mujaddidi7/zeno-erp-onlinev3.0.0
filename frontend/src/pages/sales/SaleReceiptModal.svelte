@@ -71,8 +71,9 @@ import { currencyApi } from '../../api/currencyApi.js';
 
   /*
    * The time of the sale, printed beside the date. It comes from the row's own
-   * timestamp (the invoice date is the business DAY, so it is always midnight)
-   * and reads on a 12-hour clock in the slip's own language — see receiptTime().
+   * `created_at`, which is a UTC instant (the invoice date is the business DAY,
+   * so it is always midnight), and it is rendered in the shop's time zone —
+   * 12-hour, in the slip's own language. See receiptTime().
    */
   $: printedTime = sale?.invoice_date
     ? receiptTime(sale?.created_at || sale?.invoice_date, $lang)

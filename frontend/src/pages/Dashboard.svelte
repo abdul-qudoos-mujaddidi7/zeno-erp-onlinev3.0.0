@@ -71,7 +71,7 @@
   let plainTopProducts = [];
   let topDebtors = { total: 0, sum: 0, default_currency: 'AFN', items: [] };
 
-  let activePeriod = 'today';
+  let activePeriod = 'week';
   let customStartDate = new Date(new Date().setDate(new Date().getDate() - 30))
     .toISOString()
     .slice(0, 10);
