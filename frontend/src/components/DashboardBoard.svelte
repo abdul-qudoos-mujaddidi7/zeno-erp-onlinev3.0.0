@@ -854,10 +854,6 @@
     </details>
   {/if}
 
-  <footer class="zb-footer">
-    <span><i aria-hidden="true"></i>{t('Online')} · {clockTime}</span>
-    <span>{t('Zeno ERP')} {data?.appVersion}</span>
-  </footer>
 </div>
 
 <style>
@@ -3272,10 +3268,6 @@
     font-size: 12px;
     font-weight: 700;
   }
-
-  .zb-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; color: var(--subtle); font-size: 11px; }
-  .zb-footer span:first-child { display: inline-flex; align-items: center; gap: 6px; }
-  .zb-footer span:first-child i { width: 7px; height: 7px; border-radius: 50%; background: #16a34a; }
 
   /* ---------- responsive ---------- */
   @media (max-width: 1100px) {

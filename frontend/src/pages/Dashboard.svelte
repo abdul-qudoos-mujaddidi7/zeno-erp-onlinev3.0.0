@@ -20,7 +20,6 @@
   import { canViewDashboard, canViewDashboardCard, canViewModule } from '../auth/permissions.js';
   import { getSubscriptionExpiryReminder } from '../utils/subscriptionExpiry.js';
   import { toAccountingDateString } from '../utils/accountingDate.js';
-  import { app_version } from '../config.js';
   import DashboardBoard from '../components/DashboardBoard.svelte';
 
   $: _lang = $lang;
@@ -129,7 +128,9 @@
   $: benefitTotal = Number(metricDataTotal.benefit) || 0;
   $: expenseTotal = Number(metricDataTotal.expenses) || 0;
   $: netProfit = benefitTotal - expenseTotal;
-  $: marginPercent = benefitTotal > 0 ? (netProfit / benefitTotal) * 100 : 0;
+  $: marginPercent = Number(metricDataTotal.sales) > 0
+    ? (netProfit / Number(metricDataTotal.sales)) * 100
+    : 0;
 
   $: periodLabels = {
     today: t('Today'),
@@ -1653,7 +1654,6 @@
       warehouses: warehouseRows,
     },
     transactions: recentTransactions,
-    appVersion: app_version,
     reports:
       cardTrend || cardTopProducts
         ? {
