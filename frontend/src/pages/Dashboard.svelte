@@ -184,7 +184,7 @@
     const [salesResult, purchasesResult, journalsResult, exchangesResult, overdueSalesResult, draftSalesResult, draftPurchasesResult, warehousesResult, productsResult, stockResult] = await Promise.allSettled([
       canViewSales ? saleApi.getAll({ status: 1, relations: 1, limit: 6, sort_by: 'invoice_date', sort_dir: 'desc' }) : Promise.resolve(null),
       canViewPurchases ? purchaseApi.getAll({ status: 1, relations: 1, limit: 6, sort_by: 'bill_date', sort_dir: 'desc' }) : Promise.resolve(null),
-      canViewJournals ? journalApi.getAll({ status: 1, page: 1, limit: 6 }) : Promise.resolve(null),
+      canViewJournals ? journalApi.getAll({ status: 1, page: 1, limit: 20 }) : Promise.resolve(null),
       canViewExchange ? exchangeApi.getAll({ status: 1, page: 1, limit: 6 }) : Promise.resolve(null),
       canViewSales && enable_sales_due_date ? saleApi.getAll({ status: 1, relations: 1, invoice_status: 'confirmed', payment_status: 'unpaid', due_before: lateCutoffDate, page: 1, limit: 100, sort_by: 'due_date', sort_dir: 'asc' }) : Promise.resolve(null),
       canViewSales ? saleApi.getAll({ status: 1, relations: 1, invoice_status: 'draft', page: 1, limit: 100, sort_by: 'invoice_date', sort_dir: 'desc' }) : Promise.resolve(null),
@@ -270,18 +270,20 @@
       status: item.bill_status,
       href: `/dashboard/purchases/${item.id}`,
     }));
-    const journals = rows(journalsResult).map((item) => ({
-      id: item.id,
-      kind: 'journal',
-      label: t('Journals'),
-      number: item.journal_number || item.reference_number || `#${item.id}`,
-      party: item.account?.name || item.account_name || item.description || '—',
-      date: item.date || item.created_at,
-      amount: Number(item.amount ?? item.total_amount) || 0,
-      currency: item.currency || defaultCurrency,
-      status: item.status,
-      href: '/dashboard/journals/list',
-    }));
+    const journals = rows(journalsResult)
+      .filter((item) => item.reference_type !== 'fiscal_year_close')
+      .map((item) => ({
+        id: item.id,
+        kind: 'journal',
+        label: t('Journals'),
+        number: item.journal_number || item.reference_number || `#${item.id}`,
+        party: item.account?.name || item.account_name || item.description || '—',
+        date: item.date || item.created_at,
+        amount: Number(item.amount ?? item.total_amount) || 0,
+        currency: item.currency || defaultCurrency,
+        status: item.status,
+        href: '/dashboard/journals/list',
+      }));
     const exchanges = rows(exchangesResult).map((item) => ({
       id: item.id,
       kind: 'exchange',
