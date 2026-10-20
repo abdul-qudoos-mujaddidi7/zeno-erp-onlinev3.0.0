@@ -253,11 +253,8 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   <div class="sidebar-shell">
     <div class="sidebar-brand">
       <div class="brand-main">
-        <div class="brand-mark" aria-hidden="true">Z</div>
-        <div class="brand-text">
-          <div class="brand-name">ZENO</div>
-          <div class="brand-ver">ERP · {app_version}</div>
-        </div>
+        <img class="brand-logo" src="/img/logo.png" alt="Zeno ERP" />
+        <span class="brand-version">{app_version}</span>
       </div>
       <div class="brand-toolbar">
         <button
@@ -758,11 +755,30 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
 
   .brand-main {
     display: flex;
-    gap: 0.65rem;
+    flex-direction: column;
+    gap: 2px;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     min-width: 0;
     flex: 1 1 auto;
+  }
+
+  .brand-logo {
+    display: block;
+    width: 112px;
+    height: 28px;
+    max-width: 100%;
+    object-fit: contain;
+    object-position: center;
+  }
+
+  .brand-version {
+    transform: translateX(36px);
+    color: #8a96b8;
+    font-size: 10px;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
   }
 
   .brand-toolbar {
@@ -834,49 +850,6 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     margin: 0 !important;
     font-size: 15px;
     line-height: 1;
-  }
-
-  .brand-mark {
-    width: 32px;
-    height: 32px;
-    display: grid;
-    place-items: center;
-    flex-shrink: 0;
-    border: 0;
-    border-radius: 9px;
-    background: #2f6fed;
-    color: #fff;
-    font-family: inherit;
-    font-size: 16px;
-    font-weight: 800;
-    line-height: 1;
-  }
-
-  .brand-text {
-    flex: 0 1 auto;
-    min-width: 0;
-    line-height: 1.15;
-  }
-
-  .brand-name {
-    color: #fff;
-    font-family: inherit;
-    font-size: 15px;
-    font-weight: 800;
-    line-height: 1.15;
-    letter-spacing: 0.6px;
-  }
-
-  .brand-ver {
-    margin-top: 0;
-    transform: none;
-    color: #8a96b8;
-    font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
-    font-size: 10.5px;
-    font-weight: 600;
-    line-height: 1.2;
-    text-align: center;
-    white-space: nowrap;
   }
 
   .sidebar-pos-row {
@@ -1437,13 +1410,20 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   }
 
   #erp-sidebar.collapsed .brand-main {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     gap: 0;
+    align-items: center;
   }
 
-  #erp-sidebar.collapsed .brand-ver { display: none; }
+  #erp-sidebar.collapsed .brand-logo {
+    width: 32px;
+    height: 32px;
+  }
 
-  #erp-sidebar.collapsed .brand-text,
+  #erp-sidebar.collapsed .brand-version {
+    display: none;
+  }
+
   #erp-sidebar.collapsed .sidebar-group-label,
   #erp-sidebar.collapsed .sidebar-pos-row .pos-label {
     display: none;
