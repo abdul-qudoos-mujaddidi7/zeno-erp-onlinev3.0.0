@@ -191,20 +191,48 @@
      * invoices that are still unpaid and whose due date passed at least seven
      * days ago. Purchases are deliberately excluded.
      */
-    overdueBills = rows(overdueSalesResult)
-      .map((item) => ({
-        ...item,
-        kind: 'sale',
-        href: `/dashboard/sales/${item.id}`,
-        number: item.invoice_number || `#${item.id}`,
-        party: item.account?.name || item.account_name || '—',
-        amount: Number(item.remaining) || 0,
-      }))
-      .filter(
-        (item) =>
-          item.due_date &&
-          String(item.due_date).slice(0, 10) <= lateCutoffDate,
-      );
+    const overdueSales = rows(overdueSalesResult).filter(
+      (item) =>
+        item.due_date &&
+        String(item.due_date).slice(0, 10) <= lateCutoffDate,
+    );
+
+    /*
+     * The sale list row only carries account_id, so the customer name is
+     * resolved in one batched lookup for the rows the panel actually shows.
+     * The list is ordered by due date, so the first six are the oldest bills.
+     */
+    const overdueCustomerIds = [
+      ...new Set(
+        overdueSales
+          .slice(0, 6)
+          .map((item) => Number(item.account_id))
+          .filter((id) => Number.isSafeInteger(id) && id > 0),
+      ),
+    ];
+    let overdueCustomers = new Map();
+    if (overdueCustomerIds.length) {
+      try {
+        const response = await accountApi.getAll({
+          status: 1,
+          ids: overdueCustomerIds.join(','),
+        });
+        overdueCustomers = new Map(
+          (response?.data || []).map((account) => [Number(account.id), partyName(account)]),
+        );
+      } catch (lookupError) {
+        console.warn('Dashboard late-bill customer lookup failed:', lookupError);
+      }
+    }
+
+    overdueBills = overdueSales.map((item) => ({
+      ...item,
+      kind: 'sale',
+      href: `/dashboard/sales/${item.id}`,
+      number: item.invoice_number || `#${item.id}`,
+      party: item.account?.name || item.account_name || overdueCustomers.get(Number(item.account_id)) || '—',
+      amount: Number(item.remaining) || 0,
+    }));
     draftBills = [
       ...rows(draftSalesResult).map((item) => ({ ...item, kind: 'sale', href: `/dashboard/sales/${item.id}`, number: item.invoice_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', date: item.invoice_date || item.created_at, amount: Number(item.total_amount) || 0 })),
       ...rows(draftPurchasesResult).map((item) => ({ ...item, kind: 'purchase', href: `/dashboard/purchases/${item.id}`, number: item.bill_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', date: item.bill_date || item.created_at, amount: Number(item.total_amount) || 0 })),
@@ -1363,6 +1391,13 @@
     if (label.includes('bank') || label.includes('بانک')) return 'bi-bank';
     if (label.includes('employee') || label.includes('کارمند') || label.includes('کارکوونکي')) return 'bi-person-badge-fill';
     return 'bi-folder-fill';
+  }
+
+  function partyName(account) {
+    if (!account) return '';
+    if (_lang === 'ps') return account.name_ps || account.name_fa || account.name || '';
+    if (_lang === 'fa') return account.name_fa || account.name || '';
+    return account.name || account.name_fa || '';
   }
 
   function accountTypeLabel(type, language = _lang) {
