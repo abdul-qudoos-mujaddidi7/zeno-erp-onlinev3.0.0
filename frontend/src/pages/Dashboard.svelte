@@ -76,6 +76,11 @@
     .toISOString()
     .slice(0, 10);
   let customEndDate = new Date().toISOString().slice(0, 10);
+  let returnsPeriod = 'today';
+  let returnsCustomStartDate = customStartDate;
+  let returnsCustomEndDate = customEndDate;
+  let returnMetricRequest = 0;
+  let returnMetricData = { saleReturns: 0, purchaseReturns: 0, wastes: 0, saleReturnCount: 0, purchaseReturnCount: 0, wasteCount: 0 };
   let lastRefreshed = null;
 
   /* The exchange card reads configured currency rates. Live market rates remain
@@ -160,6 +165,7 @@
 
   onMount(() => {
     refresh();
+    loadReturnsMetrics();
     refreshSubscription();
     resolveTreasuryAccount();
     loadMarket();
@@ -489,6 +495,7 @@
 
   function refreshAll() {
     refresh();
+    loadReturnsMetrics();
     loadMarket();
   }
 
@@ -905,6 +912,49 @@
     writeLocalSnapshot();
   }
 
+  async function loadReturnsMetrics(period = returnsPeriod, from = returnsCustomStartDate, to = returnsCustomEndDate) {
+    const requestId = ++returnMetricRequest;
+    let start;
+    let end;
+
+    if (period === 'custom') {
+      if (!from || !to || from > to) return;
+      start = new Date(`${from}T00:00:00`);
+      end = new Date(`${to}T00:00:00`);
+      end.setDate(end.getDate() + 1);
+    } else {
+      ({ start, end } = getPeriodRange(period));
+    }
+
+    const date_from = toDateParam(start);
+    const endInclusive = new Date(end.getTime() - 1);
+    const date_to = toDateParam(endInclusive < start ? start : endInclusive);
+
+    try {
+      const summary = (await dashboardApi.getSummary({
+        date_from,
+        date_to,
+        period,
+        granularity: period === 'today' ? 'hour' : 'day',
+        include_overview: false,
+        include_metrics: true,
+      }))?.data || {};
+      if (requestId !== returnMetricRequest) return;
+
+      const metrics = summary.metrics || {};
+      returnMetricData = {
+        saleReturns: Number(metrics.saleReturns?.value) || 0,
+        purchaseReturns: Number(metrics.purchaseReturns?.value) || 0,
+        wastes: Number(metrics.wastes?.value) || 0,
+        saleReturnCount: Number(metrics.saleReturns?.count) || 0,
+        purchaseReturnCount: Number(metrics.purchaseReturns?.count) || 0,
+        wasteCount: Number(metrics.wastes?.count) || 0,
+      };
+    } catch (returnsMetricError) {
+      console.warn('Dashboard returns metrics load failed:', returnsMetricError);
+    }
+  }
+
   function handlePeriod(event) {
     setPeriod(event.detail);
   }
@@ -915,6 +965,18 @@
     customStartDate = from;
     customEndDate = to;
     setPeriod('custom');
+  }
+
+  function handleReturnsPeriod(event) {
+    const { period, from, to } = event.detail || {};
+    if (!['today', 'month', 'custom'].includes(period)) return;
+    if (period === 'custom') {
+      if (!from || !to || from > to) return;
+      returnsCustomStartDate = from;
+      returnsCustomEndDate = to;
+    }
+    returnsPeriod = period;
+    loadReturnsMetrics(period, from, to);
   }
 
   /* ---------- view model for the board ---------- */
@@ -1567,20 +1629,20 @@
   $: returnRows = [
     {
       label: t('Sale Returns'),
-      value: metricDataTotal.saleReturns,
-      count: fmt(metricDataCount.saleReturns),
+      value: returnMetricData.saleReturns,
+      count: returnMetricData.saleReturnCount,
       href: '/dashboard/stock/returns',
     },
     {
       label: t('Purchase Returns'),
-      value: metricDataTotal.purchaseReturns,
-      count: fmt(metricDataCount.purchaseReturns),
+      value: returnMetricData.purchaseReturns,
+      count: returnMetricData.purchaseReturnCount,
       href: '/dashboard/stock/returns',
     },
     {
       label: t('Wastes'),
-      value: metricDataTotal.wastes,
-      count: fmt(metricDataCount.wastes),
+      value: returnMetricData.wastes,
+      count: returnMetricData.wasteCount,
       href: '/dashboard/wastes',
     },
   ];
@@ -1697,8 +1759,12 @@
     period={activePeriod}
     customStart={customStartDate}
     customEnd={customEndDate}
+    returnsPeriod={returnsPeriod}
+    returnsCustomStart={returnsCustomStartDate}
+    returnsCustomEnd={returnsCustomEndDate}
     on:period={handlePeriod}
     on:applycustom={handleCustomPeriod}
+    on:returnsperiod={handleReturnsPeriod}
     on:refresh={refreshAll} />
 {/if}
 

@@ -17,6 +17,9 @@
   export let period = 'week';
   export let customStart = '';
   export let customEnd = '';
+  export let returnsPeriod = 'today';
+  export let returnsCustomStart = '';
+  export let returnsCustomEnd = '';
 
   const dispatch = createEventDispatcher();
 
@@ -80,6 +83,7 @@
 
   let showPeriodMenu = false;
   let showCustomDates = false;
+  let customRangeOrigin = 'trend';
   let selectedCustomPreset = '';
   let fromDate = customStart;
   let toDate = customEnd;
@@ -98,6 +102,11 @@
     { id: 'year', label: t('This Year') },
   ];
   $: currentPeriodLabel = periodLabels[period] || periodLabels.today;
+  $: returnCountSuffix = returnsPeriod === 'today'
+    ? t('items today')
+    : returnsPeriod === 'month'
+      ? t('items this month')
+      : t('items');
 
   function pickPeriod(next) {
     showPeriodMenu = false;
@@ -106,13 +115,27 @@
     dispatch('period', next);
   }
 
-  function toggleCustomDates() {
-    showCustomDates = !showCustomDates;
+  function toggleCustomDates(origin = 'trend') {
+    showCustomDates = !showCustomDates || customRangeOrigin !== origin;
+    customRangeOrigin = origin;
     if (showCustomDates) {
-      fromDate = customStart;
-      toDate = customEnd;
+      fromDate = origin === 'returns' ? returnsCustomStart || customStart : customStart;
+      toDate = origin === 'returns' ? returnsCustomEnd || customEnd : customEnd;
       selectedCustomPreset = '';
     }
+  }
+
+  function pickReturnsPeriod(next) {
+    showCustomDates = false;
+    if (next === returnsPeriod) return;
+    dispatch('returnsperiod', { period: next });
+  }
+
+  function applyReturnsCustom() {
+    if (!fromDate || !toDate || fromDate > toDate) return;
+    showCustomDates = false;
+    selectedCustomPreset = '';
+    dispatch('returnsperiod', { period: 'custom', from: fromDate, to: toDate });
   }
 
   function formatDateInput(date) {
@@ -256,7 +279,13 @@
     const amount = Math.max(0, Number(rows[index]?.value) || 0);
     const prior = rows.slice(0, index).reduce((sum, row) => sum + Math.max(0, Number(row.value) || 0), 0);
     const ratio = returnsTotal ? amount / returnsTotal : 0;
-    return `stroke-dasharray:${ratio * circumference} ${circumference};stroke-dashoffset:${-prior / (returnsTotal || 1) * circumference}`;
+    const length = ratio * circumference;
+
+    /* The design leaves a 1.5px notch between segments so two neighbouring
+     * arcs never read as one; slivers shorter than 2px keep their whole arc. */
+    const gap = length > 2 ? 1.5 : 0;
+
+    return `stroke-dasharray:${Math.max(0, length - gap).toFixed(2)} ${circumference};stroke-dashoffset:${(-prior / (returnsTotal || 1) * circumference).toFixed(2)}`;
   }
 
   function returnPercent(value) {
@@ -655,11 +684,11 @@
                       on:click={() => pickPeriod(range)}>{periodLabels[range]}</button>
                   {/each}
                   <button type="button" class:active={showCustomDates || period === 'custom'} aria-pressed={period === 'custom'} aria-expanded={showCustomDates}
-                    on:click={toggleCustomDates}>{periodLabels.custom}</button>
+                    on:click={() => toggleCustomDates('trend')}>{periodLabels.custom}</button>
                 </div>
               </header>
 
-              {#if showCustomDates}
+              {#if showCustomDates && customRangeOrigin === 'trend'}
                 <div class="zb-custom-range" role="group" aria-label={t('Custom date range')}>
                   {#each customDatePresets as preset (preset.id)}
                     <button type="button" class="preset" class:active={selectedCustomPreset === preset.id}
@@ -673,8 +702,8 @@
                 </div>
               {/if}
 
-              {#if period === 'custom' && !showCustomDates}
-                <button type="button" class="zb-custom-chip" on:click={toggleCustomDates}>
+              {#if period === 'custom' && !showCustomDates && customRangeOrigin === 'trend'}
+                <button type="button" class="zb-custom-chip" on:click={() => toggleCustomDates('trend')}>
                   <i class="bi bi-calendar-range" aria-hidden="true"></i>
                   <span dir="ltr">{fromDate || customStart} – {toDate || customEnd}</span>
                   <i class="bi bi-pencil" aria-hidden="true"></i>
@@ -780,13 +809,45 @@
           </div>
 
         <div class="zb-block">
-          <h3 class="zb-block-title"><i class="bi bi-boxes" aria-hidden="true"></i>{t('Inventory & Returns')}</h3>
-          <div class="zb-block-row">
+          <h3 class="zb-block-title zb-inventory-title"><i class="bi bi-boxes" aria-hidden="true"></i>{t('Inventory & Returns')}</h3>
+          <div class="zb-block-row zb-inventory-row">
             <section class="zb-returns" aria-label={t('Returns & Wastes')}>
-              <h4 class="zb-returns-title">
-                <span class="zb-card-ic" data-hue="orange"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></span>
-                {t('Returns & Wastes')}
-              </h4>
+              <header class="zb-returns-hd">
+                <h3 class="zb-card-title zb-returns-title">
+                  <span class="zb-card-ic" data-hue="rose"><i class="bi bi-arrow-return-left" aria-hidden="true"></i></span>
+                  {t('Returns & Wastes')}
+                </h3>
+                <div class="zb-period-group" role="group" aria-label={t('Chart range')}>
+                  <button type="button" class:active={returnsPeriod === 'today'} aria-pressed={returnsPeriod === 'today'}
+                    on:click={() => pickReturnsPeriod('today')}>{periodLabels.today}</button>
+                  <button type="button" class:active={returnsPeriod === 'month'} aria-pressed={returnsPeriod === 'month'}
+                    on:click={() => pickReturnsPeriod('month')}>{periodLabels.month}</button>
+                  <button type="button" class:active={(showCustomDates && customRangeOrigin === 'returns') || returnsPeriod === 'custom'} aria-pressed={returnsPeriod === 'custom'} aria-expanded={showCustomDates && customRangeOrigin === 'returns'}
+                    on:click={() => toggleCustomDates('returns')}>{periodLabels.custom}</button>
+                </div>
+              </header>
+
+              {#if showCustomDates && customRangeOrigin === 'returns'}
+                <div class="zb-custom-range" role="group" aria-label={t('Custom date range')}>
+                  {#each customDatePresets as preset (preset.id)}
+                    <button type="button" class="preset" class:active={selectedCustomPreset === preset.id}
+                      on:click={() => applyCustomPreset(preset.id)}>{preset.label}</button>
+                  {/each}
+                  <span class="zb-custom-separator" aria-hidden="true"></span>
+                  <label>{t('From')}<input type="date" dir="ltr" bind:value={fromDate} on:input={() => (selectedCustomPreset = '')} /></label>
+                  <label>{t('To')}<input type="date" dir="ltr" bind:value={toDate} on:input={() => (selectedCustomPreset = '')} /></label>
+                  <button type="button" class="apply" on:click={applyReturnsCustom}>{t('Apply')}</button>
+                  <button type="button" aria-label={t('Close')} on:click={() => (showCustomDates = false)}><i class="bi bi-x-lg"></i></button>
+                </div>
+              {/if}
+
+              {#if returnsPeriod === 'custom' && !showCustomDates && customRangeOrigin === 'returns'}
+                <button type="button" class="zb-custom-chip" on:click={() => toggleCustomDates('returns')}>
+                  <i class="bi bi-calendar-range" aria-hidden="true"></i>
+                  <span dir="ltr">{returnsCustomStart || customStart} – {returnsCustomEnd || customEnd}</span>
+                  <i class="bi bi-pencil" aria-hidden="true"></i>
+                </button>
+              {/if}
 
               <div class="zb-return-content">
                 <div class="zb-return-donut" aria-hidden="true">
@@ -799,62 +860,71 @@
                   <div><small>{t('Total')}</small><b>{fmt(returnsTotal)}</b><small>{t(data.currency)}</small></div>
                 </div>
                 <div class="zb-returns-rows">
-                  {#each data.reports.returns as row (row.label)}
-                    <a class="zb-returns-row" href={row.href} use:link>
-                      <span>{row.label}<small>{fmt(row.count)} {t('Bills')}</small></span>
-                      <b dir="ltr">{fmt(row.value)} <small>{t(data.currency)}</small></b>
-                      <em dir="ltr">{returnPercent(row.value)}</em>
+                  {#each data.reports.returns as row, index (row.label)}
+                    <a class="zb-returns-row" class:dot-0={index === 0} class:dot-1={index === 1} class:dot-2={index === 2} href={row.href} use:link>
+                      <span class="zb-returns-dot" aria-hidden="true"></span>
+                      <span class="zb-returns-label">{row.label}<small>{fmt(row.count)} {returnCountSuffix}</small></span>
+                      <span class="zb-returns-value" dir="ltr">
+                        <span>{fmt(row.value)}</span>
+                        <small>{returnPercent(row.value)}</small>
+                      </span>
+                      <i class="bi bi-chevron-left zb-returns-go" aria-hidden="true"></i>
                     </a>
                   {/each}
                 </div>
               </div>
             </section>
 
-          <section class="zb-card zb-warehouse" aria-label={t('Warehouses')}>
-            <header class="zb-warehouse-hd">
-              <span>{t('Warehouse stock value')}</span>
-              <small>{t(data.currency)} · {t('Current')}</small>
-            </header>
-            {#if data.inventory?.warehouses?.length}
-              <div class="zb-warehouse-list">
-                {#each data.inventory.warehouses as warehouse (warehouse.id)}
-                  <a class="zb-warehouse-row" href={warehouse.href} use:link>
-                    <span class="zb-warehouse-name">{warehouse.name}</span>
-                    <span class="zb-warehouse-bar"><i style={`width:${warehouse.share}%`}></i></span>
-                    <b dir="ltr">{warehouse.value == null ? '—' : fmt(warehouse.value)} {#if warehouse.value != null}<small>{t(data.currency)}</small>{/if}</b>
-                  </a>
-                {/each}
-              </div>
-            {:else}
-              <span class="zb-empty">{t('No Data')}</span>
-            {/if}
-          </section>
+            <section class="zb-card zb-warehouse" aria-label={t('Warehouses')}>
+              <header class="zb-warehouse-hd">
+                <div class="zb-warehouse-heading">
+                  <h4 class="zb-card-title zb-warehouse-title">
+                    <span class="zb-card-ic" data-hue="violet"><i class="bi bi-buildings" aria-hidden="true"></i></span>
+                    {t('Warehouses')}
+                  </h4>
+                  <span class="zb-warehouse-sub">{t('Warehouse stock value')} · {t(data.currency)}</span>
+                </div>
+              </header>
+              {#if data.inventory?.warehouses?.length}
+                <div class="zb-warehouse-list" role="group" aria-label={t('Warehouses')}>
+                  {#each data.inventory.warehouses as warehouse, index (warehouse.id)}
+                    <a class="zb-warehouse-tile" class:series0={index % 3 === 0} class:series1={index % 3 === 1} class:series2={index % 3 === 2} href={warehouse.href} use:link title={warehouse.name}>
+                      <span class="zb-warehouse-name">{warehouse.name}</span>
+                      <span class="zb-warehouse-value" dir="ltr">
+                        <b>{warehouse.value == null ? '—' : fmt(warehouse.value)}</b>
+                        {#if warehouse.value != null}<small>{t(data.currency)}</small>{/if}
+                      </span>
+                    </a>
+                  {/each}
+                </div>
+              {:else}
+                <span class="zb-empty">{t('No Data')}</span>
+              {/if}
+            </section>
           </div>
         </div>
 
         {#if data.reports.topProducts?.length}
           <div class="zb-block">
-            <h3 class="zb-block-title">
-              <i class="bi bi-trophy" aria-hidden="true"></i>
-              {t('Top Products')}
-              <a class="zb-block-link" href="/dashboard/product-alerts?tab=products" use:link>
-                {t('Open')}
-                <i class="bi bi-box-arrow-up-left" aria-hidden="true"></i>
-              </a>
-            </h3>
-            <section class="zb-card" aria-label={t('Top Products')}>
+            <section class="zb-card zb-top-products matte" aria-label={t('Top Products')}>
+              <header class="zb-top-products-hd">
+                <h3 class="zb-card-title" data-hue="indigo">
+                  <span class="zb-card-ic" data-hue="indigo"><i class="bi bi-trophy-fill" aria-hidden="true"></i></span>
+                  {t('Top Products')}
+                </h3>
+                <a href="/dashboard/product-alerts?tab=products" use:link>{t('All')}</a>
+              </header>
               <div class="zb-products">
                 {#each data.reports.topProducts as product, index (product.name)}
-                  <div class="zb-product">
-                    <span class="zb-rank" dir="ltr">{index + 1}</span>
+                  <div class="zb-product" title={product.code || product.name}>
+                    <span class="zb-rank" class:top-three={index < 3} dir="ltr">{index + 1}</span>
                     <span class="zb-product-body">
                       <span class="zb-product-line">
                         <b>{product.name}</b>
-                        {#if product.code}<small>{product.code}</small>{/if}
+                        <small>{fmt(product.qty)} {t('qty')}</small>
                       </span>
                       <span class="zb-bar" data-hue="blue"><span style={`width:${product.share}%`}></span></span>
                     </span>
-                    <span class="zb-product-value" dir="ltr">{fmt(product.revenue)} <small>{t(data.currency)}</small></span>
                   </div>
                 {/each}
               </div>
@@ -2175,6 +2245,7 @@
 
   .zb-card-title[data-hue='emerald'] { --c: #059669; }
   .zb-card-title[data-hue='cyan'] { --c: #0891b2; }
+  .zb-card-title[data-hue='indigo'] { --c: #4f46e5; }
 
   .zb-card-ic {
     --c: #2f6fed;
@@ -2192,6 +2263,10 @@
   .zb-card-ic[data-hue='orange'] { --c: #ea580c; }
   .zb-card-ic[data-hue='emerald'] { --c: #059669; }
   .zb-card-ic[data-hue='cyan'] { --c: #0891b2; }
+  .zb-card-ic[data-hue='rose'] { --c: #c24d6a; }
+  .zb-card-ic[data-hue='teal'] { --c: #14917f; }
+  .zb-card-ic[data-hue='indigo'] { --c: #4f46e5; }
+  .zb-card-ic[data-hue='violet'] { --c: #c026d3; }
 
   .zb-chip {
     --c: #059669;
@@ -2742,6 +2817,17 @@
     align-items: stretch;
   }
 
+  .zb-inventory-row { gap: 14px; }
+
+  .zb-inventory-title {
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .zb-inventory-title i {
+    font-size: 17px;
+  }
+
   /* ---------- financial trend ---------- */
   .zb-trend {
     display: flex;
@@ -2750,9 +2836,9 @@
     gap: 10px;
     min-width: 0;
     padding: 12px 14px;
-    border: 1px solid var(--border-soft);
+    border: 1px solid color-mix(in srgb, var(--brand) 13%, var(--border-soft));
     border-radius: 16px;
-    background: var(--surface);
+    background: color-mix(in srgb, var(--brand) 4%, var(--surface));
   }
 
   .zb-trend-hd {
@@ -3011,24 +3097,44 @@
 
   /* ---------- returns & wastes ---------- */
   .zb-returns {
+    --c: #c24d6a;
     display: flex;
-    flex: 1 1 240px;
+    flex: 0 1 344.83px;
     flex-direction: column;
     gap: 10px;
     min-width: 0;
+    width: 344.83px;
+    height: 311.55px;
     padding: 12px 14px;
-    border: 1px solid var(--border-soft);
+    border: 1px solid color-mix(in srgb, var(--c) 13%, var(--border-soft));
     border-radius: 16px;
-    background: var(--surface);
+    background: color-mix(in srgb, var(--c) 4%, var(--surface));
   }
 
-  .zb-returns-title {
-    display: inline-flex;
+  .zb-returns-hd {
+    display: flex;
+    flex-wrap: nowrap;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
+  }
+
+  /* The rose card is the design's plain `.tcard[data-c=rose]`: the title keeps
+     the ink colour and the icon tile is a 15% tint of the module colour. */
+  .zb-returns-title {
+    flex-shrink: 0;
     color: var(--ink);
-    font-size: 13px;
-    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .zb-returns-title .zb-card-ic {
+    background: color-mix(in srgb, var(--c) 15%, var(--surface));
+    color: var(--c);
+  }
+
+  .zb-returns-hd .zb-period-group {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
   }
 
   .zb-returns-rows {
@@ -3040,6 +3146,10 @@
   }
 
   .zb-return-content { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; }
+  .zb-returns-dot { flex: 0 0 10px; width: 10px; height: 10px; border-radius: 3px; background: var(--dot, var(--subtle)); }
+  .zb-returns-row.dot-0 { --dot: #d97706; }
+  .zb-returns-row.dot-1 { --dot: #64748b; }
+  .zb-returns-row.dot-2 { --dot: #dc2626; }
   .zb-return-donut { position: relative; flex: 0 0 132px; width: 132px; height: 132px; }
   .zb-return-donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
   .zb-return-donut circle { fill: none; stroke-width: 13; }
@@ -3056,121 +3166,146 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 7px 10px;
-    border-radius: 10px;
+    padding: 6px 8px;
+    border-radius: 9px;
     background: var(--surface-2);
     transition: background 0.15s;
+    color: var(--ink);
+    text-decoration: none;
   }
 
   .zb-returns-row:hover {
     background: var(--surface-3);
   }
 
-  .zb-returns-row > span {
+  .zb-returns-label {
     flex: 1;
-    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    color: var(--ink);
     font-size: 12px;
     font-weight: 600;
+    line-height: 1.25;
   }
 
-  .zb-returns-row b {
+  .zb-returns-label small {
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 400;
+  }
+
+  .zb-returns-value {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    line-height: 1.25;
+  }
+
+  .zb-returns-value > span {
     color: var(--ink);
     font-family: var(--num);
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
-  .zb-returns-row b small {
+  .zb-returns-value > small {
     color: var(--muted);
-    font-size: 10px;
-    font-weight: 500;
-  }
-
-  .zb-returns-row em {
-    min-width: 22px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: color-mix(in srgb, #ea580c 12%, var(--surface));
-    color: #ea580c;
     font-family: var(--num);
     font-size: 10.5px;
-    font-style: normal;
     font-weight: 700;
-    text-align: center;
+    white-space: nowrap;
   }
 
-  .zb-returns-total {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-top: auto;
-    padding-top: 9px;
-    border-top: 1px solid var(--border-soft);
+  .zb-returns-go {
+    color: var(--subtle);
+    font-size: 16px;
   }
 
-  .zb-returns-total span {
-    color: var(--muted);
-    font-size: 11.5px;
-    font-weight: 600;
-  }
-
-  .zb-returns-total b {
-    color: var(--ink);
-    font-family: var(--num);
-    font-size: 13px;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .zb-returns-total b small {
-    color: var(--muted);
-    font-size: 10.5px;
-    font-weight: 500;
-  }
-
+  /*
+   * The warehouse card is the design's `.tcard[aria-labelledby=wh]`: a 6%
+   * tint of the module colour, a 16% border, and a heading tinted 75% toward
+   * the module hue. The design paints this card with `--c: #C026D3`.
+   */
   .zb-warehouse {
-    gap: 8px;
-  }
-
-  .zb-warehouse-hd,
-  .zb-warehouse-row {
-    display: flex;
-    align-items: center;
+    --c: #c026d3;
+    flex: 3 1 480px;
     gap: 10px;
+    border-color: color-mix(in srgb, var(--c) 16%, transparent);
+    background: color-mix(in srgb, var(--c) 6%, var(--surface));
   }
 
   .zb-warehouse-hd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
-    color: var(--ink);
-    font-size: 12.5px;
-    font-weight: 700;
+    gap: 8px;
   }
 
-  .zb-warehouse-hd small,
-  .zb-warehouse-row b small {
-    color: var(--muted);
-    font-size: 10.5px;
-    font-weight: 500;
+  /* The subtitle sits on the title's baseline, as the design's header row does:
+     the 28px icon tile makes the heading taller than its own text. */
+  .zb-warehouse-heading {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .zb-warehouse-title {
+    /* Restated here because `.zb-card-title` seeds its own --c, and this is the
+       fuchsia card (`--c: #C026D3` in the design), not the blue default. */
+    --c: #c026d3;
+    color: color-mix(in srgb, var(--c) 75%, var(--ink));
+  }
+
+  .zb-warehouse-title .zb-card-ic {
+    background: color-mix(in srgb, var(--c) 16%, var(--surface));
+    color: var(--c);
+  }
+
+  .zb-warehouse-sub {
+    color: var(--subtle);
+    font-size: 11px;
   }
 
   .zb-warehouse-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    flex: 1;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    align-content: start;
     gap: 6px;
   }
 
-  .zb-warehouse-row {
+  .zb-warehouse-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
     min-width: 0;
-    padding: 7px 9px;
-    border-radius: 9px;
-    background: var(--surface-2);
+    padding: 7px 10px;
+    border: 1px solid color-mix(in srgb, var(--c) 14%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--c) 6%, var(--surface));
+    color: var(--ink);
+    font: inherit;
+    text-align: start;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+
+  .zb-warehouse-tile:hover {
+    background: var(--hover-bg);
   }
 
   .zb-warehouse-name {
-    flex: 0 1 110px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-width: 0;
     overflow: hidden;
     color: var(--ink);
     font-size: 12px;
@@ -3179,27 +3314,39 @@
     white-space: nowrap;
   }
 
-  .zb-warehouse-bar {
-    flex: 1;
-    height: 4px;
-    overflow: hidden;
-    border-radius: 3px;
-    background: var(--surface-3);
+  .zb-warehouse-tile.series0 { --dot: #2f6fed; }
+  .zb-warehouse-tile.series1 { --dot: #93b7f7; }
+  .zb-warehouse-tile.series2 { --dot: #94a3b8; }
+
+  .zb-warehouse-name::before {
+    flex: 0 0 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--dot, var(--c));
+    content: '';
   }
 
-  .zb-warehouse-bar i {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: #2f6fed;
+  .zb-warehouse-value {
+    display: flex;
+    align-items: baseline;
+    width: 100%;
+    gap: 4px;
   }
 
-  .zb-warehouse-row b {
+  .zb-warehouse-value b {
     color: var(--ink);
     font-family: var(--num);
-    font-size: 12px;
+    font-size: 15px;
     font-weight: 800;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+
+  .zb-warehouse-value small {
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 500;
   }
 
   .zb-transactions {
@@ -3253,18 +3400,40 @@
   .zb-table-empty { padding: 20px !important; text-align: center; color: var(--muted) !important; }
 
   /* ---------- top products ---------- */
+  .zb-top-products {
+    --c: #4f46e5;
+    gap: 4px;
+  }
+
+  .zb-top-products-hd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 4px;
+  }
+
+  .zb-top-products-hd > a {
+    color: var(--link);
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .zb-top-products-hd > a:hover {
+    text-decoration: underline;
+  }
+
   .zb-products {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 0;
   }
 
   .zb-product {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 40px;
-    padding: 4px 6px;
+    padding: 5px 6px;
     border-radius: 9px;
     transition: background 0.15s;
   }
@@ -3279,18 +3448,24 @@
     place-items: center;
     width: 24px;
     height: 24px;
-    border-radius: 8px;
-    background: color-mix(in srgb, #2f6fed 11%, var(--surface));
-    color: var(--brand);
+    border-radius: 7px;
+    background: var(--surface-3);
+    color: var(--muted);
     font-family: var(--num);
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 800;
+  }
+
+  .zb-rank.top-three {
+    background: var(--brand-soft);
+    color: var(--link);
   }
 
   .zb-product-body {
     display: flex;
     flex: 1;
     flex-direction: column;
+    gap: 4px;
     min-width: 0;
     line-height: 1.3;
   }
@@ -3298,6 +3473,7 @@
   .zb-product-line {
     display: flex;
     align-items: baseline;
+    justify-content: space-between;
     gap: 6px;
     min-width: 0;
   }
@@ -3312,9 +3488,18 @@
   }
 
   .zb-product-line small {
-    color: var(--subtle);
-    font-family: var(--num);
-    font-size: 10.5px;
+    color: var(--muted);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .zb-top-products .zb-bar {
+    height: 4px;
+    margin-top: 0;
+  }
+
+  .zb-top-products .zb-product:not(:first-child) .zb-bar[data-hue='blue'] > span {
+    background: #93b7f7;
   }
 
   .zb-product-value {
