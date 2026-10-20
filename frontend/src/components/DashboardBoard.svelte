@@ -80,6 +80,7 @@
 
   let showPeriodMenu = false;
   let showCustomDates = false;
+  let selectedCustomPreset = '';
   let fromDate = customStart;
   let toDate = customEnd;
 
@@ -90,6 +91,12 @@
     year: t('This Year'),
     custom: t('Custom'),
   };
+  $: customDatePresets = [
+    { id: 'yesterday', label: t('Yesterday') },
+    { id: 'days30', label: t('30 days') },
+    { id: 'months3', label: t('3 months') },
+    { id: 'year', label: t('This Year') },
+  ];
   $: currentPeriodLabel = periodLabels[period] || periodLabels.today;
 
   function pickPeriod(next) {
@@ -104,13 +111,43 @@
     if (showCustomDates) {
       fromDate = customStart;
       toDate = customEnd;
+      selectedCustomPreset = '';
     }
+  }
+
+  function formatDateInput(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function applyCustomPreset(preset) {
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    const start = new Date(end);
+
+    if (preset === 'yesterday') {
+      start.setDate(start.getDate() - 1);
+      end.setDate(end.getDate() - 1);
+    } else if (preset === 'days30') {
+      start.setDate(start.getDate() - 29);
+    } else if (preset === 'months3') {
+      start.setMonth(start.getMonth() - 3);
+    } else if (preset === 'year') {
+      start.setMonth(0, 1);
+    }
+
+    fromDate = formatDateInput(start);
+    toDate = formatDateInput(end);
+    selectedCustomPreset = preset;
   }
 
   function applyCustom() {
     if (!fromDate || !toDate || fromDate > toDate) return;
     showPeriodMenu = false;
     showCustomDates = false;
+    selectedCustomPreset = '';
     dispatch('applycustom', { from: fromDate, to: toDate });
   }
 
@@ -144,7 +181,7 @@
 
   /* ---------- trend chart (inline SVG, no canvas) ---------- */
   const CHART_W = 700;
-  const CHART_H = 220;
+  const CHART_H = 250;
   const CHART_TOP = 10;
 
   let visible = [true, true, true, true];
@@ -174,7 +211,7 @@
 
   function chartY(value) {
     const ratio = chartMax > 0 ? Number(value || 0) / chartMax : 0;
-    return (CHART_H - CHART_TOP - ratio * (CHART_H - CHART_TOP)).toFixed(1);
+    return (CHART_TOP + (CHART_H - CHART_TOP) * (1 - ratio)).toFixed(1);
   }
 
   function chartX(index, length) {
@@ -197,7 +234,7 @@
 
   $: gridTicks = [1, 0.75, 0.5, 0.25, 0].map((ratio) => ({
     label: formatCompact(chartMax * ratio),
-    top: `${(1 - ratio) * 100}%`,
+    top: `${((CHART_TOP + (CHART_H - CHART_TOP) * (1 - ratio)) / CHART_H) * 100}%`,
   }));
 
   $: xLabels = (trend.labels || []).filter((label, index, list) => {
@@ -599,7 +636,7 @@
 
       <div class="zb-more-body">
         <div class="zb-block">
-          <h3 class="zb-block-title">
+          <h3 class="zb-block-title zb-trend-section-title">
             <i class="bi bi-graph-up" aria-hidden="true"></i>
             {t('Financial Trend')}
           </h3>
@@ -607,6 +644,7 @@
             <section class="zb-trend" aria-label={t('Financial Trend')}>
               <header class="zb-trend-hd">
                 <div class="zb-trend-title">
+                  <span class="zb-trend-icon" aria-hidden="true"><i class="bi bi-graph-up"></i></span>
                   <b>{t('Sales')} / {t('Expenses')}</b>
                   <small>{t(data.currency)} · {currentPeriodLabel}</small>
                 </div>
@@ -615,53 +653,67 @@
                     <button type="button" class:active={period === range} aria-pressed={period === range}
                       on:click={() => pickPeriod(range)}>{periodLabels[range]}</button>
                   {/each}
-                  <button type="button" class:active={showCustomDates} aria-expanded={showCustomDates}
+                  <button type="button" class:active={showCustomDates || period === 'custom'} aria-pressed={period === 'custom'} aria-expanded={showCustomDates}
                     on:click={toggleCustomDates}>{periodLabels.custom}</button>
-                </div>
-                <div class="zb-legend">
-                  <button
-                    type="button"
-                    class:off={!visible[0]}
-                    aria-pressed={visible[0]}
-                    on:click={() => toggleSeries(0)}>
-                    <span class="dot sales"></span>
-                    {t('Sales')}
-                  </button>
-                  <button
-                    type="button"
-                    class:off={!visible[1]}
-                    aria-pressed={visible[1]}
-                    on:click={() => toggleSeries(1)}>
-                    <span class="dot purchases"></span>
-                    {t('Purchases')}
-                  </button>
-                  <button
-                    type="button"
-                    class:off={!visible[2]}
-                    aria-pressed={visible[2]}
-                    on:click={() => toggleSeries(2)}>
-                    <span class="dot benefit"></span>
-                    {t('Benefit')}
-                  </button>
-                  <button
-                    type="button"
-                    class:off={!visible[3]}
-                    aria-pressed={visible[3]}
-                    on:click={() => toggleSeries(3)}>
-                    <span class="dot expense"></span>
-                    {t('Expenses')}
-                  </button>
                 </div>
               </header>
 
               {#if showCustomDates}
                 <div class="zb-custom-range" role="group" aria-label={t('Custom date range')}>
-                  <label>{t('From')}<input type="date" bind:value={fromDate} /></label>
-                  <label>{t('To')}<input type="date" bind:value={toDate} /></label>
+                  {#each customDatePresets as preset (preset.id)}
+                    <button type="button" class="preset" class:active={selectedCustomPreset === preset.id}
+                      on:click={() => applyCustomPreset(preset.id)}>{preset.label}</button>
+                  {/each}
+                  <span class="zb-custom-separator" aria-hidden="true"></span>
+                  <label>{t('From')}<input type="date" dir="ltr" bind:value={fromDate} on:input={() => (selectedCustomPreset = '')} /></label>
+                  <label>{t('To')}<input type="date" dir="ltr" bind:value={toDate} on:input={() => (selectedCustomPreset = '')} /></label>
                   <button type="button" class="apply" on:click={applyCustom}>{t('Apply')}</button>
                   <button type="button" aria-label={t('Close')} on:click={() => (showCustomDates = false)}><i class="bi bi-x-lg"></i></button>
                 </div>
               {/if}
+
+              {#if period === 'custom' && !showCustomDates}
+                <button type="button" class="zb-custom-chip" on:click={toggleCustomDates}>
+                  <i class="bi bi-calendar-range" aria-hidden="true"></i>
+                  <span dir="ltr">{fromDate || customStart} – {toDate || customEnd}</span>
+                  <i class="bi bi-pencil" aria-hidden="true"></i>
+                </button>
+              {/if}
+
+              <div class="zb-legend" role="group" aria-label={t('Chart series')}>
+                <button
+                  type="button"
+                  class:off={!visible[0]}
+                  aria-pressed={visible[0]}
+                  on:click={() => toggleSeries(0)}>
+                  <span class="dot sales"></span>
+                  {t('Sales')}
+                </button>
+                <button
+                  type="button"
+                  class:off={!visible[1]}
+                  aria-pressed={visible[1]}
+                  on:click={() => toggleSeries(1)}>
+                  <span class="dot purchases"></span>
+                  {t('Purchases')}
+                </button>
+                <button
+                  type="button"
+                  class:off={!visible[2]}
+                  aria-pressed={visible[2]}
+                  on:click={() => toggleSeries(2)}>
+                  <span class="dot benefit"></span>
+                  {t('Benefit')}
+                </button>
+                <button
+                  type="button"
+                  class:off={!visible[3]}
+                  aria-pressed={visible[3]}
+                  on:click={() => toggleSeries(3)}>
+                  <span class="dot expense"></span>
+                  {t('Expenses')}
+                </button>
+              </div>
 
               <div class="zb-chart" dir="ltr">
                 <div class="zb-chart-plot">
@@ -707,19 +759,19 @@
               <div class="zb-trend-totals">
                 <div>
                   <span><i class="dot sales"></i>{t('Sales')}</span>
-                  <b dir="ltr">{fmt(salesTotal)} <small>{t(data.currency)}</small></b>
+                  <b class="zb-money"><small>{data.currencySymbol || t(data.currency)}</small>{fmt(salesTotal)}</b>
                 </div>
                 <div>
                   <span><i class="dot purchases"></i>{t('Purchases')}</span>
-                  <b dir="ltr">{fmt(purchasesTotal)} <small>{t(data.currency)}</small></b>
+                  <b class="zb-money"><small>{data.currencySymbol || t(data.currency)}</small>{fmt(purchasesTotal)}</b>
                 </div>
                 <div>
                   <span><i class="dot benefit"></i>{t('Benefit')}</span>
-                  <b dir="ltr">{fmt(data.totals?.benefit ?? benefitTotal)} <small>{t(data.currency)}</small></b>
+                  <b class="zb-money"><small>{data.currencySymbol || t(data.currency)}</small>{fmt(data.totals?.benefit ?? benefitTotal)}</b>
                 </div>
                 <div>
                   <span><i class="dot expense"></i>{t('Expenses')}</span>
-                  <b dir="ltr">{fmt(data.totals?.expenses ?? expenseTotal)} <small>{t(data.currency)}</small></b>
+                  <b class="zb-money"><small>{data.currencySymbol || t(data.currency)}</small>{fmt(data.totals?.expenses ?? expenseTotal)}</b>
                 </div>
               </div>
             </section>
@@ -865,12 +917,15 @@
     --surface: #ffffff;
     --surface-2: #f8fafc;
     --surface-3: #f1f5f9;
+    --hover-bg: #f5f9ff;
     --border: #e1e7f0;
     --border-soft: #eef2f7;
+    --border-strong: #dce6f8;
     --ink: #0b1530;
     --text: #475569;
     --muted: #64748b;
     --subtle: #94a3b8;
+    --link: #2f6fed;
     --brand: #2f6fed;
     --brand-soft: #e3ecff;
     --navy: #0b1530;
@@ -901,12 +956,15 @@
     --surface: #0f1a35;
     --surface-2: #132042;
     --surface-3: #1a2848;
+    --hover-bg: #15244a;
     --border: #1e2c4f;
     --border-soft: #18254a;
+    --border-strong: #2a3b66;
     --ink: #f1f5fb;
     --text: #b4c0da;
     --muted: #8a96b8;
     --subtle: #6b79a0;
+    --link: #7fa7f8;
     --brand-soft: #16295a;
     --ok-soft: #0f3324;
     --ok-text: #4ade80;
@@ -2654,6 +2712,14 @@
     font-size: 14px;
   }
 
+  .zb-trend-section-title {
+    font-size: 14px;
+  }
+
+  .zb-trend-section-title i {
+    font-size: 16px;
+  }
+
   .zb-block-link {
     display: inline-flex;
     align-items: center;
@@ -2698,8 +2764,21 @@
 
   .zb-trend-title {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
+  }
+
+  .zb-trend-icon {
+    display: inline-flex;
+    flex: 0 0 28px;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    background: rgba(47, 111, 237, 0.13);
+    color: var(--brand);
+    font-size: 16px;
   }
 
   .zb-trend-title b {
@@ -2720,33 +2799,48 @@
   }
 
   .zb-period-group { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 9px; background: var(--surface-3); }
-  .zb-period-group button { min-height: 26px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
-  .zb-period-group button.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(11,21,48,.08); }
-  .zb-custom-range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
-  .zb-custom-range label { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11.5px; }
-  .zb-custom-range input { width: 136px; height: 28px; padding: 0 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-size: 11.5px; }
-  .zb-custom-range button { height: 28px; padding: 0 11px; border: 0; border-radius: 7px; background: var(--surface-3); color: var(--text); font: inherit; font-size: 11.5px; cursor: pointer; }
+  .zb-period-group button { height: 28px; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .zb-period-group button.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+  .zb-custom-range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--hover-bg); }
+  .zb-custom-range label { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11.5px; }
+  .zb-custom-range input { width: 92px; height: 28px; padding: 0 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
+  .zb-custom-range button { height: 28px; padding: 0 12px; border: 0; border-radius: 7px; background: var(--surface-3); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+  .zb-custom-range button.preset { padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 600; }
+  .zb-custom-range button.preset.active { border-color: var(--border-strong); background: var(--brand-soft); color: var(--link); }
+  .zb-custom-separator { width: 1px; height: 20px; background: var(--border); }
   .zb-custom-range button.apply { background: var(--brand); color: #fff; font-weight: 700; }
+  .zb-custom-range button[aria-label] { display: inline-flex; align-items: center; justify-content: center; width: 28px; padding: 0; background: transparent; color: var(--muted); }
+  .zb-custom-range button[aria-label] i { font-size: 17px; }
+
+  .zb-custom-chip { display: inline-flex; align-self: flex-start; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--hover-bg); color: var(--link); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+  .zb-custom-chip i:first-child { font-size: 15px; }
+  .zb-custom-chip i:last-child { font-size: 14px; }
 
   .zb-legend button {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    height: 26px;
-    padding: 0 9px;
-    border: 1px solid var(--border);
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border-strong);
     border-radius: 999px;
-    background: var(--surface);
-    color: var(--text);
+    background: var(--hover-bg);
+    color: var(--ink);
     font: inherit;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     transition: opacity 0.15s, border-color 0.15s;
   }
 
   .zb-legend button.off {
-    opacity: 0.45;
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--subtle);
+  }
+
+  .zb-legend button.off .dot {
+    background: var(--subtle);
   }
 
   .zb-legend button:hover {
@@ -2764,6 +2858,7 @@
   .dot.expense { background: #d97706; }
   .dot.sales { background: #2f6fed; }
   .dot.purchases { background: #64748b; }
+  .dot.benefit { background: #16a34a; }
   .dot.net { background: #16a34a; }
 
   .zb-chart {
@@ -2774,12 +2869,12 @@
 
   .zb-chart-plot {
     position: relative;
-    height: 180px;
+    height: 170px;
   }
 
   .zb-chart-grid {
     position: absolute;
-    inset: 0 0 0 38px;
+    inset: 0 4px 0 40px;
   }
 
   .zb-grid-line {
@@ -2792,8 +2887,8 @@
 
   .zb-grid-line span {
     position: absolute;
-    inset-inline-start: -38px;
-    width: 32px;
+    inset-inline-start: -40px;
+    width: 34px;
     color: var(--subtle);
     font-family: var(--num);
     font-size: 10.5px;
@@ -2808,7 +2903,7 @@
 
   .zb-chart-svg {
     position: absolute;
-    inset: 0 0 0 38px;
+    inset: 0 4px 0 40px;
   }
 
   .zb-chart-svg svg {
@@ -2848,10 +2943,10 @@
     display: flex;
     justify-content: space-between;
     gap: 6px;
-    padding: 0 4px 0 38px;
+    padding: 0 4px 0 40px;
     color: var(--muted);
     font-family: var(--num);
-    font-size: 10.5px;
+    font-size: 11px;
   }
 
   .zb-chart-x span {
@@ -2894,6 +2989,20 @@
   .zb-trend-totals b small {
     color: var(--muted);
     font-size: 10.5px;
+    font-weight: 500;
+  }
+
+  .zb-trend-totals b.zb-money {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
+  .zb-trend-totals b.zb-money small {
+    order: -1;
+    font-size: 11px;
     font-weight: 500;
   }
 

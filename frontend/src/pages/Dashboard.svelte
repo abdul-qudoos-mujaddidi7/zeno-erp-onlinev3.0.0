@@ -1587,6 +1587,7 @@
 
   $: boardData = {
     currency: defaultCurrency,
+    currencySymbol: currencySymbol(defaultCurrency),
     periodLabel,
     reminder: subscriptionReminder
       ? {
