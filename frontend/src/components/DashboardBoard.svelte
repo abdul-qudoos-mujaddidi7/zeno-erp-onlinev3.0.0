@@ -577,9 +577,6 @@
                       {rate.rate}
                       <small>{rate.unit}</small>
                     </span>
-                    <!-- The live feed carries a spot rate only; the reference's
-                         second line stays neutral instead of inventing a move. -->
-                    <span class="zb-fx-chg" dir="ltr">—</span>
                   </span>
                 </div>
               {/each}
@@ -2497,7 +2494,7 @@
     gap: 8px;
     padding: 6px 10px;
     border-radius: 10px;
-    background: var(--surface-2);
+    background: transparent;
   }
 
   .zb-fx-badge {
@@ -2554,13 +2551,6 @@
     color: var(--muted);
     font-size: 11px;
     font-weight: 500;
-  }
-
-  .zb-fx-chg {
-    color: var(--muted);
-    font-family: var(--num);
-    font-size: 10.5px;
-    font-weight: 700;
   }
 
   /* ---------- collapsed reports ---------- */

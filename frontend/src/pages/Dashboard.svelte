@@ -1478,6 +1478,10 @@
     const max = Math.max(1, ...Array.from(counts.values(), (entry) => entry.count));
 
     return Array.from(counts.entries())
+      .filter(([typeId]) => {
+        const type = marketAccountTypes.find((item) => Number(item.id) === Number(typeId)) || {};
+        return accountTypeKey(type) !== 'BANK';
+      })
       .sort((a, b) => {
         const typeA = marketAccountTypes.find((item) => Number(item.id) === Number(a[0])) || {};
         const typeB = marketAccountTypes.find((item) => Number(item.id) === Number(b[0])) || {};
