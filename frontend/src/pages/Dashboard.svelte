@@ -5,10 +5,9 @@
   import { dashboardApi } from '../api/dashboardApi.js';
   import { saleApi } from '../api/saleApi.js';
   import { purchaseApi } from '../api/purchaseApi.js';
-  import { journalApi } from '../api/journalApi.js';
-  import { exchangeApi } from '../api/exchangeApi.js';
   import { warehouseApi } from '../api/warehouseApi.js';
   import { warehouseProductApi } from '../api/warehouseProductApi.js';
+  import { stockTransactionApi } from '../api/stockTransactionApi.js';
   import { productApi } from '../api/productApi.js';
   import { subscriptionApi } from '../api/subscriptionApi.js';
   import { accountApi } from '../api/accountApi.js';
@@ -90,7 +89,9 @@
   let marketAccounts = [];
   let marketAccountTypes = [];
   let warehouseRows = [];
-  let recentTransactions = [];
+  let warehouseHistoryLabels = [];
+  let warehouseValuationSnapshot = null;
+  let warehouseHistoryRequestId = 0;
   let overdueBills = [];
   let draftBills = [];
 
@@ -164,28 +165,22 @@
   }
 
   onMount(() => {
-    refresh();
+    Promise.all([refresh(), loadMarket()]).then(() => loadSupplementalReports());
     loadReturnsMetrics();
     refreshSubscription();
     resolveTreasuryAccount();
-    loadMarket();
-    loadSupplementalReports();
   });
 
-  /* The detailed report cards use the existing operational APIs. The stock
-     card is a current inventory valuation; SVSale has no dated warehouse
-     valuation history endpoint, so it does not invent a time series. */
+  /* The detailed report cards use the existing operational APIs. Warehouse
+     history is reconstructed from current quantities and dated stock
+     movements, valued at each product's current purchase price. */
   async function loadSupplementalReports() {
     /* Business-calendar cutoff for a bill that is seven days past due. */
     const lateCutoff = new Date(`${toAccountingDateString()}T00:00:00Z`);
     lateCutoff.setUTCDate(lateCutoff.getUTCDate() - 7);
     const lateCutoffDate = lateCutoff.toISOString().slice(0, 10);
 
-    const [salesResult, purchasesResult, journalsResult, exchangesResult, overdueSalesResult, draftSalesResult, draftPurchasesResult, warehousesResult, productsResult, stockResult] = await Promise.allSettled([
-      canViewSales ? saleApi.getAll({ status: 1, relations: 1, limit: 6, sort_by: 'invoice_date', sort_dir: 'desc' }) : Promise.resolve(null),
-      canViewPurchases ? purchaseApi.getAll({ status: 1, relations: 1, limit: 6, sort_by: 'bill_date', sort_dir: 'desc' }) : Promise.resolve(null),
-      canViewJournals ? journalApi.getAll({ status: 1, page: 1, limit: 20 }) : Promise.resolve(null),
-      canViewExchange ? exchangeApi.getAll({ status: 1, page: 1, limit: 6 }) : Promise.resolve(null),
+    const [overdueSalesResult, draftSalesResult, draftPurchasesResult, warehousesResult, productsResult, stockResult] = await Promise.allSettled([
       canViewSales && enable_sales_due_date ? saleApi.getAll({ status: 1, relations: 1, invoice_status: 'confirmed', payment_status: 'unpaid', due_before: lateCutoffDate, page: 1, limit: 100, sort_by: 'due_date', sort_dir: 'asc' }) : Promise.resolve(null),
       canViewSales ? saleApi.getAll({ status: 1, relations: 1, invoice_status: 'draft', page: 1, limit: 100, sort_by: 'invoice_date', sort_dir: 'desc' }) : Promise.resolve(null),
       canViewPurchases ? purchaseApi.getAll({ status: 1, relations: 1, bill_status: 'draft', page: 1, limit: 100, sort_by: 'bill_date', sort_dir: 'desc' }) : Promise.resolve(null),
@@ -246,59 +241,6 @@
       ...rows(draftSalesResult).map((item) => ({ ...item, kind: 'sale', href: `/dashboard/sales/${item.id}`, number: item.invoice_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', date: item.invoice_date || item.created_at, amount: Number(item.total_amount) || 0 })),
       ...rows(draftPurchasesResult).map((item) => ({ ...item, kind: 'purchase', href: `/dashboard/purchases/${item.id}`, number: item.bill_number || `#${item.id}`, party: item.account?.name || item.account_name || '—', date: item.bill_date || item.created_at, amount: Number(item.total_amount) || 0 })),
     ].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-    const sales = rows(salesResult).map((item) => ({
-      id: item.id,
-      kind: 'sale',
-      label: t('Sales'),
-      number: item.invoice_number || `#${item.id}`,
-      party: item.account?.name || item.account_name || '—',
-      date: item.invoice_date || item.created_at,
-      amount: Number(item.total_amount) || 0,
-      currency: item.currency || defaultCurrency,
-      status: item.invoice_status,
-      href: `/dashboard/sales/${item.id}`,
-    }));
-    const purchases = rows(purchasesResult).map((item) => ({
-      id: item.id,
-      kind: 'purchase',
-      label: t('Purchases'),
-      number: item.bill_number || `#${item.id}`,
-      party: item.account?.name || item.account_name || '—',
-      date: item.bill_date || item.created_at,
-      amount: Number(item.total_amount) || 0,
-      currency: item.currency || defaultCurrency,
-      status: item.bill_status,
-      href: `/dashboard/purchases/${item.id}`,
-    }));
-    const journals = rows(journalsResult)
-      .filter((item) => item.reference_type !== 'fiscal_year_close')
-      .map((item) => ({
-        id: item.id,
-        kind: 'journal',
-        label: t('Journals'),
-        number: item.journal_number || item.reference_number || `#${item.id}`,
-        party: item.account?.name || item.account_name || item.description || '—',
-        date: item.date || item.created_at,
-        amount: Number(item.amount ?? item.total_amount) || 0,
-        currency: item.currency || defaultCurrency,
-        status: item.status,
-        href: '/dashboard/journals/list',
-      }));
-    const exchanges = rows(exchangesResult).map((item) => ({
-      id: item.id,
-      kind: 'exchange',
-      label: t('Exchange'),
-      number: item.exchange_number || item.reference_number || `#${item.id}`,
-      party: item.account?.name || item.account_name || item.description || '—',
-      date: item.date || item.created_at,
-      amount: Number(item.amount ?? item.total_amount) || 0,
-      currency: item.currency || defaultCurrency,
-      status: item.status,
-      href: '/dashboard/exchanges/list',
-    }));
-    recentTransactions = [...sales, ...purchases, ...journals, ...exchanges]
-      .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
-      .slice(0, 6);
 
     if (productsResult.status === 'fulfilled' && stockResult.status === 'fulfilled' && warehousesResult.status === 'fulfilled') {
       const products = rows(productsResult);
@@ -311,37 +253,221 @@
         const product = productById.get(Number(item.product_id));
         const warehouse = warehouseById.get(Number(item.warehouse_id));
         if (!warehouse) continue;
-        const current = totals.get(Number(warehouse.id)) || { value: 0, quantity: 0, unpriced: false };
+        const current = totals.get(Number(warehouse.id)) || { value: 0, quantity: 0 };
         const quantity = Number(item.quantity) || 0;
         current.quantity += quantity;
         if (product) {
           const amount = quantity * Math.abs(Number(product.buy_price) || 0);
           const value = convertInventoryValue(amount, product.buy_currency || defaultCurrency);
-          if (value == null) current.unpriced = true;
-          else current.value += value;
+          // A product without a usable exchange rate is skipped, not fatal:
+          // one unpriced item used to null the whole warehouse, which emptied
+          // the warehouse chart entirely.
+          if (value != null) current.value += value;
         }
         totals.set(Number(warehouse.id), current);
       }
-      const maxValue = Math.max(1, ...Array.from(totals.values(), (item) => item.unpriced ? 0 : item.value));
+      const maxValue = Math.max(1, ...Array.from(totals.values(), (item) => item.value));
       warehouseRows = warehouses
         .filter((warehouse) => totals.has(Number(warehouse.id)))
         .map((warehouse) => ({
           id: warehouse.id,
           name: warehouse.name,
-          value: totals.get(Number(warehouse.id)).unpriced ? null : totals.get(Number(warehouse.id)).value,
+          value: totals.get(Number(warehouse.id)).value,
           quantity: totals.get(Number(warehouse.id)).quantity,
-          share: Math.max(3, ((totals.get(Number(warehouse.id)).unpriced ? 0 : totals.get(Number(warehouse.id)).value) / maxValue) * 100),
+          share: Math.max(3, (totals.get(Number(warehouse.id)).value / maxValue) * 100),
           href: `/dashboard/warehouse/${warehouse.id}`,
         }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 6);
+      warehouseValuationSnapshot = { stock, products };
     }
+
+    await loadWarehouseHistory();
+  }
+
+  function buildWarehouseHistoryDates() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let dates = [];
+
+    const addDate = (date) => {
+      const point = new Date(date);
+      point.setHours(0, 0, 0, 0);
+      if (point > today) return;
+      const key = toDateParam(point);
+      if (!dates.some((item) => item.key === key)) {
+        const label = activePeriod === 'week'
+          ? point.toLocaleDateString(_lang || 'fa', { weekday: 'short' })
+          : activePeriod === 'today'
+            ? t('Today')
+            : (_lang === 'fa' || _lang === 'ps')
+              ? formatPersianDay(point)
+              : point.toLocaleDateString(_lang || 'en', { day: 'numeric', month: 'short' });
+        dates.push({ date: point, key, label });
+      }
+    };
+
+    if (activePeriod === 'today') {
+      addDate(today);
+    } else if (activePeriod === 'month') {
+      const { start } = getPersianMonthRange(today);
+      const dayCount = Math.max(1, Math.floor((today - start) / 86400000));
+      const step = Math.max(1, Math.ceil(dayCount / 6));
+      for (let day = 0; day < dayCount; day += step) {
+        const date = new Date(start);
+        date.setDate(start.getDate() + day);
+        addDate(date);
+      }
+      addDate(today);
+    } else if (activePeriod === 'year') {
+      const { start } = getPeriodRange('year');
+      const startJalaali = toJalaali(start.getFullYear(), start.getMonth() + 1, start.getDate());
+      for (let month = 1; month <= 12; month += 1) {
+        const monthStart = toGregorian(startJalaali.jy, month, 1);
+        addDate(new Date(monthStart.gy, monthStart.gm - 1, monthStart.gd));
+      }
+      addDate(today);
+    } else if (activePeriod === 'custom' && customStartDate && customEndDate) {
+      const start = new Date(`${customStartDate}T00:00:00`);
+      const end = new Date(`${customEndDate}T00:00:00`);
+      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start > end) return [];
+      if (start > today) return [];
+      if (end > today) end.setTime(today.getTime());
+      const dayCount = Math.max(1, Math.floor((end - start) / 86400000));
+      const step = Math.max(1, Math.ceil(dayCount / 6));
+      for (let day = 0; day <= dayCount; day += step) {
+        const date = new Date(start);
+        date.setDate(start.getDate() + day);
+        addDate(date);
+      }
+      addDate(end);
+    } else {
+      // The weekly chart follows the reference's seven daily points, ending today.
+      for (let offset = 6; offset >= 0; offset -= 1) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - offset);
+        addDate(date);
+      }
+    }
+
+    return dates.sort((first, second) => first.date - second.date);
+  }
+
+  async function loadWarehouseHistory() {
+    const requestId = ++warehouseHistoryRequestId;
+    const snapshot = warehouseValuationSnapshot;
+    const points = buildWarehouseHistoryDates();
+    warehouseHistoryLabels = points.map((point) => point.label);
+
+    if (!snapshot || !points.length || !warehouseRows.length) {
+      warehouseRows = warehouseRows.map((warehouse) => ({ ...warehouse, history: [] }));
+      return;
+    }
+
+    const today = toDateParam(new Date());
+    let movements = [];
+    try {
+      const response = await stockTransactionApi.getAll({
+        status: 1,
+        date_from: points[0].key,
+        date_to: today,
+      });
+      movements = response?.data || [];
+    } catch (historyError) {
+      console.warn('Dashboard warehouse history load failed:', historyError);
+      if (requestId === warehouseHistoryRequestId) {
+        warehouseRows = warehouseRows.map((warehouse) => ({ ...warehouse, history: [] }));
+      }
+      return;
+    }
+
+    if (requestId !== warehouseHistoryRequestId) return;
+
+    const incomingTypes = new Set([
+      'purchase', 'sale_return', 'adjustment_in', 'transfer_in', 'production_in',
+      'waste_revert', 'purchase_return_revert', 'sale_revert', 'inventory_record_return',
+      'inventory_record_revert', 'prescription_return', 'prescription_revert', 'transfer_out_revert',
+    ]);
+    const outgoingTypes = new Set([
+      'sale', 'purchase_return', 'adjustment_out', 'transfer_out', 'production_out', 'waste',
+      'purchase_revert', 'sale_return_revert', 'inventory_record', 'inventory_record_return_revert',
+      'prescription', 'prescription_return_revert', 'transfer_in_revert',
+    ]);
+    const pairKey = (warehouseId, productId) => `${Number(warehouseId)}:${Number(productId)}`;
+    const currentQuantities = new Map();
+    for (const item of snapshot.stock) {
+      const key = pairKey(item.warehouse_id, item.product_id);
+      currentQuantities.set(key, (currentQuantities.get(key) || 0) + (Number(item.quantity) || 0));
+    }
+
+    const productById = new Map(snapshot.products.map((product) => [Number(product.id), product]));
+    const movementByPair = new Map();
+    for (const movement of movements) {
+      const type = String(movement.transaction_type || '').toLowerCase();
+      const sign = incomingTypes.has(type) ? 1 : outgoingTypes.has(type) ? -1 : 0;
+      const date = String(movement.date || '').slice(0, 10);
+      if (!sign || !date || !movement.warehouse_id || !movement.product_id) continue;
+      const key = pairKey(movement.warehouse_id, movement.product_id);
+      const list = movementByPair.get(key) || [];
+      list.push({ date, quantity: (Number(movement.quantity) || 0) * sign });
+      movementByPair.set(key, list);
+    }
+
+    const productsByWarehouse = new Map();
+    for (const key of [...currentQuantities.keys(), ...movementByPair.keys()]) {
+      const [warehouseId, productId] = key.split(':').map(Number);
+      const ids = productsByWarehouse.get(warehouseId) || new Set();
+      ids.add(productId);
+      productsByWarehouse.set(warehouseId, ids);
+    }
+
+    const valuesByWarehouse = new Map();
+    for (const warehouse of warehouseRows) {
+      const warehouseId = Number(warehouse.id);
+      const histories = points.map((point) => {
+        let total = 0;
+        const productIds = productsByWarehouse.get(warehouseId) || new Set();
+
+        for (const productId of productIds) {
+          const product = productById.get(productId);
+          if (!product) continue;
+          const key = pairKey(warehouseId, productId);
+          const currentQuantity = currentQuantities.get(key) || 0;
+          const netAfterPoint = (movementByPair.get(key) || [])
+            .reduce((sum, movement) => sum + (movement.date > point.key ? movement.quantity : 0), 0);
+          const quantity = currentQuantity - netAfterPoint;
+          if (!quantity) continue;
+
+          const amount = quantity * Math.abs(Number(product.buy_price) || 0);
+          const converted = convertInventoryValue(amount, product.buy_currency || defaultCurrency);
+          // Skip the unpriced product only; one of them must not void the day
+          // (and with it, the entire series).
+          if (converted != null) total += converted;
+        }
+
+        return Math.max(0, total);
+      });
+      valuesByWarehouse.set(warehouseId, histories);
+    }
+
+    if (requestId !== warehouseHistoryRequestId) return;
+    warehouseRows = warehouseRows.map((warehouse) => ({
+      ...warehouse,
+      history: valuesByWarehouse.get(Number(warehouse.id)) || [],
+    }));
   }
 
   function convertInventoryValue(amount, currency) {
     const source = String(currency || defaultCurrency).toUpperCase();
     const destination = String(defaultCurrency || 'AFN').toUpperCase();
     if (source === destination) return amount;
+
+    const configuredSourceRate = configuredCurrencyRate(source, systemCurrencies, destination);
+    const configuredDestinationRate = configuredCurrencyRate(destination, systemCurrencies, destination);
+    if (configuredSourceRate != null && configuredDestinationRate != null) {
+      return amount * configuredSourceRate / configuredDestinationRate;
+    }
+
     const afnPerUnit = {
       AFN: 1,
       USD: Number(marketRates?.usdToAfn),
@@ -496,9 +622,8 @@
   }
 
   function refreshAll() {
-    refresh();
+    Promise.all([refresh(), loadMarket()]).then(() => loadSupplementalReports());
     loadReturnsMetrics();
-    loadMarket();
   }
 
   const LOCAL_CACHE_KEY = 'zeno:dashboard:lastSnapshot';
@@ -910,6 +1035,7 @@
     activePeriod = period;
     loadingMetricData = true;
     await getData({ includeOverview: false, includeMetrics: true });
+    await loadWarehouseHistory();
     loadingMetricData = false;
     writeLocalSnapshot();
   }
@@ -1630,13 +1756,13 @@
 
   $: returnRows = [
     {
-      label: t('Sale Returns'),
+      label: t('Dashboard Sale Return'),
       value: returnMetricData.saleReturns,
       count: returnMetricData.saleReturnCount,
       href: '/dashboard/stock/returns',
     },
     {
-      label: t('Purchase Returns'),
+      label: t('Dashboard Purchase Return'),
       value: returnMetricData.purchaseReturns,
       count: returnMetricData.purchaseReturnCount,
       href: '/dashboard/stock/returns',
@@ -1717,12 +1843,12 @@
     },
     inventory: {
       warehouses: warehouseRows,
+      warehouseHistoryLabels,
     },
-    transactions: recentTransactions,
     reports:
       cardTrend || cardTopProducts
         ? {
-            summary: `${t('Financial Trend')} · ${t('Inventory & Returns')} · ${t('Top Products')} · ${t('Transactions')}`,
+            summary: `${t('Financial Trend')} · ${t('Inventory & Returns')} · ${t('Top Products')}`,
             returns: returnRows,
             topProducts: cardTopProducts ? topProductRows : [],
           }

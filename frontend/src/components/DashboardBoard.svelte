@@ -208,11 +208,6 @@
   const CHART_TOP = 10;
 
   let visible = [true, true, true, true];
-  let transactionFilter = 'all';
-  $: filteredTransactions = (data?.transactions || []).filter((row) =>
-    transactionFilter === 'all' || row.kind === transactionFilter,
-  );
-
   function toggleSeries(index) {
     visible = visible.map((item, itemIndex) => (itemIndex === index ? !item : item));
   }
@@ -260,31 +255,67 @@
     top: `${((CHART_TOP + (CHART_H - CHART_TOP) * (1 - ratio)) / CHART_H) * 100}%`,
   }));
 
-  /* The reference warehouse chart uses demo history. This dashboard only has
-   * live inventory totals, so plot those totals by warehouse instead. */
   let hiddenWarehouseIds = [];
   $: warehouseRows = data?.inventory?.warehouses || [];
+  $: warehouseChartLabels = data?.inventory?.warehouseHistoryLabels || [];
   $: visibleWarehouseRows = warehouseRows.filter((warehouse) =>
     warehouse.value != null && !hiddenWarehouseIds.includes(String(warehouse.id)),
   );
-  $: warehouseChartMax = niceMax(
-    Math.max(0, ...visibleWarehouseRows.map((warehouse) => Number(warehouse.value) || 0)),
+  /* Reference rounding: ceil to the next multiple of a power of ten. */
+  function niceCeil(value) {
+    const raw = Number(value) || 0;
+    if (raw <= 0) return 0;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+    return Math.ceil(raw / magnitude) * magnitude;
+  }
+
+  $: warehouseChartMax = niceCeil(
+    Math.max(0, ...visibleWarehouseRows.flatMap((warehouse) => warehouse.history || []).map(Number)),
   );
-  $: warehouseChartPoints = visibleWarehouseRows.map((warehouse) => {
+  $: warehouseChartSeries = visibleWarehouseRows.flatMap((warehouse) => {
+    const values = warehouse.history || [];
+    if (
+      !warehouseChartLabels.length ||
+      values.length !== warehouseChartLabels.length ||
+      values.some((value) => value == null || !Number.isFinite(Number(value)))
+    ) return [];
+
     const index = warehouseRows.findIndex((item) => String(item.id) === String(warehouse.id));
-    const value = Math.max(0, Number(warehouse.value) || 0);
-    const x = warehouseRows.length <= 1 ? CHART_W / 2 : (index / (warehouseRows.length - 1)) * CHART_W;
-    const y = CHART_TOP + (CHART_H - CHART_TOP) * (1 - value / warehouseChartMax);
-    return { id: warehouse.id, x: Number(x.toFixed(1)), y: Number(y.toFixed(1)), value, colorIndex: index % 3 };
+    // Same string formatting as the reference (`59.0`, not `59`).
+    const scale = warehouseChartMax || 1;
+    const points = values.map((value, pointIndex) => {
+      const x = values.length <= 1 ? CHART_W / 2 : (pointIndex / (values.length - 1)) * CHART_W;
+      const y = CHART_TOP + (CHART_H - CHART_TOP) * (1 - Math.max(0, Number(value)) / scale);
+      return { x: x.toFixed(1), y: y.toFixed(1) };
+    });
+    const line = points.map((point) => `${point.x},${point.y}`).join(' ');
+    // The reference fills only the first series, from the baseline across the full width.
+    const area = points.length > 1 ? `0,${CHART_H} ${line} ${CHART_W},${CHART_H}` : '';
+    return [{
+      id: warehouse.id,
+      name: warehouse.name,
+      values,
+      points,
+      line,
+      area,
+      colorIndex: index % 3,
+    }];
   });
-  $: warehouseLinePoints = warehouseChartPoints.map((point) => `${point.x},${point.y}`).join(' ');
-  $: warehouseAreaPath = warehouseChartPoints.length
-    ? `M 0 ${CHART_H} L ${warehouseLinePoints} L ${CHART_W} ${CHART_H} Z`
-    : '';
   $: warehouseChartTicks = [1, 0.75, 0.5, 0.25, 0].map((ratio) => ({
-    value: warehouseChartMax * ratio,
+    // The reference prints plain integers here (no thousands separator).
+    label: String(Math.round(warehouseChartMax * ratio)),
     top: `${((CHART_TOP + (CHART_H - CHART_TOP) * (1 - ratio)) / CHART_H) * 100}%`,
   }));
+
+  function warehouseChange(warehouse) {
+    const values = (warehouse?.history || []).map(Number).filter((value) => Number.isFinite(value));
+    if (values.length < 2) return null;
+    const first = values[0];
+    const last = values[values.length - 1];
+    if (!first) return null;
+    const percent = ((last - first) / first) * 100;
+    return { up: percent >= 0, text: `${percent >= 0 ? '↑' : '↓'} ${Math.abs(percent).toFixed(1)}%` };
+  }
 
   function warehouseVisible(id) {
     return !hiddenWarehouseIds.includes(String(id));
@@ -310,23 +341,45 @@
   $: purchasesTotal = (trend.purchases || []).reduce((sum, value) => sum + (Number(value) || 0), 0);
   $: returnsTotal = (data?.reports?.returns || []).reduce((sum, row) => sum + (Number(row.value) || 0), 0);
 
-  function returnSegment(index) {
-    const rows = data?.reports?.returns || [];
-    const circumference = 251.327;
-    const amount = Math.max(0, Number(rows[index]?.value) || 0);
-    const prior = rows.slice(0, index).reduce((sum, row) => sum + Math.max(0, Number(row.value) || 0), 0);
-    const ratio = returnsTotal ? amount / returnsTotal : 0;
-    const length = ratio * circumference;
+  function returnsDonutBackground(rows, amount) {
+    const colors = ['#d97706', '#64748b', '#dc2626'];
+    const total = Math.max(0, Number(amount) || 0);
+    const stops = [];
+    let offset = 0;
 
-    /* The design leaves a 1.5px notch between segments so two neighbouring
-     * arcs never read as one; slivers shorter than 2px keep their whole arc. */
-    const gap = length > 2 ? 1.5 : 0;
+    if (!total) return 'conic-gradient(var(--surface-3) 0deg 360deg)';
 
-    return `stroke-dasharray:${Math.max(0, length - gap).toFixed(2)} ${circumference};stroke-dashoffset:${(-prior / (returnsTotal || 1) * circumference).toFixed(2)}`;
+    rows.forEach((row, index) => {
+      const amount = Math.max(0, Number(row.value) || 0);
+      if (!amount) return;
+
+      const angle = amount / total * 360;
+      const end = offset + angle;
+      const gap = Math.min(2.15, angle * 0.25);
+      const visibleStart = offset + gap / 2;
+      const visibleEnd = end - gap / 2;
+      const startText = `${offset.toFixed(3)}deg`;
+      const visibleStartText = `${visibleStart.toFixed(3)}deg`;
+      const visibleEndText = `${visibleEnd.toFixed(3)}deg`;
+      const endText = `${end.toFixed(3)}deg`;
+
+      if (visibleStart > offset) {
+        stops.push(`var(--surface-3) ${startText} ${visibleStartText}`);
+      }
+      stops.push(`${colors[index] || colors[0]} ${visibleStartText} ${visibleEndText}`);
+      if (end > visibleEnd) {
+        stops.push(`var(--surface-3) ${visibleEndText} ${endText}`);
+      }
+      offset = end;
+    });
+
+    if (offset < 360) stops.push(`var(--surface-3) ${offset.toFixed(3)}deg 360deg`);
+    return `conic-gradient(from 0deg, ${stops.join(', ')})`;
   }
 
-  function returnPercent(value) {
-    return returnsTotal > 0 ? `${Math.round((Number(value) || 0) / returnsTotal * 100)}%` : '0%';
+  function returnPercent(value, total) {
+    const denominator = Number(total) || 0;
+    return denominator > 0 ? `${Math.round(((Number(value) || 0) / denominator) * 100)}%` : '0%';
   }
 
   /* ---------- formatting ---------- */
@@ -340,6 +393,16 @@
     if (Math.abs(number) >= 1_000_000) return `${(number / 1_000_000).toFixed(1)}M`;
     if (Math.abs(number) >= 10_000) return `${Math.round(number / 1000)}K`;
     return fmt(Math.round(number));
+  }
+
+  function formatWarehouseTileValue(value) {
+    if (value == null || !Number.isFinite(Number(value))) return '—';
+    const amount = Number(value);
+    if (Math.abs(amount) >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}m`;
+    if (Math.abs(amount) >= 1_000) {
+      return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(amount / 1_000)}k`;
+    }
+    return fmt(amount);
   }
 
   function percent(value) {
@@ -472,16 +535,6 @@
             {/if}
           </div>
 
-          <div class="zb-treasury-actions">
-            <a href="/dashboard/transfers/list" use:link>
-              <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
-              {t('Transfer')}
-            </a>
-            <a href="/dashboard/journals/list" use:link class="soft">
-              <i class="bi bi-plus-lg" aria-hidden="true"></i>
-              {t('Receive / Pay')}
-            </a>
-          </div>
         </section>
       {/if}
 
@@ -888,13 +941,12 @@
 
               <div class="zb-return-content">
                 <div class="zb-return-donut" aria-hidden="true">
-                  <svg viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="40" class="zb-return-track"></circle>
-                    {#each data.reports.returns as row, index (row.label)}
-                      <circle cx="50" cy="50" r="40" class="zb-return-segment" class:seg-0={index === 0} class:seg-1={index === 1} class:seg-2={index === 2} style={returnSegment(index)}></circle>
-                    {/each}
-                  </svg>
-                  <div><small>{t('Total')}</small><b>{fmt(returnsTotal)}</b><small>{t(data.currency)}</small></div>
+                  <span
+                    class="zb-return-donut-ring"
+                    style:background={returnsDonutBackground(data?.reports?.returns || [], returnsTotal)}>
+                    <span class="zb-return-donut-hole"></span>
+                  </span>
+                  <div class="zb-return-total"><small>{t('Total')}</small><b>{fmt(returnsTotal)}</b><small>{t(data.currency)}</small></div>
                 </div>
                 <div class="zb-returns-rows">
                   {#each data.reports.returns as row, index (row.label)}
@@ -903,7 +955,7 @@
                       <span class="zb-returns-label">{row.label}<small>{fmt(row.count)} {returnCountSuffix}</small></span>
                       <span class="zb-returns-value" dir="ltr">
                         <span>{fmt(row.value)}</span>
-                        <small>{returnPercent(row.value)}</small>
+                        <small>{returnPercent(row.value, returnsTotal)}</small>
                       </span>
                       <i class="bi bi-chevron-left zb-returns-go" aria-hidden="true"></i>
                     </a>
@@ -924,52 +976,89 @@
                     </span>
                     {t('Warehouses')}
                   </h4>
-                  <span class="zb-warehouse-sub">{t('Warehouse stock value')} · {t(data.currency)}</span>
+                  <span class="zb-warehouse-sub">{t('Warehouse value')} · {t(data.currency)}</span>
+                </div>
+                <div class="zb-period-group zb-warehouse-period" role="group" aria-label={t('Chart range')}>
+                  <button type="button" class:active={period === 'week'} aria-pressed={period === 'week'}
+                    on:click={() => pickPeriod('week')}>{t('Warehouse 7 days')}</button>
+                  <button type="button" class:active={period === 'month'} aria-pressed={period === 'month'}
+                    on:click={() => pickPeriod('month')}>{periodLabels.month}</button>
+                  <button type="button" class:active={(showCustomDates && customRangeOrigin === 'warehouse') || period === 'custom'} aria-pressed={period === 'custom'} aria-expanded={showCustomDates && customRangeOrigin === 'warehouse'}
+                    on:click={() => toggleCustomDates('warehouse')}>{periodLabels.custom}</button>
                 </div>
               </header>
+              {#if showCustomDates && customRangeOrigin === 'warehouse'}
+                <div class="zb-custom-range" role="group" aria-label={t('Custom date range')}>
+                  {#each customDatePresets as preset (preset.id)}
+                    <button type="button" class="preset" class:active={selectedCustomPreset === preset.id}
+                      on:click={() => applyCustomPreset(preset.id)}>{preset.label}</button>
+                  {/each}
+                  <span class="zb-custom-separator" aria-hidden="true"></span>
+                  <label>{t('From')}<input type="date" dir="ltr" bind:value={fromDate} on:input={() => (selectedCustomPreset = '')} /></label>
+                  <label>{t('To')}<input type="date" dir="ltr" bind:value={toDate} on:input={() => (selectedCustomPreset = '')} /></label>
+                  <button type="button" class="apply" on:click={applyCustom}>{t('Apply')}</button>
+                  <button type="button" aria-label={t('Close')} on:click={() => (showCustomDates = false)}><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                </div>
+              {/if}
+              {#if period === 'custom' && !showCustomDates && customRangeOrigin === 'warehouse'}
+                <button type="button" class="zb-custom-chip" on:click={() => toggleCustomDates('warehouse')}>
+                  <i class="bi bi-calendar-range" aria-hidden="true"></i>
+                  <span dir="ltr">{customStart} – {customEnd}</span>
+                  <i class="bi bi-pencil" aria-hidden="true"></i>
+                </button>
+              {/if}
               {#if warehouseRows.length}
                 <div class="zb-warehouse-list" role="group" aria-label={t('Warehouses')}>
                   {#each warehouseRows as warehouse, index (warehouse.id)}
-                    <div class="zb-warehouse-item" class:series0={index % 3 === 0} class:series1={index % 3 === 1} class:series2={index % 3 === 2} class:hidden={!warehouseVisible(warehouse.id)}>
+                    {@const change = warehouseChange(warehouse)}
+                    {@const visible = !hiddenWarehouseIds.includes(String(warehouse.id))}
+                    <div class="zb-warehouse-item" class:series0={index % 3 === 0} class:series1={index % 3 === 1} class:series2={index % 3 === 2} class:hidden={!visible}>
                       <a class="zb-warehouse-tile" href={warehouse.href} use:link title={warehouse.name}>
                         <span class="zb-warehouse-name">{warehouse.name}</span>
-                        <span class="zb-warehouse-value" dir="ltr">
-                          <b>{warehouse.value == null ? '—' : fmt(warehouse.value)}</b>
-                          {#if warehouse.value != null}<small>{t(data.currency)}</small>{/if}
+                        <span class="zb-warehouse-value">
+                          <b dir="ltr">{formatWarehouseTileValue(warehouse.value)}</b>
+                          {#if change}
+                            <small class="zb-warehouse-change" class:up={change.up} class:down={!change.up} dir="ltr">{change.text}</small>
+                          {/if}
                         </span>
                       </a>
                       <button
                         type="button"
                         class="zb-warehouse-eye"
-                        aria-pressed={warehouseVisible(warehouse.id)}
-                        aria-label={t(warehouseVisible(warehouse.id) ? 'Hide from chart' : 'Show in chart')}
-                        title={t(warehouseVisible(warehouse.id) ? 'Hide from chart' : 'Show in chart')}
+                        aria-pressed={visible}
+                        aria-label={t(visible ? 'Hide from chart' : 'Show in chart')}
+                        title={t(visible ? 'Hide from chart' : 'Show in chart')}
                         on:click={() => toggleWarehouse(warehouse.id)}
                       >
-                        <i class="bi" class:bi-eye={warehouseVisible(warehouse.id)} class:bi-eye-slash={!warehouseVisible(warehouse.id)} aria-hidden="true"></i>
+                        <i class="bi" class:bi-eye={visible} class:bi-eye-slash={!visible} aria-hidden="true"></i>
                       </button>
                     </div>
                   {/each}
                 </div>
                 <div class="zb-warehouse-chart" dir="ltr" role="img" aria-label={t('Warehouse stock value')}>
                   <div class="zb-warehouse-plot">
-                    {#each warehouseChartTicks as tick (tick.top)}
-                      <div class="zb-warehouse-grid-line" style={`top:${tick.top}`}>
-                        <span>{fmt(tick.value)}</span>
-                        <i></i>
-                      </div>
-                    {/each}
-                    <svg class="zb-warehouse-svg" viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="none" aria-hidden="true">
-                      {#if warehouseAreaPath}<path d={warehouseAreaPath} fill="rgba(47,111,237,.08)"></path>{/if}
-                      {#if warehouseLinePoints}<polyline points={warehouseLinePoints} fill="none" stroke="#2F6FED" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"></polyline>{/if}
-                      {#each warehouseChartPoints as point (point.id)}
-                        <circle class={`zb-warehouse-point series${point.colorIndex}`} cx={point.x} cy={point.y} r="3.5"></circle>
+                    {#if warehouseChartMax > 0}
+                      {#each warehouseChartTicks as tick (tick.top)}
+                        <div class="zb-warehouse-grid-line" style={`top:${tick.top}`}>
+                          <span>{tick.label}</span>
+                          <i></i>
+                        </div>
                       {/each}
-                    </svg>
+                    {/if}
+                    <div class="zb-warehouse-plot-inner">
+                      {#each warehouseChartSeries as series (series.id)}
+                        <svg class="zb-warehouse-svg" viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="none" aria-hidden="true">
+                          {#if series.colorIndex === 0 && series.area}
+                            <polygon class="zb-warehouse-area" points={series.area}></polygon>
+                          {/if}
+                          <polyline class={`zb-warehouse-line series${series.colorIndex}`} points={series.line}></polyline>
+                        </svg>
+                      {/each}
+                    </div>
                   </div>
                   <div class="zb-warehouse-x">
-                    {#each warehouseRows as warehouse (warehouse.id)}
-                      <span title={warehouse.name}>{warehouse.name}</span>
+                    {#each warehouseChartLabels as label, index (`${label}-${index}`)}
+                      <span title={label}>{label}</span>
                     {/each}
                   </div>
                 </div>
@@ -1008,47 +1097,6 @@
           </div>
         {/if}
 
-        <div class="zb-block">
-          <h3 class="zb-block-title"><i class="bi bi-receipt" aria-hidden="true"></i>{t('Transactions')}</h3>
-          <section class="zb-card zb-transactions" aria-label={t('Transactions')}>
-            <div class="zb-transaction-tabs" role="tablist" aria-label={t('Transaction type')}>
-              {#each [
-                { key: 'all', label: t('All') },
-                { key: 'sale', label: t('Sales') },
-                { key: 'purchase', label: t('Purchases') },
-                { key: 'journal', label: t('Journals') },
-                { key: 'exchange', label: t('Exchange') },
-              ] as filter (filter.key)}
-                <button type="button" role="tab" aria-selected={transactionFilter === filter.key}
-                  on:click={() => (transactionFilter = filter.key)}>{filter.label}</button>
-              {/each}
-            </div>
-            <div class="zb-transaction-scroll">
-              <table>
-                <thead><tr>
-                  <th>{t('Type')}</th><th>{t('Number')}</th><th>{t('Account')}</th>
-                  <th>{t('Date')}</th><th>{t('Status')}</th><th>{t('Amount')}</th>
-                </tr></thead>
-                <tbody>
-                  {#if filteredTransactions.length}
-                    {#each filteredTransactions as row (`${row.kind}-${row.id}`)}
-                      <tr>
-                        <td><span class="zb-transaction-type" data-kind={row.kind}>{row.label}</span></td>
-                        <td dir="ltr">{row.number}</td>
-                        <td>{row.party}</td>
-                        <td dir="ltr">{row.date ? new Intl.DateTimeFormat(_lang || 'en', { dateStyle: 'short' }).format(new Date(row.date)) : '—'}</td>
-                        <td>{row.status ?? '—'}</td>
-                        <td dir="ltr"><a href={row.href} use:link>{fmt(row.amount)} <small>{t(row.currency)}</small></a></td>
-                      </tr>
-                    {/each}
-                  {:else}
-                    <tr><td class="zb-table-empty" colspan="6">{t('No Data')}</td></tr>
-                  {/if}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
       </div>
     </details>
   {/if}
@@ -1072,6 +1120,7 @@
     --text: #475569;
     --muted: #64748b;
     --subtle: #94a3b8;
+    --disabled: #cbd5e1;
     --link: #2f6fed;
     --brand: #2f6fed;
     --brand-soft: #e3ecff;
@@ -1111,6 +1160,7 @@
     --text: #b4c0da;
     --muted: #8a96b8;
     --subtle: #6b79a0;
+    --disabled: #3a4a70;
     --link: #7fa7f8;
     --brand-soft: #16295a;
     --ok-soft: #0f3324;
@@ -1894,36 +1944,6 @@
 
   .zb-treasury-amount.negative {
     color: #fca5a5;
-  }
-
-  .zb-treasury-actions {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    margin-top: auto;
-    padding-top: 4px;
-  }
-
-  .zb-treasury-actions a {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    height: 34px;
-    border-radius: 9px;
-    background: #2f6fed;
-    color: #fff;
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  .zb-treasury-actions a.soft {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .zb-treasury-actions a:hover {
-    filter: brightness(1.08);
   }
 
   /* ---------- alerts ---------- */
@@ -3227,14 +3247,9 @@
   .zb-returns-row.dot-1 { --dot: #64748b; }
   .zb-returns-row.dot-2 { --dot: #dc2626; }
   .zb-return-donut { position: relative; flex: 0 0 132px; width: 132px; height: 132px; }
-  .zb-return-donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-  .zb-return-donut circle { fill: none; stroke-width: 13; }
-  .zb-return-track { stroke: var(--surface-3); }
-  .zb-return-segment { stroke-linecap: butt; }
-  .zb-return-segment.seg-0 { stroke: #d97706; }
-  .zb-return-segment.seg-1 { stroke: #64748b; }
-  .zb-return-segment.seg-2 { stroke: #dc2626; }
-  .zb-return-donut > div { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; line-height: 1.2; }
+  .zb-return-donut-ring { position: absolute; inset: 0; overflow: hidden; border-radius: 50%; }
+  .zb-return-donut-hole { position: absolute; inset: 13px; border-radius: 50%; background: color-mix(in srgb, var(--c) 4%, var(--surface)); }
+  .zb-return-total { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; line-height: 1.2; }
   .zb-return-donut small { color: var(--muted); font-size: 10.5px; }
   .zb-return-donut b { color: var(--ink); font-family: var(--num); font-size: 16px; font-weight: 800; }
 
@@ -3309,7 +3324,9 @@
     --c: #c026d3;
     flex: 3 1 480px;
     gap: 10px;
+    padding: 12px 14px;
     border-color: color-mix(in srgb, var(--c) 16%, transparent);
+    border-radius: 16px;
     background: color-mix(in srgb, var(--c) 6%, var(--surface));
   }
 
@@ -3327,6 +3344,7 @@
     align-items: baseline;
     gap: 8px;
     min-width: 0;
+    flex-shrink: 0;
   }
 
   .zb-warehouse-title {
@@ -3334,6 +3352,7 @@
        fuchsia card (`--c: #C026D3` in the design), not the blue default. */
     --c: #c026d3;
     color: color-mix(in srgb, var(--c) 75%, var(--ink));
+    white-space: nowrap;
   }
 
   .zb-warehouse-title .zb-card-ic {
@@ -3344,6 +3363,12 @@
   .zb-warehouse-sub {
     color: var(--subtle);
     font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .zb-warehouse-period {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
   }
 
   .zb-warehouse-list {
@@ -3371,22 +3396,27 @@
     gap: 2px;
     min-width: 0;
     padding: 7px 10px;
-    border: 1px solid color-mix(in srgb, var(--series) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c) 14%, transparent);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--series) 6%, var(--surface));
+    background: color-mix(in srgb, var(--c) 6%, var(--surface));
     color: var(--ink);
     font: inherit;
-    text-align: start;
+    text-align: right;
     text-decoration: none;
     transition: background 0.15s;
   }
 
   .zb-warehouse-tile:hover {
-    background: color-mix(in srgb, var(--series) 10%, var(--surface));
+    background: color-mix(in srgb, var(--c) 13%, var(--surface));
   }
 
   .zb-warehouse-item.hidden .zb-warehouse-tile {
+    background: var(--surface);
     opacity: 0.55;
+  }
+
+  .zb-warehouse-item.hidden .zb-warehouse-name::before {
+    background: var(--disabled);
   }
 
   .zb-warehouse-eye {
@@ -3446,24 +3476,26 @@
   .zb-warehouse-value {
     display: flex;
     align-items: baseline;
+    justify-content: space-between;
     width: 100%;
-    gap: 4px;
+    gap: 6px;
   }
 
   .zb-warehouse-value b {
     color: var(--ink);
-    font-family: var(--num);
     font-size: 15px;
     font-weight: 800;
-    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
-  .zb-warehouse-value small {
-    color: var(--muted);
+  .zb-warehouse-change {
     font-size: 10.5px;
-    font-weight: 500;
+    font-weight: 700;
+    white-space: nowrap;
   }
+
+  .zb-warehouse-change.up { color: var(--ok-text); }
+  .zb-warehouse-change.down { color: var(--warn-text); }
 
   .zb-warehouse-chart {
     display: flex;
@@ -3501,88 +3533,47 @@
     border-top: 1px dashed var(--border);
   }
 
+  .zb-warehouse-plot-inner {
+    position: absolute;
+    inset: 0 4px 0 40px;
+  }
+
   .zb-warehouse-svg {
     position: absolute;
-    top: 0;
-    right: 4px;
-    bottom: 0;
-    left: 40px;
-    width: calc(100% - 44px);
+    inset: 0;
+    width: 100%;
     height: 100%;
     overflow: visible;
   }
 
-  .zb-warehouse-point.series0 { fill: #2f6fed; }
-  .zb-warehouse-point.series1 { fill: #93b7f7; }
-  .zb-warehouse-point.series2 { fill: #94a3b8; }
+  .zb-warehouse-area { fill: rgba(47, 111, 237, .08); }
+
+  .zb-warehouse-line {
+    fill: none;
+    stroke-width: 2.5;
+    vector-effect: non-scaling-stroke;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+
+  /* Stroke only: a filled polyline paints its interior and turns the chart
+     into a solid wedge (the reference lines are never filled). */
+  .zb-warehouse-line.series0 { stroke: #2f6fed; }
+  .zb-warehouse-line.series1 { stroke: #93b7f7; }
+  .zb-warehouse-line.series2 { stroke: #94a3b8; }
+  .zb-warehouse-line.series2 { stroke-dasharray: 5 4; }
 
   .zb-warehouse-x {
     display: flex;
     justify-content: space-between;
-    gap: 4px;
     padding: 0 4px 0 40px;
     color: var(--muted);
     font-size: 11px;
   }
 
   .zb-warehouse-x span {
-    flex: 1 1 0;
-    min-width: 0;
-    overflow: hidden;
-    text-align: center;
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
-
-  .zb-transactions {
-    gap: 8px;
-  }
-
-  .zb-transaction-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2px;
-    padding: 3px;
-    border-radius: 9px;
-    background: var(--surface-3);
-    align-self: flex-start;
-  }
-
-  .zb-transaction-tabs button {
-    min-height: 28px;
-    padding: 0 10px;
-    border: 0;
-    border-radius: 7px;
-    background: transparent;
-    color: var(--muted);
-    font-family: inherit;
-    font-size: 11.5px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .zb-transaction-tabs button[aria-selected='true'] {
-    background: var(--surface);
-    color: var(--ink);
-    box-shadow: 0 1px 2px rgba(11, 21, 48, .08);
-  }
-
-  .zb-transaction-scroll { overflow-x: auto; }
-  .zb-transactions table { width: 100%; min-width: 620px; border-collapse: separate; border-spacing: 0; text-align: start; font-size: 12px; }
-  .zb-transactions th { padding: 7px 10px; background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 600; white-space: nowrap; }
-  .zb-transactions th:first-child { border-start-start-radius: 8px; }
-  .zb-transactions th:last-child { border-start-end-radius: 8px; text-align: end; }
-  .zb-transactions td { padding: 8px 10px; border-bottom: 1px solid var(--border-soft); color: var(--text); white-space: nowrap; }
-  .zb-transactions td:nth-child(3) { color: var(--ink); font-weight: 600; }
-  .zb-transactions td:last-child { text-align: end; color: var(--ink); font-family: var(--num); font-weight: 800; }
-  .zb-transactions td:last-child a { color: inherit; }
-  .zb-transactions td:last-child small { color: var(--muted); font-family: inherit; font-size: 10.5px; font-weight: 500; }
-  .zb-transaction-type { display: inline-flex; align-items: center; gap: 5px; }
-  .zb-transaction-type::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #2f6fed; }
-  .zb-transaction-type[data-kind='purchase']::before { background: #64748b; }
-  .zb-transaction-type[data-kind='journal']::before { background: #d97706; }
-  .zb-transaction-type[data-kind='exchange']::before { background: #0891b2; }
-  .zb-table-empty { padding: 20px !important; text-align: center; color: var(--muted) !important; }
 
   /* ---------- top products ---------- */
   .zb-top-products {
@@ -3782,6 +3773,10 @@
     .zb {
       gap: 12px;
     }
+
+    .zb-warehouse-hd { flex-wrap: wrap; }
+    .zb-warehouse-heading { flex: 1 1 100%; justify-content: space-between; }
+    .zb-warehouse-period { max-width: 100%; }
 
     .zb-kpi-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));

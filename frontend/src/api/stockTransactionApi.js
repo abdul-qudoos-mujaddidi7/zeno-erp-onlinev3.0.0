@@ -21,6 +21,8 @@ export const stockTransactionApi = {
     search,
     sort,
     direction,
+    date_from,
+    date_to,
     page,
     offset,
     limit,
@@ -68,6 +70,14 @@ export const stockTransactionApi = {
 
     if (direction) {
       params.set('direction', String(direction));
+    }
+
+    if (date_from) {
+      params.set('date_from', String(date_from));
+    }
+
+    if (date_to) {
+      params.set('date_to', String(date_to));
     }
 
     if (page != null || offset != null) {

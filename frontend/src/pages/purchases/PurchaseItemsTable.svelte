@@ -1124,9 +1124,11 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
       console.log(
         `Converting ${i.subtotal} from ${i.unit_price_currency} to ${currency} for total calculation - exchange rate value: ${exchangeRateValue}`,
       );
-      return s + exchangeRateValue;
+      // API returns DECIMAL columns as strings, so coerce before adding —
+      // otherwise `0 + "23800.000000"` concatenates and the total renders as NaN.
+      return s + (Number(exchangeRateValue) || 0);
     } else {
-      return s + i.subtotal;
+      return s + (Number(i.subtotal) || 0);
     }
   }, 0);
 </script>

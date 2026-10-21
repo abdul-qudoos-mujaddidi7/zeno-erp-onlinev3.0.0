@@ -84,6 +84,8 @@ function buildListQuery({ orgId, filters = {} }) {
 
   const {
     status,
+    date_from,
+    date_to,
     product_id,
     product_ids,
     warehouse_id,
@@ -100,6 +102,16 @@ function buildListQuery({ orgId, filters = {} }) {
   ) {
     conditions.push('status = ?');
     values.push(status);
+  }
+
+  if (date_from) {
+    conditions.push('date >= ?');
+    values.push(date_from);
+  }
+
+  if (date_to) {
+    conditions.push('date <= ?');
+    values.push(date_to);
   }
 
   if (product_id) {

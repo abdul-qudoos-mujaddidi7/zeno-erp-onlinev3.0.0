@@ -384,69 +384,6 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
         <span class="nav-text">{t('Apartments')}</span>
       </a>
 
-      <div class="sidebar-group-label">{t('Trade')}</div>
-
-      {#if permissions?.some(p => p.code === "Sales" && p.view)}
-        <a
-          use:link
-          href="/dashboard/sales"
-          class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-            localStorage.getItem('org_type') != 'exchange' &&
-            localStorage.getItem('org_type') != 'apartment') ||
-          (shiftPressed && ctrlPressed)
-            ? ''
-            : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-          class:active={$location === '/dashboard/sales' && salesTab !== 'products'}>
-          <i class="bi bi-cart-check" aria-hidden="true"></i>
-          <span class="nav-text">{t('Sales')}</span>
-        </a>
-      {/if}
-      {#if permissions?.some(p => p.code === "Purchases" && p.view)}
-        <a
-          use:link
-          href="/dashboard/purchases"
-          class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-            localStorage.getItem('org_type') != 'exchange') ||
-          (shiftPressed && ctrlPressed)
-            ? ''
-            : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-          class:active={$location === '/dashboard/purchases'}>
-          <i class="bi bi-bag-plus" aria-hidden="true"></i>
-          <span class="nav-text">{t('Purchases')}</span>
-        </a>
-      {/if}
-      {#if permissions?.some(p => p.code === "Products" && p.view)}
-        <a use:link href="/dashboard/stock"
-          class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-            localStorage.getItem('org_type') != 'exchange') ||
-          (shiftPressed && ctrlPressed)
-            ? ''
-            : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
-          class:active={$location === '/dashboard/stock'}>
-          <i class="bi bi-box-seam" aria-hidden="true"></i>
-          <span class="nav-text">{t('Products')}</span>
-        </a>
-      {/if}
-      {#if permissions?.some(p => p.code === "Services" && p.view)}
-        {#if enable_services || (shiftPressed && ctrlPressed)}
-          <a use:link href="/dashboard/services"
-            class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-              localStorage.getItem('org_type') != 'exchange')
-              ? ''
-              : 'd-none'}"
-            class:active={$location === '/dashboard/services'}>
-            <i class="bi bi-person-vcard" aria-hidden="true"></i>
-            <span class="nav-text">{t('Services')}</span>
-          </a>
-        {/if}
-      {/if}
-      <a use:link href="/dashboard/stock-transactions"
-        class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
-        class:active={$location === '/dashboard/stock-transactions'}>
-        <i class="bi bi-box-seam" aria-hidden="true"></i>
-        <span class="nav-text">{t('Stock Transactions')}</span>
-      </a>
-
       <div class="sidebar-group-label">{t('Finance')}</div>
 
       {#if permissions?.some(p => p.code === "Accounts" && p.view)}
@@ -516,6 +453,69 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
         class:active={$location === '/dashboard/account-types'}>
         <i class="bi bi-diagram-3" aria-hidden="true"></i>
         <span class="nav-text">{t('Account Types')}</span>
+      </a>
+
+      <div class="sidebar-group-label">{t('Trade')}</div>
+
+      {#if permissions?.some(p => p.code === "Sales" && p.view)}
+        <a
+          use:link
+          href="/dashboard/sales"
+          class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+            localStorage.getItem('org_type') != 'exchange' &&
+            localStorage.getItem('org_type') != 'apartment') ||
+          (shiftPressed && ctrlPressed)
+            ? ''
+            : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
+          class:active={$location === '/dashboard/sales' && salesTab !== 'products'}>
+          <i class="bi bi-cart-check" aria-hidden="true"></i>
+          <span class="nav-text">{t('Sales')}</span>
+        </a>
+      {/if}
+      {#if permissions?.some(p => p.code === "Purchases" && p.view)}
+        <a
+          use:link
+          href="/dashboard/purchases"
+          class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+            localStorage.getItem('org_type') != 'exchange') ||
+          (shiftPressed && ctrlPressed)
+            ? ''
+            : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
+          class:active={$location === '/dashboard/purchases'}>
+          <i class="bi bi-bag-plus" aria-hidden="true"></i>
+          <span class="nav-text">{t('Purchases')}</span>
+        </a>
+      {/if}
+      {#if permissions?.some(p => p.code === "Products" && p.view)}
+        <a use:link href="/dashboard/stock"
+          class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+            localStorage.getItem('org_type') != 'exchange') ||
+          (shiftPressed && ctrlPressed)
+            ? ''
+            : 'd-none'}  {localStorage.getItem('role_id') != '5' || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
+          class:active={$location === '/dashboard/stock'}>
+          <i class="bi bi-box-seam" aria-hidden="true"></i>
+          <span class="nav-text">{t('Products')}</span>
+        </a>
+      {/if}
+      {#if permissions?.some(p => p.code === "Services" && p.view)}
+        {#if enable_services || (shiftPressed && ctrlPressed)}
+          <a use:link href="/dashboard/services"
+            class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
+              localStorage.getItem('org_type') != 'exchange')
+              ? ''
+              : 'd-none'}"
+            class:active={$location === '/dashboard/services'}>
+            <i class="bi bi-person-vcard" aria-hidden="true"></i>
+            <span class="nav-text">{t('Services')}</span>
+          </a>
+        {/if}
+      {/if}
+      <a use:link href="/dashboard/stock-transactions"
+        class="list-group-item list-group-item-action {shiftPressed && ctrlPressed ? '' : 'd-none'}"
+        class:active={$location === '/dashboard/stock-transactions'}>
+        <i class="bi bi-box-seam" aria-hidden="true"></i>
+        <span class="nav-text">{t('Stock Transactions')}</span>
       </a>
 
       <div class="sidebar-group-label">{t('Management')}</div>
