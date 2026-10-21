@@ -208,6 +208,7 @@
         loc.startsWith('/dashboard/account-sale-form/') ||
         loc.startsWith('/dashboard/purchase-form/') ||
         loc.startsWith('/dashboard/account-purchase-form/') ||
+        loc.startsWith('/dashboard/production-form/') ||
         loc.startsWith('/dashboard/stock-transfer-form/')}>
       {#key currentLang}
       {#if !routeFeatureEnabled}
