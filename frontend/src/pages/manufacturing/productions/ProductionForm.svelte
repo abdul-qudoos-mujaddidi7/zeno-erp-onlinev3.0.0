@@ -21,6 +21,8 @@
   import { productApi } from '../../../api/productApi.js';
   import { accountTypeApi } from '../../../api/accountTypeApi.js';
   import { productionApi } from '../../../api/productionApi.js';
+  import FilterSelect from '../../../components/common/FilterSelect.svelte';
+  import '../manufacturing-form.css';
   import { bomApi } from '../../../api/bomApi.js';
 
   let productModalRef;
@@ -279,7 +281,7 @@
 
   async function saveProduction(confirm = false) {
     if (!form.warehouse_id || !form.bom_id || !form.product_id || items.length === 0) {
-      toast.error(t('Validation Error'), t('Warehouse, Customer, BOM, and at least one Item are required.'));
+      toast.error(t('Validation Error'), t('Warehouse, BOM, Product, and at least one Item are required.'));
       return;
     }
 
@@ -378,153 +380,205 @@
     items = [];
   }
 </script>
+<div class="sale-create-page manufacturing-form" dir={t('dir')}>
+  <section class="sale-section sale-details-section">
+    <header class="sale-section-header">
+      <div class="sale-section-heading">
+        <span class="sale-section-icon" aria-hidden="true">
+          <i class="bi bi-gear-wide-connected"></i>
+        </span>
 
-<div class="container-fluid mt-4">
-  <div class="card shadow-2">
-    <div class="card-body">
-      <h4 class="mb-4">
-        {productionId ? t('Edit Production') : t('New Production')}
-      </h4>
-
-      <div class="row g-3">
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" bind:value={form.warehouse_id}>
-            <option value="">{t('Select Warehouse')}</option>
-            {#each warehouses as w}
-              <option value={w.id}>{w.name}</option>
-            {/each}
-          </select>
-        </div>
-
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" bind:value={form.bom_id}>
-            <option value="">{t('Select BOM')}</option>
-            {#each boms as b}
-              <option value={b.id}>BOM-{b.bill_number}</option>
-            {/each}
-          </select>
-        </div>
-
-        <div class="col-md-3">
-          <div class="input-group">
-            <select class="form-select form-select-sm" bind:value={form.product_id}>
-              <option value="">{t('Select Product')}</option>
-              {#each products as p}
-                <option value={p.id}>
-                  {p.name}
-                </option>
-              {/each}
-            </select>
-            <button
-              class="btn btn-info btn-sm pt-1 px-2 d-none"
-              type="button"
-              on:click={() => productModalRef.openModal()}><i class="bi bi-plus-circle"></i></button>
-          </div>
-        </div>
-
-        <div class="col-md-3">
-          <div class="input-group input-group-sm">
-            <div class="form-outline flex-grow-1" data-mdb-input-init>
-              <input
-                type="text"
-                id="inp_quantity"
-                class="form-control form-control-sm"
-                bind:value={form.quantity} />
-              <label class="form-label" for="inp_quantity">{t('Quantity')}</label>
-            </div>
-            {#if units.find((u) => u.id == form.product_unit_id)}
-              <div class="input-group-text">
-                {units.find((u) => u.id == form.product_unit_id)?.name || t('Select The Product')}
-              </div>
-            {/if}
-          </div>
-        </div>
-        <div class="col-md-3">
-          <input
-            readonly
-            type="text"
-            class="form-control form-control-sm"
-            value="{t('Production #')}: {form.production_number}" />
-        </div>
-
-        <div class="col-md-3">
-          <div class="input-group input-group-sm persianDatePicker">
-            <input
-              type="date"
-              class="form-control form-control-sm dater1"
-              required
-              bind:value={form.production_start_date} />
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="input-group input-group-sm persianDatePicker">
-            <input
-              type="date"
-              class="form-control form-control-sm dater2"
-              required
-              bind:value={form.production_end_date} />
-          </div>
-        </div>
-        <div class="col-md-3">
-          <button
-            id="showCurrencyDropdown"
-            class="btn btn-secondary dropdown-toggle btn-sm w-100"
-            type="button"
-            data-mdb-toggle="dropdown"
-            aria-expanded="false">
-            {form.currency ? t(form.currency) : t('AFN')}
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end">
-            {#each currencies as cur}
-              <li>
-                <button
-                  class="dropdown-item"
-                  style={form.currency == cur.code
-                    ? 'background-color:rgb(225.6, 233.7, 247.05) !important;color: rgb(41.3, 79.1, 141.4) !important'
-                    : ''}
-                  on:click={() => (form.currency = cur.code)}
-                  type="button">
-                  {t(cur.code)}
-                </button>
-              </li>
-            {/each}
-          </ul>
-        </div>
-        <div class="col-md-12">
-          <textarea
-            class="form-control form-control-sm"
-            rows="2"
-            bind:value={form.description}
-            placeholder={t('Description')}></textarea>
+        <div>
+          <h2>
+            {productionId ? t('Edit Production') : t('New Production')}
+            <span class="sale-required-note"><i class="bi bi-asterisk" aria-hidden="true"></i></span>
+          </h2>
         </div>
       </div>
+    </header>
+
+    <div class="sale-details-grid">
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-building" aria-hidden="true"></i>
+          {t('Warehouse')}
+        </span>
+
+        <FilterSelect
+          variant="outline"
+          label={t('Warehouse')}
+          icon="bi-building"
+          value={form.warehouse_id}
+          options={[
+            { value: '', label: t('Select Warehouse') },
+            ...warehouses.map((w) => ({ value: w.id, label: w.name })),
+          ]}
+          on:change={(event) => (form.warehouse_id = event.detail)} />
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-list-check" aria-hidden="true"></i>
+          {t('BOM')}
+        </span>
+
+        <FilterSelect
+          variant="outline"
+          label={t('BOM')}
+          icon="bi-list-check"
+          value={form.bom_id}
+          options={[
+            { value: '', label: t('Select BOM') },
+            ...boms.map((b) => ({ value: b.id, label: `BOM-${b.bill_number}` })),
+          ]}
+          on:change={(event) => (form.bom_id = event.detail)} />
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-box-seam" aria-hidden="true"></i>
+          {t('Product')}
+        </span>
+
+        <FilterSelect
+          variant="outline"
+          label={t('Product')}
+          icon="bi-box-seam"
+          value={form.product_id}
+          options={[
+            { value: '', label: t('Select Product') },
+            ...products.map((p) => ({ value: p.id, label: p.name })),
+          ]}
+          on:change={(event) => (form.product_id = event.detail)} />
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-123" aria-hidden="true"></i>
+          {t('Quantity')}
+        </span>
+
+        <div class="sale-quantity-control">
+          <input type="text" class="form-control" id="inp_quantity" bind:value={form.quantity} />
+          {#if units.find((u) => u.id == form.product_unit_id)}
+            <span class="sale-quantity-suffix">
+              {units.find((u) => u.id == form.product_unit_id)?.name}
+            </span>
+          {/if}
+        </div>
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-cash-stack" aria-hidden="true"></i>
+          {t('Currency')}
+        </span>
+
+        <FilterSelect
+          variant="outline"
+          label={t('Currency')}
+          icon="bi-cash-stack"
+          value={form.currency}
+          options={currencies.map((c) => ({ value: c.code, label: t(c.code) }))}
+          on:change={(event) => (form.currency = event.detail)} />
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-calendar3" aria-hidden="true"></i>
+          {t('Start Date')}
+        </span>
+
+        <div class="input-group input-group-sm persianDatePicker">
+          <input type="date" class="form-control dater1" required bind:value={form.production_start_date} />
+        </div>
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-calendar-check" aria-hidden="true"></i>
+          {t('End Date')}
+        </span>
+
+        <div class="input-group input-group-sm persianDatePicker">
+          <input type="date" class="form-control dater2" required bind:value={form.production_end_date} />
+        </div>
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-hash" aria-hidden="true"></i>
+          {t('Production #')}
+        </span>
+
+        <input readonly type="text" class="form-control" value={form.production_number} />
+      </div>
+
+      <div class="sale-field sale-field--description">
+        <span class="sale-field-label">
+          <i class="bi bi-card-text" aria-hidden="true"></i>
+          {t('Description')}
+        </span>
+
+        <textarea class="form-control" rows="2" bind:value={form.description} placeholder={t('Description')}></textarea>
+      </div>
     </div>
-  </div>
+  </section>
+
   <ProductionItemsTable bind:items currency={form.currency} warehouse_id={form.warehouse_id} />
   <ProductionOperationsTable bind:operations bind:quantity bind:currency />
-  <div class="card shadow-2 mt-4">
-    <div class="card-body d-flex justify-content-between align-items-center">
-      <h4>
-        {t('Total')}{t('-of-')}{t('Production Cost')}: {total_amount.toLocaleString(undefined, {
-          maximumFractionDigits: 3,
-        })}
-        {t(form.currency)}
-        | {t('Cost')}{t('-of-')}
-        {t('per')}
-        {t('Product')}: {(total_amount / form.quantity).toLocaleString(undefined, {
-          maximumFractionDigits: 3,
-        })}
-        {t(form.currency)}
-      </h4>
-      <div>
-        <button class="btn btn-secondary me-2" on:click={() => saveProduction(false)} disabled={loading}
-          >{t('Save Draft')}</button>
-        <button class="btn btn-success" on:click={() => saveProduction(true)} disabled={loading}
-          >{t('Confirm Production')}</button>
-      </div>
+
+  <footer class="sale-actions">
+    <div class="sale-actions__buttons">
+      <button
+        type="button"
+        class="sale-action-button sale-action-button--draft"
+        on:click={() => saveProduction(false)}
+        disabled={loading}>
+        {#if loading}
+          <span class="spinner-border spinner-border-sm" role="status"></span>
+        {:else}
+          <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+        {/if}
+
+        <span>{t('Save Draft')}</span>
+      </button>
+
+      <button
+        type="button"
+        class="sale-action-button sale-action-button--confirm"
+        on:click={() => saveProduction(true)}
+        disabled={loading}>
+        {#if loading}
+          <span class="spinner-border spinner-border-sm" role="status"></span>
+        {:else}
+          <i class="bi bi-check2-circle" aria-hidden="true"></i>
+        {/if}
+
+        <span>{t('Confirm Production')}</span>
+      </button>
     </div>
-  </div>
+  </footer>
 </div>
+
+<style>
+  .sale-quantity-control {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .sale-quantity-suffix {
+    flex: 0 0 auto;
+    color: #64748b;
+    font-size: 0.7rem;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+
+</style>
 
 <AccountModal
   bind:this={modalRef}
@@ -548,6 +602,7 @@
             <button
               type="button"
               class="btn-close"
+              aria-label={t('Close')}
               on:click={() => {
                 showAccountModal = false;
               }}></button>

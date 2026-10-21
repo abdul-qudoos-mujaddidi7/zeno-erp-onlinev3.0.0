@@ -1,18 +1,28 @@
 <script>
-  import { onMount, tick } from 'svelte';
-  import BOMForm from './boms/BOMForm.svelte';
-  import { showDate, setDatePickers } from '../../calendar.js';
+  import { onMount } from 'svelte';
   import { push } from 'svelte-spa-router';
+  import { showDate } from '../../calendar.js';
   import { generatePDF, generatingPDF } from './../generatePDF.js';
   import { bomApi } from '../../api/bomApi.js';
 
   import { t, lang, translate_org_type } from '../../i18n/i18n';
   import { DEFAULT_PAGE_SIZE } from '../../lib/pagination.js';
+
+  import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
+  import ActionButton from '../../components/common/ActionButton.svelte';
+  import ExportMenu from '../../components/common/ExportMenu.svelte';
+  import FilterToolbar from '../../components/common/FilterToolbar.svelte';
+  import SummaryCard from '../../components/common/SummaryCard.svelte';
+  import DataTable from '../../components/common/DataTable.svelte';
+  import EmptyState from '../../components/common/EmptyState.svelte';
+  import StatusBadge from '../../components/common/StatusBadge.svelte';
+  import TableActions from '../../components/common/TableActions.svelte';
+  import PaginationBar from '../../components/common/PaginationBar.svelte';
+
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
   let boms = [];
-  let bomId = null;
   let loading = true;
 
   let searchTerm = '';
@@ -21,11 +31,10 @@
   let itemsPerPage = DEFAULT_PAGE_SIZE;
   let sortColumn = 'created_at';
   let sortDirection = 'desc';
+  let showSummaryCards = true;
 
-  function handleDateChange(inputName, value) {
-    if (inputName === 'fromDate') fromDate = value;
-    else if (inputName === 'toDate') toDate = value;
-  }
+  let fromDate = '';
+  let toDate = '';
 
   async function load() {
     loading = true;
@@ -35,32 +44,36 @@
 
   onMount(async () => {
     await load();
-    tick().then(() => setDatePickers(handleDateChange));
   });
 
-  function getPageNumbers(current, total) {
-    const delta = 2;
-    const range = [];
-    const rangeWithDots = [];
-    let l;
-    for (let i = 1; i <= total; i++) {
-      if (i === 1 || i === total || (i >= current - delta && i <= current + delta)) {
-        range.push(i);
-      }
-    }
-    for (let i of range) {
-      if (l) {
-        if (i - l === 2) {
-          rangeWithDots.push(l + 1);
-        } else if (i - l !== 1) {
-          rangeWithDots.push('...');
-        }
-      }
-      rangeWithDots.push(i);
-      l = i;
-    }
-    return rangeWithDots;
+  function handleToolbarFilter(event) {
+    const { key, value } = event.detail;
+    if (key === 'status') filterStatus = value;
+    if (key === 'fromDate') fromDate = value;
+    if (key === 'toDate') toDate = value;
+    if (currentPage !== 1) currentPage = 1;
   }
+
+  function resetFilters() {
+    searchTerm = '';
+    filterStatus = 'all';
+    fromDate = '';
+    toDate = '';
+    currentPage = 1;
+  }
+
+  $: statusFilterOptions = [
+    { value: 'all', label: t('All Statuses') },
+    { value: 'confirmed', label: t('Confirmed') },
+    { value: 'draft', label: t('Draft') },
+    { value: 'cancelled', label: t('Cancelled') },
+  ];
+
+  $: toolbarFilters = [
+    { key: 'status', label: t('Status'), value: filterStatus, icon: 'bi-activity', options: statusFilterOptions },
+    { key: 'fromDate', label: t('From Date'), value: fromDate, icon: 'bi-calendar3', type: 'date' },
+    { key: 'toDate', label: t('To Date'), value: toDate, icon: 'bi-calendar3', type: 'date' },
+  ];
 
   function setSort(column) {
     if (sortColumn === column) {
@@ -71,22 +84,14 @@
     }
   }
 
-  function getLocalDate() {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().split('T')[0];
+  function statusTone(status) {
+    if (status === 'confirmed') return 'positive';
+    if (status === 'cancelled') return 'negative';
+    return 'neutral';
   }
 
-  // let fromDate = getLocalDate();
-  // let toDate = getLocalDate();
-
-  let fromDate = '';
-  let toDate = '';
-
-  let totalBOMsAmount = {};
-
   $: totalBOMsAmount = filteredBOMs.reduce((totals, p) => {
-    if (!p.bill_status || p.bill_status !== 'confirmed') return totals; // Skip cancelled or invalid boms
+    if (!p.bill_status || p.bill_status !== 'confirmed') return totals;
     if (!totals[p.currency]) totals[p.currency] = 0;
     totals[p.currency] += Number(p.total_amount);
     return totals;
@@ -97,7 +102,6 @@
       const invoiceDate = new Date(p.created_at);
       const from = fromDate ? new Date(fromDate) : null;
       const to = toDate ? new Date(toDate) : null;
-      // If both dates are same, show that day's sales
       if (from && to && from.getTime() === to.getTime()) {
         return invoiceDate.toDateString() === from.toDateString();
       }
@@ -151,208 +155,305 @@
   $: totalPages = Math.ceil(filteredBOMs.length / itemsPerPage);
 
   $: if (searchTerm || filterStatus) currentPage = 1;
+
+  function getPageNumbers(current, total) {
+    const delta = 2;
+    const range = [];
+    const rangeWithDots = [];
+    let l;
+    for (let i = 1; i <= total; i++) {
+      if (i === 1 || i === total || (i >= current - delta && i <= current + delta)) {
+        range.push(i);
+      }
+    }
+    for (let i of range) {
+      if (l) {
+        if (i - l === 2) {
+          rangeWithDots.push(l + 1);
+        } else if (i - l !== 1) {
+          rangeWithDots.push('...');
+        }
+      }
+      rangeWithDots.push(i);
+      l = i;
+    }
+    return rangeWithDots;
+  }
+
+  $: bomsCountLabel = `${filteredBOMs.length} ${filteredBOMs.length < 2 ? t('BOM') : t('BOMs')}`;
+
+  $: totalAmountLabel = Object.entries(totalBOMsAmount)
+    .map(
+      ([currency, amount]) =>
+        `${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} ${t(currency)}`,
+    )
+    .join(' <br> ') || '—';
 </script>
 
-{#if loading}
-  <div>Loading...</div>
-{:else}
-  <button
-    on:click={() => {
-      generatePDF('boms', filteredBOMs, fromDate, toDate, filteredBOMs.length, totalBOMsAmount, {});
-    }}
-    disabled={generatingPDF}
-    class="btn btn-outline-danger btn-sm me-2 px-2 float-end">
-    {#if generatingPDF}
-      <div class="spinner-border spinner-border-sm" role="status">
-        <span class="visually-hidden">${t('Generating...')}</span>
-      </div>
-    {:else}
-      <i class="bi bi-file-pdf-fill"></i>
-      {t('PDF')}
-    {/if}
-  </button>
-  <div class="row">
-    <div class="col-md-4">
-      <div class="input-group input-group-sm persianDatePicker">
-        <input type="date" class="form-control" data-bind="fromDate" bind:value={fromDate} />
+<IndexPageLayout
+  dir={t('dir')}
+  ariaLabel={t('BOMs')}
+  toolbarWidth="25rem"
+  showStats={showSummaryCards}
+  showFooter={!loading && filteredBOMs.length > 0}
+  dense={true}
+  contentClass="boms-index-content"
+  tablePadding={true}>
+  <svelte:fragment slot="actions">
+    <ActionButton icon="bi-plus-lg" label={t('New BOM')} on:click={() => push(`/dashboard/bom-form/0`)} />
 
-        <span class="input-group-text persian-date-text"></span>
-      </div>
-    </div>
+    <ExportMenu
+      extraClass="pdf-btn"
+      loading={generatingPDF}
+      disabled={generatingPDF || filteredBOMs.length === 0}
+      on:export={() => {
+        generatePDF('boms', filteredBOMs, fromDate, toDate, filteredBOMs.length, totalBOMsAmount, {});
+      }} />
 
-    <div class="col-md-4">
-      <div class="input-group input-group-sm persianDatePicker">
-        <input type="date" class="form-control" data-bind="toDate" bind:value={toDate} />
+    <button
+      type="button"
+      class="index-settings-button"
+      class:is-active={showSummaryCards}
+      aria-label={t('Summary')}
+      aria-expanded={showSummaryCards}
+      title={t('Summary')}
+      on:click={() => (showSummaryCards = !showSummaryCards)}>
+      <i class="bi {showSummaryCards ? 'bi-x-lg' : 'bi-clipboard-data'}" aria-hidden="true"></i>
+    </button>
+  </svelte:fragment>
 
-        <span class="input-group-text persian-date-text"></span>
-      </div>
+  <svelte:fragment slot="stats">
+    <div class="index-summary-grid boms-summary-grid">
+      <SummaryCard label={t('BOMs Count')} icon="bi-diagram-3" tone="green">{bomsCountLabel}</SummaryCard>
+      <SummaryCard label={t('Total BOMs Amount')} icon="bi-cash-stack" tone="cyan">
+        {@html totalAmountLabel}
+      </SummaryCard>
     </div>
-  </div>
-  <div class="m-3 d-flex gap-3 flex-wrap">
-    <div class="card">
-      <div class="card-header py-2">
-        <small><i class="bi bi-box-seam me-2 text-success"></i>{t('BOMs Count')}</small>
-      </div>
-      <div class="card-body p-2">
-        <small class="text-center fw-bold d-block">
-          {filteredBOMs.length}
-          {filteredBOMs.length < 2 ? t('BOM') : t('BOMs')}
-        </small>
-      </div>
+  </svelte:fragment>
+
+  <svelte:fragment slot="toolbar">
+    <FilterToolbar
+      searchValue={searchTerm}
+      searchPlaceholder={t('Search boms...')}
+      filters={toolbarFilters}
+      filterLabel={t('Filter')}
+      resetLabel={t('Clear Filters')}
+      showReset={true}
+      on:searchChange={(event) => (searchTerm = event.detail)}
+      on:filterChange={handleToolbarFilter}
+      on:reset={resetFilters} />
+  </svelte:fragment>
+
+  {#if loading}
+    <div class="index-table-state">
+      <EmptyState loading message={t('Loading...')} />
     </div>
-    <div class="card">
-      <div class="card-header py-2">
-        <small><i class="bi bi-box me-2 text-primary"></i>{t('Total BOMs Amount')}</small>
-      </div>
-      <div class="card-body p-2">
-        <small class=" text-center fw-bold d-block">
-          {@html Object.entries(totalBOMsAmount)
-            .map(
-              ([currency, amount]) =>
-                `${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} ${t(currency)}`,
-            )
-            .join(' <br> ')}
-        </small>
-      </div>
+  {:else if filteredBOMs.length === 0}
+    <div class="index-table-state">
+      <EmptyState icon="bi-inbox" message={t('No boms found.')} />
     </div>
-  </div>
-  <div class="card shadow-2">
-    <div class="card-header bg-body-tertiary border-bottom p-3">
-      <div class="row g-3 align-items-center">
-        <div class="col-md-4">
-          <input type="text" class="form-control" placeholder={t('Search boms...')} bind:value={searchTerm} />
-        </div>
-        <div class="col-md-3">
-          <select class="form-select" bind:value={filterStatus}>
-            <option value="all">{t('All Statuses')}</option>
-            <option value="confirmed">{t('Confirmed')}</option>
-            <option value="draft">{t('Draft')}</option>
-            <option value="cancelled">{t('Cancelled')}</option>
-          </select>
-        </div>
-        <div class="col-md-2 offset-md-1 text-end">
-          <select class="form-select form-select-sm d-inline-block w-auto" bind:value={itemsPerPage}>
-            <option value={5}>5 {t('per page')}</option>
-            <option value={10}>10 {t('per page')}</option>
-            <option value={20}>20 {t('per page')}</option>
-            <option value={50}>50 {t('per page')}</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <button class="btn btn-primary w-100" on:click={() => push(`/dashboard/bom-form/0`)}
-            ><i class="bi bi-plus-circle me-2"></i>
-            {t('New BOM')}</button>
-        </div>
-      </div>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-sm table-hover align-middle">
-          <thead class="table-light">
-            <tr>
-              <th class="ps-4 cursor-pointer" on:click={() => setSort('id')}
-                >{t('ID')}{#if sortColumn === 'id'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}</th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('bill_number')}
-                >{t('Bill #')}{#if sortColumn === 'bill_number'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}</th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('bill_date')}
-                >{t('Date')}{#if sortColumn === 'bill_date'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}</th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('total_amount')}
-                >{t('Total')}{#if sortColumn === 'total_amount'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}</th>
-              <th class="text-center">{t('Status')}</th>
-              <th class="text-center" width="150">{t('Actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each paginatedBOMs as p}
-              <tr>
-                <td class="ps-4 text-muted small">#{p.id}</td>
-                <td class="text-center">{p.bill_number}</td>
-                <td class="text-center">{@html showDate(p.bill_date)}</td>
-                <td class="text-center"
-                  >{Number(p.total_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                  {t(p.currency)}</td>
-                <td class="text-center"
-                  ><span class="badge badge-{p.bill_status === 'confirmed' ? 'success' : 'warning'}"
-                    >{t(p.bill_status)}</span
-                  ></td>
-                <td class="text-center">
-                  <button
-                    class="btn btn-sm btn-outline-primary me-1"
-                    on:click={() => push(`/dashboard/boms/${p.id}`)}
-                    title="View"><i class="bi bi-eye"></i></button>
-                  {#if p.bill_status === 'draft'}
-                    <button class="btn btn-sm btn-warning" on:click={() => push(`/dashboard/bom-form/` + p.id)}
-                      >{t('Edit')}</button>
-                  {/if}
-                </td>
-              </tr>
-            {/each}
-            {#if filteredBOMs.length === 0}
-              <tr><td colspan="12" class="text-center text-muted p-4">{t('No boms found.')}</td></tr>
+  {:else}
+    <DataTable
+      ariaLabel={t('BOMs')}
+      minWidth="780px"
+      dense={true}
+      striped={true}
+      hover={false}
+      stickyHeader={true}
+      layout="fixed"
+      scrollbar="thin">
+      <svelte:fragment slot="head">
+        <tr>
+          <th class="col-start">#</th>
+          <th class="cursor-pointer" on:click={() => setSort('created_at')}>
+            {t('Date')}
+            {#if sortColumn === 'created_at'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
             {/if}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    {#if !loading && filteredBOMs.length > 0}
-      <div class="card-footer bg-body-tertiary d-flex justify-content-between align-items-center pt-3 overflow-x-auto">
-        <div class="text-muted small">
-          {t('Showing')}
-          {(currentPage - 1) * itemsPerPage + 1}
-          {t('to')}
-          {Math.min(currentPage * itemsPerPage, filteredBOMs.length)}
-          {t('of')}
-          {filteredBOMs.length}
-          {t('entries')}
-        </div>
-        <nav>
-          <ul class="pagination pagination-circle pagination-sm mb-0">
-            <li class="page-item" class:disabled={currentPage === 1}>
-              <button class="page-link" on:click={() => (currentPage = 1)}
-                ><i class="bi bi-chevron-double-{t('dir') === 'rtl' ? 'right' : 'left'}"></i></button>
-            </li>
-            <li class="page-item" class:disabled={currentPage === 1}>
-              <button class="page-link" on:click={() => (currentPage -= 1)}
-                ><i class="bi bi-chevron-{t('dir') === 'rtl' ? 'right' : 'left'}"></i></button>
-            </li>
-            {#each getPageNumbers(currentPage, totalPages) as pageNum, idx (pageNum === '...' ? `dot-${idx}` : pageNum)}
-              {#if pageNum === '...'}
-                <li class="page-item disabled">
-                  <span class="page-link">...</span>
-                </li>
-              {:else}
-                <li class="page-item" class:active={currentPage === pageNum}>
-                  <button class="page-link" on:click={() => (currentPage = pageNum)}>{pageNum}</button>
-                </li>
-              {/if}
-            {/each}
-            <li class="page-item" class:disabled={currentPage === totalPages || totalPages === 0}>
-              <button class="page-link" on:click={() => (currentPage += 1)}
-                ><i class="bi bi-chevron-{t('dir') === 'rtl' ? 'left' : 'right'}"></i></button>
-            </li>
-            <li class="page-item" class:disabled={currentPage === totalPages || totalPages === 0}>
-              <button class="page-link" on:click={() => (currentPage = totalPages)}
-                ><i class="bi bi-chevron-double-{t('dir') === 'rtl' ? 'left' : 'right'}"></i></button>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    {/if}
-  </div>
-{/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('bill_date')}>
+            {t('BOM Date')}
+            {#if sortColumn === 'bill_date'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('bill_number')}>
+            {t('Bill #')}
+            {#if sortColumn === 'bill_number'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('total_amount')}>
+            {t('Total')}
+            {#if sortColumn === 'total_amount'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th>{t('Status')}</th>
+          <th>{t('Actions')}</th>
+        </tr>
+      </svelte:fragment>
 
-<style>
-  .cursor-pointer {
+      {#each paginatedBOMs as p, index (p.id)}
+        <tr>
+          <td class="col-start cell-muted">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+          <td>
+            <StatusBadge tone="neutral" ghost ltr={true} stacked>{@html showDate(p.created_at)}</StatusBadge>
+          </td>
+          <td>
+            <StatusBadge tone="neutral" ghost ltr={true} stacked>{@html showDate(p.bill_date)}</StatusBadge>
+          </td>
+          <td>
+            <button type="button" class="invoice-link" on:click={() => push(`/dashboard/boms/${p.id}`)}>
+              {p.bill_number}
+            </button>
+          </td>
+          <td>
+            <span class="amount-pill">
+              <span dir="ltr">{Number(p.total_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+              {t(p.currency)}
+            </span>
+          </td>
+          <td>
+            <button type="button" class="invoice-link" on:click={() => push(`/dashboard/boms/${p.id}`)}>
+              <StatusBadge tone={statusTone(p.bill_status)}>{t(p.bill_status)}</StatusBadge>
+            </button>
+          </td>
+          <td>
+            <TableActions
+              actions={[
+                {
+                  icon: 'bi-eye',
+                  label: t('View'),
+                  tone: 'view',
+                  onClick: () => push(`/dashboard/boms/${p.id}`),
+                },
+                ...(p.bill_status === 'draft'
+                  ? [
+                      {
+                        icon: 'bi-pencil',
+                        label: t('Edit'),
+                        tone: 'edit',
+                        onClick: () => push(`/dashboard/bom-form/` + p.id),
+                      },
+                    ]
+                  : []),
+              ]} />
+          </td>
+        </tr>
+      {/each}
+    </DataTable>
+  {/if}
+
+  <svelte:fragment slot="footer">
+    <PaginationBar
+      bind:currentPage
+      {totalPages}
+      {itemsPerPage}
+      totalItems={filteredBOMs.length}
+      ariaLabel={t('BOMs pagination')}
+      rowLabel={t('rows')}
+      on:perPageChange={(e) => {
+        itemsPerPage = Number(e.detail);
+        currentPage = 1;
+      }}
+      {getPageNumbers} />
+  </svelte:fragment>
+</IndexPageLayout>
+
+<style>:global(.boms-index-content .data-table) {
+    width: 100%;
+    margin: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    color: #46536a;
+    font-size: var(--table-font-size, 0.78rem);
+  }
+
+:global(.boms-index-content .data-table thead th) {
+    height: 3rem;
+    padding: 0.625rem 0.875rem;
+    border: 0;
+    border-bottom: 1px solid #dfe5ed;
+    background: #ffffff;
+    color: #66758a;
+    font-size: var(--table-header-font-size, 0.78125rem);
+    font-weight: 800;
+    line-height: 1.25;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+:global(.boms-index-content .data-table tbody tr) {
+    height: auto;
+    background: #ffffff;
+  }
+
+:global(.boms-index-content .data-table tbody td) {
+    height: auto;
+    padding: 0.4rem 0.875rem;
+    border: 0;
+    border-bottom: 1px solid #e0e0e0;
+    background: transparent;
+    color: #46536a;
+    font-size: var(--table-font-size, 0.75rem);
+    line-height: 1.5;
+    text-align: center;
+    vertical-align: middle;
+  }
+
+:global(.boms-index-content .data-table tbody tr:nth-child(even)) {
+    background: #f5f7fa;
+  }
+
+:global(.boms-index-content .data-table tbody tr:nth-child(odd):hover) {
+    background: #ffffff;
+  }
+
+:global(.boms-index-content .data-table tbody tr:nth-child(even):hover) {
+    background: #f5f7fa;
+  }
+
+:global(.data-table tbody tr.row-overdue) {
+    background: #fef2f2 !important;
+  }
+
+:global(.data-table tbody tr.row-due-soon) {
+    background: #fffbeb !important;
+  }
+
+.cell-muted {
+    color: #94a3b8;
+    font-size: 0.78rem;
+  }
+
+.invoice-link {
+    padding: 0;
+    border: 0;
+    color: #0f6efd;
+    background: transparent;
+    font-size: var(--table-font-size, 0.78rem);
+    font-weight: 700;
     cursor: pointer;
   }
-  .pagination-circle .page-link {
-    border-radius: 50% !important;
-    margin-left: 3px;
-    margin-right: 3px;
-    border: none;
+
+.amount-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 28px;
+    padding: 0.28rem 0.62rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    color: #334155;
+    background: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
   }
-</style>
+
+.boms-summary-grid {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }</style>

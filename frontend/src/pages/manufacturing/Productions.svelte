@@ -1,27 +1,49 @@
 <script>
   import { productUnitApi } from '../../api/productUnitApi.js';
   import { productionApi } from '../../api/productionApi.js';
-  import { onMount, tick } from 'svelte';
+  import { onMount } from 'svelte';
   import { push } from 'svelte-spa-router';
-  import { convertUnit, getMultiple } from '../stocktransactions/calculateStock.js';
+  import { getMultiple } from '../stocktransactions/calculateStock.js';
   import { generatePDF, generatingPDF } from '../generatePDF.js';
+  import { showDate } from '../../calendar.js';
 
-  import { showDate, setDatePickers } from '../../calendar.js';
-
-  import { t, lang, translate_org_type,shortID } from '../../i18n/i18n.js';
-import { currencyApi } from '../../api/currencyApi.js';
-import { warehouseApi } from '../../api/warehouseApi.js';
-import { accountApi } from '../../api/accountApi.js';
-import { productApi } from '../../api/productApi.js';
+  import { t, lang, translate_org_type } from '../../i18n/i18n.js';
+  import { currencyApi } from '../../api/currencyApi.js';
+  import { warehouseApi } from '../../api/warehouseApi.js';
+  import { accountApi } from '../../api/accountApi.js';
+  import { productApi } from '../../api/productApi.js';
   import { DEFAULT_PAGE_SIZE } from '../../lib/pagination.js';
+
+  import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
+  import ActionButton from '../../components/common/ActionButton.svelte';
+  import ExportMenu from '../../components/common/ExportMenu.svelte';
+  import FilterToolbar from '../../components/common/FilterToolbar.svelte';
+  import DataTable from '../../components/common/DataTable.svelte';
+  import EmptyState from '../../components/common/EmptyState.svelte';
+  import StatusBadge from '../../components/common/StatusBadge.svelte';
+  import TableActions from '../../components/common/TableActions.svelte';
+  import PaginationBar from '../../components/common/PaginationBar.svelte';
+
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
   let productions = [];
   let currencies = [];
-
-
   let accounts = [];
+  let warehouses = [];
+  let loading = true;
+  let products = [];
+  let units = [];
+
+  let searchTerm = '';
+  let filterStatus = 'all';
+  let currentPage = 1;
+  let itemsPerPage = DEFAULT_PAGE_SIZE;
+  let sortColumn = 'created_at';
+  let sortDirection = 'desc';
+
+  let fromDate = '';
+  let toDate = '';
 
   function getAccountName(acc) {
     let out = '';
@@ -30,26 +52,6 @@ import { productApi } from '../../api/productApi.js';
     if (t('Lang') === 'ps') out = acc.name_ps || acc.name || '';
     out = out || 'Unknown';
     return out;
-  }
-
-
-  let warehouses = [];
-  let productionId = null;
-  let loading = true;
-  let products = [];
-  let units = [];
-
-  // --- Table State ---
-  let searchTerm = '';
-  let filterStatus = 'all'; // 'all', 'confirmed', 'draft', etc.
-  let currentPage = 1;
-  let itemsPerPage = DEFAULT_PAGE_SIZE;
-  let sortColumn = 'created_at';
-  let sortDirection = 'desc';
-
-  function handleDateChange(inputName, value) {
-    if (inputName === 'fromDate') fromDate = value;
-    else if (inputName === 'toDate') toDate = value;
   }
 
   async function load() {
@@ -67,8 +69,51 @@ import { productApi } from '../../api/productApi.js';
 
   onMount(async () => {
     await load();
-    tick().then(() => setDatePickers(handleDateChange));
   });
+
+  function handleToolbarFilter(event) {
+    const { key, value } = event.detail;
+    if (key === 'status') filterStatus = value;
+    if (key === 'fromDate') fromDate = value;
+    if (key === 'toDate') toDate = value;
+    if (currentPage !== 1) currentPage = 1;
+  }
+
+  function resetFilters() {
+    searchTerm = '';
+    filterStatus = 'all';
+    fromDate = '';
+    toDate = '';
+    currentPage = 1;
+  }
+
+  $: statusFilterOptions = [
+    { value: 'all', label: t('All Statuses') },
+    { value: 'confirmed', label: t('Confirmed') },
+    { value: 'draft', label: t('Draft') },
+    { value: 'cancelled', label: t('Cancelled') },
+  ];
+
+  $: toolbarFilters = [
+    { key: 'status', label: t('Status'), value: filterStatus, icon: 'bi-activity', options: statusFilterOptions },
+    { key: 'fromDate', label: t('From Date'), value: fromDate, icon: 'bi-calendar3', type: 'date' },
+    { key: 'toDate', label: t('To Date'), value: toDate, icon: 'bi-calendar3', type: 'date' },
+  ];
+
+  function setSort(column) {
+    if (sortColumn === column) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortColumn = column;
+      sortDirection = 'asc';
+    }
+  }
+
+  function statusTone(status) {
+    if (status === 'confirmed') return 'positive';
+    if (status === 'cancelled') return 'negative';
+    return 'neutral';
+  }
 
   function getPageNumbers(current, total) {
     const delta = 2;
@@ -97,33 +142,11 @@ import { productApi } from '../../api/productApi.js';
     return rangeWithDots;
   }
 
-  function setSort(column) {
-    if (sortColumn === column) {
-      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      sortColumn = column;
-      sortDirection = 'asc';
-    }
-  }
-
-  function getLocalDate() {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().split('T')[0];
-  }
-
-  // let fromDate = getLocalDate();
-  // let toDate = getLocalDate();
-
-  let fromDate = "";
-  let toDate = "";
-  // Reactive computed list
   $: filteredProductions = (() => {
     let result = productions.filter((s) => {
       const productionDate = new Date(s.created_at);
       const from = fromDate ? new Date(fromDate) : null;
       const to = toDate ? new Date(toDate) : null;
-      // If both dates are same, show that day's productions
       if (from && to && from.getTime() === to.getTime()) {
         return productionDate.toDateString() === from.toDateString();
       }
@@ -180,11 +203,8 @@ import { productApi } from '../../api/productApi.js';
 
   $: if (searchTerm || filterStatus) currentPage = 1;
 
-
-  let totalProductionsAmount = {};
-  // consider currency if you have multi currency support
   $: totalProductionsAmount = filteredProductions.reduce((totals, s) => {
-    if (!s.production_status || s.production_status !== 'confirmed') return totals; // Skip cancelled or invalid productions
+    if (!s.production_status || s.production_status !== 'confirmed') return totals;
     if (!totals[s.currency]) totals[s.currency] = 0;
     totals[s.currency] += Number(s.total_amount);
     return totals;
@@ -206,366 +226,425 @@ import { productApi } from '../../api/productApi.js';
   }
 
   let totalBenefitAmount = {};
-let benefitRun = 0;
+  let benefitRun = 0;
 
-async function calculateBenefit() {
-  const runId = ++benefitRun;
+  async function calculateBenefit() {
+    const runId = ++benefitRun;
 
-  const updatedProductions = await Promise.all(
-    filteredProductions.map(async (s) => {
-      if (!s.production_status || s.production_status !== 'confirmed') {
-        return { ...s, benefits: null };
-      }
-
-      const productionItems = await getProductionItems(s.id);
-
-      let totalCost = 0;
-      let benefits = {};
-      benefits[s.currency] = 0;
-
-      for (const item of productionItems) {
-        let product = products.find((p) => p.id === item.product_id);
-        if (!product) continue;
-
-        let costPrice = Number(product.buy_price) || 0;
-
-        if (product.buy_currency != s.currency) {
-          costPrice =
-            exchangeRate(costPrice, product.buy_currency, s.currency) || 0;
+    const updatedProductions = await Promise.all(
+      filteredProductions.map(async (s) => {
+        if (!s.production_status || s.production_status !== 'confirmed') {
+          return { ...s, benefits: null };
         }
 
-        if (item.product_unit_id != product.product_unit_id) {
-          const multiple = await getMultiple(
-            Number(item.product_unit_id),
-            Number(product.product_unit_id)
-          );
-          costPrice = multiple * costPrice;
+        const productionItems = await getProductionItems(s.id);
+
+        let totalCost = 0;
+        let benefits = {};
+        benefits[s.currency] = 0;
+
+        for (const item of productionItems) {
+          let product = products.find((p) => p.id === item.product_id);
+          if (!product) continue;
+
+          let costPrice = Number(product.buy_price) || 0;
+
+          if (product.buy_currency != s.currency) {
+            costPrice = exchangeRate(costPrice, product.buy_currency, s.currency) || 0;
+          }
+
+          if (item.product_unit_id != product.product_unit_id) {
+            const multiple = await getMultiple(Number(item.product_unit_id), Number(product.product_unit_id));
+            costPrice = multiple * costPrice;
+          }
+
+          const profit = (Number(item.unit_price) - costPrice) * Number(item.quantity);
+
+          benefits[s.currency] += profit;
+          totalCost += costPrice * Number(item.quantity);
         }
 
-        const profit =
-          (Number(item.unit_price) - costPrice) *
-          Number(item.quantity);
+        return {
+          ...s,
+          benefits,
+        };
+      }),
+    );
 
-        benefits[s.currency] += profit;
-        totalCost += costPrice * Number(item.quantity);
+    totalBenefitAmount = filteredProductions.reduce((totals, s) => {
+      if (!s.production_status || s.production_status !== 'confirmed') return totals;
+      if (!s.benefits) return totals;
+
+      for (const [currency, amount] of Object.entries(s.benefits)) {
+        if (!totals[currency]) totals[currency] = 0;
+        totals[currency] += Number(amount) || 0;
       }
 
-      return {
-        ...s,
-        benefits,
-      };
-    })
-  );
+      return totals;
+    }, {});
 
-  $: totalBenefitAmount = filteredProductions.reduce((totals, s) => {
-  if (!s.production_status || s.production_status !== 'confirmed') return totals;
-  if (!s.benefits) return totals;
+    if (runId !== benefitRun) return;
 
-  for (const [currency, amount] of Object.entries(s.benefits)) {
-    if (!totals[currency]) totals[currency] = 0;
-    totals[currency] += Number(amount) || 0;
+    productions = productions.map((s) => {
+      const updated = updatedProductions.find((u) => u.id === s.id);
+      return updated ? updated : s;
+    });
   }
 
-  return totals;
-}, {});
-
-  // prevent race condition
-  if (runId !== benefitRun) return;
-
-  // 🔥 important: reassign
-  productions = productions.map((s) => {
-    const updated = updatedProductions.find((u) => u.id === s.id);
-    return updated ? updated : s;
-  });
-}
   $: if (filteredProductions.length && products.length) {
     calculateBenefit();
   }
+
 </script>
 
-{#if loading}
-  <div>Loading...</div>
-{:else}
-  <button
-    on:click={() => {
-      generatePDF('productions', filteredProductions, fromDate, toDate,filteredProductions.length,totalProductionsAmount,totalBenefitAmount);
-    }}
-    disabled={generatingPDF}
-    class="btn btn-outline-danger btn-sm me-2 px-2 float-end">
-    {#if generatingPDF}
-      <div class="spinner-border spinner-border-sm" role="status">
-        <span class="visually-hidden">${t('Generating...')}</span>
-      </div>
-    {:else}
-      <i class="bi bi-file-pdf-fill"></i>
-      {t('PDF')}
-    {/if}
-  </button>
-  <div class="row">
-    <div class="col-md-4">
-      <div class="input-group input-group-sm persianDatePicker">
-        <input type="date" class="form-control" data-bind="fromDate" bind:value={fromDate} />
+<IndexPageLayout
+  dir={t('dir')}
+  ariaLabel={t('Productions')}
+  toolbarWidth="25rem"
+  showFooter={!loading && filteredProductions.length > 0}
+  dense={true}
+  contentClass="productions-index-content"
+  tablePadding={true}>
+  <svelte:fragment slot="actions">
+    <ActionButton icon="bi-plus-lg" label={t('New Production')} on:click={() => push(`/dashboard/production-form/0`)} />
 
-        <span class="input-group-text persian-date-text"></span>
-      </div>
+    <ExportMenu
+      extraClass="pdf-btn"
+      loading={generatingPDF}
+      disabled={generatingPDF || filteredProductions.length === 0}
+      on:export={() => {
+        generatePDF(
+          'productions',
+          filteredProductions,
+          fromDate,
+          toDate,
+          filteredProductions.length,
+          totalProductionsAmount,
+          totalBenefitAmount,
+        );
+      }} />
+
+  </svelte:fragment>
+
+  <svelte:fragment slot="toolbar">
+    <FilterToolbar
+      searchValue={searchTerm}
+      searchPlaceholder={t('Search productions...')}
+      filters={toolbarFilters}
+      filterLabel={t('Filter')}
+      resetLabel={t('Clear Filters')}
+      showReset={true}
+      on:searchChange={(event) => (searchTerm = event.detail)}
+      on:filterChange={handleToolbarFilter}
+      on:reset={resetFilters} />
+  </svelte:fragment>
+
+  {#if loading}
+    <div class="index-table-state">
+      <EmptyState loading message={t('Loading...')} />
     </div>
-
-    <div class="col-md-4">
-      <div class="input-group input-group-sm persianDatePicker">
-        <input type="date" class="form-control" data-bind="toDate" bind:value={toDate} />
-
-        <span class="input-group-text persian-date-text"></span>
-      </div>
+  {:else if filteredProductions.length === 0}
+    <div class="index-table-state">
+      <EmptyState icon="bi-inbox" message={t('No productions found.')} />
     </div>
-  </div>
-  <div class="m-3 d-flex gap-3 flex-wrap">
-    <div class="card">
-      <div class="card-header py-2">
-        <small><i class="bi bi-box-seam me-2 text-success"></i>{t('Productions Count')}</small>
-      </div>
-      <div class="card-body p-2">
-        <small class="text-center fw-bold d-block">
-          {filteredProductions.length}
-          {filteredProductions.length < 2 ? t('Production') : t('Productions')}
-        </small>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-header py-2">
-        <small><i class="bi bi-box me-2 text-primary"></i>{t('Total Productions Amount')}</small>
-      </div>
-      <div class="card-body p-2">
-        <small class=" text-center fw-bold d-block">
-          {@html Object.entries(totalProductionsAmount)
-            .map(
-              ([currency, amount]) =>
-                `${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} ${t(currency)}`,
-            )
-            .join(' <br> ')}
-        </small>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-header py-2">
-        <small><i class="bi bi-box me-2 text-primary"></i>{t('Total Benefit Amount')}</small>
-      </div>
-      <div class="card-body p-2">
-        <small class=" text-center fw-bold d-block">
-          {@html Object.entries(totalBenefitAmount)
-            .map(
-              ([currency, amount]) =>
-                `${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} ${t(currency)}`,
-            )
-            .join(' <br> ')}
-        </small>
-      </div>
-    </div>
-  </div>
-  <div class="card shadow-2">
-    <!-- Toolbar -->
-    <div class="card-header bg-body-tertiary border-bottom p-3">
-      <div class="row g-3 align-items-center">
-        <div class="col-md-4">
-          <input type="text" class="form-control" placeholder={t('Search productions...')} bind:value={searchTerm} />
-        </div>
-
-        <div class="col-md-3">
-          <select class="form-select" bind:value={filterStatus}>
-            <option value="all">{t('All Statuses')}</option>
-            <option value="confirmed">{t('Confirmed')}</option>
-            <option value="draft">{t('Draft')}</option>
-            <option value="cancelled">{t('Cancelled')}</option>
-          </select>
-        </div>
-
-        <div class="col-md-2 offset-md-1 text-end">
-          <select class="form-select form-select-sm d-inline-block w-auto" bind:value={itemsPerPage}>
-            <option value={5}>5 {t('per page')}</option>
-            <option value={10}>10 {t('per page')}</option>
-            <option value={20}>20 {t('per page')}</option>
-            <option value={50}>50 {t('per page')}</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <button class="btn btn-primary w-100" on:click={() => push(`/dashboard/production-form/0`)}
-            ><i class="bi bi-plus-circle me-2"></i>{t('New Production')}</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-hover table-sm align-middle">
-          <thead class="table-light">
-            <tr>
-              <th class="ps-4 cursor-pointer" on:click={() => setSort('id')}>
-                {t('ID')}
-                {#if sortColumn === 'id'}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}
-              </th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('created_at')}
-                >{t('Date')}{#if sortColumn === 'created_at'}<i
-                    class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i
-                  >{/if}</th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('production_number')}
-                >{t('Invoice #')}{#if sortColumn === 'production_number'}<i
-                    class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i
-                  >{/if}</th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('product_id')}
-                >{t('Product')}{#if sortColumn === 'product_id'}<i
-                    class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i
-                  >{/if}</th>
-
-
-              <th class="text-center cursor-pointer" on:click={() => setSort('quantity')}
-                >{t('Quantity')}{#if sortColumn === 'quantity'}<i
-                    class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i
-                  >{/if}</th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('total_amount')}
-                >{t('Total Cost')}{#if sortColumn === 'total_amount'}<i
-                    class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i
-                  >{/if}</th>
-
-
-              <th class="text-center cursor-pointer" on:click={() => setSort('warehouse_id')}
-                >{t('Warehouse')}{#if sortColumn === 'warehouse_id'}<i
-                    class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i
-                  >{/if}</th>
-
-              <th class="text-center">{t('Status')}</th>
-              <th width="150" class="text-center">{t('Actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each paginatedProductions as s}
-              <tr>
-                <td class="ps-4 text-muted small">{shortID(s.id)}</td>
-                <td class="text-center">{@html showDate(s.created_at)}</td>
-                 
-                <td class="text-center">
-                  <button 
-                  on:click={push(`/dashboard/productions/${s.id}`)}
-                  
-                  class="btn btn-link btn-sm"
-                  
-                    >{s.production_number}</button
-                  >
-                
-                
-                </td>
-                 <td class="text-center"
-                  >
-                <span
-                    on:click={push(`/dashboard/product/${s.product_id}`)}
-                    style="cursor:pointer"
-                    class="badge badge-success">
-                    {products.find(a=>a.id==s.product_id)?.name}
-                  </span></td>
-
-
-                <td class="text-center fw-bold"
-                  >{Number(s.quantity).toLocaleString(undefined, {
-                    maximumFractionDigits: 3,
-                  })}{' '}
-                  {units.find(u=>u.id==s.product_unit_id)?.name}</td>
-              
-                   
-                <td class="text-center fw-bold"
-                  >{Number(s.total_amount).toLocaleString(undefined, {
-                    maximumFractionDigits: 3,
-                  })}{' '}
-                  {t(s.currency)}</td>
-
-
-              
-              
-              
-
-                <td class="text-center fw-bold"
-                  >{warehouses.find(w=>w.id==s.warehouse_id)?.name || "-"}</td>
-
-                <td class="text-center"
-                  ><span class="badge badge-{s.production_status === 'confirmed' ? 'success' : 'warning'}"
-                    >{t(s.production_status)}</span
-                  ></td>
-
-               
-                <td class="text-center">
-                  <button
-                    class="btn btn-sm btn-outline-primary me-1"
-                    on:click={() => push(`/dashboard/productions/${s.id}`)}
-                    title="View"><i class="bi bi-eye"></i></button>
-                  {#if s.production_status === 'draft'}
-                    <button class="btn btn-sm btn-warning" on:click={() => push(`/dashboard/production-form/` + s.id)}
-                      >{t('Edit')}</button>
-                  {/if}
-                </td>
-              </tr>
-            {/each}
-            {#if filteredProductions.length === 0}
-              <tr><td colspan="12" class="text-center text-muted p-4">{t('No productions found.')}</td></tr>
+  {:else}
+    <DataTable
+      ariaLabel={t('Productions')}
+      minWidth="980px"
+      dense={true}
+      striped={true}
+      hover={false}
+      stickyHeader={true}
+      layout="fixed"
+      scrollbar="thin">
+      <svelte:fragment slot="head">
+        <tr>
+          <th class="col-start">#</th>
+          <th class="cursor-pointer" on:click={() => setSort('created_at')}>
+            {t('Date')}
+            {#if sortColumn === 'created_at'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
             {/if}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('production_number')}>
+            {t('Production #')}
+            {#if sortColumn === 'production_number'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('product_id')}>
+            {t('Product')}
+            {#if sortColumn === 'product_id'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('quantity')}>
+            {t('Quantity')}
+            {#if sortColumn === 'quantity'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('total_amount')}>
+            {t('Total Cost')}
+            {#if sortColumn === 'total_amount'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('warehouse_id')}>
+            {t('Warehouse')}
+            {#if sortColumn === 'warehouse_id'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th>{t('Status')}</th>
+          <th>{t('Actions')}</th>
+        </tr>
+      </svelte:fragment>
 
-    {#if !loading && filteredProductions.length > 0}
-      <div class="card-footer bg-body-tertiary d-flex justify-content-between align-items-center pt-3 overflow-x-auto">
-        <div class="text-muted small">
-          {t('Showing')}
-          {(currentPage - 1) * itemsPerPage + 1}
-          {t('to')}
-          {Math.min(currentPage * itemsPerPage, filteredProductions.length)}
-          {t('of')}
-          {filteredProductions.length}
-          {t('entries')}
-        </div>
-        <nav>
-          <ul class="pagination pagination-circle pagination-sm mb-0">
-            <li class="page-item" class:disabled={currentPage === 1}>
-              <button class="page-link" on:click={() => (currentPage = 1)}
-                ><i class="bi bi-chevron-double-{t('dir') === 'rtl' ? 'right' : 'left'}"></i></button>
-            </li>
-            <li class="page-item" class:disabled={currentPage === 1}>
-              <button class="page-link" on:click={() => (currentPage -= 1)}
-                ><i class="bi bi-chevron-{t('dir') === 'rtl' ? 'right' : 'left'}"></i></button>
-            </li>
+      {#each paginatedProductions as s, index (s.id)}
+        <tr>
+          <td class="col-start cell-muted">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+          <td>
+            <StatusBadge tone="neutral" ghost ltr={true} stacked>{@html showDate(s.created_at)}</StatusBadge>
+          </td>
+          <td>
+            <button type="button" class="invoice-link" on:click={() => push(`/dashboard/productions/${s.id}`)}>
+              {s.production_number}
+            </button>
+          </td>
+          <td>
+            {#if products.find((a) => a.id == s.product_id)}
+              <button type="button" class="account-badge" on:click={() => push(`/dashboard/product/${s.product_id}`)}>
+                {products.find((a) => a.id == s.product_id)?.name}
+              </button>
+            {:else}
+              <span class="cell-muted">—</span>
+            {/if}
+          </td>
+          <td>
+            <span class="amount-pill">
+              <span dir="ltr">{Number(s.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+              {units.find((u) => u.id == s.product_unit_id)?.name || ''}
+            </span>
+          </td>
+          <td>
+            <span class="amount-pill">
+              <span dir="ltr">{Number(s.total_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
+              {t(s.currency)}
+            </span>
+          </td>
+          <td>
+            {#if warehouses.find((w) => w.id == s.warehouse_id)}
+              <button
+                type="button"
+                class="warehouse-link"
+                title={t('Warehouse')}
+                on:click={() => push(`/dashboard/warehouse/${s.warehouse_id}`)}>
+                <i class="bi bi-building" aria-hidden="true"></i>
+                <span>{warehouses.find((w) => w.id == s.warehouse_id)?.name}</span>
+              </button>
+            {:else}
+              <span class="cell-muted">—</span>
+            {/if}
+          </td>
+          <td>
+            <button type="button" class="invoice-link" on:click={() => push(`/dashboard/productions/${s.id}`)}>
+              <StatusBadge tone={statusTone(s.production_status)}>{t(s.production_status)}</StatusBadge>
+            </button>
+          </td>
+          <td>
+            <TableActions
+              actions={[
+                {
+                  icon: 'bi-eye',
+                  label: t('View'),
+                  tone: 'view',
+                  onClick: () => push(`/dashboard/productions/${s.id}`),
+                },
+                ...(s.production_status === 'draft'
+                  ? [
+                      {
+                        icon: 'bi-pencil',
+                        label: t('Edit'),
+                        tone: 'edit',
+                        onClick: () => push(`/dashboard/production-form/` + s.id),
+                      },
+                    ]
+                  : []),
+              ]} />
+          </td>
+        </tr>
+      {/each}
+    </DataTable>
+  {/if}
 
-            {#each getPageNumbers(currentPage, totalPages) as pageNum, idx (pageNum === '...' ? `dot-${idx}` : pageNum)}
-              {#if pageNum === '...'}
-                <li class="page-item disabled">
-                  <span class="page-link">...</span>
-                </li>
-              {:else}
-                <li class="page-item" class:active={currentPage === pageNum}>
-                  <button class="page-link" on:click={() => (currentPage = pageNum)}>{pageNum}</button>
-                </li>
-              {/if}
-            {/each}
+  <svelte:fragment slot="footer">
+    <PaginationBar
+      bind:currentPage
+      {totalPages}
+      {itemsPerPage}
+      totalItems={filteredProductions.length}
+      ariaLabel={t('Productions pagination')}
+      rowLabel={t('rows')}
+      on:perPageChange={(e) => {
+        itemsPerPage = Number(e.detail);
+        currentPage = 1;
+      }}
+      {getPageNumbers} />
+  </svelte:fragment>
+</IndexPageLayout>
 
-            <li class="page-item" class:disabled={currentPage === totalPages || totalPages === 0}>
-              <button class="page-link" on:click={() => (currentPage += 1)}
-                ><i class="bi bi-chevron-{t('dir') === 'rtl' ? 'left' : 'right'}"></i></button>
-            </li>
-            <li class="page-item" class:disabled={currentPage === totalPages || totalPages === 0}>
-              <button class="page-link" on:click={() => (currentPage = totalPages)}
-                ><i class="bi bi-chevron-double-{t('dir') === 'rtl' ? 'left' : 'right'}"></i></button>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    {/if}
-  </div>
-{/if}
+<style>:global(.productions-index-content .data-table) {
+    width: 100%;
+    margin: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    color: #46536a;
+    font-size: var(--table-font-size, 0.78rem);
+  }
 
-<style>
-  .cursor-pointer {
+:global(.productions-index-content .data-table thead th) {
+    height: 3rem;
+    padding: 0.625rem 0.875rem;
+    border: 0;
+    border-bottom: 1px solid #dfe5ed;
+    background: #ffffff;
+    color: #66758a;
+    font-size: var(--table-header-font-size, 0.78125rem);
+    font-weight: 800;
+    line-height: 1.25;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+:global(.productions-index-content .data-table tbody tr) {
+    height: auto;
+    background: #ffffff;
+  }
+
+:global(.productions-index-content .data-table tbody td) {
+    height: auto;
+    padding: 0.4rem 0.875rem;
+    border: 0;
+    border-bottom: 1px solid #e0e0e0;
+    background: transparent;
+    color: #46536a;
+    font-size: var(--table-font-size, 0.75rem);
+    line-height: 1.5;
+    text-align: center;
+    vertical-align: middle;
+  }
+
+:global(.productions-index-content .data-table tbody tr:nth-child(even)) {
+    background: #f5f7fa;
+  }
+
+:global(.productions-index-content .data-table tbody tr:nth-child(odd):hover) {
+    background: #ffffff;
+  }
+
+:global(.productions-index-content .data-table tbody tr:nth-child(even):hover) {
+    background: #f5f7fa;
+  }
+
+:global(.data-table tbody tr.row-overdue) {
+    background: #fef2f2 !important;
+  }
+
+:global(.data-table tbody tr.row-due-soon) {
+    background: #fffbeb !important;
+  }
+
+.cell-muted {
+    color: #94a3b8;
+    font-size: 0.78rem;
+  }
+
+.invoice-link {
+    padding: 0;
+    border: 0;
+    color: #0f6efd;
+    background: transparent;
+    font-size: var(--table-font-size, 0.78rem);
+    font-weight: 700;
     cursor: pointer;
   }
-  .pagination-circle .page-link {
-    border-radius: 50% !important;
-    margin-left: 3px;
-    margin-right: 3px;
-    border: none;
+
+.account-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    white-space: nowrap;
+    cursor: pointer;
   }
-</style>
+
+.warehouse-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: #0f6efd;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+.warehouse-link i {
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    opacity: 0.75;
+  }
+
+.warehouse-link span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+.warehouse-link:hover span {
+    text-decoration: underline;
+    text-underline-offset: 0.15rem;
+  }
+
+.warehouse-link:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+
+:global(html.dark) .warehouse-link {
+    color: #60a5fa;
+  }
+
+:global(html.dark) .warehouse-link:hover {
+    color: #93c5fd;
+  }
+
+.amount-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 28px;
+    padding: 0.28rem 0.62rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    color: #334155;
+    background: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+.productions-summary-grid {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }</style>

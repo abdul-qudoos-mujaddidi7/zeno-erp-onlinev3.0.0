@@ -8,6 +8,8 @@
   import ProductModal from '../../products/ProductModal.svelte';
   import { push } from 'svelte-spa-router';
   import { bomApi } from '../../../api/bomApi.js';
+  import FilterSelect from '../../../components/common/FilterSelect.svelte';
+  import '../manufacturing-form.css';
   import { workCenterApi } from '../../../api/workCenterApi.js';
   import { toast } from '../../../ToastUI/toast.js';
   import { t, lang, translate_org_type } from '../../../i18n/i18n';
@@ -240,104 +242,205 @@
     items = [];
   }
 </script>
+<div class="sale-create-page manufacturing-form" dir={t('dir')}>
+  <section class="sale-section sale-details-section">
+    <header class="sale-section-header">
+      <div class="sale-section-heading">
+        <span class="sale-section-icon" aria-hidden="true">
+          <i class="bi bi-diagram-3"></i>
+        </span>
 
-<div class="container-fluid mt-4">
-  <div class="card shadow-2">
-    <div class="card-body">
-      <h4 class="mb-4">
-        {bomId ? t('Edit BOM') : t('New BOM')}
-      </h4>
-
-      <div class="row g-3">
-        <div class="col-md-3">
-          <div class="input-group">
-            <select class="form-select form-select-sm" bind:value={form.product_id}>
-              <option value="">{t('Select Product')}</option>
-              {#each products as p}<option value={p.id}>{p.name}</option>{/each}
-            </select>
-
-            <button class="btn btn-info btn-sm pt-1 px-2" type="button" on:click={() => productModal.openModal()}>
-              <i class="bi bi-plus-circle"></i>
-            </button>
-          </div>
+        <div>
+          <h2>
+            {bomId ? t('Edit BOM') : t('New BOM')}
+            <span class="sale-required-note"><i class="bi bi-asterisk" aria-hidden="true"></i></span>
+          </h2>
         </div>
+      </div>
+    </header>
 
-        <div class="col-md-3">
-          <div class="input-group input-group-sm">
-            <div class="form-outline flex-grow-1" data-mdb-input-init>
-              <input
-                type="text"
-                id="inp_quantity"
-                class="form-control form-control-sm"
-                bind:value={form.quantity} />
-              <label class="form-label" for="inp_quantity">{t('Quantity')}</label>
-            </div>
-            {#if units.find((u) => u.id == form.product_unit_id)}
-              <div class="input-group-text">
-                {units.find((u) => u.id == form.product_unit_id)?.name || t('Select The Product')}
-              </div>
-            {/if}
-          </div>
-        </div>
+    <div class="sale-details-grid">
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-box-seam" aria-hidden="true"></i>
+          {t('Product')}
+        </span>
 
-        <div class="col-md-2">
-          <input readonly type="text" class="form-control form-control-sm" value="{t('Bill #')}: {form.bill_number}" />
-        </div>
+        <div class="bom-product-control">
+          <FilterSelect
+            variant="outline"
+            label={t('Product')}
+            icon="bi-box-seam"
+            value={form.product_id}
+            options={[
+              { value: '', label: t('Select Product') },
+              ...products.map((p) => ({ value: p.id, label: p.name })),
+            ]}
+            on:change={(event) => (form.product_id = event.detail)} />
 
-        <div class="col-md-2">
-          <input type="date" class="form-control form-control-sm dater1" bind:value={form.bill_date} />
-        </div>
-
-        <div class="col-md-2">
           <button
-            id="showCurrencyDropdown"
-            class="btn btn-secondary dropdown-toggle btn-sm w-100"
             type="button"
-            data-mdb-toggle="dropdown"
-            aria-expanded="false">
-            {form.currency ? t(form.currency) : t('AFN')}
+            class="bom-add-product"
+            title={t('New Product')}
+            aria-label={t('New Product')}
+            on:click={() => productModal.openModal()}>
+            <i class="bi bi-plus-lg" aria-hidden="true"></i>
           </button>
-
-          <ul class="dropdown-menu dropdown-menu-end">
-            {#each currencies as cur}
-              <li>
-                <button
-                  class="dropdown-item"
-                  style={form.currency == cur.code
-                    ? 'background-color:rgb(225.6, 233.7, 247.05) !important;color: rgb(41.3, 79.1, 141.4) !important'
-                    : ''}
-                  on:click={() => (form.currency = cur.code)}
-                  type="button">
-                  {t(cur.code)}
-                </button>
-              </li>
-            {/each}
-          </ul>
         </div>
       </div>
 
-      <div class="mt-3">
-        <textarea
-          class="form-control form-control-sm"
-          rows="2"
-          bind:value={form.description}
-          placeholder={t('Description')}></textarea>
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-123" aria-hidden="true"></i>
+          {t('Quantity')}
+        </span>
+
+        <div class="sale-quantity-control">
+          <input type="text" class="form-control" id="inp_quantity" bind:value={form.quantity} />
+          {#if units.find((u) => u.id == form.product_unit_id)}
+            <span class="sale-quantity-suffix">
+              {units.find((u) => u.id == form.product_unit_id)?.name}
+            </span>
+          {/if}
+        </div>
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-hash" aria-hidden="true"></i>
+          {t('Bill #')}
+        </span>
+
+        <input readonly type="text" class="form-control" value={form.bill_number} />
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-calendar3" aria-hidden="true"></i>
+          {t('Date')}
+        </span>
+
+        <div class="input-group input-group-sm persianDatePicker">
+          <input type="date" class="form-control dater1" bind:value={form.bill_date} />
+        </div>
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
+          <i class="bi bi-cash-stack" aria-hidden="true"></i>
+          {t('Currency')}
+        </span>
+
+        <FilterSelect
+          variant="outline"
+          label={t('Currency')}
+          icon="bi-cash-stack"
+          value={form.currency}
+          options={currencies.map((c) => ({ value: c.code, label: t(c.code) }))}
+          on:change={(event) => (form.currency = event.detail)} />
+      </div>
+
+      <div class="sale-field sale-field--description">
+        <span class="sale-field-label">
+          <i class="bi bi-card-text" aria-hidden="true"></i>
+          {t('Description')}
+        </span>
+
+        <textarea class="form-control" rows="2" bind:value={form.description} placeholder={t('Description')}></textarea>
       </div>
     </div>
-  </div>
+  </section>
+
   <BOMItemsTable bind:items warehouse_id={form.warehouse_id} currency={form.currency} />
   <BOMOperationsTable bind:operations bind:quantity bind:currency />
 
-  <div class="card shadow-2 mt-4">
-    <div class="card-body d-flex justify-content-end align-items-center">
-      <div>
-        <button class="btn btn-secondary me-2" on:click={() => saveBOM(false)} disabled={loading}
-          >{t('Save Draft')}</button>
-        <button class="btn btn-success" on:click={() => saveBOM(true)} disabled={loading}>{t('Confirm BOM')}</button>
-      </div>
+  <footer class="sale-actions">
+    <div class="sale-actions__buttons">
+      <button
+        type="button"
+        class="sale-action-button sale-action-button--draft"
+        on:click={() => saveBOM(false)}
+        disabled={loading}>
+        {#if loading}
+          <span class="spinner-border spinner-border-sm" role="status"></span>
+        {:else}
+          <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+        {/if}
+
+        <span>{t('Save Draft')}</span>
+      </button>
+
+      <button
+        type="button"
+        class="sale-action-button sale-action-button--confirm"
+        on:click={() => saveBOM(true)}
+        disabled={loading}>
+        {#if loading}
+          <span class="spinner-border spinner-border-sm" role="status"></span>
+        {:else}
+          <i class="bi bi-check2-circle" aria-hidden="true"></i>
+        {/if}
+
+        <span>{t('Confirm BOM')}</span>
+      </button>
     </div>
-  </div>
+  </footer>
 </div>
+
+<style>
+  .bom-product-control {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .bom-product-control :global(.filter-select) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .bom-add-product {
+    display: inline-grid;
+    flex: 0 0 auto;
+    width: 2.2rem;
+    height: 2.375rem;
+    place-items: center;
+    border: 1px solid var(--sale-primary);
+    border-radius: 0.625rem;
+    background: var(--sale-primary);
+    color: #ffffff;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .bom-add-product:hover {
+    border-color: var(--sale-primary-dark);
+    background: var(--sale-primary-dark);
+    box-shadow: 0 5px 14px rgba(47, 111, 237, 0.22);
+  }
+
+  .sale-quantity-control {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .sale-quantity-suffix {
+    flex: 0 0 auto;
+    color: #64748b;
+    font-size: 0.7rem;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+
+</style>
 
 <ProductModal
   bind:this={productModal}
