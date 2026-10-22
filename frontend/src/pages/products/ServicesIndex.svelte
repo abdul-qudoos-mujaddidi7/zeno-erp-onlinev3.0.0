@@ -1,30 +1,33 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-import { productImageApi } from '../../api/productImageApi.js';
-import { departmentApi } from '../../api/departmentApi.js';
-import { productCategoryApi } from '../../api/productCategoryApi.js';
-import { productUnitApi } from '../../api/productUnitApi.js';
+  import { productImageApi } from '../../api/productImageApi.js';
+  import { departmentApi } from '../../api/departmentApi.js';
+  import { productCategoryApi } from '../../api/productCategoryApi.js';
+  import { productUnitApi } from '../../api/productUnitApi.js';
   import { unitCategoryApi } from '../../api/unitCategoryApi.js';
   import { productApi } from '../../api/productApi.js';
   import { stockTransactionApi } from '../../api/stockTransactionApi.js';
   import { productBrandApi } from '../../api/productBrandApi.js';
   import { productGenericApi } from '../../api/productGenericApi.js';
-  import ProductModal from './ProductModal.svelte';
   import { t, lang, translate_org_type, shortID, settings_all } from '../../i18n/i18n.js';
   import { push } from 'svelte-spa-router';
-  import OpenFoodAPIModal from './OpenFoodAPIModal.svelte';
-  import { getCachedImage, cacheImage } from './imageCache.js';
-
   import { resolveMediaUrl } from '../../lib/mediaUrl.js';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../../lib/pagination.js';
 
-  let openFoodAPIModalRef;
+  import SummaryCard from '../../components/common/SummaryCard.svelte';
+  import FilterToolbar from '../../components/common/FilterToolbar.svelte';
+  import DataTable from '../../components/common/DataTable.svelte';
+  import StatusBadge from '../../components/common/StatusBadge.svelte';
+  import PaginationBar from '../../components/common/PaginationBar.svelte';
+  import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableActions from '../../components/common/TableActions.svelte';
+  import ActionButton from '../../components/common/ActionButton.svelte';
+  import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
 
   import { calculateAllStocks, calculateProductStock } from '../stocktransactions/calculateStock.js';
-import { currencyApi } from '../../api/currencyApi.js';
-import { warehouseApi } from '../../api/warehouseApi.js';
-import { userApi } from '../../api/userApi.js';
-import { warehouseProductApi } from '../../api/warehouseProductApi.js';
+  import { currencyApi } from '../../api/currencyApi.js';
+  import { warehouseApi } from '../../api/warehouseApi.js';
+  import { userApi } from '../../api/userApi.js';
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -51,6 +54,7 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('keyup', handleKeyUp);
   });
+
   // --- State ---
   let products = [];
   let calculatingStock = false;
@@ -62,14 +66,10 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
   let units = [];
   let unitCategories = [];
   let currencies = [];
-  let warehouses = [];
-  let warehouse_products = [];
   let loading = true;
   let totalItems = 0;
   let totalPages = 0;
-
-  let goodModal;
-  let serviceModal;
+  let showSummary = true;
 
   // --- Table State ---
   let searchTerm = '';
@@ -86,16 +86,6 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
   let sortDirection = 'desc'; // 'asc' or 'desc'
 
   // --- Helper Functions ---
-  function getStockBadge(qty, unitName, alarm_quantity) {
-    let cls = 'badge-success';
-    if (qty <= 0) {
-      cls = 'badge-danger';
-    } else if (qty < alarm_quantity) {
-      cls = 'badge-warning';
-    }
-    return `<span class="badge ${cls}"><span dir='ltr'>${qty}</span> ${unitName}</span>`;
-  }
-
   function getPageNumbers(current, total) {
     const delta = 2;
     const range = [];
@@ -131,6 +121,22 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
     }
   }
 
+  function getServiceDuration(service) {
+    const duration = Number(service.service_duration) || 0;
+    if (!duration) return '—';
+
+    return `${duration.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${t(
+      service.service_duration_unit || 'minute',
+    )}`;
+  }
+
+  function formatAmount(value) {
+    return Number(value || 0).toLocaleString(undefined, {
+      maximumFractionDigits: 3,
+      minimumFractionDigits: 2,
+    });
+  }
+
   // --- Data Loading ---
 
   let totalPurchaseCostMap = {};
@@ -150,10 +156,6 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
       totalPurchaseCostMap[buyCurrency] = (totalPurchaseCostMap[buyCurrency] || 0) + buyPrice * qty;
       totalSaleValueMap[sellCurrency] = (totalSaleValueMap[sellCurrency] || 0) + sellPrice * qty;
       totalQuantityCount += qty;
-      // check if qty is not integer and it is float, then round to 2 decimal places
-      if (qty % 1 !== 0) {
-        console.log(p.name, p.id, qty);
-      }
     });
   }
 
@@ -179,16 +181,14 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
 
       categories = (await productCategoryApi.getAll({ status: 1 }))?.data || [];
       const brandResponse = await productBrandApi.getAll({ status: 1 });
-    brands = brandResponse?.data || [];
+      brands = brandResponse?.data || [];
       const genericResponse = await productGenericApi.getAll({ status: 1 });
       generics = genericResponse?.data || [];
       departments = (await departmentApi.getAll({ status: 1 }))?.data || [];
       units = (await productUnitApi.getAll({ status: 1 }))?.data || [];
       unitCategories = (await unitCategoryApi.getAll({ status: 1 }))?.data || [];
       currencies = (await currencyApi.getAll({ status: 1 }))?.data || [];
-      warehouses = (await warehouseApi.getAll({ status: 1 }))?.data || [];
-      warehouse_products = (await warehouseProductApi.getAll({ status: 1 }))?.data || [];
-      users = await (await userApi.getAll({ status: 1 }))?.data || [];
+      users = (await (await userApi.getAll({ status: 1 }))?.data) || [];
 
       await calculateTotalBenefit();
       await calculateTotalPredictedBenefit();
@@ -199,15 +199,13 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
           status: 1,
           product_ids: pageIds.join(','),
         }))?.data || [];
-      const imageByProductId = new Map(
-        images.map((img) => [Number(img.product_id), img]),
-      );
+      const imageByProductId = new Map(images.map((img) => [Number(img.product_id), img]));
       for (let product of products) {
         const img = imageByProductId.get(Number(product.id)) || null;
         product.thumbnailUrl = resolveMediaUrl(img?.thumbnail, '/img/no-image.png');
       }
     } catch (e) {
-      console.error('Error loading products:', e);
+      console.error('Error loading services:', e);
     } finally {
       loading = false;
     }
@@ -227,24 +225,12 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
     }
   }
 
-  function openNewProduct(type = 'product') {
-    if (type === 'service') {
-      serviceModal.openModal();
-      return;
-    }
-    goodModal.openModal();
+  function openNewProduct() {
+    push('/dashboard/service-form/new');
   }
 
   function editExistingProduct(product) {
-    if (product?.type === 'service') {
-      serviceModal.editProduct(product);
-    } else {
-      goodModal.editProduct(product);
-    }
-  }
-
-  function onProductSaved() {
-    loadAll();
+    push(`/dashboard/service-form/${product.id}`);
   }
 
   // --- Computed Data (Filter, Sort, Pagination) ---
@@ -270,7 +256,6 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
     }
 
     if (filterCurrency !== 'all') {
-      console.log('filterCurrency', filterCurrency);
       result = result.filter((p) => p.currency === filterCurrency);
     }
     if (filterGeneric !== 'all') {
@@ -300,7 +285,6 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
       if (valA === undefined || valA === null) return 1;
       if (valB === undefined || valB === null) return -1;
 
-      // Specific handling for calculated fields
       // String comparison
       if (typeof valA === 'string') valA = valA.toLowerCase();
       if (typeof valB === 'string') valB = valB.toLowerCase();
@@ -315,6 +299,72 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
 
   $: paginatedProducts = filteredProducts;
 
+  // --- Toolbar ---
+
+  $: serviceToolbarFilters = [
+    {
+      key: 'status',
+      label: t('Status'),
+      value: filterStatus,
+      options: [
+        { value: 'all', label: t('All') },
+        { value: 'active', label: t('Active') },
+        { value: 'inactive', label: t('Inactive') },
+      ],
+    },
+    {
+      key: 'category',
+      label: t('Category'),
+      value: filterCategory,
+      options: [{ value: 'all', label: t('All') }, ...categories.map((cat) => ({ value: cat.id, label: cat.name }))],
+    },
+    {
+      key: 'department',
+      label: t('Department'),
+      value: filterDepartment,
+      options: [{ value: 'all', label: t('All') }, ...departments.map((d) => ({ value: d.id, label: d.name }))],
+    },
+    {
+      key: 'user',
+      label: t('User'),
+      value: filterUser,
+      options: [{ value: 'all', label: t('All') }, ...users.map((u) => ({ value: u.id, label: getUserName(u) }))],
+    },
+    {
+      key: 'currency',
+      label: t('Currency'),
+      value: filterCurrency,
+      visible: _translate_org_type == 'exchange',
+      options: [
+        { value: 'all', label: t('All') },
+        ...currencies.map((cur) => ({ value: cur.code, label: t(cur.code) })),
+      ],
+    },
+  ];
+
+  function handleToolbarFilterChange(event) {
+    const { key, value } = event.detail;
+    if (key === 'status') filterStatus = value;
+    if (key === 'category') filterCategory = value;
+    if (key === 'department') filterDepartment = value;
+    if (key === 'user') filterUser = value;
+    if (key === 'currency') filterCurrency = value;
+    if (currentPage !== 1) currentPage = 1;
+  }
+
+  function resetFilters() {
+    searchTerm = '';
+    filterCategory = 'all';
+    filterBrand = 'all';
+    filterCurrency = 'all';
+    filterGeneric = 'all';
+    filterDepartment = 'all';
+    filterUser = 'all';
+    filterStatus = 'active';
+    currentPage = 1;
+    loadAll();
+  }
+
   // --- UI Helpers ---
   function setSort(column) {
     if (sortColumn === column) {
@@ -326,7 +376,7 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
   }
 
   function getCategoryName(id) {
-    return categories.find((c) => c.id === id)?.name || '-';
+    return categories.find((c) => c.id === id)?.name || '—';
   }
 
   function getBrandName(id) {
@@ -341,11 +391,6 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
     return units.find((u) => u.id === id)?.name || '';
   }
 
-  // Reset pagination when filters change
-  $: if (searchTerm || filterCategory || filterStatus) {
-    currentPage = 1;
-  }
-
   function addInitialStockTransactionsForAllProducts() {
     if (
       !confirm(
@@ -358,17 +403,10 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
         productApi.getAll({ status: 1 }),
         productApi.getAll({ status: 0 }),
       ]);
-      const products = [
-        ...(activeProducts?.data || []),
-        ...(deletedProducts?.data || []),
-      ];
-      const warehouses = await Promise.all([
-        warehouseApi.getAll({ status: 1 }),
-        warehouseApi.getAll({ status: 0 }),
-      ]).then(([active, deleted]) => [
-        ...(active?.data || []),
-        ...(deleted?.data || []),
-      ]);
+      const products = [...(activeProducts?.data || []), ...(deletedProducts?.data || [])];
+      const warehouses = await Promise.all([warehouseApi.getAll({ status: 1 }), warehouseApi.getAll({ status: 0 })]).then(
+        ([active, deleted]) => [...(active?.data || []), ...(deleted?.data || [])],
+      );
       for (const p of products) {
         if (p.initial_warehouse_id > 0) {
           const w = warehouses.find((w) => w.id === p.initial_warehouse_id);
@@ -398,8 +436,10 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
   }
 
   function formatValueObj(obj) {
-    if (!obj) return '-';
-    return Object.keys(obj)
+    if (!obj) return '—';
+    const keys = Object.keys(obj);
+    if (!keys.length) return '—';
+    return keys
       .map((k) => `${obj[k].toLocaleString(undefined, { maximumFractionDigits: 3, minimumFractionDigits: 2 })} ${t(k)}`)
       .join('<br />');
   }
@@ -435,7 +475,6 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
   let totalBenefit = {};
   async function calculateTotalBenefit() {
     totalBenefit = {};
-    let count = {};
     products.forEach((p) => {
       const benefit = Number(calculateBenefit(p));
       if (totalBenefit[p.buy_currency]) {
@@ -483,437 +522,398 @@ import { warehouseProductApi } from '../../api/warehouseProductApi.js';
   }
 </script>
 
-<div class="container-fluid my-4">
-  <!-- Header -->
+<IndexPageLayout
+  dir={t('dir')}
+  ariaLabel={t('Services')}
+  toolbarWidth="28rem"
+  showStats={showSummary}
+  showExtra={shiftPressed && ctrlPressed}
+  showFooter={!loading && totalItems > 0}
+  dense={true}
+  contentClass="services-index-content"
+  tablePadding={true}>
+  <svelte:fragment slot="actions">
+    <ActionButton icon="bi-plus-lg" label={t('New Service')} on:click={() => openNewProduct()} />
 
-  <div class="mb-4 d-flex gap-3 flex-wrap">
-    <div class="card">
-      <div class="card-header py-2">
-        <small><i class="bi bi-box-seam me-2 text-success"></i>{t('Total Services')}</small>
-      </div>
-      <div class="card-body p-2">
-        <small class="text-center fw-bold d-block">
-          {products.length.toLocaleString()}
-        </small>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-header py-2">
-        <small><i class="bi bi-box me-2 text-primary"></i>{t('Total Expense Rate')}</small>
-      </div>
-      <div class="card-body p-2">
-        <small class=" text-center fw-bold d-block">
-          {@html formatValueObj(totalPurchaseCostMap)}
-        </small>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-header py-2">
-        <small><i class="bi bi-shop me-2 text-success"></i>{t('Total Sale Rate')}</small>
-      </div>
-      <div class="card-body p-2">
-        <small class="text-center fw-bold d-block">
-          {@html formatValueObj(totalSaleValueMap)}
-        </small>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-header py-2">
-        <small><i class="bi bi-box-seam me-2 text-success"></i>{t('Current Benefit')}</small>
-      </div>
-      <div class="card-body p-2">
-        <small class="text-center fw-bold d-block">
-          {@html formatValueObj(totalBenefit)}
-        </small>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-header py-2">
-        <small><i class="bi bi-box-seam me-2 text-success"></i>{t('Predicted Benefit')}</small>
-      </div>
-      <div class="card-body p-2">
-        <small class="text-center fw-bold d-block">
-          {@html formatValueObj(totalPredictedBenefit)}
-        </small>
-      </div>
-    </div>
-  </div>
+    <button
+      type="button"
+      class="index-settings-button"
+      class:is-active={showSummary}
+      aria-label={t('Summary')}
+      aria-expanded={showSummary}
+      title={t('Summary')}
+      on:click={() => (showSummary = !showSummary)}>
+      <i class="bi {showSummary ? 'bi-x-lg' : 'bi-clipboard-data'}" aria-hidden="true"></i>
+    </button>
+  </svelte:fragment>
 
-  <!-- Card Container -->
-  <div class="card shadow-sm rounded-lg border-0">
-    <!-- Toolbar -->
-    <div class="card-header bg-body-tertiary border-bottom p-3">
-      <div class="row g-2 align-items-center">
-        <!-- Search -->
-        <div class="col-md-2">
-          <input
-            type="text"
-            id="product-search"
-            class="form-control form-control-sm me-3"
-            placeholder={t('Search products...')}
-            bind:value={searchTerm} />
-        </div>
-        <div class="col-md-2">
-          <select class="form-select form-select-sm me-3" bind:value={filterCategory}>
-            <option value="all">{t('All Categories')}</option>
-            {#each categories as cat}
-              <option value={cat.id}>{cat.name}</option>
-            {/each}
-          </select>
-        </div>
+  <svelte:fragment slot="toolbar">
+    <FilterToolbar
+      searchValue={searchTerm}
+      searchPlaceholder={`${t('Search services...')}`}
+      filters={serviceToolbarFilters}
+      filterLabel={t('Filter')}
+      resetLabel={t('Clear Filters')}
+      showReset={true}
+      on:searchChange={(event) => {
+        searchTerm = event.detail;
+        if (currentPage !== 1) currentPage = 1;
+      }}
+      on:filterChange={handleToolbarFilterChange}
+      on:reset={resetFilters} />
+  </svelte:fragment>
 
-        <div class="col-md-2">
+  <svelte:fragment slot="stats">
+    <div class="index-summary-grid services-summary-grid">
+      <SummaryCard label={t('Total Services')} icon="bi-briefcase" tone="blue">
+        {totalItems.toLocaleString()}
+      </SummaryCard>
+
+      <SummaryCard label={t('Total Expense Rate')} icon="bi-bag-check" tone="cyan">
+        {@html formatValueObj(totalPurchaseCostMap)}
+      </SummaryCard>
+
+      <SummaryCard label={t('Total Sale Rate')} icon="bi-shop" tone="green">
+        {@html formatValueObj(totalSaleValueMap)}
+      </SummaryCard>
+
+      <SummaryCard label={t('Current Benefit')} icon="bi-graph-up-arrow" tone="amber">
+        {@html formatValueObj(totalBenefit)}
+      </SummaryCard>
+
+      <SummaryCard label={t('Predicted Benefit')} icon="bi-stars" tone="purple">
+        {@html formatValueObj(totalPredictedBenefit)}
+      </SummaryCard>
+    </div>
+  </svelte:fragment>
+
+  <svelte:fragment slot="extra">
+    <ActionButton
+      variant="secondary"
+      icon="bi-calculator"
+      label={t('Calculate All Products Stock')}
+      loading={calculatingStock}
+      disabled={calculatingStock}
+      on:click={async () => {
+        if (confirm(t('Are you sure you want to recalculate stock for all products? This may take a while.'))) {
+          calculatingStock = true;
+          await calculateAllStocks();
+          calculatingStock = false;
+          loadAll();
+        }
+      }} />
+  </svelte:fragment>
+
+  {#if loading}
+    <div class="index-table-state">
+      <EmptyState loading message={t('Loading...')} />
+    </div>
+  {:else if filteredProducts.length === 0}
+    <div class="index-table-state">
+      <EmptyState icon="bi-inbox" message={t('No services found.')} />
+    </div>
+  {:else}
+    <DataTable
+      ariaLabel={t('Services')}
+      minWidth="980px"
+      dense={true}
+      striped={true}
+      hover={false}
+      stickyHeader={true}
+      layout="fixed"
+      scrollbar="thin">
+      <svelte:fragment slot="head">
+        <tr>
+          <th class="col-start">#</th>
+          <th class="col-start cursor-pointer" on:click={() => setSort('name')}>
+            {t('Service')}
+            {#if sortColumn === 'name'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('department_id')}>
+            {t('Department')}
+            {#if sortColumn === 'department_id'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('user_id')}>
+            {t('User')}
+            {#if sortColumn === 'user_id'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th>{t('Category')}</th>
+          <th>{t('Duration')}</th>
           {#if _translate_org_type == 'exchange'}
-            <select class="form-select form-select-sm me-3" bind:value={filterCurrency}>
-              <option value="all">{t('All Currencies')}</option>
-              {#each currencies as cur}
-                <option value={cur.code}>{t(cur.code)}</option>
-              {/each}
-            </select>
-          {/if}
-          <select class="form-select form-select-sm me-3" bind:value={filterDepartment}>
-            <option value="all">{t('All Departments')}</option>
-            {#each departments as dept}
-              <option value={dept.id}>{dept.name}</option>
-            {/each}
-          </select>
-        </div>
-
-        <div class="col-md-2">
-          <select class="form-select form-select-sm me-3" bind:value={filterUser}>
-            <option value="all">{t('All Users')}</option>
-            {#each users as user}
-              <option value={user.id}
-                >{user.first_name ? user.first_name + ' ' + user.last_name : user.username}</option>
-            {/each}
-          </select>
-        </div>
-
-        <div class="col-md-2">
-          <select class="form-select form-select-sm me-2" bind:value={itemsPerPage}>
-            <option value={5}>5 {t('per page')}</option>
-            <option value={10}>10 {t('per page')}</option>
-            <option value={20}>20 {t('per page')}</option>
-            <option value={50}>50 {t('per page')}</option>
-            <option value={100}>100 {t('per page')}</option>
-            <option value={250}>250 {t('per page')}</option>
-          </select>
-        </div>
-
-        <div class="col-md-2">
-          <button
-            class="btn btn-success btn-sm px-1 w-100"
-            on:click={() => {
-              openNewProduct('service');
-            }}>
-            <i class="bi bi-plus-circle"></i>
-            {t('New Service')}
-          </button>
-
-          <button
-            disabled={calculatingStock}
-            class="btn btn-danger btn-sm mt-2 w-100 {(shiftPressed && ctrlPressed) || calculatingStock ? '' : 'd-none'}"
-            on:click={async () => {
-              if (confirm(t('Are you sure you want to recalculate stock for all products? This may take a while.'))) {
-                calculatingStock = true;
-                await calculateAllStocks();
-                calculatingStock = false;
-                loadAll();
-              }
-            }}>
-            {@html calculatingStock
-              ? `<div class="spinner-border spinner-border-sm" role="status">
-  <span class="visually-hidden">Loading...</span>
-</div>
-`
-              : `<i class="bi bi-plus-circle me-2"></i>` + t('Calculate All Products Stock')}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Table Body -->
-    <div class="card-body p-0">
-      {#if loading}
-        <div class="text-center p-5">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">{t('Loading...')}</span>
-          </div>
-          <p class="mt-2 text-muted">{t('Loading...')}</p>
-        </div>
-      {:else if filteredProducts.length === 0}
-        <div class="text-center p-5">
-          <i class="bi bi-inbox fs-1 text-muted"></i>
-          <p class="mt-2 text-muted">{t('No products found.')}</p>
-        </div>
-      {:else}
-        <div class="table-responsive">
-          <table class="table table-sm table-hover table-striped align-middle mb-0">
-            <thead class="table-light">
-              <tr>
-                <th class="ps-4 cursor-pointer" on:click={() => setSort('id')}>
-                  {t('ID')}
-                  {#if sortColumn === 'id'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
-                  {/if}
-                </th>
-                <th class="ps-4 cursor-pointer" on:click={() => setSort('department_id')}>
-                  {t('Department')}
-                  {#if sortColumn === 'department_id'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
-                  {/if}
-                </th>
-                <th class="cursor-pointer" on:click={() => setSort('name')}>
-                  {t('Service')}
-                  {#if sortColumn === 'name'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
-                  {/if}
-                </th>
-
-                <th class="ps-4 cursor-pointer" on:click={() => setSort('user_id')}>
-                  {t('User')}
-                  {#if sortColumn === 'user_id'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
-                  {/if}
-                </th>
-                {#if _translate_org_type == 'exchange'}
-                  <th class="cursor-pointer" on:click={() => setSort('currency')}>
-                    {t('Currency')}
-                    {#if sortColumn === 'currency'}
-                      <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
-                    {/if}
-                  </th>
-                {/if}
-                <th class="text-center">{t('Category')}</th>
-                <th class="text-center cursor-pointer" on:click={() => setSort('quantity')}>
-                  {t('Quantity')}
-                  {#if sortColumn === 'quantity'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
-                  {/if}
-                </th>
-
-                {#if enable_expiry_date}
-                  <th class="text-center">{t('Expiry Date')}</th>
-                {/if}
-                <th class="text-center">{t('Cost')}</th>
-                <th class="text-center">{t('Sale')}</th>
-                <th class="text-center cursor-pointer" on:click={() => setSort('calculated_benefit')}
-                  >{t('Benefit')}
-
-                  {#if sortColumn === 'calculated_benefit'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
-                  {/if}
-                </th>
-
-                <th class="text-center pe-4">{t('Actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each paginatedProducts as product (product.id)}
-                <tr class="">
-                  <td class="ps-4 text-muted small">{shortID(product.id)}</td>
-
-                  <td class="ps-4 small">{departments.find((d) => d.id === product.department_id)?.name || ''}</td>
-
-                  <td class="">
-                    {#if product.thumbnailUrl != '/img/no-image.png'}<img
-                        src={product.thumbnailUrl}
-                        alt=""
-                        class="rounded-circle shadow-sm float-start"
-                        width="40"
-                        height="40"
-                        style="object-fit: cover; border: 2px solid white;" />
-                    {/if}
-                    <div>
-                      <button
-                        class="btn btn-link text-primary fw-bold btn-sm px-1"
-                        on:click={() => push(`/dashboard/product/${product.id}`)}>{product.name}</button>
-                      {#if product.description}
-                        <small class="text-muted d-none d-md-block">{product.description.substring(0, 30)}...</small>
-                      {/if}
-                    </div>
-                  </td>
-
-                  <td class="ps-4 small">{getUserName(users.find((d) => d.id === product.user_id)) || ''}</td>
-
-                  {#if _translate_org_type == 'exchange'}
-                    <td class="text-center">{t(product.currency || '')}</td>
-                  {/if}
-                  <td class="text-center">{getCategoryName(product.category_id)}</td>
-                  <td class="text-center">
-                    {@html getStockBadge(
-                      Number(product.quantity || 0) * -1 || 0,
-                      getUnitName(product.product_unit_id),
-                      product.alarm_quantity,
-                    )}
-                  </td>
-
-                  {#if enable_expiry_date}
-                    <th class="text-center">{product.expiry_date}</th>
-                  {/if}
-                  <td class="text-center">
-                    <span class="font-weight-bold"
-                      >{Number(product.buy_price).toLocaleString(undefined, {
-                        maximumFractionDigits: 3,
-                      })}&nbsp;{t(product.buy_currency)}</span>
-                  </td>
-                  <td class="text-center">
-                    <span class="font-weight-bold text-primary"
-                      >{Number(product.sell_price).toLocaleString(undefined, {
-                        maximumFractionDigits: 3,
-                      })}&nbsp;{t(product.sell_currency)}</span>
-                  </td>
-                  <td class="text-center">
-                    <div class="badge badge-{product.calculated_benefit < 0 ? 'danger' : 'success'}">
-                      <span dir="ltr"
-                        >{product.calculated_benefit.toLocaleString(undefined, {
-                          maximumFractionDigits: 3,
-                          minimumFractionDigits: 2,
-                        })}</span>
-                      {t(product.buy_currency) || ''}
-                    </div>
-                  </td>
-
-                  <td class="text-center pe-4">
-                    <button
-                      class="btn btn-sm btn-outline-primary me-1"
-                      on:click={() => push(`/dashboard/product/${product.id}`)}
-                      title="View"><i class="bi bi-eye"></i></button>
-                    <button
-                      class="btn btn-sm btn-outline-secondary me-1 {shiftPressed && ctrlPressed ? '' : 'd-none'}"
-                      on:click={async () => {
-                        await calculateProductStock(product.id, 'single');
-                        loadAll();
-                      }}>
-                      <i class="bi bi-calculator"></i>
-                    </button>
-                    <button
-                      class="btn btn-sm btn-outline-secondary me-1 {shiftPressed && ctrlPressed ? '' : 'd-none'}"
-                      on:click={async () => {
-                        await moveToProducts(product.id);
-                      }}>
-                      <i class="bi bi-arrow-right"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary me-1" on:click={() => editExistingProduct(product)}>
-                      <i class="bi bi-pencil"></i>
-                    </button>
-                    <!-- <button
-                      class="btn btn-sm btn-outline-danger"
-                      on:click={() => deleteProduct(product.id)}
-                    >
-                      <i class="bi bi-trash"></i>
-                    </button> -->
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      {/if}
-    </div>
-
-    <!-- Pagination Footer -->
-    {#if !loading && filteredProducts.length > 0}
-      <div class="card-footer bg-body-tertiary d-flex justify-content-between align-items-center pt-3 overflow-x-auto">
-        <div class="text-muted small">
-          {t('Showing')}
-          {(currentPage - 1) * itemsPerPage + 1}
-          {t('to')}
-          {Math.min(currentPage * itemsPerPage, filteredProducts.length)}
-          {t('of')}
-          {filteredProducts.length}
-          {t('entries')}
-        </div>
-        <nav>
-          <ul class="pagination pagination-circle pagination-sm mb-0">
-            <li class="page-item" class:disabled={currentPage === 1}>
-              <button class="page-link" on:click={() => (currentPage = 1)}>
-                <i class="bi bi-chevron-double-{t('dir') === 'rtl' ? 'right' : 'left'}"></i>
-              </button>
-            </li>
-            <li class="page-item" class:disabled={currentPage === 1}>
-              <button class="page-link" on:click={() => (currentPage -= 1)}>
-                <i class="bi bi-chevron-{t('dir') === 'rtl' ? 'right' : 'left'}"></i>
-              </button>
-            </li>
-
-            {#each getPageNumbers(currentPage, totalPages) as pageNum, idx (pageNum === '...' ? `dot-${idx}` : pageNum)}
-              {#if pageNum === '...'}
-                <li class="page-item disabled">
-                  <span class="page-link">...</span>
-                </li>
-              {:else}
-                <li class="page-item" class:active={currentPage === pageNum}>
-                  <button class="page-link" on:click={() => (currentPage = pageNum)}>{pageNum}</button>
-                </li>
+            <th class="cursor-pointer" on:click={() => setSort('currency')}>
+              {t('Currency')}
+              {#if sortColumn === 'currency'}
+                <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
               {/if}
-            {/each}
+            </th>
+          {/if}
+          <th class="cursor-pointer" on:click={() => setSort('buy_price')}>
+            {t('Cost')}
+            {#if sortColumn === 'buy_price'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('sell_price')}>
+            {t('Sale')}
+            {#if sortColumn === 'sell_price'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('calculated_benefit')}>
+            {t('Benefit')}
+            {#if sortColumn === 'calculated_benefit'}
+              <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+            {/if}
+          </th>
+          <th>{t('Actions')}</th>
+        </tr>
+      </svelte:fragment>
 
-            <li class="page-item" class:disabled={currentPage === totalPages || totalPages === 0}>
-              <button class="page-link" on:click={() => (currentPage += 1)}>
-                <i class="bi bi-chevron-{t('dir') === 'rtl' ? 'left' : 'right'}"></i>
-              </button>
-            </li>
-            <li class="page-item" class:disabled={currentPage === totalPages || totalPages === 0}>
-              <button class="page-link" on:click={() => (currentPage = totalPages)}>
-                <i class="bi bi-chevron-double-{t('dir') === 'rtl' ? 'left' : 'right'}"></i>
-              </button>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    {/if}
-  </div>
-</div>
+      {#each paginatedProducts as service, index (service.id)}
+        <tr>
+          <td class="col-start cell-muted">{(currentPage - 1) * itemsPerPage + index + 1}</td>
 
-<ProductModal
-  bind:this={goodModal}
-  {categories}
-  {units}
-  {unitCategories}
-  {warehouses}
-  type="product"
-  defaultCurrency="AFN"
-  {warehouse_products}
-  on:saved={onProductSaved} />
+          <td>
+            <div class="service-cell">
+              {#if service.thumbnailUrl && service.thumbnailUrl !== '/img/no-image.png'}
+                <img class="service-thumb" src={service.thumbnailUrl} alt="" loading="lazy" />
+              {:else}
+                <span class="service-thumb service-thumb--icon" aria-hidden="true">
+                  <i class="bi bi-briefcase"></i>
+                </span>
+              {/if}
 
-<ProductModal
-  bind:this={serviceModal}
-  {categories}
-  {units}
-  {unitCategories}
-  {warehouses}
-  type="service"
-  defaultCurrency="AFN"
-  {warehouse_products}
-  on:saved={onProductSaved} />
+              <span class="service-meta">
+                <button
+                  type="button"
+                  class="service-name-btn"
+                  title={service.name}
+                  on:click={() => push(`/dashboard/product/${service.id}`)}>
+                  {service.name}
+                </button>
 
-<OpenFoodAPIModal bind:this={openFoodAPIModalRef} on:productSelected={(e) => {}} />
+                {#if service.code}
+                  <small class="service-code">{service.code}</small>
+                {/if}
+              </span>
+            </div>
+          </td>
+
+          <td class="small">{departments.find((d) => d.id === service.department_id)?.name || '—'}</td>
+
+          <td class="small">{getUserName(users.find((u) => u.id === service.user_id)) || '—'}</td>
+
+          <td>
+            <StatusBadge tone="neutral" ghost>{getCategoryName(service.category_id)}</StatusBadge>
+          </td>
+
+          <td>
+            <span class="service-duration">{getServiceDuration(service)}</span>
+          </td>
+
+          {#if _translate_org_type == 'exchange'}
+            <td>
+              <StatusBadge tone="info">{t(service.currency || '')}</StatusBadge>
+            </td>
+          {/if}
+
+          <td>
+            <span class="amount-pill">
+              <span dir="ltr">{formatAmount(service.buy_price)}</span>
+              {t(service.buy_currency || '')}
+            </span>
+          </td>
+
+          <td>
+            <span class="amount-pill is-sale">
+              <span dir="ltr">{formatAmount(service.sell_price)}</span>
+              {t(service.sell_currency || '')}
+            </span>
+          </td>
+
+          <td>
+            <StatusBadge tone={Number(service.calculated_benefit || 0) < 0 ? 'negative' : 'positive'}>
+              <span dir="ltr">{formatAmount(service.calculated_benefit)}</span>
+              {t(service.buy_currency || '')}
+            </StatusBadge>
+          </td>
+
+          <td>
+            <TableActions
+              actions={[
+                {
+                  icon: 'bi-eye',
+                  label: t('View'),
+                  tone: 'view',
+                  onClick: () => push(`/dashboard/product/${service.id}`),
+                },
+                {
+                  icon: 'bi-pencil',
+                  label: t('Edit'),
+                  tone: 'edit',
+                  onClick: () => editExistingProduct(service),
+                },
+                ...(shiftPressed && ctrlPressed
+                  ? [
+                      {
+                        icon: 'bi-calculator',
+                        label: t('Calculate stock'),
+                        tone: 'muted',
+                        onClick: async () => {
+                          await calculateProductStock(service.id, 'single');
+                          loadAll();
+                        },
+                      },
+                      {
+                        icon: 'bi-arrow-right',
+                        label: t('Move to products'),
+                        tone: 'muted',
+                        onClick: async () => {
+                          await moveToProducts(service.id);
+                        },
+                      },
+                    ]
+                  : []),
+              ]} />
+          </td>
+        </tr>
+      {/each}
+    </DataTable>
+  {/if}
+
+  <svelte:fragment slot="footer">
+    <PaginationBar
+      bind:currentPage
+      {totalPages}
+      {itemsPerPage}
+      {totalItems}
+      ariaLabel={t('Services pagination')}
+      rowLabel={t('rows')}
+      on:perPageChange={(event) => {
+        itemsPerPage = Number(event.detail);
+        currentPage = 1;
+      }}
+      {getPageNumbers} />
+  </svelte:fragment>
+</IndexPageLayout>
 
 <style>
-  /* MDBootstrap specific tweaks */
   .cursor-pointer {
     cursor: pointer;
   }
 
-  /* Custom Badge Styles (MDB Inspired) */
-  /* :global(.badge-success) {
-    background-color: #00b074 !important;
+  .cell-muted {
+    color: #94a3b8;
   }
 
-  :global(.badge-warning) {
-    background-color: #ffbb33 !important;
-    color: #000 !important;
+  .service-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+    text-align: start;
   }
 
-  :global(.badge-danger) {
-    background-color: #ff3547 !important;
-  } */
+  .service-thumb {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    border: 1px solid #e5edf6;
+    border-radius: 9px;
+    background: #f8fafc;
+    object-fit: cover;
+  }
 
-  .pagination-circle .page-link {
-    border-radius: 50% !important;
-    margin-left: 3px;
-    margin-right: 3px;
-    border: none;
+  .service-thumb--icon {
+    display: inline-grid;
+    place-items: center;
+    color: #93a5bd;
+    font-size: 0.95rem;
+  }
+
+  .service-meta {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    text-align: start;
+  }
+
+  .service-name-btn {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #0f6efd;
+    font: inherit;
+    font-weight: 750;
+    text-align: start;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+  }
+
+  .service-name-btn:hover {
+    text-decoration: underline;
+  }
+
+  .service-code {
+    color: #94a3b8;
+    font-size: 0.7rem;
+    direction: ltr;
+    text-align: start;
+  }
+
+  .service-duration {
+    color: #475569;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .amount-pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.2rem;
+    color: #334155;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+
+  .amount-pill.is-sale {
+    color: #0f6efd;
+  }
+
+  :global(.index-statistics .services-summary-grid) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  :global(html.dark) .service-name-btn {
+    color: #93c5fd;
+  }
+
+  :global(html.dark) .service-duration,
+  :global(html.dark) .amount-pill {
+    color: var(--erp-text, #e5edf9);
+  }
+
+  :global(html.dark) .amount-pill.is-sale {
+    color: #93c5fd;
+  }
+
+  @media (max-width: 1199.98px) {
+    :global(.index-statistics .services-summary-grid) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    :global(.index-statistics .services-summary-grid) {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

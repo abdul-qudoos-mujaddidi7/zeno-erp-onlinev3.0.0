@@ -169,6 +169,7 @@
   $: selectedDepartmentId = loc && loc.startsWith('/dashboard/department/') ? loc.split('/').pop() : null;
 
   $: productFormId = loc && loc.startsWith('/dashboard/product-form/') ? loc.split('/').pop() : null;
+  $: serviceFormId = loc && loc.startsWith('/dashboard/service-form/') ? loc.split('/').pop() : null;
 
   let sidebarOpen = false;
   let sidebarCollapsed = false;
@@ -326,6 +327,8 @@
         <div class="route-fill route-fill--scrollable">
           <AsyncPage loader={loadFiscalYears} />
         </div>
+      {:else if loc.startsWith('/dashboard/service-form/')}
+        <AsyncPage loader={loadProductForm} {serviceFormId} formType="service" />
       {:else if loc.startsWith('/dashboard/product-form/')}
         <AsyncPage loader={loadProductForm} {productFormId} />
       {:else if loc.startsWith('/dashboard/product/')}

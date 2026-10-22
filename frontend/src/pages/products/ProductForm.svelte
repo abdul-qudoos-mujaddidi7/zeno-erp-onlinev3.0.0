@@ -11,6 +11,8 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import ProductModal from './ProductModal.svelte';
 
   export let productFormId = null;
+  export let serviceFormId = null;
+  export let formType = 'product';
 
   let categories = [];
   let units = [];
@@ -26,8 +28,14 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   let showProductSearchResults = false;
   let activeProductSearchIndex = 0;
 
-  $: isNew = !productFormId || productFormId === 'new';
-  $: formKey = productFormId || 'new';
+  $: isServiceForm = formType === 'service';
+  $: activeFormId = isServiceForm ? serviceFormId : productFormId;
+  $: formRoute = isServiceForm ? '/dashboard/service-form' : '/dashboard/product-form';
+  $: searchPlaceholder = isServiceForm
+    ? t('Search service by name or code...')
+    : t('Search product by name, barcode, or SKU...');
+  $: isNew = !activeFormId || activeFormId === 'new';
+  $: formKey = `${formType}:${activeFormId || 'new'}`;
   $: formKey, (productModalRef = null);
   $: normalizedProductSearch = productSearch.trim().toLocaleLowerCase();
   $: matchingProducts = products
@@ -68,6 +76,10 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     return Number(first?.id || 0) - Number(second?.id || 0);
   }
 
+  function matchesFormType(product) {
+    return isServiceForm ? product?.type === 'service' : product?.type !== 'service';
+  }
+
   async function loadProductNeighbors(id) {
     previousProductId = null;
     nextProductId = null;
@@ -75,7 +87,9 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     if (!id || id === 'new') return;
 
     const routeKey = String(id).trim();
-    const products = ((await productApi.getAll({ status: 1 }))?.data || []).sort(compareProductsByCreatedAt);
+    const products = ((await productApi.getAll({ status: 1 }))?.data || [])
+      .filter(matchesFormType)
+      .sort(compareProductsByCreatedAt);
     const currentIndex = products.findIndex((product) => String(product.id).trim() === routeKey);
 
     if (currentIndex < 0) return;
@@ -90,7 +104,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     productSearch = '';
     showProductSearchResults = false;
     activeProductSearchIndex = 0;
-    push(`/dashboard/product-form/${id}`);
+    push(`${formRoute}/${id}`);
   }
 
   function selectProductToEdit(product) {
@@ -155,7 +169,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     warehouse_products =
       (await warehouseProductApi.getAll({ status: 1 }))?.data || [];
 
-    products = (await productApi.getAll({ status: 1 }))?.data || [];
+    products = ((await productApi.getAll({ status: 1 }))?.data || []).filter(matchesFormType);
 
     dataReady = true;
   });
@@ -164,7 +178,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     if (id == null || id === '') return null;
 
     const routeKey = String(id).trim();
-    const products = (await productApi.getAll({ status: 1 }))?.data || [];
+    const products = ((await productApi.getAll({ status: 1 }))?.data || []).filter(matchesFormType);
 
     return (
       products.find(
@@ -193,11 +207,11 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   }
 
   $: if (dataReady && productModalRef) {
-    loadFormForRoute(productFormId);
+    loadFormForRoute(activeFormId);
   }
 
   $: if (dataReady) {
-    loadProductNeighbors(productFormId);
+    loadProductNeighbors(activeFormId);
   }
 </script>
 
@@ -219,7 +233,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
               type="search"
               role="combobox"
               bind:value={productSearch}
-              placeholder={t('Search product by name, barcode, or SKU...')}
+              placeholder={searchPlaceholder}
               autocomplete="off"
               aria-autocomplete="list"
               aria-controls="product-edit-search-results"
@@ -262,9 +276,9 @@ import { productUnitApi } from '../../api/productUnitApi.js';
                 <button
                   type="button"
                   role="option"
-                  aria-selected={String(product.id) === String(productFormId)}
+                  aria-selected={String(product.id) === String(activeFormId)}
                   class:active={index === activeProductSearchIndex}
-                  class:selected={String(product.id) === String(productFormId)}
+                  class:selected={String(product.id) === String(activeFormId)}
                   on:mouseenter={() => (activeProductSearchIndex = index)}
                   on:mousedown|preventDefault={() => {}}
                   on:click={() => selectProductToEdit(product)}>
@@ -284,8 +298,8 @@ import { productUnitApi } from '../../api/productUnitApi.js';
             {:else}
               <div class="product-edit-search__empty">
                 <span aria-hidden="true"><i class="bi bi-box-seam"></i></span>
-                <strong>{t('No products found.')}</strong>
-                <small>{t('Search product by name, barcode, or SKU...')}</small>
+                <strong>{t(isServiceForm ? 'No services found.' : 'No products found.')}</strong>
+                <small>{searchPlaceholder}</small>
               </div>
             {/if}
           </div>
@@ -305,7 +319,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
         {previousProductId}
         {nextProductId}
         onNavigateProduct={navigateToProduct}
-        type="product"
+        type={formType}
       />
     {/key}
   </div>

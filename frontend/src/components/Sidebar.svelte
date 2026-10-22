@@ -177,10 +177,10 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   $: enable_services = $settings_all.find((s) => s.key === 'enable_services')?.value == 1;
   /*
    * Miscellaneous -> "Enable Manufacturing Menu". Missing rows fall back to
-   * visible so organizations that never saved the setting keep today's menu.
+   * hidden so BOM and Productions stay off until the organization enables them.
    */
   $: enable_manufacturing_menu =
-    $settings_all.find((s) => s.key === 'enable_manufacturing_menu')?.value != 0;
+    $settings_all.find((s) => s.key === 'enable_manufacturing_menu')?.value == 1;
 
   let shiftPressed = false;
   let ctrlPressed = false;

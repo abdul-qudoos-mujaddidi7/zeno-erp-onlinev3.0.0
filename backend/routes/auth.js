@@ -539,6 +539,12 @@ router.post("/register", async (req, res) => {
           value: "0",
         },
         {
+          category: "Miscellaneous",
+          type: "boolean",
+          key: "enable_manufacturing_menu",
+          value: "0",
+        },
+        {
           category: "Sale",
           type: "int",
           key: "invoice_index",

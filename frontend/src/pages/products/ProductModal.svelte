@@ -106,9 +106,7 @@ import { userApi } from '../../api/userApi.js';
     name = name + ' ' + t(currency);
     setTimeout(() => {
       if (window.mdb) {
-        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
-          new window.mdb.Input(el);
-        });
+        initMdbInputs();
         productModalEl?.querySelectorAll('.dropdown-toggle').forEach((el) => {
           new window.mdb.Dropdown(el);
         });
@@ -358,7 +356,7 @@ import { userApi } from '../../api/userApi.js';
       sessionStorage.removeItem(PRODUCT_FORM_RETURN_KEY);
     }
 
-    push(returnRoute || '/dashboard/stock');
+    push(returnRoute || (type === 'service' ? '/dashboard/services' : '/dashboard/stock'));
   }
 
   // let productModal;
@@ -488,6 +486,20 @@ import { userApi } from '../../api/userApi.js';
     });
   }
 
+  /*
+   * MDB Input only understands containers holding an input or textarea. The
+   * unit-category select wrapper has a label but no input, and MDB's
+   * date-placeholder logic then reads a null input and throws, so skip it.
+   */
+  function initMdbInputs(root = productModalEl) {
+    if (!window.mdb || !root) return;
+    root.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
+      if (el.querySelector('input, textarea')) {
+        new window.mdb.Input(el);
+      }
+    });
+  }
+
   async function initProductDatePickers() {
     await tick();
     if (productModalEl) {
@@ -548,9 +560,7 @@ import { userApi } from '../../api/userApi.js';
     }
     setTimeout(() => {
       if (window.mdb) {
-        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
-          new window.mdb.Input(el);
-        });
+        initMdbInputs();
         productModalEl?.querySelectorAll('.dropdown-toggle').forEach((el) => {
           new window.mdb.Dropdown(el);
         });
@@ -597,7 +607,7 @@ import { userApi } from '../../api/userApi.js';
     }
     setTimeout(() => {
       if (window.mdb) {
-        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+        initMdbInputs();
       }
       initProductDatePickers();
     }, 100);
@@ -661,7 +671,7 @@ import { userApi } from '../../api/userApi.js';
     alarm_quantity = '';
     alarm_expiry_days = '';
     if (window.mdb) {
-      productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+      initMdbInputs();
     }
   }
 
@@ -709,7 +719,7 @@ import { userApi } from '../../api/userApi.js';
 
     setTimeout(() => {
       if (window.mdb) {
-        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+        initMdbInputs();
       }
     }, 100);
 
@@ -1021,7 +1031,7 @@ import { userApi } from '../../api/userApi.js';
           resetForm();
           setTimeout(() => {
             if (window.mdb) {
-              productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+              initMdbInputs();
               productModalEl?.querySelectorAll('.dropdown-toggle').forEach((el) => new window.mdb.Dropdown(el));
             }
           }, 100);
@@ -1177,6 +1187,7 @@ import { userApi } from '../../api/userApi.js';
   class={asPage ? 'product-form-page' : 'product-modal-root simple-modal'}
   class:modal={!asPage}
   class:fade={!asPage}
+  class:qa-service-modal={!asPage && type == 'service'}
   dir={t('dir')}
   id={asPage ? 'productFormPage' : 'createProductModal'}
   bind:this={productModalEl}
@@ -1337,7 +1348,7 @@ import { userApi } from '../../api/userApi.js';
 
                       form_category_search_input?.focus();
                       if (window.mdb) {
-                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        initMdbInputs();
                       }
                     }}>
                     <i class="bi bi-chevron-down"></i>
@@ -1363,7 +1374,7 @@ import { userApi } from '../../api/userApi.js';
 
                       form_category_search_input?.focus();
                       if (window.mdb) {
-                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        initMdbInputs();
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -1464,9 +1475,7 @@ import { userApi } from '../../api/userApi.js';
                         showCategoryDropdown = false;
                         setTimeout(() => {
                           if (window.mdb) {
-                            document
-                              .querySelectorAll('[data-mdb-input-init]')
-                              .forEach((el) => new window.mdb.Input(el));
+                            initMdbInputs(document);
                           }
                         }, 100);
                       }}>
@@ -1487,7 +1496,12 @@ import { userApi } from '../../api/userApi.js';
                 options={unitCategoryOptions}
                 on:change={(e) => selectUnitCategory(e.detail)} />
             {:else}
-              <div class="form-outline" data-mdb-input-init>
+              <!--
+                No data-mdb-input-init here: MDB auto-initializes that attribute
+                and its Input class expects an input or textarea, so a select
+                wrapper throws on load. The outline styles are applied by CSS.
+              -->
+              <div class="form-outline">
                 <select
                   id="c-unit-category"
                   class="form-select form-select-sm"
@@ -1529,7 +1543,7 @@ import { userApi } from '../../api/userApi.js';
                       await tick();
                       form_unit_search_input?.focus();
                       if (window.mdb) {
-                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        initMdbInputs();
                       }
                     }}>
                     <i class="bi bi-chevron-down"></i>
@@ -1553,7 +1567,7 @@ import { userApi } from '../../api/userApi.js';
                       await tick();
                       form_unit_search_input?.focus();
                       if (window.mdb) {
-                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        initMdbInputs();
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -1634,9 +1648,7 @@ import { userApi } from '../../api/userApi.js';
                         showUnitDropdown = false;
                         setTimeout(() => {
                           if (window.mdb) {
-                            document
-                              .querySelectorAll('[data-mdb-input-init]')
-                              .forEach((el) => new window.mdb.Input(el));
+                            initMdbInputs(document);
                           }
                         }, 100);
                       }}>
@@ -1672,7 +1684,7 @@ import { userApi } from '../../api/userApi.js';
                         await tick();
                         form_department_search_input?.focus();
                         if (window.mdb) {
-                          productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                          initMdbInputs();
                         }
                       }}>
                       <i class="bi bi-chevron-down"></i>
@@ -1696,7 +1708,7 @@ import { userApi } from '../../api/userApi.js';
                       await tick();
                       form_department_search_input?.focus();
                       if (window.mdb) {
-                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        initMdbInputs();
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -1774,9 +1786,7 @@ import { userApi } from '../../api/userApi.js';
                           showDepartmentDropdown = false;
                           setTimeout(() => {
                             if (window.mdb) {
-                              document
-                                .querySelectorAll('[data-mdb-input-init]')
-                                .forEach((el) => new window.mdb.Input(el));
+                              initMdbInputs(document);
                             }
                           }, 100);
                         }}>
@@ -1812,7 +1822,7 @@ import { userApi } from '../../api/userApi.js';
                         await tick();
                         form_user_search_input?.focus();
                         if (window.mdb) {
-                          productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                          initMdbInputs();
                         }
                       }}>
                       <i class="bi bi-chevron-down"></i>
@@ -1836,7 +1846,7 @@ import { userApi } from '../../api/userApi.js';
                       await tick();
                       form_user_search_input?.focus();
                       if (window.mdb) {
-                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        initMdbInputs();
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -1914,9 +1924,7 @@ import { userApi } from '../../api/userApi.js';
                           showUserDropdown = false;
                           setTimeout(() => {
                             if (window.mdb) {
-                              document
-                                .querySelectorAll('[data-mdb-input-init]')
-                                .forEach((el) => new window.mdb.Input(el));
+                              initMdbInputs(document);
                             }
                           }, 100);
                         }}>
@@ -1953,7 +1961,7 @@ import { userApi } from '../../api/userApi.js';
                         await tick();
                         form_brand_search_input?.focus();
                         if (window.mdb) {
-                          productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                          initMdbInputs();
                         }
                       }}>
                       <i class="bi bi-chevron-down"></i>
@@ -1977,7 +1985,7 @@ import { userApi } from '../../api/userApi.js';
                       await tick();
                       form_brand_search_input?.focus();
                       if (window.mdb) {
-                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        initMdbInputs();
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -2077,9 +2085,7 @@ import { userApi } from '../../api/userApi.js';
                           showBrandDropdown = false;
                           setTimeout(() => {
                             if (window.mdb) {
-                              document
-                                .querySelectorAll('[data-mdb-input-init]')
-                                .forEach((el) => new window.mdb.Input(el));
+                              initMdbInputs(document);
                             }
                           }, 100);
                         }}>
@@ -2117,7 +2123,7 @@ import { userApi } from '../../api/userApi.js';
 
                         form_generic_search_input?.focus();
                         if (window.mdb) {
-                          productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                          initMdbInputs();
                         }
                       }}>
                       <i class="bi bi-chevron-down"></i>
@@ -2145,7 +2151,7 @@ import { userApi } from '../../api/userApi.js';
 
                       form_generic_search_input?.focus();
                       if (window.mdb) {
-                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
+                        initMdbInputs();
                       }
                     }}>
                     <i class="bi bi-search"></i>
@@ -2245,9 +2251,7 @@ import { userApi } from '../../api/userApi.js';
                           showGenericDropdown = false;
                           setTimeout(() => {
                             if (window.mdb) {
-                              document
-                                .querySelectorAll('[data-mdb-input-init]')
-                                .forEach((el) => new window.mdb.Input(el));
+                              initMdbInputs(document);
                             }
                           }, 100);
                         }}>
@@ -2495,9 +2499,7 @@ import { userApi } from '../../api/userApi.js';
                     }
                     setTimeout(() => {
                       if (window.mdb) {
-                        productModalEl?.querySelectorAll('[data-mdb-input-init]').forEach((el) => {
-                          new window.mdb.Input(el);
-                        });
+                        initMdbInputs();
                         productModalEl?.querySelectorAll('.dropdown-toggle').forEach((el) => {
                           new window.mdb.Dropdown(el);
                         });
@@ -2981,6 +2983,28 @@ import { userApi } from '../../api/userApi.js';
           <button type="button" class="btn-neutral" on:click={closeProductForm}>
             {t('Cancel')}
           </button>
+        {:else if type == 'service'}
+        <div class="qa-service-footer">
+          <button type="button" class="qa-service-footer__submit" on:click={() => saveProduct()}>
+            {editingId ? t('Update Service') : t('Save Service')}
+          </button>
+
+          <div class="qa-service-footer__links">
+            {#if !editingId}
+              <button type="button" class="qa-service-footer__link" on:click={() => saveProduct('again')}>
+                {t('Save Service and Add Another')}
+              </button>
+            {/if}
+
+            <button
+              type="button"
+              class="qa-service-footer__link qa-service-footer__link--muted"
+              data-mdb-dismiss="modal"
+              on:click={closeProductForm}>
+              {t('Close')}
+            </button>
+          </div>
+        </div>
         {:else}
         <button type="button" class="product-footer-btn product-footer-btn--close" data-mdb-dismiss="modal" on:click={closeProductForm}>
           {t('Close')}
@@ -3171,6 +3195,99 @@ import { userApi } from '../../api/userApi.js';
   .product-modal-close:hover {
     background: #f8fafc;
     color: #0f172a;
+  }
+
+  /* Service quick-action modal: same compact shell as the category popup. */
+  :global(.product-modal-root.qa-service-modal .modal-dialog) {
+    width: min(100% - 24px, 32.5rem);
+    max-width: 32.5rem;
+    /*
+     * The service form is taller than the category popup, so top-align the
+     * dialog: centered flex would push the header above the scroll area on
+     * short screens and leave the title and close button unreachable.
+     */
+    align-items: flex-start;
+    display: flex;
+    min-height: calc(100% - 2rem);
+  }
+
+  :global(.product-modal-root.qa-service-modal .modal-content.product-modal) {
+    border-radius: 0.875rem;
+  }
+
+  :global(.product-modal-root.qa-service-modal .product-modal-header) {
+    padding: 0.9rem 1.35rem 0.75rem;
+    padding-inline-end: 3.25rem;
+  }
+
+  :global(.product-modal-root.qa-service-modal .product-modal-title) {
+    font-size: 1.05rem;
+  }
+
+  :global(.product-modal-root.qa-service-modal .product-modal-subtitle) {
+    margin-top: 0.25rem;
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
+
+  :global(.product-modal-root.qa-service-modal .product-modal-body) {
+    padding: 1rem 1.35rem;
+  }
+
+  :global(.product-modal-root.qa-service-modal .product-modal-footer) {
+    display: block;
+    padding: 0.9rem 1.35rem 1rem;
+  }
+
+  .qa-service-footer {
+    display: grid;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .qa-service-footer__submit {
+    width: 100%;
+    min-height: 2.5rem;
+    border: none;
+    border-radius: 0.625rem;
+    background: #0f6efd;
+    color: #ffffff;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .qa-service-footer__submit:hover {
+    background: #1d4ed8;
+  }
+
+  .qa-service-footer__links {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .qa-service-footer__link {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #0f6efd;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 650;
+    cursor: pointer;
+  }
+
+  .qa-service-footer__link:hover {
+    text-decoration: underline;
+  }
+
+  .qa-service-footer__link--muted {
+    color: #64748b;
   }
 
   :global(.product-modal-body) {

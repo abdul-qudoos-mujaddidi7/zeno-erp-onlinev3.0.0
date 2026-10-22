@@ -488,6 +488,16 @@
         </ul>`;
     }
 
+    if (loc.startsWith('/dashboard/service-form/')) {
+      const isNewService = loc.endsWith('/new');
+      return `<ul class="navbar-nav me-auto stock-top-tabs">
+          <li class="nav-item stock-top-tabs__icon"><i class="bi bi-briefcase"></i></li>
+          <li class="nav-item">
+            <a class="nav-link active py-0" href="javascript:void(0)"><small>${isNewService ? t('New Service') : t('Update Service')}</small></a>
+          </li>
+        </ul>`;
+    }
+
     if (loc.startsWith('/dashboard/product-form/')) {
       const isNewProduct = loc.endsWith('/new');
       return `<ul class="navbar-nav me-auto stock-top-tabs">

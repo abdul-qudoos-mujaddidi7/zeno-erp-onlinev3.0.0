@@ -283,7 +283,7 @@ import { settingsApi } from '../../api/settingsApi.js';
         category: 'Miscellaneous',
         type: 'boolean',
         key: 'enable_manufacturing_menu',
-        value: 1,
+        value: 0,
       },
       {
         category: 'Sale',
