@@ -30,15 +30,6 @@ const {
 const fiscalPostingGuard =
   require('./fiscal-posting-guard.service');
 
-const TIME_TO_SECONDS = {
-  second: 1,
-  minute: 60,
-  hour: 3600,
-  day: 86400,
-  month: 2592000,
-  year: 31536000,
-};
-
 function getAuthenticatedIdentity(user) {
   const orgId = Number(user?.org_id);
   const userId = Number(user?.local_id);
@@ -73,45 +64,6 @@ function getAuthenticatedIdentity(user) {
 
 function isConfirmed(status) {
   return String(status || '').trim().toLowerCase() === 'confirmed';
-}
-
-function convertTime(amount, fromUnit, toUnit) {
-  const from = TIME_TO_SECONDS[String(fromUnit || 'hour').toLowerCase()] || 3600;
-  const to = TIME_TO_SECONDS[String(toUnit || 'hour').toLowerCase()] || 3600;
-  return (Number(amount || 0) * from) / to;
-}
-
-function computeOperationsTotal(operations, quantity, currency) {
-  return (operations || []).reduce((sum, operation) => {
-    if (
-      operation.cost_currency &&
-      currency &&
-      operation.cost_currency !== currency
-    ) {
-      return sum;
-    }
-
-    if (operation.cost_per_hour) {
-      const runHours = convertTime(
-        (Number(operation.run_time) || 0) * (Number(quantity) || 1),
-        operation.run_time_unit,
-        'hour',
-      );
-      const setupHours = convertTime(
-        Number(operation.setup_time) || 0,
-        operation.setup_time_unit,
-        'hour',
-      );
-
-      return sum + ((runHours + setupHours) * Number(operation.cost_per_hour));
-    }
-
-    if (operation.fixed_cost) {
-      return sum + Number(operation.fixed_cost || 0);
-    }
-
-    return sum;
-  }, 0);
 }
 
 async function createJournalEntry(
@@ -546,74 +498,11 @@ async function confirmProductionEffects(
     },
   );
 
-  const operationsTotal = computeOperationsTotal(
-    operations,
-    header.quantity,
-    header.currency,
-  );
-
-  if (operationsTotal > 0) {
-    const treasuryAccount =
-      await productionRepository.findAccountByCode(
-        connection,
-        {
-          orgId,
-          code: 'TREASURY',
-        },
-      );
-
-    if (!treasuryAccount) {
-      throw new AppError(
-        'TREASURY account not found.',
-        500,
-        'TREASURY_ACCOUNT_NOT_FOUND',
-      );
-    }
-
-    const expensesAccount =
-      await productionRepository.findAccountByCode(
-        connection,
-        {
-          orgId,
-          code: 'EXPENSES',
-        },
-      );
-
-    if (!expensesAccount) {
-      throw new AppError(
-        'EXPENSES account not found.',
-        500,
-        'EXPENSES_ACCOUNT_NOT_FOUND',
-      );
-    }
-
-    await createJournalEntry(
-      connection,
-      {
-        orgId,
-        userId,
-        requestContext,
-        data: {
-          date: header.production_end_date || new Date().toISOString().slice(0, 10),
-          reference_id: productionId,
-          reference_type: 'production',
-          description:
-            header.description
-            || `Production Operations Cost #${header.production_number || productionId}`,
-          currency: header.currency || null,
-          first_entry_account: expensesAccount.id,
-          first_entry_debit: operationsTotal,
-          first_entry_credit: 0,
-          second_entry_account: treasuryAccount.id,
-          second_entry_debit: 0,
-          second_entry_credit: operationsTotal,
-          status: 1,
-        },
-        description:
-          `Created production journal for production ${productionId}`,
-      },
-    );
-  }
+  /*
+   * Production stays out of the ledger: confirming a production moves stock
+   * and refreshes the finished product's buy price, but it posts no journal
+   * entry, so it never touches the EXPENSES or TREASURY accounts.
+   */
 }
 
 async function revertProductionEffects(

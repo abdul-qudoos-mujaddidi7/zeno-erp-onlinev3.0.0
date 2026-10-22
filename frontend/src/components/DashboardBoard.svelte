@@ -1872,8 +1872,6 @@
   .zb-treasury-hero {
     position: relative;
     line-height: 1.3;
-    /* Keep the caption and total together on the left side of the card. */
-    text-align: left;
   }
 
   .zb-treasury-cap {
@@ -1883,7 +1881,9 @@
   }
 
   .zb-treasury-total {
-    display: inline-flex;
+    display: flex;
+    /* Caption stays on the RTL start side; the total hugs the left edge. */
+    justify-content: flex-end;
     align-items: baseline;
     gap: 4px;
     color: #fca5a5;

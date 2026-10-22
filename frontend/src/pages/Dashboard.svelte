@@ -805,6 +805,31 @@
     return { start, end: current };
   }
 
+  function applyMetrics(metrics = {}) {
+    metricDataTotal = {
+      sales: Number(metrics.sales?.value) || 0,
+      purchases: Number(metrics.purchases?.value) || 0,
+      benefit: Number(metrics.benefit?.value) || 0,
+      expenses: Number(metrics.expenses?.value) || 0,
+      saleReturns: Number(metrics.saleReturns?.value) || 0,
+      purchaseReturns: Number(metrics.purchaseReturns?.value) || 0,
+      wastes: Number(metrics.wastes?.value) || 0,
+    };
+
+    metricDataCount = {
+      sales: Number(metrics.sales?.count) || 0,
+      salesCash: Number(metrics.sales?.cashCount) || 0,
+      salesCredit: Number(metrics.sales?.creditCount) || 0,
+      purchases: Number(metrics.purchases?.count) || 0,
+      purchasesCash: Number(metrics.purchases?.cashCount) || 0,
+      purchasesCredit: Number(metrics.purchases?.creditCount) || 0,
+      expenses: Number(metrics.expenses?.count) || 0,
+      saleReturns: Number(metrics.saleReturns?.count) || 0,
+      purchaseReturns: Number(metrics.purchaseReturns?.count) || 0,
+      wastes: Number(metrics.wastes?.count) || 0,
+    };
+  }
+
   function getPersianMonthRange(date = new Date()) {
     const { jy, jm } = toJalaali(date.getFullYear(), date.getMonth() + 1, date.getDate());
     const startG = toGregorian(jy, jm, 1);
@@ -843,17 +868,37 @@
           ? 'month'
           : 'day';
 
-    const summary =
-      (
-        await dashboardApi.getSummary({
-          date_from,
-          date_to,
-          period: activePeriod,
-          granularity,
-          include_overview: includeOverview,
-          include_metrics: includeMetrics,
-        })
-      )?.data || {};
+    /*
+     * The KPI row is titled "Today's Operations" and every card says
+     * "Today's …", so it keeps today's numbers even while the rest of the
+     * board follows a wider period.
+     */
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const useTodayMetrics = includeMetrics && activePeriod !== 'today';
+
+    const [summaryResult, todayResult] = await Promise.all([
+      dashboardApi.getSummary({
+        date_from,
+        date_to,
+        period: activePeriod,
+        granularity,
+        include_overview: includeOverview,
+        include_metrics: includeMetrics,
+      }),
+      useTodayMetrics
+        ? dashboardApi.getSummary({
+            date_from: toDateParam(todayStart),
+            date_to: toDateParam(new Date()),
+            period: 'today',
+            granularity: 'hour',
+            include_overview: false,
+            include_metrics: true,
+          })
+        : null,
+    ]);
+
+    const summary = summaryResult?.data || {};
 
     if (includeOverview && summary.overview) {
       applyOverview(summary.overview);
@@ -865,30 +910,7 @@
       return;
     }
 
-    const metrics = summary.metrics || {};
-
-    metricDataTotal = {
-      sales: Number(metrics.sales?.value) || 0,
-      purchases: Number(metrics.purchases?.value) || 0,
-      benefit: Number(metrics.benefit?.value) || 0,
-      expenses: Number(metrics.expenses?.value) || 0,
-      saleReturns: Number(metrics.saleReturns?.value) || 0,
-      purchaseReturns: Number(metrics.purchaseReturns?.value) || 0,
-      wastes: Number(metrics.wastes?.value) || 0,
-    };
-
-    metricDataCount = {
-      sales: Number(metrics.sales?.count) || 0,
-      salesCash: Number(metrics.sales?.cashCount) || 0,
-      salesCredit: Number(metrics.sales?.creditCount) || 0,
-      purchases: Number(metrics.purchases?.count) || 0,
-      purchasesCash: Number(metrics.purchases?.cashCount) || 0,
-      purchasesCredit: Number(metrics.purchases?.creditCount) || 0,
-      expenses: Number(metrics.expenses?.count) || 0,
-      saleReturns: Number(metrics.saleReturns?.count) || 0,
-      purchaseReturns: Number(metrics.purchaseReturns?.count) || 0,
-      wastes: Number(metrics.wastes?.count) || 0,
-    };
+    applyMetrics((todayResult?.data || summary).metrics || {});
 
     plainTopProducts = (summary.top_products || []).map((topProduct) => ({
       pid: topProduct.pid,
