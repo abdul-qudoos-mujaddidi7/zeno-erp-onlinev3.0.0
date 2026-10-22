@@ -513,9 +513,9 @@
 
           <div class="zb-treasury-hero">
             <span class="zb-treasury-cap">{t('Total in')} {t(data.currency)}</span>
-            <div class="zb-treasury-total" class:negative={data.treasury.total < 0} dir="ltr">
-              {fmt(data.treasury.total)}
-              <span>{data.treasury.symbol || t(data.currency)}</span>
+            <div class="zb-treasury-total" class:negative={data.treasury.total < 0}>
+              <span class="zb-treasury-total-value" dir="ltr">{fmt(data.treasury.total)}</span>
+              <span class="zb-treasury-total-cur">{data.treasury.symbol || t(data.currency)}</span>
             </div>
           </div>
 
@@ -1872,6 +1872,8 @@
   .zb-treasury-hero {
     position: relative;
     line-height: 1.3;
+    /* Keep the caption and total together on the left side of the card. */
+    text-align: left;
   }
 
   .zb-treasury-cap {
@@ -1881,6 +1883,9 @@
   }
 
   .zb-treasury-total {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
     color: #fca5a5;
     font-family: var(--num);
     font-size: 20px;
@@ -1892,7 +1897,13 @@
     color: #fff;
   }
 
-  .zb-treasury-total span {
+  /* Keep the sign and digits in one LTR run so the minus stays in front. */
+  .zb-treasury-total-value {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
+  .zb-treasury-total-cur {
     color: #94a3b8;
     font-size: 14px;
     font-weight: 700;
