@@ -1,16 +1,17 @@
 <script>
-  ;
-import { productCategoryApi } from '../../../api/productCategoryApi.js';
-import { productUnitApi } from '../../../api/productUnitApi.js';
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { productCategoryApi } from '../../../api/productCategoryApi.js';
+  import { productUnitApi } from '../../../api/productUnitApi.js';
+  import { onMount, createEventDispatcher, tick } from 'svelte';
   import ProductModal from '../../products/ProductModal.svelte';
   import Swal from 'sweetalert2';
 
-  import { t, lang, translate_org_type,settings_all } from '../../../i18n/i18n.js';
-import { currencyApi } from '../../../api/currencyApi.js';
-import { warehouseApi } from '../../../api/warehouseApi.js';
-import { productApi } from '../../../api/productApi.js';
-import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
+  import { t, lang, translate_org_type, settings_all } from '../../../i18n/i18n.js';
+  import { currencyApi } from '../../../api/currencyApi.js';
+  import { warehouseApi } from '../../../api/warehouseApi.js';
+  import { productApi } from '../../../api/productApi.js';
+  import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
+  import FilterSelect from '../../../components/common/FilterSelect.svelte';
+  import '../production-ledger.css';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
@@ -24,12 +25,9 @@ import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
 
   let products = [];
   let search = '';
-  let showDropdown = false;
 
   let quantity = 1;
   let unit_price = 0;
-  let unit_currency = '';
-  let unit = 0;
   let selectedProduct = null;
 
   let barcodeInput = '';
@@ -44,6 +42,13 @@ import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
   let warehouse_products = [];
   let stock = 0;
 
+  let search_input = null;
+  let showProductDropdown = false;
+  let productDropdownStyle = '';
+  let isProductCellEditing = false;
+  let selectingProduct = false;
+  let productSearchTimer;
+
   async function loadAll() {
     categories = (await productCategoryApi.getAll({ status: 1 }))?.data || [];
     units = (await productUnitApi.getAll({ status: 1 }))?.data || [];
@@ -56,7 +61,7 @@ import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
     loadAll();
 
     products = (await productApi.getAll({ status: 1 }))?.data || [];
-    products = products.filter(p=>p.product_status?p.product_status == 'active':p.status == 1);
+    products = products.filter((p) => (p.product_status ? p.product_status == 'active' : p.status == 1));
   });
 
   // Build lookup map
@@ -83,6 +88,7 @@ import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
     traverse(unitId);
     return result;
   }
+
   function changeUnit(item, unitId) {
     unitId = Number(unitId);
 
@@ -98,39 +104,33 @@ import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
     dispatch('update', { items });
   }
 
-  $: filteredProducts =
-    search.length > 0
-      ? products
-          .filter(
-            (p) =>
-              p.name.toLowerCase().includes(search.trim().toLowerCase()) ||
-              p.code?.includes(search.trim().toLowerCase()),
-          )
-          .slice(0, 10)
-      : [];
+  $: filteredProducts = products
+    .filter((p) => {
+      if (!search.trim()) return true;
+
+      const term = search.trim().toLowerCase();
+
+      return p.name?.toLowerCase().includes(term) || p.code?.includes(term);
+    })
+    .slice(0, 12);
 
   function selectProduct(product) {
     selectedProduct = product;
     const unitHierarchy = getUnitHierarchy(product.product_unit_id);
     search = product.name;
     unit_price = Number(product.sell_price) || 0;
-    unit_currency = product.sell_currency || currency;
-    unit = product.product_unit_id;
-    showDropdown = false;
     selectedProduct.availableUnits = unitHierarchy;
-    console.log('Calculating stock for product', product.id, 'in warehouse', warehouse_id);
-    stock =
-      warehouse_products.find((wp) => wp.product_id === product.id && wp.warehouse_id === warehouse_id)?.quantity || 0;
+    stock = getProductStock(product.id);
   }
 
   function addItem() {
     if (!selectedProduct) return;
 
-    const existingIndex = items.findIndex((i) => i.product_id === selectedProduct.id);
+    const existingIndex = items.findIndex((i) => Number(i.product_id) === Number(selectedProduct.id));
 
     if (existingIndex !== -1) {
       items[existingIndex].quantity += Number(quantity);
-      items[existingIndex].subtotal = items[existingIndex].quantity * items[existingIndex].unit_price;
+      items[existingIndex].subtotal = items[existingIndex].quantity * items[existingIndex].calculated_price;
     } else {
       items.push({
         product_id: selectedProduct.id,
@@ -157,10 +157,31 @@ import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
     quantity = 1;
     unit_price = 0;
   }
+
   function removeItem(index) {
     items.splice(index, 1);
     items = [...items];
     dispatch('update', { items });
+  }
+
+  function clearItems() {
+    items = [];
+    dispatch('update', { items });
+  }
+
+  function getProductStock(productId) {
+    const rows = warehouse_products.filter(
+      (wp) => Number(wp.product_id) === Number(productId) && Number(wp.warehouse_id) === Number(warehouse_id),
+    );
+
+    return rows.reduce(
+      (sum, wp) =>
+        sum +
+        Number(
+          wp.quantity ?? wp.current_quantity ?? wp.available_quantity ?? wp.stock ?? 0,
+        ),
+      0,
+    );
   }
 
   function getCalculatedStock(item) {
@@ -171,17 +192,18 @@ import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
 
   function recalc(index) {
     const item = items[index];
+    if (!item) return;
 
     // Find the selected unit
     const selectedUnit = item.availableUnits?.find((u) => u.id === item.product_unit_id);
     const multiplier = selectedUnit?.multiplier || 1;
 
     // Get stock in the warehouse adjusted for selected unit
-    let stock = Math.floor(getProductStock(item.product_id) / multiplier);
+    let stockAvailable = Math.floor(getProductStock(item.product_id) / multiplier);
 
     // Adjust quantity if it exceeds available stock
-    if (!enable_stock_minus && stock < item.quantity) {
-      item.quantity = stock;
+    if (!enable_stock_minus && stockAvailable < item.quantity) {
+      item.quantity = stockAvailable;
     }
 
     // Calculate subtotal using multiplier
@@ -207,8 +229,12 @@ import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
   }
 
   async function processBarcode(code) {
-    const product = (await productApi.getAll({ status: 1 }))?.data
-      ?.find((p) => String(p.code) === String(code)) || null;
+    const product =
+      products.find(
+        (item) =>
+          String(item.code) === String(code) &&
+          (item.product_status ? item.product_status === 'active' : Number(item.status) === 1),
+      ) || null;
     if (!product) return;
     selectProduct(product);
     addItem();
@@ -223,188 +249,377 @@ import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
     const toRate = toCurrency.exchangeRate || 1;
     return (amount / toRate) * fromRate;
   }
+
   $: total = items.reduce((s, i) => {
     if (i.currency && currency && i.currency !== currency) {
-      let exchangeRateValue = exchangeRate(i.subtotal, i.currency, currency);
-      console.log(
-        `Converting ${i.subtotal} from ${i.currency} to ${currency} for total calculation - exchange rate value: ${exchangeRateValue}`,
-      );
-      return s + exchangeRateValue;
-    } else {
-      return s + i.subtotal;
+      return s + exchangeRate(i.subtotal, i.currency, currency);
     }
+
+    return s + Number(i.subtotal || 0);
   }, 0);
 
-  function getProductStock(productId) {
-    return (
-      warehouse_products.find((wp) => wp.product_id === productId && wp.warehouse_id === warehouse_id)?.quantity || 0
-    );
+  function portal(node) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
+  function positionProductDropdown() {
+    if (!search_input) return;
+
+    const rect = search_input.getBoundingClientRect();
+    const availableHeight = Math.max(90, window.innerHeight - rect.bottom - 12);
+    const maxHeight = Math.min(250, availableHeight);
+
+    productDropdownStyle =
+      `position:fixed;` +
+      `left:${rect.left}px;` +
+      `width:${Math.max(rect.width, 260)}px;` +
+      `top:${rect.bottom + 5}px;` +
+      `bottom:auto;` +
+      `max-height:${maxHeight}px;` +
+      `overflow:auto;` +
+      `z-index:100000;`;
+  }
+
+  $: if (showProductDropdown) {
+    tick().then(positionProductDropdown);
+  }
+
+  function handleProductSearchInput() {
+    showProductDropdown = true;
+
+    clearTimeout(productSearchTimer);
+    productSearchTimer = setTimeout(async () => {
+      if (!products.length) {
+        products = (await productApi.getAll({ status: 1 }))?.data || [];
+      }
+
+      if (showProductDropdown) positionProductDropdown();
+    }, 250);
+  }
+
+  async function activateProductCellSearch() {
+    isProductCellEditing = true;
+    search = '';
+    selectedProduct = null;
+    showProductDropdown = true;
+
+    if (!products.length) {
+      products = (await productApi.getAll({ status: 1 }))?.data || [];
+    }
+
+    await tick();
+
+    search_input?.scrollIntoView({
+      block: 'center',
+      inline: 'nearest',
+    });
+
+    search_input?.focus();
+    positionProductDropdown();
+  }
+
+  function closeProductCellSearch() {
+    showProductDropdown = false;
+    isProductCellEditing = false;
+    search = '';
+    selectedProduct = null;
+  }
+
+  async function selectAndAddProduct(product) {
+    if (!product) return;
+
+    selectingProduct = true;
+
+    try {
+      if (!warehouse_id) {
+        Swal.fire({
+          icon: 'warning',
+          title: t('Warehouse'),
+          text: t('Please select a warehouse first.'),
+        });
+        return;
+      }
+
+      selectProduct(product);
+
+      if (!enable_stock_minus && stock <= 0) {
+        Swal.fire({
+          icon: 'error',
+          title: t('Out of Stock'),
+          text: t('Product is out of stock in the selected warehouse.'),
+        });
+        return;
+      }
+
+      addItem();
+      showProductDropdown = false;
+      isProductCellEditing = false;
+    } finally {
+      selectingProduct = false;
+    }
+  }
+
+  async function openCreateProductModal() {
+    productModal?.openModal();
   }
 </script>
 
-<div class="card shadow-2 mt-4">
-  <div class="card-body">
-    <h5 class="mb-4">{t('Production Materials')}</h5>
+<div class="card shadow-2 production-ledger-card">
+  <header class="production-ledger-header">
+    <h5 class="production-ledger-title">
+      <span class="production-ledger-icon" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
+      {t('Production Materials')}
+    </h5>
+  </header>
 
-    <input type="text" class="position-absolute opacity-0" bind:value={barcodeInput} on:keydown={handleBarcode} />
+  <input type="text" class="position-absolute opacity-0" bind:value={barcodeInput} on:keydown={handleBarcode} />
 
-    <div class="row g-3 mb-4">
-      <div class="col-md-6 position-relative">
-        <div class="input-group input-group-sm">
-          <input
-            type="text"
-            class="form-control form-control-sm"
-            bind:value={search}
-            on:focus={() => (showDropdown = true)}
-            placeholder={t('Search Product...')} />
-          {#if showDropdown && filteredProducts.length > 0}
-            <div
-              class="list-group position-absolute w-100 shadow bg-body-tertiary"
-              style="top:100%; left:0; z-index:1055; max-height:250px; overflow:auto;">
-              {#each filteredProducts as p}
-                <button type="button" class="list-group-item list-group-item-action" on:click={() => selectProduct(p)}>
-                  <div class="d-flex justify-content-between">
-                    <span>{p.name}</span>
-                    <small>{p.code}</small>
-                  </div>
-                </button>
-              {/each}
-            </div>
-          {/if}
-
-          <button class="btn btn-info btn-sm pt-1 px-2" type="button" on:click={() => productModal.openModal()}>
-            <i class="bi bi-plus-circle"></i>
-          </button>
-        </div>
-      </div>
-
-      <div class="col-md-2">
-        <div class="input-group input-group-sm">
-          <input
-            type="number"
-            class="form-control form-control-sm"
-            bind:value={quantity}
-            on:input={() => {
-              if (quantity < 1) quantity = 1;
-              if (!enable_stock_minus&&quantity > stock) quantity = stock;
-            }}
-            min="1" />
-          <span class="input-group-text">{units.find((u) => u.id === unit)?.name || t('Unit')}</span>
-        </div>
-        {#if selectedProduct}
-          <div class="form-text {stock === 0 ? 'text-danger' : ''}">
-            {t('Present in Warehouse')}: {stock}
-            {units.find((u) => u.id === unit)?.name || t('Unit')}
-          </div>
-        {/if}
-      </div>
-
-      <div class="col-md-2">
-        <div class="input-group input-group-sm">
-          <input type="number" class="form-control form-control-sm" bind:value={unit_price} min="0" />
-
-          <span class="input-group-text">{t(unit_currency)}</span>
-        </div>
-      </div>
-
-      <div class="col-md-2">
-        <button
-          class="btn btn-primary btn-sm w-100"
-          on:click={() => {
-            if (enable_stock_minus || stock > 0) {
-              addItem();
-            } else {
-              Swal.fire({
-                icon: 'error',
-                title: t('Out of Stock'),
-                text: t('Product is out of stock in the selected warehouse.'),
-              });
-            }
-          }}>{t('Add Item')}</button>
-      </div>
-    </div>
-
-    <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead class="table-light">
+  <div class="production-ledger-scroll">
+    <table class="table table-hover align-middle production-ledger-table">
+      <thead>
+        <tr>
+          <th class="production-ledger-col-product">{t('Product')}</th>
+          <th class="production-ledger-col-planned text-center">{t('Planned Quantity')}</th>
+          <th class="production-ledger-col-quantity text-center">{t('Quantity')}</th>
+          <th class="production-ledger-col-price text-center">{t('Cost Price')}</th>
+          <th class="production-ledger-col-subtotal text-center">{t('Subtotal')}</th>
+          <th class="production-ledger-col-actions text-center">{t('Actions')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each items as item, index}
           <tr>
-            <th>{t('Product')}</th>
-            <th width="200" class="text-center">{t('Planned Quantity')}</th>
-            <th width="200" class="text-center">{t('Quantity')}</th>
-            <th width="180" class="text-center">{t('Cost Price')}</th>
-            <th width="150" class="text-center">{t('Subtotal')}</th>
-            <th width="80" class="text-center">{t('Actions')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each items as item, index}
-            <tr>
-              <td>{item.product_name}</td>
-              <td>{item.planned_quantity} {units.find(u=>u.id==item.product_unit_id)?.name}</td>
-              <td>
+            <td class="production-ledger-product-cell">
+              <div class="production-ledger-product">
+                <span class="production-ledger-product-copy">
+                  <strong class="production-ledger-product-name">{item.product_name}</strong>
+                  <small>
+                    {t('Present in Warehouse')}:
+                    {Number(getCalculatedStock(item) || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                    {units.find((u) => u.id === item.product_unit_id)?.name || t('Unit')}
+                  </small>
+                </span>
+              </div>
+            </td>
 
-                <div class="input-group input-group-sm">
-                  <input
-                    type="number"
-                    class="form-control form-control-sm"
-                    bind:value={item.quantity}
-                    on:input={() => recalc(index)} />
-                  {#if item.availableUnits?.length > 1}
-                    <select
-                      class="form-select form-select-sm"
-                      bind:value={item.product_unit_id}
-                      on:change={(e) => changeUnit(item, e.target.value)}>
-                      {#each item.availableUnits as u}
-                        <option value={u.id}>{u.name}</option>
-                      {/each}
-                    </select>
-                  {:else}
-                    <span class="badge bg-body-tertiary text-dark border">
-                      {item.availableUnits?.[0]?.name}
-                    </span>
-                  {/if}
-                </div>
-                <div class="form-text mt-0 {getCalculatedStock(item) === 0 ? 'text-danger' : ''}">
-                  {t('Present in Warehouse')}: {getCalculatedStock(item)}
-                  {units.find((u) => u.id === item.product_unit_id)?.name || t('Unit')}
-                </div>
-              </td>
-              <td>
-                <div class="input-group input-group-sm">
-                  <input
-                    type="number"
-                    class="form-control form-control-sm"
-                    bind:value={item.calculated_price}
-                    on:input={() => recalc(index)} />
-                  <span class="input-group-text">{t(item.currency)}</span>
-                </div>
-              </td>
-              <td class="fw-bold text-center">
-                {#if item.currency != currency}
-                {Number(exchangeRate(item.subtotal, item.currency, currency)||0).toLocaleString(
-                    undefined,
-                    { maximumFractionDigits: 3 },
-                  )}
-                  {t(currency)}
-                {:else}{Number(item.subtotal || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                  {t(item.currency)}
+            <td class="production-ledger-col-planned text-center">
+              <span class="production-ledger-readonly">
+                {Number(item.planned_quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                {units.find((u) => u.id === item.product_unit_id)?.name || t('Unit')}
+              </span>
+            </td>
+
+            <td class="production-ledger-col-quantity text-center">
+              <div class="input-group input-group-sm production-ledger-cell-group">
+                <input
+                  type="number"
+                  class="form-control form-control-sm"
+                  bind:value={item.quantity}
+                  on:input={() => recalc(index)} />
+                {#if item.availableUnits?.length > 1}
+                  <FilterSelect
+                    compact
+                    value={item.product_unit_id}
+                    label={t('Unit')}
+                    options={item.availableUnits.map((u) => ({ value: u.id, label: u.name }))}
+                    on:change={(event) => changeUnit(item, event.detail)} />
+                {:else}
+                  <span class="input-group-text">
+                    {item.availableUnits?.[0]?.name ||
+                      units.find((u) => u.id === item.product_unit_id)?.name ||
+                      t('Unit')}
+                  </span>
                 {/if}
-              </td>
-              <td class="text-center"
-                ><button class="btn btn-sm btn-outline-danger" on:click={() => removeItem(index)}>✕</button></td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+              </div>
+            </td>
 
-    <div class="text-end mt-3">
-      <h5>
-        {t('Total')}{t('-of-')}{t('Production Materials')}:
-        <span class="text-primary">{total.toLocaleString(undefined, { maximumFractionDigits: 3 })} {t(currency)}</span>
-      </h5>
-    </div>
+            <td class="production-ledger-col-price text-center">
+              <div class="input-group input-group-sm production-ledger-cell-group">
+                <input
+                  type="number"
+                  class="form-control form-control-sm"
+                  bind:value={item.calculated_price}
+                  on:input={() => recalc(index)} />
+                <span class="input-group-text">{t(item.currency)}</span>
+              </div>
+            </td>
+
+            <td class="production-ledger-col-subtotal text-center">
+              <div class="production-ledger-money">
+                {#if item.currency != currency}
+                  <strong>
+                    {Number(exchangeRate(item.subtotal, item.currency, currency) || 0).toLocaleString(undefined, {
+                      maximumFractionDigits: 3,
+                    })}
+                  </strong>
+                  <small>{t(currency)}</small>
+                {:else}
+                  <strong>
+                    {Number(item.subtotal || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                  </strong>
+                  <small>{t(item.currency)}</small>
+                {/if}
+              </div>
+            </td>
+
+            <td class="production-ledger-col-actions production-ledger-actions-cell">
+              <button
+                type="button"
+                class="btn btn-sm production-ledger-row-button production-ledger-row-button--danger"
+                title={t('Delete')}
+                aria-label={t('Delete')}
+                on:click={() => removeItem(index)}>
+                <i class="bi bi-trash" aria-hidden="true"></i>
+              </button>
+            </td>
+          </tr>
+        {/each}
+
+        <!--
+          Permanent blank row: click the Product cell, pick a product,
+          the row becomes filled and a new blank row stays below.
+        -->
+        <tr class="production-ledger-search-row">
+          <td
+            class="production-ledger-product-cell production-ledger-search-cell"
+            class:production-ledger-search-cell--editing={isProductCellEditing}
+            role="button"
+            tabindex="0"
+            aria-label={t('Select Product')}
+            on:click={() => {
+              if (!isProductCellEditing) activateProductCellSearch();
+            }}
+            on:keydown={(event) => {
+              if (!isProductCellEditing && (event.key === 'Enter' || event.key === ' ')) {
+                event.preventDefault();
+                activateProductCellSearch();
+              }
+            }}>
+            {#if isProductCellEditing}
+              <div class="production-ledger-inline-search">
+                <span class="production-ledger-search-icon" aria-hidden="true">
+                  <i class="bi bi-search"></i>
+                </span>
+
+                <input
+                  type="text"
+                  class="production-ledger-search-input"
+                  bind:this={search_input}
+                  bind:value={search}
+                  on:click|stopPropagation
+                  on:input={handleProductSearchInput}
+                  on:focus={() => {
+                    showProductDropdown = true;
+                    positionProductDropdown();
+                  }}
+                  on:keydown={(event) => {
+                    if (event.key === 'Enter') {
+                      const match = filteredProducts[0];
+
+                      if (match) {
+                        event.preventDefault();
+                        selectAndAddProduct(match);
+                      }
+                    }
+
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      closeProductCellSearch();
+                    }
+                  }}
+                  on:blur={() =>
+                    setTimeout(() => {
+                      if (isProductCellEditing && !selectingProduct) {
+                        closeProductCellSearch();
+                      }
+                    }, 180)}
+                  placeholder={t('Search product by name, barcode, or SKU...')}
+                  autocomplete="off" />
+
+                {#if showProductDropdown && filteredProducts.length > 0}
+                  <div use:portal class="list-group shadow production-ledger-dropdown" style={productDropdownStyle}>
+                    {#each filteredProducts as prod (prod.id)}
+                      <button
+                        type="button"
+                        class="list-group-item list-group-item-action"
+                        on:mousedown|preventDefault={() => selectAndAddProduct(prod)}>
+                        <div class="production-ledger-option">
+                          <span class="production-ledger-option__copy">
+                            <strong>{prod.name}</strong>
+                            <small>
+                              {categories.find((category) => category.id === prod.category_id)?.name || t('Category')}
+                            </small>
+                          </span>
+
+                          <span class="production-ledger-option__stock" title={t('Present in Warehouse')}>
+                            <i class="bi bi-box-seam" aria-hidden="true"></i>
+                            <strong dir="ltr">
+                              {Number(getProductStock(prod.id) || 0).toLocaleString(undefined, {
+                                maximumFractionDigits: 3,
+                              })}
+                            </strong>
+                            <small>
+                              {units.find((item) => item.id === prod.product_unit_id)?.name || t('Unit')}
+                            </small>
+                          </span>
+                        </div>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <div class="production-ledger-empty-product">
+                <button
+                  type="button"
+                  class="production-ledger-empty-product__icon"
+                  title={t('New Product')}
+                  aria-label={t('New Product')}
+                  on:click|stopPropagation={openCreateProductModal}>
+                  <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                </button>
+
+                <span class="production-ledger-empty-product__copy">
+                  <strong>{t('Select Product')}</strong>
+                  <small>{t('Product')}</small>
+                </span>
+              </div>
+            {/if}
+          </td>
+
+          <td class="production-ledger-col-planned"></td>
+          <td class="production-ledger-col-quantity"></td>
+          <td class="production-ledger-col-price"></td>
+          <td class="production-ledger-col-subtotal"></td>
+          <td class="production-ledger-col-actions"></td>
+        </tr>
+      </tbody>
+    </table>
   </div>
+
+  {#if items.length > 0}
+    <footer class="production-ledger-footer">
+      <button type="button" class="production-ledger-clear" on:click={clearItems}>
+        <i class="bi bi-trash3" aria-hidden="true"></i>
+        <span>{t('Clear All')}</span>
+      </button>
+
+      <div class="production-ledger-total">
+        <span>{t('Total')}{t('-of-')}{t('Production Materials')}</span>
+
+        <strong dir="ltr">
+          {Number(total || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+        </strong>
+
+        <small>{t(currency)}</small>
+      </div>
+    </footer>
+  {/if}
 </div>
 
 <ProductModal

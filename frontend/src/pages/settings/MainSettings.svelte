@@ -280,6 +280,12 @@ import { settingsApi } from '../../api/settingsApi.js';
         value: 0,
       },
       {
+        category: 'Miscellaneous',
+        type: 'boolean',
+        key: 'enable_manufacturing_menu',
+        value: 1,
+      },
+      {
         category: 'Sale',
         type: 'int',
         key: 'invoice_index',

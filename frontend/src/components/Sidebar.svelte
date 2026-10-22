@@ -175,6 +175,12 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
   $: console.log('settings updated:', $settings_all);
   $: enable_master_exchanges = $settings_all.find((s) => s.key === 'enable_master_exchanges')?.value == 1;
   $: enable_services = $settings_all.find((s) => s.key === 'enable_services')?.value == 1;
+  /*
+   * Miscellaneous -> "Enable Manufacturing Menu". Missing rows fall back to
+   * visible so organizations that never saved the setting keep today's menu.
+   */
+  $: enable_manufacturing_menu =
+    $settings_all.find((s) => s.key === 'enable_manufacturing_menu')?.value != 0;
 
   let shiftPressed = false;
   let ctrlPressed = false;
@@ -534,17 +540,13 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
       </a>
       <a use:link
         href="/dashboard/boms"
-        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') && localStorage.getItem('org_type') == 'manufacturing') || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
+        class="list-group-item list-group-item-action {enable_manufacturing_menu || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
         class:active={loc.startsWith('/dashboard/boms') || $location === '/dashboard/boms'}>
         <i class="bi bi-receipt" aria-hidden="true"></i>
         <span class="nav-text">{t('Bill of Materials')}</span>
       </a>
       <a use:link href="/dashboard/productions"
-        class="list-group-item list-group-item-action {(localStorage.getItem('org_type') &&
-          localStorage.getItem('org_type') == 'manufacturing') ||
-        (shiftPressed && ctrlPressed)
-          ? ''
-          : 'd-none'}"
+        class="list-group-item list-group-item-action {enable_manufacturing_menu || (shiftPressed && ctrlPressed) ? '' : 'd-none'}"
         class:active={loc.startsWith('/dashboard/productions') || $location === '/dashboard/productions'}>
         <i class="bi bi-gear-wide-connected" aria-hidden="true"></i>
         <span class="nav-text">{t('Productions')}</span>

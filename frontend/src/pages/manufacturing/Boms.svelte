@@ -12,7 +12,6 @@
   import ActionButton from '../../components/common/ActionButton.svelte';
   import ExportMenu from '../../components/common/ExportMenu.svelte';
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
-  import SummaryCard from '../../components/common/SummaryCard.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
@@ -31,7 +30,6 @@
   let itemsPerPage = DEFAULT_PAGE_SIZE;
   let sortColumn = 'created_at';
   let sortDirection = 'desc';
-  let showSummaryCards = true;
 
   let fromDate = '';
   let toDate = '';
@@ -180,21 +178,12 @@
     return rangeWithDots;
   }
 
-  $: bomsCountLabel = `${filteredBOMs.length} ${filteredBOMs.length < 2 ? t('BOM') : t('BOMs')}`;
-
-  $: totalAmountLabel = Object.entries(totalBOMsAmount)
-    .map(
-      ([currency, amount]) =>
-        `${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} ${t(currency)}`,
-    )
-    .join(' <br> ') || '—';
 </script>
 
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('BOMs')}
   toolbarWidth="25rem"
-  showStats={showSummaryCards}
   showFooter={!loading && filteredBOMs.length > 0}
   dense={true}
   contentClass="boms-index-content"
@@ -210,25 +199,6 @@
         generatePDF('boms', filteredBOMs, fromDate, toDate, filteredBOMs.length, totalBOMsAmount, {});
       }} />
 
-    <button
-      type="button"
-      class="index-settings-button"
-      class:is-active={showSummaryCards}
-      aria-label={t('Summary')}
-      aria-expanded={showSummaryCards}
-      title={t('Summary')}
-      on:click={() => (showSummaryCards = !showSummaryCards)}>
-      <i class="bi {showSummaryCards ? 'bi-x-lg' : 'bi-clipboard-data'}" aria-hidden="true"></i>
-    </button>
-  </svelte:fragment>
-
-  <svelte:fragment slot="stats">
-    <div class="index-summary-grid boms-summary-grid">
-      <SummaryCard label={t('BOMs Count')} icon="bi-diagram-3" tone="green">{bomsCountLabel}</SummaryCard>
-      <SummaryCard label={t('Total BOMs Amount')} icon="bi-cash-stack" tone="cyan">
-        {@html totalAmountLabel}
-      </SummaryCard>
-    </div>
   </svelte:fragment>
 
   <svelte:fragment slot="toolbar">
@@ -328,16 +298,12 @@
                   tone: 'view',
                   onClick: () => push(`/dashboard/boms/${p.id}`),
                 },
-                ...(p.bill_status === 'draft'
-                  ? [
-                      {
-                        icon: 'bi-pencil',
-                        label: t('Edit'),
-                        tone: 'edit',
-                        onClick: () => push(`/dashboard/bom-form/` + p.id),
-                      },
-                    ]
-                  : []),
+                {
+                  icon: 'bi-pencil',
+                  label: t('Edit'),
+                  tone: 'edit',
+                  onClick: () => push(`/dashboard/bom-form/` + p.id),
+                },
               ]} />
           </td>
         </tr>
@@ -453,7 +419,4 @@
     white-space: nowrap;
   }
 
-.boms-summary-grid {
-    width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }</style>
+</style>

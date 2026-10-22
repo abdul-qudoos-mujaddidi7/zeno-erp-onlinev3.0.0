@@ -1,0 +1,1221 @@
+/*
+ * Production ledger tables (مواد تولید / عملیات تولید).
+ * Visual system copied from the Sale Items table so the production form
+ * looks identical to the sale form. Every rule is scoped by
+ * `.production-ledger-card` so it never leaks into other tables.
+ */
+
+.production-ledger-card {
+  --pl-primary: var(--bs-primary, #2f6fed);
+  --pl-primary-dark: #1d4ed8;
+  --pl-border: #dfe6ef;
+  --pl-border-soft: #edf1f6;
+  --pl-text: #172033;
+  --pl-muted: #718096;
+
+  position: relative;
+  z-index: 35;
+  width: 100%;
+  margin-top: 1rem !important;
+  overflow: visible;
+  border: 1px solid var(--pl-border);
+  border-radius: 0.875rem;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.055) !important;
+}
+
+/* Header — same rhythm as the Sale Items heading. */
+.production-ledger-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 4.75rem;
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--pl-border-soft);
+  border-radius: 0.875rem 0.875rem 0 0;
+  background: #ffffff;
+}
+
+.production-ledger-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  margin: 0;
+  color: var(--pl-text);
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+.production-ledger-icon {
+  display: inline-grid;
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: 0.625rem;
+  background: #edf4ff;
+  color: var(--pl-primary);
+  font-size: 1rem;
+}
+
+.production-ledger-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0 0.7rem;
+  border: 1px solid #d6e4fb;
+  border-radius: 0.55rem;
+  background: #f3f8ff;
+  color: var(--pl-primary);
+  font-size: 0.7rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.production-ledger-action:hover {
+  transform: translateY(-1px);
+  border-color: #b9d0f3;
+  background: #eaf2ff;
+}
+
+/* Hidden barcode field used by the materials table. */
+.production-ledger-card input.position-absolute.opacity-0 {
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Table shell — header stays visible, only the body scrolls. */
+.production-ledger-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  overscroll-behavior: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #b9c5d5 transparent;
+}
+
+.production-ledger-scroll::-webkit-scrollbar {
+  width: 0.45rem;
+  height: 0.45rem;
+}
+
+.production-ledger-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.production-ledger-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #b9c5d5;
+}
+
+.production-ledger-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.production-ledger-table {
+  width: 100%;
+  min-width: 46rem;
+  margin: 0 !important;
+  border: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  color: #42516a;
+}
+
+.production-ledger-table thead {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.production-ledger-table tbody {
+  display: block;
+  width: 100%;
+  max-height: calc(21.25rem + 4.25rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #b9c5d5 transparent;
+}
+
+.production-ledger-table tbody > tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.production-ledger-table tbody::-webkit-scrollbar {
+  width: 0.45rem;
+}
+
+.production-ledger-table tbody::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.production-ledger-table tbody::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #b9c5d5;
+}
+
+.production-ledger-table tbody::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.production-ledger-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  height: 2.875rem;
+  padding: 0.55rem 0.625rem;
+  border: 0;
+  border-bottom: 1px solid #dfe5ed;
+  background: #f7f9fc !important;
+  color: #67768a;
+  font-size: 0.68rem;
+  font-weight: 850;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: none;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.production-ledger-table thead th:first-child {
+  text-align: start;
+}
+
+.production-ledger-table tbody tr {
+  height: 4.25rem;
+  background: #ffffff;
+  transition: background 0.12s ease;
+}
+
+.production-ledger-table tbody tr:nth-child(even) {
+  background: #fbfcfe;
+}
+
+.production-ledger-table tbody tr:hover {
+  background: #f4f8ff !important;
+}
+
+.production-ledger-table tbody td {
+  height: 4.25rem;
+  padding: 0.45rem 0.25rem;
+  border: 0;
+  border-bottom: 1px solid #e9eef5;
+  background: transparent;
+  color: #46566d;
+  font-size: 0.74rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* Column rhythm */
+.production-ledger-col-product {
+  width: 34%;
+  min-width: 14rem;
+}
+
+.production-ledger-col-planned {
+  width: 12%;
+  min-width: 7rem;
+}
+
+.production-ledger-col-quantity {
+  width: 17%;
+  min-width: 9rem;
+}
+
+.production-ledger-col-price {
+  width: 16%;
+  min-width: 9rem;
+}
+
+.production-ledger-col-subtotal {
+  width: 15%;
+  min-width: 8rem;
+}
+
+.production-ledger-col-actions {
+  width: 6%;
+  min-width: 4.5rem;
+}
+
+.production-ledger-col-index {
+  width: 4%;
+  min-width: 3rem;
+}
+
+.production-ledger-col-center {
+  width: 17%;
+  min-width: 10rem;
+}
+
+.production-ledger-col-name {
+  width: 19%;
+  min-width: 11rem;
+}
+
+.production-ledger-col-time {
+  width: 10%;
+  min-width: 7rem;
+}
+
+.production-ledger-col-total-time {
+  width: 12%;
+  min-width: 8rem;
+}
+
+.production-ledger-col-cost {
+  width: 11%;
+  min-width: 7.5rem;
+}
+
+.production-ledger-col-total-cost {
+  width: 11%;
+  min-width: 8rem;
+}
+
+/* Sticky product column, exactly like Sale Items. */
+.production-ledger-product-cell {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 2;
+  padding-inline: 0.625rem !important;
+  background: #ffffff !important;
+  box-shadow: 1px 0 0 #e9eef5;
+}
+
+.production-ledger-table tbody tr:nth-child(even) .production-ledger-product-cell {
+  background: #fbfcfe !important;
+}
+
+.production-ledger-table tbody tr:hover .production-ledger-product-cell {
+  background: #f4f8ff !important;
+}
+
+.production-ledger-table thead .production-ledger-col-product {
+  inset-inline-start: 0;
+  z-index: 6;
+  background: #f7f9fc !important;
+  box-shadow: 1px 0 0 #dfe5ed;
+}
+
+.production-ledger-product {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  white-space: normal;
+}
+
+.production-ledger-product-copy {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 0.1rem;
+  text-align: start;
+}
+
+.production-ledger-product-name {
+  overflow: hidden;
+  color: #26364b;
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-ledger-product-copy small {
+  overflow: hidden;
+  color: #8491a4;
+  font-size: 0.63rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-ledger-cell-text {
+  display: block;
+  overflow: hidden;
+  color: #26364b;
+  font-size: 0.74rem;
+  font-weight: 750;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.production-ledger-cell-text--muted {
+  color: #8491a4;
+  font-size: 0.63rem;
+  font-weight: 600;
+}
+
+/* Editable cells — one bordered group, input + suffix. */
+.production-ledger-table .production-ledger-cell-group {
+  display: inline-flex;
+  align-items: stretch;
+  width: fit-content;
+  max-width: calc(100% - 0.5rem);
+  min-width: 0;
+  height: 2.25rem;
+  min-height: 2.25rem;
+  overflow: hidden;
+  border: 1px solid #dbe3ee;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  box-shadow: none;
+  vertical-align: middle;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.production-ledger-table .production-ledger-cell-group:focus-within {
+  border-color: #78a4f5;
+  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.08);
+}
+
+.production-ledger-table .production-ledger-cell-group .form-control {
+  field-sizing: content;
+  flex: 1 1 auto;
+  inline-size: auto;
+  width: auto;
+  min-inline-size: 3ch;
+  min-width: 3ch;
+  max-inline-size: none;
+  max-width: none;
+  height: 100% !important;
+  min-height: 0 !important;
+  padding: 0 0.45rem;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0;
+  background: transparent !important;
+  color: #26364b;
+  font-size: 0.73rem;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: none !important;
+}
+
+.production-ledger-table .production-ledger-cell-group .input-group-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 2.75rem;
+  height: 100%;
+  padding: 0 0.4rem;
+  border: 0 !important;
+  border-inline-start: 1px solid #e3e8ef !important;
+  border-radius: 0 !important;
+  background: #f7f9fc !important;
+  color: #718096;
+  font-size: 0.62rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+/* Unit picker inside the quantity cell. */
+.production-ledger-col-quantity .filter-select {
+  flex: 0 0 auto;
+  width: auto !important;
+  min-width: 4.5rem;
+  max-width: 8rem !important;
+  height: 100%;
+  border-inline-start: 1px solid #e3e8ef;
+}
+
+.production-ledger-col-quantity .filter-select__trigger {
+  width: 100%;
+  min-height: 100% !important;
+  height: 100% !important;
+  padding: 0 0.45rem !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #f7f9fc !important;
+  color: #718096 !important;
+  font-size: 0.62rem !important;
+  font-weight: 750 !important;
+  box-shadow: none !important;
+}
+
+/* Read-only values use the same chip look as the sale table. */
+.production-ledger-readonly {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  max-width: 100%;
+  padding: 0 0.6rem;
+  overflow: hidden;
+  border: 1px solid #e3e8ef;
+  border-radius: 0.5rem;
+  background: #f7f9fc;
+  color: #526176;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-ledger-readonly--stacked {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+  padding: 0.25rem 0.5rem;
+  white-space: normal;
+}
+
+.production-ledger-readonly small {
+  color: #8491a4;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+/* Money — subtotal / cost totals. */
+.production-ledger-money {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.3rem;
+  width: fit-content;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.production-ledger-money strong {
+  color: #172033;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.production-ledger-money small {
+  margin: 0;
+  color: #718096;
+  font-size: 0.62rem;
+  font-weight: 750;
+}
+
+/* Row actions. */
+.production-ledger-actions-cell {
+  text-align: center !important;
+}
+
+.production-ledger-row-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.production-ledger-table .production-ledger-row-button {
+  display: inline-grid;
+  width: 2rem !important;
+  min-width: 2rem !important;
+  height: 2rem !important;
+  min-height: 2rem !important;
+  padding: 0 !important;
+  place-items: center;
+  border: 1px solid #d8e4f8 !important;
+  border-radius: 0.5rem !important;
+  background: #f3f7fe !important;
+  color: var(--pl-primary) !important;
+  font-size: 0.75rem;
+  line-height: 1;
+  box-shadow: none !important;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.production-ledger-table .production-ledger-row-button:hover {
+  transform: translateY(-1px);
+  border-color: #bad0f5 !important;
+  background: #edf4ff !important;
+}
+
+.production-ledger-table .production-ledger-row-button--danger {
+  border: 1px solid #f3cccc !important;
+  background: #fff7f7 !important;
+  color: #d64545 !important;
+}
+
+.production-ledger-table .production-ledger-row-button--danger:hover {
+  border-color: #efaaaa !important;
+  background: #feecec !important;
+  color: #c53030 !important;
+}
+
+/* Footer total row. */
+.production-ledger-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 4rem;
+  margin: 0 !important;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--pl-border-soft);
+  border-radius: 0 0 0.875rem 0.875rem;
+  background: #fbfcfe;
+}
+
+.production-ledger-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #f3cccc;
+  border-radius: 0.55rem;
+  background: #ffffff;
+  color: #dc2626;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.production-ledger-clear:hover {
+  transform: translateY(-1px);
+  border-color: #efaaaa;
+  background: #fff5f5;
+}
+
+.production-ledger-clear i {
+  font-size: 0.72rem;
+}
+
+.production-ledger-total {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.production-ledger-total > span {
+  color: #526176;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.production-ledger-total > strong {
+  color: var(--pl-primary);
+  font-size: 1.05rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.production-ledger-total > small {
+  color: #718096;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+/* Permanent blank product row (materials table). */
+.production-ledger-search-row {
+  height: 4.25rem;
+  background: #ffffff;
+}
+
+.production-ledger-search-row:hover {
+  background: #f4f8ff !important;
+}
+
+.production-ledger-search-row > td {
+  height: 4.25rem !important;
+  padding: 0.45rem 0.25rem !important;
+  border-bottom: 1px solid #e9eef5 !important;
+  background: transparent !important;
+  vertical-align: middle !important;
+}
+
+.production-ledger-search-cell {
+  cursor: text;
+  outline: none;
+}
+
+.production-ledger-search-cell:focus-visible,
+.production-ledger-search-cell--editing {
+  background: #f8fbff !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(47, 111, 237, 0.22),
+    1px 0 0 #e9eef5 !important;
+}
+
+.production-ledger-empty-product {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.35rem;
+  color: #718096;
+  text-align: start;
+}
+
+.production-ledger-empty-product__icon {
+  display: inline-grid;
+  flex: 0 0 1.85rem;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 0.45rem;
+  background: #edf4ff;
+  color: var(--pl-primary);
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.production-ledger-empty-product__icon:hover {
+  background: #dbeafe;
+}
+
+.production-ledger-empty-product__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+}
+
+.production-ledger-empty-product__copy strong {
+  color: #526176;
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.production-ledger-empty-product__copy small {
+  color: #94a3b8;
+  font-size: 0.61rem;
+  font-weight: 600;
+}
+
+.production-ledger-inline-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.35rem;
+  background: transparent;
+}
+
+.production-ledger-search-icon {
+  display: inline-grid;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  color: var(--pl-primary);
+  font-size: 0.76rem;
+}
+
+.production-ledger-search-input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 2.35rem;
+  padding: 0 0.3rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #26364b;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: start;
+  box-shadow: none;
+}
+
+.production-ledger-search-input::placeholder {
+  color: #9aa7b8;
+  font-weight: 500;
+}
+
+/* Product dropdown (portalled to <body>, so it is not card-scoped). */
+.production-ledger-dropdown {
+  z-index: 100000 !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 20rem;
+  padding: 0.3rem;
+  border: 1px solid #dce4ef;
+  border-radius: 0.75rem;
+  background: #ffffff !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16) !important;
+}
+
+.production-ledger-dropdown .list-group-item {
+  min-height: 3rem;
+  padding: 0.55rem 0.65rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #26364b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: start;
+}
+
+.production-ledger-dropdown .list-group-item:hover,
+.production-ledger-dropdown .list-group-item:focus {
+  background: #f0f6ff;
+  color: var(--pl-primary);
+}
+
+.production-ledger-dropdown .list-group-item small {
+  color: #8491a4;
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+.production-ledger-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.production-ledger-option__copy {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 0.1rem;
+  text-align: start;
+}
+
+.production-ledger-option__copy strong {
+  overflow: hidden;
+  color: #26364b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-ledger-option__copy small {
+  overflow: hidden;
+  color: #8491a4;
+  font-size: 0.63rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-ledger-option__stock {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 0.25rem;
+  min-height: 1.75rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #cce9dc;
+  border-radius: 0.45rem;
+  background: #f2fbf7;
+  color: #087a54;
+  white-space: nowrap;
+}
+
+.production-ledger-option__stock strong {
+  color: #087a54;
+  font-size: 0.7rem;
+  font-weight: 850;
+}
+
+.production-ledger-option__stock small {
+  color: #54806c !important;
+  font-size: 0.57rem !important;
+  font-weight: 700;
+}
+
+.production-ledger-empty-state {
+  display: grid;
+  min-height: 7.5rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.3rem;
+  padding: 1rem;
+  color: #8491a4;
+  text-align: center;
+}
+
+.production-ledger-empty-state i {
+  display: inline-grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: 0.625rem;
+  background: #f1f5f9;
+  color: #94a3b8;
+  font-size: 1rem;
+}
+
+.production-ledger-empty-state strong {
+  color: #526176;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.production-ledger-empty-state small {
+  color: #8491a4;
+  font-size: 0.63rem;
+  font-weight: 600;
+}
+
+/* RTL */
+html[dir='rtl'] .production-ledger-product-cell {
+  box-shadow: -1px 0 0 #e9eef5;
+}
+
+html[dir='rtl'] .production-ledger-table thead .production-ledger-col-product {
+  box-shadow: -1px 0 0 #dfe5ed;
+}
+
+/* Responsive */
+@media (max-width: 991.98px) {
+  .production-ledger-table {
+    min-width: 42rem;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .production-ledger-card {
+    border-radius: 0.75rem;
+  }
+
+  .production-ledger-header {
+    min-height: 4.25rem;
+    padding: 0.8rem;
+  }
+
+  .production-ledger-table {
+    min-width: 40rem;
+  }
+
+  .production-ledger-table tbody {
+    max-height: calc(17rem + 4.25rem);
+  }
+
+  .production-ledger-footer {
+    padding-inline: 0.8rem;
+  }
+}
+
+@media (max-width: 479.98px) {
+  .production-ledger-title {
+    font-size: 0.9rem;
+  }
+
+  .production-ledger-icon {
+    flex-basis: 2.2rem;
+    width: 2.2rem;
+    height: 2.2rem;
+    font-size: 0.9rem;
+  }
+
+  .production-ledger-footer {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+/* Dark theme */
+html.dark .production-ledger-card {
+  --pl-border: var(--erp-border, #2b3a4f);
+  --pl-border-soft: var(--erp-border, #2b3a4f);
+  --pl-text: var(--erp-text, #e5edf8);
+  --pl-muted: var(--erp-muted, #94a3b8);
+
+  border-color: var(--pl-border);
+  background: var(--erp-surface, #111827);
+  color-scheme: dark;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2) !important;
+}
+
+html.dark .production-ledger-header {
+  border-color: var(--pl-border);
+  background: var(--erp-surface, #111827);
+}
+
+html.dark .production-ledger-title {
+  color: var(--pl-text);
+}
+
+html.dark .production-ledger-icon {
+  background: rgba(47, 111, 237, 0.16);
+  color: #93c5fd;
+}
+
+html.dark .production-ledger-action {
+  border-color: #30466a;
+  background: #172843;
+  color: #9dc0ff;
+}
+
+html.dark .production-ledger-action:hover {
+  border-color: #45618b;
+  background: #203554;
+}
+
+html.dark .production-ledger-scroll {
+  background: var(--erp-surface, #111827);
+  scrollbar-color: #52647d transparent;
+}
+
+html.dark .production-ledger-scroll::-webkit-scrollbar-thumb {
+  background: #52647d;
+}
+
+html.dark .production-ledger-table {
+  color: #c8d3e2;
+}
+
+html.dark .production-ledger-table thead th,
+html.dark .production-ledger-table thead .production-ledger-col-product {
+  border-color: var(--pl-border);
+  background: #172033 !important;
+  color: #a9b7ca;
+  box-shadow: 1px 0 0 var(--pl-border);
+}
+
+html.dark .production-ledger-table tbody tr {
+  background: var(--erp-surface, #111827);
+}
+
+html.dark .production-ledger-table tbody tr:nth-child(even) {
+  background: #141d2c;
+}
+
+html.dark .production-ledger-table tbody tr:hover {
+  background: #1a2638 !important;
+}
+
+html.dark .production-ledger-table tbody td {
+  border-color: var(--pl-border);
+  color: #c8d3e2;
+}
+
+html.dark .production-ledger-product-cell {
+  background: var(--erp-surface, #111827) !important;
+  box-shadow: 1px 0 0 var(--pl-border);
+}
+
+html.dark .production-ledger-table tbody tr:nth-child(even) .production-ledger-product-cell {
+  background: #141d2c !important;
+}
+
+html.dark .production-ledger-table tbody tr:hover .production-ledger-product-cell {
+  background: #1a2638 !important;
+}
+
+html.dark .production-ledger-product-name,
+html.dark .production-ledger-cell-text,
+html.dark .production-ledger-money strong {
+  color: var(--pl-text);
+}
+
+html.dark .production-ledger-product-copy small,
+html.dark .production-ledger-cell-text--muted,
+html.dark .production-ledger-money small,
+html.dark .production-ledger-total > span,
+html.dark .production-ledger-total > small {
+  color: var(--pl-muted);
+}
+
+html.dark .production-ledger-table .production-ledger-cell-group {
+  border-color: var(--pl-border);
+  background: var(--erp-surface-soft, #172033);
+}
+
+html.dark .production-ledger-table .production-ledger-cell-group .form-control {
+  color: var(--pl-text);
+}
+
+html.dark .production-ledger-table .production-ledger-cell-group .input-group-text,
+html.dark .production-ledger-col-quantity .filter-select__trigger {
+  border-color: var(--pl-border) !important;
+  background: #202b3d !important;
+  color: #a9b7ca !important;
+}
+
+html.dark .production-ledger-readonly {
+  border-color: var(--pl-border);
+  background: #172033;
+  color: #c8d3e2;
+}
+
+html.dark .production-ledger-readonly small {
+  color: var(--pl-muted);
+}
+
+html.dark .production-ledger-table .production-ledger-row-button {
+  border-color: #2d4770 !important;
+  background: #16243a !important;
+  color: #8bb7ff !important;
+}
+
+html.dark .production-ledger-table .production-ledger-row-button:hover {
+  border-color: #45618b !important;
+  background: #1d2b40 !important;
+}
+
+html.dark .production-ledger-table .production-ledger-row-button--danger {
+  border-color: #74333c !important;
+  background: #321c25 !important;
+  color: #ff8d98 !important;
+}
+
+html.dark .production-ledger-table .production-ledger-row-button--danger:hover {
+  border-color: #9a4350 !important;
+  background: #44222c !important;
+  color: #ffabb3 !important;
+}
+
+html.dark .production-ledger-footer {
+  border-color: var(--pl-border);
+  background: #0f1726;
+}
+
+html.dark .production-ledger-clear {
+  border-color: #74333c;
+  background: var(--erp-surface, #111827);
+  color: #ff8d98;
+}
+
+html.dark .production-ledger-clear:hover {
+  border-color: #9a4350;
+  background: #321c25;
+}
+
+html.dark .production-ledger-search-row,
+html.dark .production-ledger-search-row > td,
+html.dark .production-ledger-search-cell {
+  border-color: var(--pl-border) !important;
+  background: #0f1726 !important;
+}
+
+html.dark .production-ledger-search-row:hover,
+html.dark .production-ledger-search-row:hover .production-ledger-search-cell {
+  background: #1a2638 !important;
+}
+
+html.dark .production-ledger-search-cell:focus-visible,
+html.dark .production-ledger-search-cell--editing {
+  background: #172338 !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(96, 165, 250, 0.28),
+    1px 0 0 var(--pl-border) !important;
+}
+
+html.dark .production-ledger-empty-product__icon {
+  background: rgba(96, 165, 250, 0.14);
+  color: #93c5fd;
+}
+
+html.dark .production-ledger-empty-product__copy strong {
+  color: var(--pl-text);
+}
+
+html.dark .production-ledger-empty-product__copy small {
+  color: var(--pl-muted);
+}
+
+html.dark .production-ledger-search-icon {
+  color: #93c5fd;
+}
+
+html.dark .production-ledger-search-input {
+  color: var(--pl-text);
+}
+
+html.dark .production-ledger-search-input::placeholder {
+  color: #718198;
+}
+
+html.dark .production-ledger-dropdown {
+  border-color: var(--erp-border, #2b3a4f);
+  background: var(--erp-surface, #111827) !important;
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4) !important;
+}
+
+html.dark .production-ledger-dropdown .list-group-item {
+  color: var(--erp-text, #e5edf8);
+}
+
+html.dark .production-ledger-dropdown .list-group-item:hover,
+html.dark .production-ledger-dropdown .list-group-item:focus {
+  background: #1d2b40;
+}
+
+html.dark .production-ledger-dropdown .list-group-item small,
+html.dark .production-ledger-option__copy small {
+  color: var(--erp-muted, #94a3b8);
+}
+
+html.dark .production-ledger-option__copy strong {
+  color: var(--erp-text, #e5edf8);
+}
+
+html.dark .production-ledger-option__stock {
+  border-color: #205b49;
+  background: #12372d;
+  color: #8bd5ba;
+}
+
+html.dark .production-ledger-option__stock strong {
+  color: #8bd5ba;
+}
+
+html.dark .production-ledger-option__stock small {
+  color: #73b99f !important;
+}
+
+html.dark .production-ledger-empty-state i {
+  background: #202b3d;
+  color: #94a3b8;
+}
+
+html.dark .production-ledger-empty-state strong {
+  color: var(--erp-text, #e5edf8);
+}

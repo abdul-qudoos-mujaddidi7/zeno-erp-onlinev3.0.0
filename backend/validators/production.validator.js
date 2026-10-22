@@ -1,9 +1,5 @@
 const { z } = require('zod');
 
-const {
-  paymentDateSchema,
-} = require('./payment-date.validator');
-
 const nullableString = (maxLength) =>
   z.preprocess(
     (value) => {
@@ -66,22 +62,6 @@ const productionOperationSchema = z.object({
   fixed_cost: nullableNumber(),
   labor_count: nullableNumber(),
   efficiency: nullableNumber(),
-  description: nullableString(65535),
-  status: z
-    .coerce
-    .number()
-    .int()
-    .min(0)
-    .max(1)
-    .default(1),
-});
-
-const productionPaymentSchema = z.object({
-  production_id: nullableNumber(),
-  account_id: nullableNumber(),
-  amount: nullableNumber(),
-  currency: nullableString(50),
-  payment_date: paymentDateSchema,
   description: nullableString(65535),
   status: z
     .coerce
@@ -160,23 +140,10 @@ const productionBodySchema = z.object({
     .array(productionOperationSchema)
     .optional()
     .default([]),
-  payments: z
-    .array(productionPaymentSchema)
-    .optional()
-    .default([]),
 });
 
 const productionIdParamsSchema = z.object({
   id: z
-    .coerce
-    .number()
-    .int()
-    .positive()
-    .max(Number.MAX_SAFE_INTEGER),
-});
-
-const paymentIdParamsSchema = z.object({
-  paymentId: z
     .coerce
     .number()
     .int()
@@ -223,8 +190,6 @@ module.exports = {
   updateProductionSchema: productionBodySchema,
   productionIdParamsSchema,
   productionListQuerySchema,
-  createPaymentSchema: productionPaymentSchema,
-  paymentIdParamsSchema,
   createReturnSchema: productionReturnSchema,
   returnIdParamsSchema,
 };

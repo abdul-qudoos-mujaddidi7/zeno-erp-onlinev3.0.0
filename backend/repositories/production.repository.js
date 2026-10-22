@@ -72,25 +72,6 @@ const PRODUCTION_OPERATION_COLUMNS = `
   updated_at
 `;
 
-const PAYMENT_COLUMNS = `
-  local_id AS id,
-  local_id,
-  production_id,
-  account_id,
-  amount,
-  currency,
-  payment_date,
-  description,
-  status,
-  COALESCE(version, 1) AS version,
-  created_by,
-  updated_by,
-  approved_by,
-  approved_at,
-  created_at,
-  updated_at
-`;
-
 const RETURN_COLUMNS = `
   local_id AS id,
   local_id,
@@ -132,6 +113,36 @@ const RETURN_ITEM_COLUMNS = `
   created_at,
   updated_at
 `;
+
+/*
+ * Production returns are optional.
+ *
+ * They live in `production_returns` / `production_return_items`, which only
+ * exist in databases that were provisioned with them. Every production read
+ * attaches its returns, so a database without those tables made the production
+ * page fail with ER_NO_SUCH_TABLE even though the document itself, its items
+ * and its operations were perfectly readable.
+ *
+ * The presence of the tables is checked once per process (a schema does not
+ * change while the server runs) and the return queries are skipped when they
+ * are missing, which keeps the production view and delete paths working
+ * without migrations. Restart the server after creating the tables.
+ */
+let returnTablesAvailable = null;
+
+async function hasReturnTables(executor) {
+  if (returnTablesAvailable !== null) {
+    return returnTablesAvailable;
+  }
+
+  const [rows] = await executor.query(
+    "SHOW TABLES LIKE 'production_returns'",
+  );
+
+  returnTablesAvailable = rows.length > 0;
+
+  return returnTablesAvailable;
+}
 
 async function findAll(
   executor,
@@ -647,182 +658,6 @@ async function softDeleteOperationsByProduction(
   );
 }
 
-async function findPaymentsByProduction(
-  executor,
-  {
-    orgId,
-    productionId,
-    includeDeleted = false,
-  },
-) {
-  const [rows] = await executor.execute(
-    `
-      SELECT
-        ${PAYMENT_COLUMNS}
-      FROM production_payments
-      WHERE org_id = ?
-        AND production_id = ?
-        ${includeDeleted ? '' : 'AND status = 1'}
-      ORDER BY created_at ASC, local_id ASC
-    `,
-    [
-      orgId,
-      productionId,
-    ],
-  );
-
-  return rows;
-}
-
-async function findPaymentByLocalId(
-  executor,
-  {
-    orgId,
-    localId,
-    forUpdate = false,
-  },
-) {
-  const [rows] = await executor.execute(
-    `
-      SELECT
-        ${PAYMENT_COLUMNS}
-      FROM production_payments
-      WHERE org_id = ?
-        AND local_id = ?
-      LIMIT 1
-      ${forUpdate ? 'FOR UPDATE' : ''}
-    `,
-    [
-      orgId,
-      localId,
-    ],
-  );
-
-  return rows[0] || null;
-}
-
-async function createPayment(
-  connection,
-  {
-    orgId,
-    localId,
-    userId,
-    data,
-  },
-) {
-  await connection.execute(
-    `
-      INSERT INTO production_payments (
-        org_id,
-        local_id,
-        production_id,
-        account_id,
-        amount,
-        currency,
-        payment_date,
-        description,
-        status,
-        version,
-        created_by,
-        updated_by,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NOW(3), NOW(3)
-      )
-    `,
-    [
-      orgId,
-      localId,
-      data.production_id ?? null,
-      data.account_id ?? null,
-      data.amount ?? null,
-      data.currency ?? null,
-      data.payment_date ?? null,
-      data.description ?? null,
-      data.status ?? null,
-      userId,
-      userId,
-    ],
-  );
-
-  return findPaymentByLocalId(
-    connection,
-    {
-      orgId,
-      localId,
-    },
-  );
-}
-
-async function softDeletePayment(
-  connection,
-  {
-    orgId,
-    localId,
-    userId,
-  },
-) {
-  const [result] = await connection.execute(
-    `
-      UPDATE production_payments
-      SET
-        status = 0,
-        version = COALESCE(version, 0) + 1,
-        updated_by = ?,
-        updated_at = NOW(3)
-      WHERE org_id = ?
-        AND local_id = ?
-    `,
-    [
-      userId,
-      orgId,
-      localId,
-    ],
-  );
-
-  if (result.affectedRows === 0) {
-    return null;
-  }
-
-  return findPaymentByLocalId(
-    connection,
-    {
-      orgId,
-      localId,
-    },
-  );
-}
-
-async function softDeletePaymentsByProduction(
-  connection,
-  {
-    orgId,
-    productionId,
-    userId,
-  },
-) {
-  await connection.execute(
-    `
-      UPDATE production_payments
-      SET
-        status = 0,
-        version = COALESCE(version, 0) + 1,
-        updated_by = ?,
-        updated_at = NOW(3)
-      WHERE org_id = ?
-        AND production_id = ?
-        AND status = 1
-    `,
-    [
-      userId,
-      orgId,
-      productionId,
-    ],
-  );
-}
-
 async function findReturnsByProduction(
   executor,
   {
@@ -831,6 +666,10 @@ async function findReturnsByProduction(
     includeDeleted = false,
   },
 ) {
+  if (!(await hasReturnTables(executor))) {
+    return [];
+  }
+
   const [rows] = await executor.execute(
     `
       SELECT
@@ -1012,6 +851,10 @@ async function findReturnItemsByReturn(
     includeDeleted = false,
   },
 ) {
+  if (!(await hasReturnTables(executor))) {
+    return [];
+  }
+
   const [rows] = await executor.execute(
     `
       SELECT
@@ -1106,6 +949,10 @@ async function softDeleteReturnsByProduction(
     userId,
   },
 ) {
+  if (!(await hasReturnTables(connection))) {
+    return;
+  }
+
   await connection.execute(
     `
       UPDATE production_returns
@@ -1134,6 +981,10 @@ async function softDeleteReturnItemsByProduction(
     userId,
   },
 ) {
+  if (!(await hasReturnTables(connection))) {
+    return;
+  }
+
   await connection.execute(
     `
       UPDATE production_return_items pri
@@ -1261,11 +1112,7 @@ module.exports = {
   findOperationsByProduction,
   createOperation,
   softDeleteOperationsByProduction,
-  findPaymentsByProduction,
-  findPaymentByLocalId,
-  createPayment,
-  softDeletePayment,
-  softDeletePaymentsByProduction,
+  hasReturnTables,
   findReturnsByProduction,
   findReturnByLocalId,
   createReturn,

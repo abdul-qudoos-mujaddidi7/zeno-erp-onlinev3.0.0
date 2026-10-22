@@ -14,8 +14,6 @@ const {
   updateProductionSchema,
   productionIdParamsSchema,
   productionListQuerySchema,
-  createPaymentSchema,
-  paymentIdParamsSchema,
   createReturnSchema,
   returnIdParamsSchema,
 } = require('../../validators/production.validator');
@@ -70,27 +68,6 @@ router.delete(
   }),
   asyncHandler(
     productionController.remove,
-  ),
-);
-
-router.post(
-  '/:id/payments',
-  validate({
-    params: productionIdParamsSchema,
-    body: createPaymentSchema,
-  }),
-  asyncHandler(
-    productionController.addPayment,
-  ),
-);
-
-router.delete(
-  '/payments/:paymentId',
-  validate({
-    params: paymentIdParamsSchema,
-  }),
-  asyncHandler(
-    productionController.removePayment,
   ),
 );
 

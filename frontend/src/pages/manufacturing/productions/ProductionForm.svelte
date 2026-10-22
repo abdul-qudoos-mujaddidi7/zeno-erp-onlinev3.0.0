@@ -380,7 +380,7 @@
     items = [];
   }
 </script>
-<div class="sale-create-page manufacturing-form" dir={t('dir')}>
+<div class="sale-create-page manufacturing-form production-form-page" dir={t('dir')}>
   <section class="sale-section sale-details-section">
     <header class="sale-section-header">
       <div class="sale-section-heading">
@@ -470,6 +470,15 @@
 
       <div class="sale-field">
         <span class="sale-field-label">
+          <i class="bi bi-hash" aria-hidden="true"></i>
+          {t('Production #')}
+        </span>
+
+        <input readonly type="text" class="form-control production-number-control" value={form.production_number} />
+      </div>
+
+      <div class="sale-field">
+        <span class="sale-field-label">
           <i class="bi bi-cash-stack" aria-hidden="true"></i>
           {t('Currency')}
         </span>
@@ -503,15 +512,6 @@
         <div class="input-group input-group-sm persianDatePicker">
           <input type="date" class="form-control dater2" required bind:value={form.production_end_date} />
         </div>
-      </div>
-
-      <div class="sale-field">
-        <span class="sale-field-label">
-          <i class="bi bi-hash" aria-hidden="true"></i>
-          {t('Production #')}
-        </span>
-
-        <input readonly type="text" class="form-control" value={form.production_number} />
       </div>
 
       <div class="sale-field sale-field--description">
@@ -555,7 +555,7 @@
           <i class="bi bi-check2-circle" aria-hidden="true"></i>
         {/if}
 
-        <span>{t('Confirm Production')}</span>
+        <span>{t('Confirm')} {t('Production')}</span>
       </button>
     </div>
   </footer>

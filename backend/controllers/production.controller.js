@@ -83,41 +83,6 @@ async function remove(req, res) {
   });
 }
 
-async function addPayment(req, res) {
-  const payment =
-    await productionService.createPayment({
-      user: req.user,
-      productionId: req.validated.params.id,
-      data: req.validated.body,
-      requestContext:
-        getRequestContext(req),
-    });
-
-  res.status(201).json({
-    success: true,
-    message:
-      'Payment added successfully.',
-    data: payment,
-  });
-}
-
-async function removePayment(req, res) {
-  const payment =
-    await productionService.deletePayment({
-      user: req.user,
-      paymentId: req.validated.params.paymentId,
-      requestContext:
-        getRequestContext(req),
-    });
-
-  res.status(200).json({
-    success: true,
-    message:
-      'Payment deleted successfully.',
-    data: payment,
-  });
-}
-
 async function createReturn(req, res) {
   const productionReturn =
     await productionService.createReturn({
@@ -159,8 +124,6 @@ module.exports = {
   create,
   update,
   remove,
-  addPayment,
-  removePayment,
   createReturn,
   removeReturn,
 };

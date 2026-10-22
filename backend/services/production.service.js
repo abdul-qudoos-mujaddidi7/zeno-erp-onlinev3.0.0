@@ -575,40 +575,6 @@ async function replaceNested(
   };
 }
 
-async function createOptionalPayments(
-  connection,
-  {
-    orgId,
-    userId,
-    productionId,
-    payments = [],
-  },
-) {
-  const createdPayments = [];
-
-  for (const payment of payments) {
-    const paymentLocalId = generateLocalId();
-
-    const createdPayment =
-      await productionRepository.createPayment(
-        connection,
-        {
-          orgId,
-          localId: paymentLocalId,
-          userId,
-          data: {
-            ...payment,
-            production_id: productionId,
-          },
-        },
-      );
-
-    createdPayments.push(createdPayment);
-  }
-
-  return createdPayments;
-}
-
 async function attachRelations(
   executor,
   {
@@ -619,7 +585,6 @@ async function attachRelations(
   const [
     items,
     operations,
-    payments,
     returns,
   ] = await Promise.all([
     productionRepository.findItemsByProduction(
@@ -630,13 +595,6 @@ async function attachRelations(
       },
     ),
     productionRepository.findOperationsByProduction(
-      executor,
-      {
-        orgId,
-        productionId: production.id,
-      },
-    ),
-    productionRepository.findPaymentsByProduction(
       executor,
       {
         orgId,
@@ -674,7 +632,6 @@ async function attachRelations(
     ...production,
     items,
     operations,
-    payments,
     returns: returnsWithItems,
   };
 }
@@ -775,17 +732,6 @@ async function createProduction({
       },
     );
 
-    const createdPayments =
-      await createOptionalPayments(
-        connection,
-        {
-          orgId,
-          userId,
-          productionId: localId,
-          payments: data.payments || [],
-        },
-      );
-
     if (isConfirmed(data.production_status)) {
       await confirmProductionEffects(
         connection,
@@ -819,7 +765,6 @@ async function createProduction({
           ...production,
           items: createdItems,
           operations: createdOperations,
-          payments: createdPayments,
         },
 
         description:
@@ -838,14 +783,13 @@ async function createProduction({
 
     await connection.commit();
 
-    /* Productions/payments/returns write journals and move stock. */
+    /* Production changes affect dashboard aggregates. */
     dashboardService.invalidateDashboardAggregates(orgId);
 
     return {
       ...production,
       items: createdItems,
       operations: createdOperations,
-      payments: createdPayments,
       returns: [],
     };
   } catch (error) {
@@ -1013,7 +957,7 @@ async function updateProduction({
 
     await connection.commit();
 
-    /* Productions/payments/returns write journals and move stock. */
+    /* Production changes affect dashboard aggregates. */
     dashboardService.invalidateDashboardAggregates(orgId);
 
     return attachRelations(
@@ -1183,27 +1127,6 @@ async function deleteProduction({
       );
     }
 
-    const payments =
-      await productionRepository.findPaymentsByProduction(
-        connection,
-        {
-          orgId,
-          productionId,
-        },
-      );
-
-    for (const payment of payments) {
-      await journalRepository.softDeleteByReference(
-        connection,
-        {
-          orgId,
-          referenceId: payment.id,
-          referenceType: 'production_payment',
-          userId,
-        },
-      );
-    }
-
     const deletedProduction =
       await productionRepository.softDelete(
         connection,
@@ -1224,15 +1147,6 @@ async function deleteProduction({
     );
 
     await productionRepository.softDeleteOperationsByProduction(
-      connection,
-      {
-        orgId,
-        productionId,
-        userId,
-      },
-    );
-
-    await productionRepository.softDeletePaymentsByProduction(
       connection,
       {
         orgId,
@@ -1291,205 +1205,10 @@ async function deleteProduction({
 
     await connection.commit();
 
-    /* Productions/payments/returns write journals and move stock. */
+    /* Production changes affect dashboard aggregates. */
     dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedProduction;
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-}
-
-async function createPayment({
-  user,
-  productionId,
-  data,
-  requestContext,
-}) {
-  const {
-    orgId,
-    userId,
-  } = getAuthenticatedIdentity(user);
-
-  const connection =
-    await db.getConnection();
-
-  try {
-    await connection.beginTransaction();
-
-    const production =
-      await productionRepository.findByLocalId(
-        connection,
-        {
-          orgId,
-          localId: productionId,
-          forUpdate: true,
-        },
-      );
-
-    if (!production) {
-      throw new AppError(
-        'Production not found.',
-        404,
-        'PRODUCTION_NOT_FOUND',
-      );
-    }
-
-    const paymentLocalId = generateLocalId();
-
-    const payment =
-      await productionRepository.createPayment(
-        connection,
-        {
-          orgId,
-          localId: paymentLocalId,
-          userId,
-          data: {
-            ...data,
-            production_id: productionId,
-          },
-        },
-      );
-
-    await activityRepository.create(
-      connection,
-      {
-        orgId,
-        userId,
-
-        action: 'create',
-        tableName: 'production_payments',
-        entityId: payment.id,
-
-        oldValues: null,
-        newValues: payment,
-
-        description:
-          `Added payment of ${payment.amount} ${payment.currency} for production #${productionId}`,
-
-        ipAddress:
-          requestContext.ipAddress,
-
-        sessionId:
-          requestContext.sessionId,
-
-        deviceInfo:
-          requestContext.deviceInfo,
-      },
-    );
-
-    await connection.commit();
-
-    /* Productions/payments/returns write journals and move stock. */
-    dashboardService.invalidateDashboardAggregates(orgId);
-
-    return payment;
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-}
-
-async function deletePayment({
-  user,
-  paymentId,
-  requestContext,
-}) {
-  const {
-    orgId,
-    userId,
-  } = getAuthenticatedIdentity(user);
-
-  const connection =
-    await db.getConnection();
-
-  try {
-    await connection.beginTransaction();
-
-    const payment =
-      await productionRepository.findPaymentByLocalId(
-        connection,
-        {
-          orgId,
-          localId: paymentId,
-          forUpdate: true,
-        },
-      );
-
-    if (!payment) {
-      throw new AppError(
-        'Production payment not found.',
-        404,
-        'PRODUCTION_PAYMENT_NOT_FOUND',
-      );
-    }
-
-    if (Number(payment.status) === 0) {
-      throw new AppError(
-        'Production payment is already deleted.',
-        409,
-        'PRODUCTION_PAYMENT_ALREADY_DELETED',
-      );
-    }
-
-    const deletedPayment =
-      await productionRepository.softDeletePayment(
-        connection,
-        {
-          orgId,
-          localId: paymentId,
-          userId,
-        },
-      );
-
-    await journalRepository.softDeleteByReference(
-      connection,
-      {
-        orgId,
-        referenceId: paymentId,
-        referenceType: 'production_payment',
-        userId,
-      },
-    );
-
-    await activityRepository.create(
-      connection,
-      {
-        orgId,
-        userId,
-
-        action: 'delete',
-        tableName: 'production_payments',
-        entityId: paymentId,
-
-        oldValues: payment,
-        newValues: deletedPayment,
-
-        description:
-          `Deleted production payment #${paymentId}`,
-
-        ipAddress:
-          requestContext.ipAddress,
-
-        sessionId:
-          requestContext.sessionId,
-
-        deviceInfo:
-          requestContext.deviceInfo,
-      },
-    );
-
-    await connection.commit();
-
-    /* Productions/payments/returns write journals and move stock. */
-    dashboardService.invalidateDashboardAggregates(orgId);
-
-    return deletedPayment;
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -1508,6 +1227,15 @@ async function createReturn({
     orgId,
     userId,
   } = getAuthenticatedIdentity(user);
+
+  /* Returns need tables this database may not have (see the repository). */
+  if (!(await productionRepository.hasReturnTables(db))) {
+    throw new AppError(
+      'Production returns are not available on this database.',
+      409,
+      'PRODUCTION_RETURNS_UNAVAILABLE',
+    );
+  }
 
   const connection =
     await db.getConnection();
@@ -1722,7 +1450,7 @@ async function createReturn({
 
     await connection.commit();
 
-    /* Productions/payments/returns write journals and move stock. */
+    /* Production changes affect dashboard aggregates. */
     dashboardService.invalidateDashboardAggregates(orgId);
 
     return {
@@ -1915,7 +1643,7 @@ async function deleteReturn({
 
     await connection.commit();
 
-    /* Productions/payments/returns write journals and move stock. */
+    /* Production changes affect dashboard aggregates. */
     dashboardService.invalidateDashboardAggregates(orgId);
 
     return deletedReturn;
@@ -1933,8 +1661,6 @@ module.exports = {
   createProduction,
   updateProduction,
   deleteProduction,
-  createPayment,
-  deletePayment,
   createReturn,
   deleteReturn,
 };

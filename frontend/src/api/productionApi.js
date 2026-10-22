@@ -49,19 +49,6 @@ export const productionApi = {
     );
   },
 
-  addPayment(productionId, data) {
-    return api.post(
-      `${BASE_URL}/${productionId}/payments`,
-      data,
-    );
-  },
-
-  removePayment(paymentId) {
-    return api.delete(
-      `${BASE_URL}/payments/${paymentId}`,
-    );
-  },
-
   createReturn(productionId, data) {
     return api.post(
       `${BASE_URL}/${productionId}/returns`,

@@ -476,7 +476,7 @@ test('the same date rule is shared, not reimplemented per endpoint', () => {
     'validators/purchase.validator.js',
     'validators/inventory-record.validator.js',
     'validators/prescription.validator.js',
-    'validators/production.validator.js',
+    /* Productions have no payments, so they have no payment date rule. */
   ];
 
   for (const relativePath of sources) {

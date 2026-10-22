@@ -269,6 +269,10 @@
     padding: 0.5rem 0.75rem 0.625rem;
   }
 
+  .production-form-page .sale-details-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .sale-field {
     display: grid;
     grid-template-rows: 1rem auto;
@@ -686,6 +690,158 @@
     box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1) !important;
   }
 
+  .manufacturing-form .sale-details-grid .app-date-field {
+    gap: 0;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .manufacturing-form .sale-details-grid .app-date-field input {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--sale-control-height) !important;
+    height: var(--sale-control-height) !important;
+    padding: 0 0.65rem !important;
+    border-color: #d6dfeb !important;
+    border-radius: 0.625rem !important;
+    font-size: 0.78rem !important;
+    font-weight: 650 !important;
+    line-height: 1.2;
+    box-sizing: border-box;
+    box-shadow: none !important;
+  }
+
+  .manufacturing-form .sale-details-grid .app-date-field input:focus {
+    border-color: #78a4f5 !important;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1) !important;
+  }
+
+  .production-form-page .sale-quantity-control {
+    width: 100%;
+    min-height: var(--sale-control-height);
+  }
+
+  .production-form-page .sale-quantity-control .form-control {
+    flex: 1 1 0;
+    width: 1%;
+    min-width: 0;
+    min-height: var(--sale-control-height) !important;
+    height: var(--sale-control-height) !important;
+    padding: 0 0.65rem;
+    border: 1px solid #d6dfeb;
+    border-radius: 0.625rem;
+    background: #ffffff;
+    color: #26364b;
+    font-size: 0.78rem;
+    font-weight: 650;
+    box-shadow: none;
+  }
+
+  .production-form-page .sale-quantity-control .form-control:focus {
+    border-color: #78a4f5;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1);
+  }
+
+  .production-form-page .production-number-control {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--sale-control-height) !important;
+    height: var(--sale-control-height) !important;
+    padding: 0 0.65rem;
+    border: 1px solid #d6dfeb;
+    border-radius: 0.625rem;
+    background: #ffffff;
+    color: #26364b;
+    font-size: 0.78rem;
+    font-weight: 650;
+    box-shadow: none;
+  }
+
+  .bom-form-page .sale-details-grid {
+    grid-template-columns:
+      minmax(10rem, 1fr)
+      minmax(13rem, 1.35fr)
+      minmax(8rem, 0.72fr)
+      minmax(10rem, 0.9fr)
+      minmax(9rem, 0.82fr);
+  }
+
+  .bom-form-page .sale-quantity-control {
+    width: 100%;
+    min-height: var(--sale-control-height);
+  }
+
+  .bom-form-page .sale-quantity-control .form-control {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--sale-control-height) !important;
+    height: var(--sale-control-height) !important;
+    padding: 0 0.65rem;
+    border: 1px solid #d6dfeb;
+    border-radius: 0.625rem;
+    background: #ffffff;
+    color: #26364b;
+    font-size: 0.78rem;
+    font-weight: 650;
+    box-shadow: none;
+  }
+
+  .bom-form-page .sale-quantity-control .form-control:focus {
+    border-color: #78a4f5;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1);
+  }
+
+  .sale-description-body {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.875rem 1rem 1rem;
+  }
+
+  .sale-description-body--details {
+    padding: 0;
+  }
+
+  .sale-description-body input,
+  .sale-description-body textarea {
+    width: 100%;
+    min-height: 2.375rem;
+    padding: 0.75rem;
+    border: 1px solid #d6dfeb;
+    border-radius: 0.625rem;
+    outline: 0;
+    background: #ffffff;
+    color: #26364b;
+    font: inherit;
+    font-size: 0.78rem;
+    line-height: 1.55;
+  }
+
+  .sale-description-body input {
+    height: 2.375rem;
+    padding-block: 0;
+  }
+
+  .sale-description-body textarea {
+    resize: vertical;
+    min-height: 4.75rem;
+  }
+
+  .sale-description-body input:hover,
+  .sale-description-body textarea:hover {
+    border-color: #bcc9db;
+  }
+
+  .sale-description-body input:focus,
+  .sale-description-body textarea:focus {
+    border-color: #78a4f5;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1);
+  }
+
+  .sale-description-body input::placeholder,
+  .sale-description-body textarea::placeholder {
+    color: #9aa7b8;
+  }
+
   .sale-exchange-editor {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(2.5rem, 0.7fr) minmax(0, 1fr);
@@ -895,6 +1051,14 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
+    .production-form-page .sale-details-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .bom-form-page .sale-details-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
     .sale-field--customer {
       grid-column: span 2;
     }
@@ -915,6 +1079,14 @@
     }
 
     .sale-details-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .production-form-page .sale-details-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .bom-form-page .sale-details-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
@@ -969,6 +1141,14 @@
     .sale-details-grid {
       grid-template-columns: 1fr;
       padding: 0.8rem;
+    }
+
+    .production-form-page .sale-details-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .bom-form-page .sale-details-grid {
+      grid-template-columns: 1fr;
     }
 
     .sale-field--customer {
@@ -1113,6 +1293,11 @@
   html.dark .sale-details-grid .filter-select select,
   html.dark .sale-details-grid .filter-select button,
   html.dark .sale-details-grid .form-select,
+  html.dark .production-form-page .sale-quantity-control .form-control,
+  html.dark .production-form-page .production-number-control,
+  html.dark .bom-form-page .sale-quantity-control .form-control,
+  html.dark .bom-form-page .sale-field--description textarea,
+  html.dark .manufacturing-form .sale-details-grid .app-date-field input,
   html.dark .sale-app-datepicker input,
   html.dark .sale-app-datepicker .date-picker-control {
     border-color: var(--sale-border) !important;
@@ -1413,4 +1598,3 @@
     background: transparent;
     color: #93c5fd;
   }
-

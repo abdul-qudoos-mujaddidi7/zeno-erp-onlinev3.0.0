@@ -4,6 +4,7 @@
   import ProductModal from '../../products/ProductModal.svelte';
 
   import { t, lang, translate_org_type } from '../../../i18n/i18n.js';
+  import '../production-ledger.css';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
@@ -273,85 +274,216 @@ import { currencyApi } from '../../../api/currencyApi.js';
         return s + 0;
       }
     }
+
+    return s;
   }, 0);
 </script>
 
-<div class="card shadow-2 mt-4">
-  <div class="card-body">
-      <h5 class="mb-3">
-        
-      <button class="btn btn-info btn-sm pt-1 px-2 float-end" type="button" on:click={() => {
-        openModal()
-        }}>
-        <i class="bi bi-plus-circle"></i> {t("New Operation")}
-      </button>
-      {t('Production Operations')}</h5>
+<div class="card shadow-2 production-ledger-card">
+  <header class="production-ledger-header">
+    <h5 class="production-ledger-title">
+      <span class="production-ledger-icon" aria-hidden="true"><i class="bi bi-gear-wide-connected"></i></span>
+      {t('Production Operations')}
+    </h5>
 
-    <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead class="table-light">
+    <button type="button" class="production-ledger-action" on:click={() => openModal()}>
+      <i class="bi bi-plus-lg" aria-hidden="true"></i>
+      <span>{t('New Operation')}</span>
+    </button>
+  </header>
+
+  <div class="production-ledger-scroll">
+    <table class="table table-hover align-middle production-ledger-table">
+      <thead>
+        <tr>
+          <th class="production-ledger-col-index">#</th>
+          <th class="production-ledger-col-center">{t('Work Center')}</th>
+          <th class="production-ledger-col-name">{t('Name')}{t('-of-')}{t('Operation')}</th>
+          <th class="production-ledger-col-time text-center">{t('Setup Time')}</th>
+          <th class="production-ledger-col-time text-center">{t('Run Time')}</th>
+          <th class="production-ledger-col-total-time text-center">{t('Operation Total Time')}</th>
+          <th class="production-ledger-col-cost text-center">{t('Cost')}</th>
+          <th class="production-ledger-col-total-cost text-center">{t('Total Cost')}</th>
+          <th class="production-ledger-col-actions text-center">{t('Actions')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each operations as operation, index}
           <tr>
-            <th>#</th>
-            <th>{t('Work Center')}</th>
+            <td class="production-ledger-col-index">
+              <span class="production-ledger-cell-text production-ledger-cell-text--muted">{index + 1}</span>
+            </td>
 
-              <th>{t('Name')}{t('-of-')}{t('Operation')}</th>
-              <th class="d-none">{t('Sequence')}</th>
-              <th>{t('Setup Time')}</th>
-              <th>{t('Run Time')}</th>
-              <th>{t('Operation Total Time')}</th>
-              <th>{t('Cost')}</th>
-              <th>{t('Total Cost')}</th>
-              <th class='d-none'>{t('Labor Count')}</th>
-              <th class='d-none'>{t('Efficiency')}</th>
+            <td class="production-ledger-col-center">
+              <div class="production-ledger-product">
+                <span class="production-ledger-product-copy">
+                  <strong class="production-ledger-product-name">
+                    {work_centers.find((wc) => wc.id == operation.work_center_id)?.name || '-'}
+                  </strong>
+                  {#if operation.sequence}
+                    <small>{t('Sequence')}: {operation.sequence}</small>
+                  {/if}
+                </span>
+              </div>
+            </td>
 
-            <th class="text-center">{t('Actions')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each operations as operation, index}
-            <tr>
-              <td>{index+1}</td>
-              <td>{work_centers.find(wc=>wc.id==operation.work_center_id)?.name}</td>
-              <td>{operation.operation_name}</td>
-              <td class="d-none">{operation.sequence}</td>
-              <td>{operation.setup_time} {operation.setup_time?t(operation.setup_time_unit):""}</td>
-              <td>{operation.run_time} {operation.run_time?t(operation.run_time_unit):""}</td>
+            <td class="production-ledger-col-name">
+              <div class="production-ledger-product">
+                <span class="production-ledger-product-copy">
+                  <strong class="production-ledger-product-name">{operation.operation_name || '-'}</strong>
+                  {#if operation.description}
+                    <small>{operation.description}</small>
+                  {/if}
+                </span>
+              </div>
+            </td>
 
-              <td>
-              {Object.entries(seperateTime((Number(operation.run_time)||0)*(Number(quantity)||1)+convertTime(Number(operation.setup_time)||0,operation.setup_time_unit,operation.run_time_unit),operation.run_time_unit)).map(([cur, amt]) => `${amt} ${t(cur)} `).join(" "+t('and')+t(" "))}
-              </td>
-              <td>
-                {@html operation.cost_per_hour?`<small class='d-block text-info'>${t('Cost per Hour')}</small>`+Number(operation.cost_per_hour||0).toLocaleString(undefined, { maximumFractionDigits: 3 })+" "+t(operation.cost_currency):""}
-                {@html operation.fixed_cost?`<small class='d-block text-danger'>${t('Fixed Cost')}</small>`+Number(operation.fixed_cost||0).toLocaleString(undefined, { maximumFractionDigits: 3 })+" "+t(operation.cost_currency):""}
-              </td>
-
-
-              <td>
-                {#if operation.cost_per_hour}
-                  {((convertTime((Number(operation.run_time)||0)*(Number(quantity)||1),operation.run_time_unit,'hour')+convertTime(Number(operation.setup_time)||0,operation.setup_time_unit,'hour'))*Number(operation.cost_per_hour)).toLocaleString(undefined, { maximumFractionDigits: 3 })} {t(operation.cost_currency)}
-
-                {:else if operation.fixed_cost}
-                  {Number(operation.fixed_cost||0).toLocaleString(undefined, { maximumFractionDigits: 3 })} {t(operation.cost_currency)}
+            <td class="production-ledger-col-time text-center">
+              <span class="production-ledger-readonly">
+                {#if operation.setup_time}
+                  {operation.setup_time} {t(operation.setup_time_unit)}
+                {:else}
+                  -
                 {/if}
-              </td>
-              <td class='d-none'>{operation.labor_count}</td>
-              <td class='d-none'>{operation.efficiency}</td>
+              </span>
+            </td>
 
-              <td class="text-center"
-                ><button class="btn btn-sm btn-outline-info me-2 px-2" on:click={() => openModal(index)}><i class='bi bi-pencil'></i></button><button class="btn btn-sm btn-outline-danger px-2" on:click={() => removeOperation(index)}><i class='bi bi-trash'></i></button></td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+            <td class="production-ledger-col-time text-center">
+              <span class="production-ledger-readonly">
+                {#if operation.run_time}
+                  {operation.run_time} {t(operation.run_time_unit)}
+                {:else}
+                  -
+                {/if}
+              </span>
+            </td>
 
-    <div class="text-end mt-3">
-      <h5>
-        {t('Total')}{t('-of-')}{t('Production Operations')}:
-        <span class="text-primary">{total.toLocaleString(undefined, { maximumFractionDigits: 3 })} {t(currency)}</span>
-      </h5>
-    </div>
+            <td class="production-ledger-col-total-time text-center">
+              <span class="production-ledger-cell-text">
+                {Object.entries(
+                  seperateTime(
+                    (Number(operation.run_time) || 0) * (Number(quantity) || 1) +
+                      convertTime(
+                        Number(operation.setup_time) || 0,
+                        operation.setup_time_unit,
+                        operation.run_time_unit,
+                      ),
+                    operation.run_time_unit,
+                  ),
+                )
+                  .map(([cur, amt]) => `${amt} ${t(cur)} `)
+                  .join(' ' + t('and') + ' ')}
+              </span>
+            </td>
+
+            <td class="production-ledger-col-cost text-center">
+              {#if operation.cost_per_hour}
+                <span class="production-ledger-readonly production-ledger-readonly--stacked">
+                  <small>{t('Cost per Hour')}</small>
+                  <span dir="ltr">
+                    {Number(operation.cost_per_hour || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                  </span>
+                  <small>{t(operation.cost_currency)}</small>
+                </span>
+              {:else if operation.fixed_cost}
+                <span class="production-ledger-readonly production-ledger-readonly--stacked">
+                  <small>{t('Fixed Cost')}</small>
+                  <span dir="ltr">
+                    {Number(operation.fixed_cost || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                  </span>
+                  <small>{t(operation.cost_currency)}</small>
+                </span>
+              {:else}
+                <span class="production-ledger-cell-text production-ledger-cell-text--muted">-</span>
+              {/if}
+            </td>
+
+            <td class="production-ledger-col-total-cost text-center">
+              <div class="production-ledger-money">
+                {#if operation.cost_per_hour}
+                  <strong>
+                    {(
+                      (convertTime(
+                        (Number(operation.run_time) || 0) * (Number(quantity) || 1),
+                        operation.run_time_unit,
+                        'hour',
+                      ) +
+                        convertTime(Number(operation.setup_time) || 0, operation.setup_time_unit, 'hour')) *
+                      Number(operation.cost_per_hour)
+                    ).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                  </strong>
+                  <small>{t(operation.cost_currency)}</small>
+                {:else if operation.fixed_cost}
+                  <strong>
+                    {Number(operation.fixed_cost || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                  </strong>
+                  <small>{t(operation.cost_currency)}</small>
+                {:else}
+                  <strong>-</strong>
+                {/if}
+              </div>
+            </td>
+
+            <td class="production-ledger-col-actions production-ledger-actions-cell">
+              <div class="production-ledger-row-buttons">
+                <button
+                  type="button"
+                  class="btn btn-sm production-ledger-row-button"
+                  title={t('Edit')}
+                  aria-label={t('Edit')}
+                  on:click={() => openModal(index)}>
+                  <i class="bi bi-pencil" aria-hidden="true"></i>
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn-sm production-ledger-row-button production-ledger-row-button--danger"
+                  title={t('Delete')}
+                  aria-label={t('Delete')}
+                  on:click={() => removeOperation(index)}>
+                  <i class="bi bi-trash" aria-hidden="true"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        {/each}
+
+        {#if operations.length === 0}
+          <tr>
+            <td colspan="9">
+              <div class="production-ledger-empty-state">
+                <i class="bi bi-gear-wide-connected" aria-hidden="true"></i>
+                <strong>{t('No Data')}</strong>
+              </div>
+            </td>
+          </tr>
+        {/if}
+      </tbody>
+    </table>
   </div>
+
+  {#if operations.length > 0}
+    <footer class="production-ledger-footer">
+      <button
+        type="button"
+        class="production-ledger-clear"
+        on:click={() => {
+          operations = [];
+          dispatch('update', { operations });
+        }}>
+        <i class="bi bi-trash3" aria-hidden="true"></i>
+        <span>{t('Clear All')}</span>
+      </button>
+
+      <div class="production-ledger-total">
+        <span>{t('Total')}{t('-of-')}{t('Production Operations')}</span>
+
+        <strong dir="ltr">{Number(total || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}</strong>
+
+        <small>{t(currency)}</small>
+      </div>
+    </footer>
+  {/if}
 </div>
 
 
@@ -363,7 +495,7 @@ import { currencyApi } from '../../../api/currencyApi.js';
         <h5 class="modal-title">
           {editingId != null ? t('Update Operation') : t('New Operation')}
         </h5>
-        <button type="button" class="btn-close" data-mdb-dismiss="modal"></button>
+        <button type="button" class="btn-close" aria-label={t('Close')} data-mdb-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div class="row">

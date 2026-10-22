@@ -2,17 +2,19 @@
   import { productCategoryApi } from '../../../api/productCategoryApi.js';
   import { settingsApi } from '../../../api/settingsApi.js';
   import { productUnitApi } from '../../../api/productUnitApi.js';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import BOMItemsTable from './BOMItemsTable.svelte';
   import BOMOperationsTable from './BOMOperationsTable.svelte';
   import ProductModal from '../../products/ProductModal.svelte';
   import { push } from 'svelte-spa-router';
   import { bomApi } from '../../../api/bomApi.js';
   import FilterSelect from '../../../components/common/FilterSelect.svelte';
+  import AppDatePicker from '../../../components/common/AppDatePicker.svelte';
   import '../manufacturing-form.css';
   import { workCenterApi } from '../../../api/workCenterApi.js';
   import { toast } from '../../../ToastUI/toast.js';
   import { t, lang, translate_org_type } from '../../../i18n/i18n';
+  import { getKabulDate } from '../../../calendar.js';
   import { currencyApi } from '../../../api/currencyApi.js';
   import { productApi } from '../../../api/productApi.js';
   import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
@@ -34,6 +36,55 @@
 
   let productModal;
 
+  let form_product_search = '';
+  let form_product_search_input = null;
+  let filteredProducts = [];
+  let showProductDropdown = false;
+  let productDropdownStyle = '';
+
+  function portal(node) {
+    document.body.appendChild(node);
+    return { destroy() { node.remove(); } };
+  }
+
+  function positionProductDropdown() {
+    if (!form_product_search_input) return;
+    const rect =
+      form_product_search_input.closest('.sale-customer-input')?.getBoundingClientRect() ||
+      form_product_search_input.getBoundingClientRect();
+    const maxHeight = Math.min(220, window.innerHeight * 0.4);
+    const openUp = window.innerHeight - rect.bottom < maxHeight + 10;
+    productDropdownStyle = openUp
+      ? `position:fixed;left:${rect.left}px;width:${rect.width}px;bottom:${window.innerHeight - rect.top + 5}px;top:auto;max-height:${maxHeight}px;overflow:auto;z-index:100000;`
+      : `position:fixed;left:${rect.left}px;width:${rect.width}px;top:${rect.bottom + 5}px;bottom:auto;max-height:${maxHeight}px;overflow:auto;z-index:100000;`;
+  }
+
+  $: if (showProductDropdown) tick().then(positionProductDropdown);
+
+  function getProductName(id) {
+    return products.find((p) => p.id == id)?.name || '';
+  }
+
+  function getProductCategoryName(id) {
+    return categories.find((c) => c.id == id)?.name || '';
+  }
+
+  function handleProductSearchInput() {
+    showProductDropdown = true;
+    const term = form_product_search.trim().toLowerCase();
+    filteredProducts = term
+      ? products.filter((p) => (p.name || '').toLowerCase().includes(term))
+      : products;
+  }
+
+  function handleProductSearchFocus() {
+    showProductDropdown = true;
+    const term = form_product_search.trim().toLowerCase();
+    filteredProducts = term
+      ? products.filter((p) => (p.name || '').toLowerCase().includes(term))
+      : products;
+  }
+
   let operations = [];
 
   $: quantity = form.quantity;
@@ -46,7 +97,7 @@
     product_unit_id: '',
     quantity: '',
     bill_number: '',
-    bill_date: new Date().toISOString().slice(0, 10),
+    bill_date: getKabulDate(),
     bill_status: 'draft',
     total_amount: 0,
     currency: '',
@@ -83,7 +134,7 @@
   async function loadBOM(id) {
     try {
       const bom = (await bomApi.getById(Number(id)))?.data || null;
-      if (!bom || bom.bill_status !== 'draft' || Number(bom.status) !== 1) {
+      if (!bom || Number(bom.status) !== 1) {
         push('/dashboard/boms');
         return;
       }
@@ -157,10 +208,12 @@
   }
 
   $: total_amount = items.reduce((s, i) => {
+    /* DECIMAL subtotals arrive as strings when a saved BOM is reloaded. */
+    const subtotal = Number(i.subtotal) || 0;
     if (i.unit_price_currency && form.currency && i.unit_price_currency !== form.currency) {
-      return s + exchangeRate(i.subtotal, i.unit_price_currency, form.currency);
+      return s + exchangeRate(subtotal, i.unit_price_currency, form.currency);
     }
-    return s + i.subtotal;
+    return s + subtotal;
   }, 0);
 
   async function saveBOM(confirm = false) {
@@ -234,7 +287,7 @@
       total_amount: 0,
       bill_number: '',
       product_unit_id: '',
-      bill_date: new Date().toISOString().slice(0, 10),
+      bill_date: getKabulDate(),
       bill_status: 'draft',
       description: '',
       status: 1,
@@ -242,7 +295,7 @@
     items = [];
   }
 </script>
-<div class="sale-create-page manufacturing-form" dir={t('dir')}>
+<div class="sale-create-page manufacturing-form bom-form-page" dir={t('dir')}>
   <section class="sale-section sale-details-section">
     <header class="sale-section-header">
       <div class="sale-section-heading">
@@ -260,32 +313,107 @@
     </header>
 
     <div class="sale-details-grid">
-      <div class="sale-field">
+      <div class="sale-field sale-field--customer">
         <span class="sale-field-label">
           <i class="bi bi-box-seam" aria-hidden="true"></i>
           {t('Product')}
         </span>
 
-        <div class="bom-product-control">
-          <FilterSelect
-            variant="outline"
-            label={t('Product')}
-            icon="bi-box-seam"
-            value={form.product_id}
-            options={[
-              { value: '', label: t('Select Product') },
-              ...products.map((p) => ({ value: p.id, label: p.name })),
-            ]}
-            on:change={(event) => (form.product_id = event.detail)} />
+        <div class="sale-customer-control position-relative">
+          <div class="sale-customer-input">
+            <button
+              type="button"
+              class="sale-customer-input__icon"
+              class:is-active={!!form.product_id}
+              title={t('Product')}
+              aria-label={t('Product')}
+              disabled={!form.product_id}
+              on:click={() => {
+                if (form.product_id) {
+                  const product = products.find((p) => p.id == form.product_id);
+                  if (product) productModal.editProduct(product);
+                }
+              }}>
+              <i class="bi bi-box-seam" aria-hidden="true"></i>
+            </button>
 
-          <button
-            type="button"
-            class="bom-add-product"
-            title={t('New Product')}
-            aria-label={t('New Product')}
-            on:click={() => productModal.openModal()}>
-            <i class="bi bi-plus-lg" aria-hidden="true"></i>
-          </button>
+            {#if form.product_id}
+              <button
+                type="button"
+                class="sale-selected-customer"
+                on:click={async () => {
+                  form.product_id = '';
+                  form_product_search = '';
+                  showProductDropdown = true;
+                  filteredProducts = products;
+                  await tick();
+                  form_product_search_input?.focus();
+                }}>
+                <span class="sale-selected-customer__identity">
+                  <span class="sale-selected-customer__name">
+                    {getProductName(form.product_id)}
+                  </span>
+                </span>
+                <i class="bi bi-pencil-square" aria-hidden="true"></i>
+              </button>
+            {:else}
+              <input
+                id="form_product_search"
+                bind:this={form_product_search_input}
+                type="text"
+                bind:value={form_product_search}
+                placeholder={t('Select Product')}
+                autocomplete="off"
+                on:input={handleProductSearchInput}
+                on:focus={handleProductSearchFocus}
+                on:blur={() =>
+                  setTimeout(() => (showProductDropdown = false), 150)} />
+            {/if}
+
+            <button
+              type="button"
+              class="sale-add-customer"
+              title={t('New Product')}
+              aria-label={t('New Product')}
+              on:click={() => productModal.openModal()}>
+              <i class="bi bi-plus-lg" aria-hidden="true"></i>
+              <span>{t('Add')}</span>
+            </button>
+          </div>
+
+          {#if showProductDropdown && filteredProducts.length > 0}
+            <ul
+              use:portal
+              class="sale-customer-dropdown"
+              style={productDropdownStyle}>
+              {#each filteredProducts as p (p.id)}
+                <li>
+                  <button
+                    type="button"
+                    class="sale-customer-option"
+                    on:mousedown={() => {
+                      form.product_id = p.id;
+                      form_product_search = p.name || '';
+                      showProductDropdown = false;
+                    }}>
+                    <span class="sale-customer-option__avatar">
+                      <i class="bi bi-box-seam" aria-hidden="true"></i>
+                    </span>
+
+                    <span class="sale-customer-option__copy">
+                      <strong>{p.name}</strong>
+
+                      <small>
+                        {getProductCategoryName(p.category_id) || 'N/A'}
+                      </small>
+                    </span>
+
+                    <i class="bi bi-chevron-right sale-customer-option__arrow" aria-hidden="true"></i>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
         </div>
       </div>
 
@@ -311,7 +439,10 @@
           {t('Bill #')}
         </span>
 
-        <input readonly type="text" class="form-control" value={form.bill_number} />
+        <div class="sale-readonly-field">
+          <span dir="ltr">{form.bill_number}</span>
+          <i class="bi bi-lock-fill" aria-hidden="true"></i>
+        </div>
       </div>
 
       <div class="sale-field">
@@ -320,8 +451,8 @@
           {t('Date')}
         </span>
 
-        <div class="input-group input-group-sm persianDatePicker">
-          <input type="date" class="form-control dater1" bind:value={form.bill_date} />
+        <div class="sale-app-datepicker">
+          <AppDatePicker bind:value={form.bill_date} required />
         </div>
       </div>
 
@@ -341,12 +472,12 @@
       </div>
 
       <div class="sale-field sale-field--description">
-        <span class="sale-field-label">
-          <i class="bi bi-card-text" aria-hidden="true"></i>
-          {t('Description')}
-        </span>
-
-        <textarea class="form-control" rows="2" bind:value={form.description} placeholder={t('Description')}></textarea>
+        <div class="sale-description-body sale-description-body--details">
+          <textarea
+            bind:value={form.description}
+            rows="2"
+            placeholder={t('Description')} />
+        </div>
       </div>
     </div>
   </section>
@@ -388,42 +519,6 @@
 </div>
 
 <style>
-  .bom-product-control {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    min-width: 0;
-  }
-
-  .bom-product-control :global(.filter-select) {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .bom-add-product {
-    display: inline-grid;
-    flex: 0 0 auto;
-    width: 2.2rem;
-    height: 2.375rem;
-    place-items: center;
-    border: 1px solid var(--sale-primary);
-    border-radius: 0.625rem;
-    background: var(--sale-primary);
-    color: #ffffff;
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition:
-      background 0.15s ease,
-      border-color 0.15s ease,
-      box-shadow 0.15s ease;
-  }
-
-  .bom-add-product:hover {
-    border-color: var(--sale-primary-dark);
-    background: var(--sale-primary-dark);
-    box-shadow: 0 5px 14px rgba(47, 111, 237, 0.22);
-  }
-
   .sale-quantity-control {
     position: relative;
     display: flex;
