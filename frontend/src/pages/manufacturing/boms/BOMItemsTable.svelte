@@ -306,7 +306,7 @@
         <tbody>
           {#each items as item, index}
             <tr>
-              <td class="purchase-item-product-cell">
+              <td class="purchase-item-product-cell purchase-item-col-product">
                 <div class="purchase-item-product">
                   <span class="purchase-item-product-copy">
                     <strong class="purchase-item-product-name">{item.product_name}</strong>
@@ -403,7 +403,7 @@
           -->
           <tr class="purchase-item-search-row">
             <td
-              class="purchase-item-product-cell purchase-item-search-cell"
+              class="purchase-item-product-cell purchase-item-col-product purchase-item-search-cell"
               class:purchase-item-search-cell--editing={isProductCellEditing}
               role="button"
               tabindex="0"
@@ -878,51 +878,30 @@
   /*
    * Table shell
    */
+  /*
+   * Keep ONE table grid: the wrapper is the only scroll container and the
+   * header sticks inside it. Splitting into a separate <thead> table and a
+   * scrolling block <tbody> made every body row re-derive its own column
+   * widths on a narrower box, so the columns drifted away from their headers.
+   */
   .purchase-items-card :global(.table-responsive),
   .purchase-items-card :global(.sale-items-scroll-area) {
     width: 100%;
     max-width: 100%;
     min-height: 0;
     height: auto;
-    max-height: none;
+    max-height: calc(2.875rem + 21.25rem + 4.25rem);
 
     overflow-x: auto !important;
-    overflow-y: visible !important;
+    overflow-y: auto !important;
 
     border: 0;
     background: #ffffff;
 
     overscroll-behavior: auto;
-    scrollbar-gutter: auto;
 
     scrollbar-width: thin;
     scrollbar-color: #b9c5d5 transparent;
-  }
-
-  .purchase-items-table :global(thead) {
-    display: table;
-    width: 100%;
-    table-layout: fixed;
-  }
-
-  .purchase-items-table :global(tbody) {
-    display: block;
-    width: 100%;
-    max-height: calc(21.25rem + 4.25rem);
-
-    overflow-x: hidden;
-    overflow-y: auto;
-
-    overscroll-behavior-y: auto;
-    scrollbar-gutter: stable;
-    scrollbar-width: thin;
-    scrollbar-color: #b9c5d5 transparent;
-  }
-
-  .purchase-items-table :global(tbody > tr) {
-    display: table;
-    width: 100%;
-    table-layout: fixed;
   }
 
   .purchase-items-table :global(tbody::-webkit-scrollbar) {
@@ -1375,12 +1354,8 @@
     .purchase-items-card :global(.sale-items-scroll-area) {
       min-height: 0;
       height: auto;
-      max-height: none;
-      overflow-y: visible !important;
-    }
-
-    .purchase-items-table :global(tbody) {
-      max-height: calc(17rem + 4.25rem);
+      max-height: calc(2.875rem + 17rem + 4.25rem);
+      overflow-y: auto !important;
     }
 
     .purchase-items-total-row {

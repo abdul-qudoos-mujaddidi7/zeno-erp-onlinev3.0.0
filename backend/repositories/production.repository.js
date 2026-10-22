@@ -1100,6 +1100,47 @@ async function findAccountByCode(
   return rows[0] || null;
 }
 
+/*
+ * Material shortage messages name the product, so the production service
+ * resolves the affected ids in one statement instead of one lookup per row.
+ */
+async function findProductNames(
+  executor,
+  {
+    orgId,
+    productIds = [],
+  },
+) {
+  const ids = [...new Set(
+    (productIds || [])
+      .map(Number)
+      .filter(Boolean),
+  )];
+
+  if (!ids.length) {
+    return [];
+  }
+
+  const placeholders = ids.map(() => '?').join(', ');
+
+  const [rows] = await executor.execute(
+    `
+      SELECT
+        local_id AS id,
+        name
+      FROM products
+      WHERE org_id = ?
+        AND local_id IN (${placeholders})
+    `,
+    [
+      orgId,
+      ...ids,
+    ],
+  );
+
+  return rows;
+}
+
 module.exports = {
   findAll,
   findByLocalId,
@@ -1125,4 +1166,5 @@ module.exports = {
   adjustProductQuantity,
   updateProductBuyPrice,
   findAccountByCode,
+  findProductNames,
 };

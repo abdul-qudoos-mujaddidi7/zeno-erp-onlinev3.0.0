@@ -525,11 +525,11 @@
             {:else}
               {#each data.treasury.entries as entry (entry.code)}
                 <div class="zb-treasury-row">
-                  <span class="zb-treasury-badge">{entry.symbol}</span>
-                  <span class="zb-treasury-name">{entry.name}</span>
                   <span class="zb-treasury-amount" class:negative={entry.negative} dir="ltr">
                     {entry.negative ? '-' : ''}{entry.amount}
                   </span>
+                  <span class="zb-treasury-name">{entry.name}</span>
+                  <span class="zb-treasury-badge">{entry.symbol}</span>
                 </div>
               {/each}
             {/if}
@@ -723,17 +723,17 @@
             {:else}
               {#each data.market.fx.rates as rate (rate.code)}
                 <div class="zb-fx-row">
-                  <span class="zb-fx-badge">{rate.symbol}</span>
-                  <span class="zb-fx-name">
-                    <b>{rate.name}</b>
-                    <small dir="ltr">1 {rate.code}</small>
-                  </span>
                   <span class="zb-fx-value">
                     <span class="zb-fx-rate">
                       {rate.rate}
                       <small>{rate.unit}</small>
                     </span>
                   </span>
+                  <span class="zb-fx-name">
+                    <b>{rate.name}</b>
+                    <small dir="ltr">1 {rate.code}</small>
+                  </span>
+                  <span class="zb-fx-badge">{rate.symbol}</span>
                 </div>
               {/each}
             {/if}
@@ -1931,6 +1931,8 @@
     flex: 1;
     color: #e2e8f0;
     font-size: 12.5px;
+    /* Keep the currency label beside its symbol badge, now on the far side. */
+    text-align: end;
   }
 
   .zb-treasury-amount {
@@ -2734,6 +2736,8 @@
     flex: 1;
     flex-direction: column;
     line-height: 1.25;
+    /* Keep the currency label beside its symbol badge, now on the far side. */
+    text-align: end;
   }
 
   .zb-fx-name b {

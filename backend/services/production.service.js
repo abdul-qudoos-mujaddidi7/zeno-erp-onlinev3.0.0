@@ -23,6 +23,10 @@ const {
   generateLocalId,
 } = require('../utils/generateLocalId');
 
+const {
+  itemQuantityInProductUnit,
+} = require('../utils/unitConversion');
+
 const fiscalPostingGuard =
   require('./fiscal-posting-guard.service');
 
@@ -178,6 +182,146 @@ async function createJournalEntry(
   return journal;
 }
 
+/*
+ * ONE answer to "what does this material line take out of stock?" in the
+ * product's base unit, matching sale, purchase, waste and transfer.
+ */
+async function materialStockQuantity(
+  connection,
+  {
+    orgId,
+    item,
+  },
+) {
+  return itemQuantityInProductUnit(
+    connection,
+    {
+      orgId,
+      item,
+    },
+  );
+}
+
+/*
+ * A production may only consume material the warehouse actually holds.
+ *
+ * The requirement is aggregated per product (a BOM may list the same
+ * material twice) and checked against the selected warehouse balance,
+ * locking the row so a concurrent movement cannot slip between the check
+ * and the deduction. A shortfall throws before any row is written, so the
+ * surrounding transaction rolls back and no partial production survives.
+ * `enable_stock_minus` deliberately does not relax this: a production
+ * started without its raw material has no real cost to capitalise.
+ */
+async function assertMaterialStockAvailable(
+  connection,
+  {
+    orgId,
+    warehouseId,
+    items,
+  },
+) {
+  if (!warehouseId) {
+    return;
+  }
+
+  const requiredByProduct = new Map();
+
+  for (const item of items || []) {
+    if (Number(item.quantity || 0) <= 0) continue;
+
+    const stockQty = await materialStockQuantity(
+      connection,
+      {
+        orgId,
+        item,
+      },
+    );
+
+    /* A service is not inventory: it is never consumed out of stock. */
+    if (stockQty.isService) continue;
+
+    const quantity = Number(stockQty.quantity || 0);
+
+    if (quantity <= 0) continue;
+
+    const key = Number(item.product_id);
+    const entry = requiredByProduct.get(key);
+
+    if (entry) {
+      entry.required += quantity;
+    } else {
+      requiredByProduct.set(key, {
+        productId: key,
+        required: quantity,
+      });
+    }
+  }
+
+  if (!requiredByProduct.size) {
+    return;
+  }
+
+  const shortages = [];
+
+  for (const entry of requiredByProduct.values()) {
+    const balance =
+      await warehouseProductRepository.findByWarehouseProduct(
+        connection,
+        {
+          orgId,
+          warehouseId,
+          productId: entry.productId,
+          forUpdate: true,
+        },
+      );
+
+    const available = Number(balance?.quantity || 0);
+
+    if (available + 1e-9 < entry.required) {
+      shortages.push({
+        product_id: entry.productId,
+        required: entry.required,
+        available,
+      });
+    }
+  }
+
+  if (!shortages.length) {
+    return;
+  }
+
+  const names =
+    await productionRepository.findProductNames(
+      connection,
+      {
+        orgId,
+        productIds: shortages.map((shortage) => shortage.product_id),
+      },
+    );
+
+  const nameById = new Map(
+    (names || []).map((product) => [
+      Number(product.id),
+      product.name,
+    ]),
+  );
+
+  throw new AppError(
+    'Not enough raw material stock in the selected warehouse for this production.',
+    409,
+    'INSUFFICIENT_MATERIAL_STOCK',
+    {
+      shortages: shortages.map((shortage) => ({
+        ...shortage,
+        product_name:
+          nameById.get(shortage.product_id)
+          || `#${shortage.product_id}`,
+      })),
+    },
+  );
+}
+
 async function applyMaterialStock(
   connection,
   {
@@ -191,8 +335,38 @@ async function applyMaterialStock(
     sign = -1,
   },
 ) {
+  if (sign < 0) {
+    await assertMaterialStockAvailable(
+      connection,
+      {
+        orgId,
+        warehouseId,
+        items,
+      },
+    );
+  }
+
   for (const item of items || []) {
-    const quantity = Number(item.quantity || 0);
+    const enteredQuantity = Number(item.quantity || 0);
+    if (enteredQuantity <= 0) continue;
+
+    /*
+     * Product and warehouse balances are kept in the product base unit,
+     * while the movement keeps the entered quantity together with its
+     * product_unit_id (the ledger convention used everywhere else).
+     */
+    const stockQty = await materialStockQuantity(
+      connection,
+      {
+        orgId,
+        item,
+      },
+    );
+
+    /* A service is not inventory: no stock balance, no movement. */
+    if (stockQty.isService) continue;
+
+    const quantity = Number(stockQty.quantity || 0);
     if (quantity <= 0) continue;
 
     await productionRepository.adjustProductQuantity(
@@ -211,7 +385,7 @@ async function applyMaterialStock(
         userId,
         warehouseId,
         productId: item.product_id,
-        productUnitId: item.product_unit_id,
+        productUnitId: stockQty.productUnitId,
         delta: sign * quantity,
       },
     );
@@ -230,7 +404,7 @@ async function applyMaterialStock(
           transaction_type: sign < 0
             ? 'production_in'
             : 'production_in_revert',
-          quantity: sign * quantity,
+          quantity: sign * enteredQuantity,
           unit_cost: Number(item.unit_price || 0),
           total_cost: sign * Number(item.subtotal || 0),
           currency: item.currency || defaultCurrency || null,

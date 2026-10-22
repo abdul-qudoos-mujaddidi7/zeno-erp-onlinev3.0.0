@@ -29,6 +29,9 @@
 
   let productions = [];
   let currencies = [];
+
+  /* Production edit/delete actions are hidden for now. */
+  const showProductionEditAction = false;
   let accounts = [];
   let warehouses = [];
   let loading = true;
@@ -461,7 +464,7 @@
                   tone: 'view',
                   onClick: () => push(`/dashboard/productions/${s.id}`),
                 },
-                ...(s.production_status === 'draft'
+                ...(showProductionEditAction && s.production_status === 'draft'
                   ? [
                       {
                         icon: 'bi-pencil',

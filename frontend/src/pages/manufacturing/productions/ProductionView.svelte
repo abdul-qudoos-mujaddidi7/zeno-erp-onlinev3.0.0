@@ -33,6 +33,12 @@
   let units = [];
   let showDelete = false;
   let showEdit = false;
+
+  /*
+   * Production edit/delete actions are hidden for now. Flip this flag back
+   * to true to bring the header buttons and their modals back.
+   */
+  const showProductionActions = false;
   let calculatedItems = [];
   $: if (currencies.length && products.length) {
     calculateItems();
@@ -145,18 +151,20 @@
             <button type="button" class="pd-btn pd-btn--outline" on:click={() => (showA4Receipt = true)}>
               <i class="bi bi-printer"></i>{t('Print')} A4
             </button>
-            {#if production.production_status === 'confirmed'}
-              <button type="button" class="pd-btn pd-btn--secondary" on:click={() => (showEdit = true)}>
-                <i class="bi bi-pencil"></i>{t('Edit')}
-              </button>
-            {:else}
-              <button type="button" class="pd-btn pd-btn--secondary" on:click={() => push(`/dashboard/production-form/${productionId}`)}>
-                <i class="bi bi-pencil"></i>{t('Edit')}
+            {#if showProductionActions}
+              {#if production.production_status === 'confirmed'}
+                <button type="button" class="pd-btn pd-btn--secondary" on:click={() => (showEdit = true)}>
+                  <i class="bi bi-pencil"></i>{t('Edit')}
+                </button>
+              {:else}
+                <button type="button" class="pd-btn pd-btn--secondary" on:click={() => push(`/dashboard/production-form/${productionId}`)}>
+                  <i class="bi bi-pencil"></i>{t('Edit')}
+                </button>
+              {/if}
+              <button type="button" class="pd-btn pd-btn--danger-outline" on:click={() => (showDelete = true)}>
+                <i class="bi bi-trash"></i>{t('Delete')}
               </button>
             {/if}
-            <button type="button" class="pd-btn pd-btn--danger-outline" on:click={() => (showDelete = true)}>
-              <i class="bi bi-trash"></i>{t('Delete')}
-            </button>
           </div>
         </div>
         <dl class="pd-header-meta">

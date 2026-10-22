@@ -279,6 +279,47 @@
 
   $: total_amount = items_total_amount + operations_total_amount;
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatQuantity(value) {
+    return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 3 });
+  }
+
+  /*
+   * The backend refuses to confirm a production whose raw materials are not
+   * in the selected warehouse, and returns every short line so the user can
+   * see exactly what to buy or transfer instead of a generic failure.
+   */
+  function showMaterialShortage(shortages) {
+    Swal.fire({
+      icon: 'error',
+      title: t('Insufficient Raw Material Stock'),
+      html: `
+        <p class="mb-2">${escapeHtml(t('Not enough raw material stock in the selected warehouse for this production.'))}</p>
+        <ul style="text-align: start; margin: 0; padding-inline-start: 1.25rem;">
+          ${shortages
+            .map(
+              (shortage) => `<li>
+                <strong>${escapeHtml(shortage.product_name)}</strong><br />
+                ${escapeHtml(t('Required'))}: ${escapeHtml(formatQuantity(shortage.required))}
+                &nbsp;|&nbsp;
+                ${escapeHtml(t('Available'))}: ${escapeHtml(formatQuantity(shortage.available))}
+              </li>`,
+            )
+            .join('')}
+        </ul>
+      `,
+      confirmButtonText: t('OK'),
+    });
+  }
+
   async function saveProduction(confirm = false) {
     if (!form.warehouse_id || !form.bom_id || !form.product_id || items.length === 0) {
       toast.error(t('Validation Error'), t('Warehouse, BOM, Product, and at least one Item are required.'));
@@ -354,12 +395,22 @@
       push('/dashboard/productions/' + savedId);
     } catch (err) {
       console.error(err);
-      Swal.fire({
-        icon: 'error',
-        title: t('Error'),
-        text: t('Failed to save production. Please try again.'),
-        confirmButtonText: t('OK'),
-      });
+
+      const shortages =
+        err?.code === 'INSUFFICIENT_MATERIAL_STOCK'
+          ? err.errors?.shortages || []
+          : [];
+
+      if (shortages.length) {
+        showMaterialShortage(shortages);
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: t('Error'),
+          text: t('Failed to save production. Please try again.'),
+          confirmButtonText: t('OK'),
+        });
+      }
     }
 
     loading = false;
