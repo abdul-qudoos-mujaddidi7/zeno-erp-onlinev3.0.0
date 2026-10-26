@@ -745,13 +745,13 @@ import { currencyApi } from '../api/currencyApi.js';
                       <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
                     {/if}
                   </th>
-                  <th class="cursor-pointer" on:click={() => setSort('total_amount')}>
+                  <th class="col-end cursor-pointer" on:click={() => setSort('total_amount')}>
                     {t('Total')}
                     {#if sortColumn === 'total_amount'}
                       <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
                   {/if}
                 </th>
-                  <th>
+                  <th class="col-end">
                     {t('Remaining')}
                   </th>
                   <th class="cursor-pointer" on:click={() => setSort('warehouse_id')}>
@@ -761,7 +761,7 @@ import { currencyApi } from '../api/currencyApi.js';
               {/if}
                   </th>
                   <th>{t('Status')}</th>
-                  <th>{t('Actions')}</th>
+                  <th class="col-end">{t('Actions')}</th>
             </tr>
               </svelte:fragment>
 
@@ -797,13 +797,13 @@ import { currencyApi } from '../api/currencyApi.js';
                       {getAccountName(accounts.find((a) => a.id == p.account_id))}
                     </button>
                   </td>
-                  <td>
+                  <td class="col-end">
                     <span class="amount-pill">
                       <span dir="ltr">{Number(p.total_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
                       {t(p.currency)}
                     </span>
                   </td>
-                  <td>
+                  <td class="col-end">
                     <div class="remaining-cell">
                       <button
                         type="button"
@@ -884,54 +884,6 @@ import { currencyApi } from '../api/currencyApi.js';
   </IndexPageLayout>
 {/if}
 <style>
-  :global(.purchases-index-content .data-table) {
-    width: 100%;
-    margin: 0;
-    border-collapse: separate;
-    border-spacing: 0;
-    color: #46536a;
-    font-size: var(--table-font-size, 0.78rem);
-  }
-
-  :global(.purchases-index-content .data-table thead th) {
-    height: 3rem;
-    padding: 0.625rem 0.875rem;
-    border: 0;
-    border-bottom: 1px solid #dfe5ed;
-    background: var(--erp-surface, #ffffff);
-    color: #66758a;
-    font-size: var(--table-header-font-size, 0.78125rem);
-    font-weight: 800;
-    line-height: 1.25;
-    text-align: center;
-    vertical-align: middle;
-    white-space: nowrap;
-  }
-
-  :global(.purchases-index-content .data-table tbody tr) {
-    height: auto;
-    background: var(--data-table-row-bg, var(--erp-surface, #ffffff));
-  }
-
-  :global(.purchases-index-content .data-table tbody td) {
-    height: auto;
-    padding: 0.4rem 0.875rem;
-    border: 0;
-    border-bottom: 1px solid #e0e0e0;
-    background: transparent;
-    color: #46536a;
-    font-size: var(--table-font-size, 0.75rem);
-    line-height: 1.5;
-    text-align: center;
-    vertical-align: middle;
-  }
-
-  :global(.purchases-index-content .data-table tbody tr),
-  :global(.purchases-index-content .data-table tbody tr:hover),
-  :global(.purchases-index-content .data-table tbody td) {
-    background: var(--data-table-row-bg, var(--erp-surface, #ffffff));
-  }
-
   .cursor-pointer {
     cursor: pointer;
   }
@@ -1401,41 +1353,12 @@ import { currencyApi } from '../api/currencyApi.js';
     padding: 0.15rem 0.25rem 0;
   }
 
-  .purchases-page :global(.data-table-wrap) {
-    padding: 0 0.35rem;
-  }
-
-  .purchases-page :global(.data-table thead th) {
-    padding: var(--table-cell-padding-y, 0.8125rem) var(--table-cell-padding-x, 0.875rem);
-    border-bottom: 1px solid #dfe5ed;
-    background: #fbfcfe;
-    color: #64748b;
-    font-size: var(--table-header-font-size, 0.72rem);
-    font-weight: 900;
-    letter-spacing: 0;
-  }
-
-  .purchases-page :global(.data-table tbody td) {
-    padding: var(--table-cell-padding-y, 0.8125rem) var(--table-cell-padding-x, 0.875rem);
-    border-bottom: 1px solid #edf1f6;
-    font-size: var(--table-font-size, 0.78rem);
-    color: #46536a;
-    vertical-align: middle;
-  }
-
-  .purchases-page :global(.data-table tbody tr:nth-child(even)) {
-    background: #fbfdff;
-  }
-
-  .purchases-page :global(.data-table tbody tr:hover) {
-    background: #f0f7ff !important;
-  }
-
-  .purchases-page :global(.data-table tbody tr.row-overdue) {
+  /* Overdue / due-soon tint over the shared table row background. */
+  :global(.data-table tbody tr.row-overdue) {
     background: #fef2f2 !important;
   }
 
-  .purchases-page :global(.data-table tbody tr.row-due-soon) {
+  :global(.data-table tbody tr.row-due-soon) {
     background: #fffbeb !important;
   }
 
@@ -1584,7 +1507,7 @@ import { currencyApi } from '../api/currencyApi.js';
   .purchases-page :global(.pagination-shell) {
     padding: 0.65rem 0.85rem;
     border-top: 1px solid #eef2f7;
-    background: #ffffff;
+    background: #F8FAFC;
   }
 
   /* Shared index-toolbar adaptation for the purchase-specific filters. */
@@ -1748,33 +1671,6 @@ import { currencyApi } from '../api/currencyApi.js';
       max-height: min(70vh, 32rem);
       overflow-y: auto;
     }
-  }
-
-  :global(html.dark .purchases-index-content .data-table) {
-    --data-table-row-bg: var(--erp-surface, #111827);
-    --data-table-alt-row-bg: var(--erp-surface-soft, #172033);
-    color: var(--erp-text);
-  }
-
-  :global(html.dark .purchases-index-content .data-table tbody) {
-    background: var(--data-table-row-bg) !important;
-  }
-
-  :global(html.dark .purchases-index-content .data-table thead th) {
-    border-bottom-color: var(--erp-border);
-    background: var(--erp-surface-soft) !important;
-    color: var(--erp-text-soft);
-  }
-
-  :global(html.dark .purchases-index-content .data-table tbody tr),
-  :global(html.dark .purchases-index-content .data-table tbody tr:hover),
-  :global(html.dark .purchases-index-content .data-table tbody td) {
-    background: var(--data-table-row-bg) !important;
-    color: var(--erp-text);
-  }
-
-  :global(html.dark .purchases-index-content .data-table tbody td) {
-    border-bottom-color: var(--erp-border);
   }
 
   :global(html.dark .purchases-page .page-header),

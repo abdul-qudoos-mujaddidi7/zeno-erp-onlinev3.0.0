@@ -1,13 +1,20 @@
 <script>
   import { onMount } from 'svelte';
-import { productUnitApi } from '../../api/productUnitApi.js';
-  ;
+  import { productUnitApi } from '../../api/productUnitApi.js';
   import { warehouseApi } from '../../api/warehouseApi.js';
   import { productApi } from '../../api/productApi.js';
   import { stockTransactionApi } from '../../api/stockTransactionApi.js';
   import StockTransactionModal from './StockTransactionModal.svelte';
   import { t, lang, translate_org_type } from '../../i18n/i18n';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../../lib/pagination.js';
+  import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
+  import FilterToolbar from '../../components/common/FilterToolbar.svelte';
+  import ActionButton from '../../components/common/ActionButton.svelte';
+  import DataTable from '../../components/common/DataTable.svelte';
+  import StatusBadge from '../../components/common/StatusBadge.svelte';
+  import TableActions from '../../components/common/TableActions.svelte';
+  import PaginationBar from '../../components/common/PaginationBar.svelte';
+  import EmptyState from '../../components/common/EmptyState.svelte';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   let transactions = [];
@@ -237,178 +244,242 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   function isSorted(column) {
     return sortColumn === column;
   }
+
+  /*
+   * Toolbar model. The filters stay controlled by the page's own state so the
+   * server keeps owning search, filter, sort and paging.
+   */
+  $: transactionFilters = [
+    {
+      key: 'type',
+      label: t('stock_transactions.type'),
+      icon: 'bi-tag',
+      value: selectedType,
+      options: [
+        { value: '', label: t('stock_transactions.all_types') },
+        ...transactionTypes.map((type) => ({ value: type, label: t(type) })),
+      ],
+    },
+    {
+      key: 'status',
+      label: t('stock_transactions.status'),
+      icon: 'bi-activity',
+      value: selectedStatus,
+      options: [
+        { value: '', label: t('All') },
+        { value: '1', label: t('Active') },
+        { value: '0', label: t('Deleted') },
+      ],
+    },
+    {
+      key: 'warehouse',
+      label: t('stock_transactions.warehouse'),
+      icon: 'bi-building',
+      value: selectedWarehouse,
+      options: [
+        { value: '', label: t('stock_transactions.all_warehouses') },
+        ...warehouses.map((w) => ({ value: String(w.id), label: w.name })),
+      ],
+    },
+    {
+      key: 'product',
+      label: t('stock_transactions.product'),
+      icon: 'bi-box-seam',
+      value: selectedProduct,
+      options: [
+        { value: '', label: t('stock_transactions.all_products') },
+        ...products.map((p) => ({ value: String(p.id), label: p.name })),
+      ],
+    },
+  ];
+
+  function handleFilterChange(event) {
+    const { key, value } = event.detail;
+    if (key === 'type') selectedType = value;
+    if (key === 'status') selectedStatus = value;
+    if (key === 'warehouse') selectedWarehouse = value;
+    if (key === 'product') selectedProduct = value;
+    resetToFirstPage();
+  }
+
+  function resetFilters() {
+    selectedType = '';
+    selectedStatus = '';
+    selectedWarehouse = '';
+    selectedProduct = '';
+    searchQuery = '';
+    searchTerm = '';
+    resetToFirstPage();
+  }
 </script>
-<div class="card mb-4">
-  <div class="card-header d-flex align-items-center justify-content-between">
-    <div>
-      <button class="btn btn-primary" on:click={() => openModal()}>
-        <i class="bi bi-plus-lg me-1"></i>{t('stock_transactions.add')}
-      </button>
-    </div>
-    <div class="d-flex gap-2">
-      <input class="form-control" placeholder={t('stock_transactions.search')} bind:value={searchQuery} on:input={handleSearchInput} />
-      <select class="form-select" bind:value={selectedType} on:change={resetToFirstPage}>
-        <option value="">{t('stock_transactions.all_types')}</option>
-        {#each transactionTypes as type}
-          <option value={type}>{type}</option>
-        {/each}
-      </select>
-      <select class="form-select" bind:value={selectedStatus} on:change={resetToFirstPage}>
-        <option value="">{t('All')}</option>
-        <option value="1">{t('Active')}</option>
-        <option value="0">{t('Deleted')}</option>
-      </select>
-      <select class="form-select" bind:value={selectedWarehouse} on:change={resetToFirstPage}>
-        <option value="">{t('stock_transactions.all_warehouses')}</option>
-        {#each warehouses as w}
-          <option value={w.id}>{w.name}</option>
-        {/each}
-      </select>
-      <select class="form-select" bind:value={selectedProduct} on:change={resetToFirstPage}>
-        <option value="">{t('stock_transactions.all_products')}</option>
-        {#each products as p}
-          <option value={p.id}>{p.name}</option>
-        {/each}
-      </select>
-    </div>
-  </div>
+
+<IndexPageLayout
+  dir={t('dir')}
+  ariaLabel={t('Stock Transactions')}
+  toolbarWidth="25rem"
+  showFooter={!loading && totalEntries > 0}
+  dense={true}
+  contained={true}
+  contentClass="stock-transactions-index-content"
+  tablePadding={true}>
+  <svelte:fragment slot="actions">
+    <ActionButton
+      icon="bi-plus-lg"
+      label={`+ ${t('stock_transactions.add')}`}
+      on:click={() => openModal()} />
+  </svelte:fragment>
+
+  <svelte:fragment slot="toolbar">
+    <FilterToolbar
+      searchValue={searchQuery}
+      searchPlaceholder={t('stock_transactions.search')}
+      filters={transactionFilters}
+      filterLabel={t('Filter')}
+      resetLabel={t('Clear Filters')}
+      showReset={true}
+      on:searchChange={(event) => {
+        searchQuery = event.detail;
+        handleSearchInput();
+      }}
+      on:filterChange={handleFilterChange}
+      on:reset={resetFilters} />
+  </svelte:fragment>
+
   {#if loading}
-    <div class="p-4 text-center">{t('stock_transactions.loading')}</div>
+    <div class="index-table-state">
+      <EmptyState loading message={t('stock_transactions.loading')} />
+    </div>
+  {:else if transactions.length === 0}
+    <div class="index-table-state">
+      <EmptyState icon="bi-box-arrow-in-down" message={t('No transactions found.')} />
+    </div>
   {:else}
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-hover table-sm align-middle">
-          <thead class="table-light">
-            <tr>
-              <th class="ps-4 cursor-pointer" on:click={() => setSort('id')}>
-                {t('ID')}
-                {#if isSorted('id')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}
-              </th>
-              <th class="cursor-pointer" on:click={() => setSort('date')}>
-                {t('stock_transactions.date')}
-                {#if isSorted('date')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}
-              </th>
-              <th class="cursor-pointer" on:click={() => setSort('transaction_type')}>
-                {t('stock_transactions.type')}
-                {#if isSorted('transaction_type')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}
-              </th>
-              <th class="cursor-pointer" on:click={() => setSort('reference_id')}>
-                {t('stock_transactions.reference_id')}
-                {#if isSorted('reference_id')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}
-              </th>
-              <th>{t('stock_transactions.warehouse')}</th>
-              <th>{t('stock_transactions.product')}</th>
-              <th class="cursor-pointer" on:click={() => setSort('quantity')}>
-                {t('In')}
-                {#if isSorted('quantity')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}
-              </th>
-              <th class="cursor-pointer" on:click={() => setSort('quantity')}>
-                {t('Out')}
-                {#if isSorted('quantity')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}
-              </th>
-              <th class="cursor-pointer" on:click={() => setSort('unit_cost')}>
-                {t('stock_transactions.unit_cost')}
-                {#if isSorted('unit_cost')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}
-              </th>
-              <th class="cursor-pointer" on:click={() => setSort('total_cost')}>
-                {t('stock_transactions.total_cost')}
-                {#if isSorted('total_cost')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}
-              </th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each transactions as tx (tx.id)}
-              <tr>
-                <td>{tx.id}</td>
-                <td>{tx.date}</td>
-                <td>{t(tx.transaction_type)}</td>
-                <td>{tx.reference_id}</td>
-                <td>{warehouses.find((w) => w.id == tx.warehouse_id)?.name}</td>
-                <td>{products.find((p) => p.id == tx.product_id)?.name}</td>
-                <td>
-                  {tx.transaction_type === 'purchase' ||
-                  tx.transaction_type === 'sale_return' ||
-                  tx.transaction_type === 'adjustment_in' ||
-                  tx.transaction_type === 'transfer_in' ||
-                  tx.transaction_type === 'production_out'
-                    ? tx.quantity
-                    : ''}
-                  {units.find((u) => u.id == tx.product_unit_id)?.name}
-                </td>
-                <td>
-                  {tx.transaction_type === 'sale' ||
-                  tx.transaction_type === 'purchase_return' ||
-                  tx.transaction_type === 'adjustment_out' ||
-                  tx.transaction_type === 'transfer_out' ||
-                  tx.transaction_type === 'waste' ||
-                  tx.transaction_type === 'production_in'
-                    ? tx.quantity
-                    : ''}
-                  {units.find((u) => u.id == tx.product_unit_id)?.name}
-                </td>
-                <td>{Number(tx.unit_cost).toLocaleString(undefined, { maximumFractionDigits: 3 })} {t(tx.currency)}</td>
-                <td>{Number(tx.total_cost).toLocaleString(undefined, { maximumFractionDigits: 3 })} {t(tx.currency)}</td>
-                <td>
-                  <button class="btn btn-sm btn-outline-primary me-1" aria-label="Edit" title="Edit" on:click={() => openModal(tx)}>
-                    <i class="bi bi-pencil"></i>
-                  </button>
-                  <button class="btn btn-sm btn-outline-danger" aria-label="Delete" title="Delete" on:click={() => removeTransaction(tx)}>
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  {/if}
-  {#if !loading && totalEntries > 0}
-    <div class="card-footer bg-body-tertiary d-flex justify-content-between align-items-center pt-3">
-      <div class="text-muted small">
-        {t('Showing')}
-        {(currentPage - 1) * itemsPerPage + 1}
-        {t('to')}
-        {Math.min(currentPage * itemsPerPage, totalEntries)}
-        {t('of')}
-        {totalEntries}
-        {t('entries')}
-      </div>
-      <nav>
-        <ul class="pagination pagination-circle pagination-sm mb-0">
-          <li class="page-item" class:disabled={currentPage === 1}>
-            <button class="page-link" on:click={() => (currentPage = 1)}>
-              <i class="bi bi-chevron-double-{t('dir') === 'rtl' ? 'right' : 'left'}"></i>
-            </button>
-          </li>
-          <li class="page-item" class:disabled={currentPage === 1}>
-            <button class="page-link" on:click={() => (currentPage -= 1)}>
-              <i class="bi bi-chevron-{t('dir') === 'rtl' ? 'right' : 'left'}"></i>
-            </button>
-          </li>
-          {#each getPageNumbers(currentPage, totalPages) as pageNum, idx (pageNum === '...' ? `dot-${idx}` : pageNum)}
-            {#if pageNum === '...'}
-              <li class="page-item disabled">
-                <span class="page-link">...</span>
-              </li>
-            {:else}
-              <li class="page-item" class:active={currentPage === pageNum}>
-                <button class="page-link" on:click={() => (currentPage = pageNum)}>{pageNum}</button>
-              </li>
+    <DataTable ariaLabel={t('Stock Transactions')} minWidth="980px" striped={false} hover={true}>
+      <svelte:fragment slot="head">
+        <tr>
+          <th class="cursor-pointer" on:click={() => setSort('id')}>
+            {t('ID')}
+            {#if isSorted('id')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('date')}>
+            {t('stock_transactions.date')}
+            {#if isSorted('date')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('transaction_type')}>
+            {t('stock_transactions.type')}
+            {#if isSorted('transaction_type')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('reference_id')}>
+            {t('stock_transactions.reference_id')}
+            {#if isSorted('reference_id')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th>{t('stock_transactions.warehouse')}</th>
+          <th>{t('stock_transactions.product')}</th>
+          <th class="col-end cursor-pointer" on:click={() => setSort('quantity')}>
+            {t('In')}
+            {#if isSorted('quantity')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th class="col-end cursor-pointer" on:click={() => setSort('quantity')}>
+            {t('Out')}
+            {#if isSorted('quantity')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th class="col-end cursor-pointer" on:click={() => setSort('unit_cost')}>
+            {t('stock_transactions.unit_cost')}
+            {#if isSorted('unit_cost')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th class="col-end cursor-pointer" on:click={() => setSort('total_cost')}>
+            {t('stock_transactions.total_cost')}
+            {#if isSorted('total_cost')}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th class="col-end">{t('Actions')}</th>
+        </tr>
+      </svelte:fragment>
+
+      {#each transactions as tx (tx.id)}
+        <tr>
+          <td class="cell-muted">{tx.id}</td>
+          <td><span dir="ltr">{tx.date}</span></td>
+          <td>
+            <StatusBadge tone="neutral">{t(tx.transaction_type)}</StatusBadge>
+          </td>
+          <td>{tx.reference_id}</td>
+          <td>{warehouses.find((w) => w.id == tx.warehouse_id)?.name}</td>
+          <td>{products.find((p) => p.id == tx.product_id)?.name}</td>
+          <td class="col-end">
+            {#if tx.transaction_type === 'purchase' ||
+              tx.transaction_type === 'sale_return' ||
+              tx.transaction_type === 'adjustment_in' ||
+              tx.transaction_type === 'transfer_in' ||
+              tx.transaction_type === 'production_out'}
+              <span dir="ltr">{tx.quantity}</span>
             {/if}
-          {/each}
-          <li class="page-item" class:disabled={currentPage === totalPages || totalPages === 0}>
-            <button class="page-link" on:click={() => (currentPage += 1)}
-              ><i class="bi bi-chevron-{t('dir') === 'rtl' ? 'left' : 'right'}"></i></button>
-          </li>
-          <li class="page-item" class:disabled={currentPage === totalPages || totalPages === 0}>
-            <button class="page-link" on:click={() => (currentPage = totalPages)}
-              ><i class="bi bi-chevron-double-{t('dir') === 'rtl' ? 'left' : 'right'}"></i></button>
-          </li>
-        </ul>
-      </nav>
-    </div>
+            {units.find((u) => u.id == tx.product_unit_id)?.name}
+          </td>
+          <td class="col-end">
+            {#if tx.transaction_type === 'sale' ||
+              tx.transaction_type === 'purchase_return' ||
+              tx.transaction_type === 'adjustment_out' ||
+              tx.transaction_type === 'transfer_out' ||
+              tx.transaction_type === 'waste' ||
+              tx.transaction_type === 'production_in'}
+              <span dir="ltr">{tx.quantity}</span>
+            {/if}
+            {units.find((u) => u.id == tx.product_unit_id)?.name}
+          </td>
+          <td class="col-end">
+            <span dir="ltr">
+              {Number(tx.unit_cost).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+            </span>
+            {t(tx.currency)}
+          </td>
+          <td class="col-end">
+            <span dir="ltr">
+              {Number(tx.total_cost).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+            </span>
+            {t(tx.currency)}
+          </td>
+          <td class="col-end">
+            <TableActions
+              actions={[
+                {
+                  icon: 'bi-pencil',
+                  label: t('Edit'),
+                  tone: 'edit',
+                  onClick: () => openModal(tx),
+                },
+                {
+                  icon: 'bi-trash',
+                  label: t('Delete'),
+                  tone: 'delete',
+                  onClick: () => removeTransaction(tx),
+                },
+              ]} />
+          </td>
+        </tr>
+      {/each}
+    </DataTable>
   {/if}
-</div>
+
+  <svelte:fragment slot="footer">
+    <PaginationBar
+      bind:currentPage
+      {totalPages}
+      {itemsPerPage}
+      totalItems={totalEntries}
+      ariaLabel={t('stock_transactions.title')}
+      rowLabel={t('rows')}
+      on:perPageChange={(event) => {
+        itemsPerPage = Number(event.detail);
+        currentPage = 1;
+      }}
+      {getPageNumbers} />
+  </svelte:fragment>
+</IndexPageLayout>
+
 <StockTransactionModal bind:this={modalRef} {warehouses} {products} {productUnits} on:saved={loadTransactions} />
+
+<style>
+  .cursor-pointer {
+    cursor: pointer;
+  }
+</style>

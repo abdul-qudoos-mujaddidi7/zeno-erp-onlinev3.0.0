@@ -13,6 +13,8 @@
   import ActionButton from '../components/common/ActionButton.svelte';
   import PaginationBar from '../components/common/PaginationBar.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
+  import DataTable from '../components/common/DataTable.svelte';
+  import StatusBadge from '../components/common/StatusBadge.svelte';
   import TableActions from '../components/common/TableActions.svelte';
   import StockTransferDeleteModal from './stocktransfers/StockTransferDeleteModal.svelte';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../lib/pagination.js';
@@ -281,79 +283,74 @@
       <EmptyState icon="bi-arrow-left-right" message={t('No stocktransfers found.')} />
     </div>
   {:else}
-      <div class="table-responsive">
-        <table class="table table-hover table-sm align-middle">
-          <thead class="table-light">
-            <tr>
-              <th class="ps-4 cursor-pointer" on:click={() => setSort('id')}>
-                {t('ID')}
-                {#if sortColumn === 'id'}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>{/if}
-              </th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('transfer_number')}
-                >{t('Transfer #')}{#if sortColumn === 'transfer_number'}<i
-                    class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i
-                  >{/if}</th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('transfer_date')}
-                >{t('Date')}{#if sortColumn === 'transfer_date'}<i
-                    class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i
-                  >{/if}</th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('total_amount')}
-                >{t('Total')}{#if sortColumn === 'total_amount'}<i
-                    class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i
-                  >{/if}</th>
-              <th class="text-center">{t('Status')}</th>
-              <th class="text-center">{t('Created Date')}</th>
-              <th class="text-center">{t('Actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each paginatedStockTransfers as s}
-              <tr>
-                <td class="ps-4 text-muted small">{shortID(s.id)}</td>
-                <td class="text-center">{s.transfer_number}</td>
-                <td class="text-center">{@html showDate(s.transfer_date)}</td>
-                <td class="text-center"
-                  >{Number(s.total_amount).toLocaleString(undefined, {
-                    maximumFractionDigits: 3,
-                  })}{' '}
-                  {t(s.currency)}</td>
-                <td class="text-center"
-                  ><span class="badge badge-{s.transfer_status === 'confirmed' ? 'success' : 'warning'}"
-                    >{t(s.transfer_status)}</span
-                  ></td>
+    <DataTable ariaLabel={t('Stock Transfers')} minWidth="820px" striped={false} hover={true}>
+      <svelte:fragment slot="head">
+        <tr>
+          <th class="cursor-pointer" on:click={() => setSort('id')}>
+            {t('ID')}
+            {#if sortColumn === 'id'}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('transfer_number')}>
+            {t('Transfer #')}
+            {#if sortColumn === 'transfer_number'}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th class="cursor-pointer" on:click={() => setSort('transfer_date')}>
+            {t('Date')}
+            {#if sortColumn === 'transfer_date'}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th class="col-end cursor-pointer" on:click={() => setSort('total_amount')}>
+            {t('Total')}
+            {#if sortColumn === 'total_amount'}<i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>{/if}
+          </th>
+          <th>{t('Status')}</th>
+          <th>{t('Created Date')}</th>
+          <th class="col-end">{t('Actions')}</th>
+        </tr>
+      </svelte:fragment>
 
-                <td class="text-center"><span dir="ltr">{new Date(s.created_at).toLocaleString()}</span></td>
-                <td class="text-center">
-                  <TableActions
-                    actions={[
-                      {
-                        icon: 'bi-eye',
-                        label: t('View'),
-                        tone: 'view',
-                        onClick: () => push(`/dashboard/stock-transfers/${s.id}`),
-                      },
-                      {
-                        icon: 'bi-pencil',
-                        label: t('Edit'),
-                        tone: 'edit',
-                        onClick: () => push(`/dashboard/stock-transfer-form/${s.id}`),
-                      },
-                      {
-                        icon: 'bi-trash',
-                        label: t('Delete'),
-                        tone: 'delete',
-                        onClick: () => (transferToDelete = s),
-                      },
-                    ]} />
-                </td>
-              </tr>
-            {/each}
-            {#if filteredStockTransfers.length === 0}
-              <tr><td colspan="12" class="text-center text-muted p-4">{t('No stocktransfers found.')}</td></tr>
-            {/if}
-          </tbody>
-        </table>
-      </div>
+      {#each paginatedStockTransfers as s (s.id)}
+        <tr>
+          <td class="cell-muted">{shortID(s.id)}</td>
+          <td dir="ltr">{s.transfer_number}</td>
+          <td>{@html showDate(s.transfer_date)}</td>
+          <td class="col-end">
+            <span dir="ltr">
+              {Number(s.total_amount).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+            </span>
+            {t(s.currency)}
+          </td>
+          <td>
+            <StatusBadge tone={s.transfer_status === 'confirmed' ? 'positive' : 'warning'}>
+              {t(s.transfer_status)}
+            </StatusBadge>
+          </td>
+          <td><span dir="ltr">{new Date(s.created_at).toLocaleString()}</span></td>
+          <td class="col-end">
+            <TableActions
+              actions={[
+                {
+                  icon: 'bi-eye',
+                  label: t('View'),
+                  tone: 'view',
+                  onClick: () => push(`/dashboard/stock-transfers/${s.id}`),
+                },
+                {
+                  icon: 'bi-pencil',
+                  label: t('Edit'),
+                  tone: 'edit',
+                  onClick: () => push(`/dashboard/stock-transfer-form/${s.id}`),
+                },
+                {
+                  icon: 'bi-trash',
+                  label: t('Delete'),
+                  tone: 'delete',
+                  onClick: () => (transferToDelete = s),
+                },
+              ]} />
+          </td>
+        </tr>
+      {/each}
+    </DataTable>
   {/if}
 
   <svelte:fragment slot="footer">

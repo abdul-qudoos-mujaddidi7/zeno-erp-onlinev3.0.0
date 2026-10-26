@@ -187,7 +187,7 @@ import { settingsApi } from '../../api/settingsApi.js';
         }
 
         body {
-          font-family: Vazirmatn, sans-serif;
+          font-family: 'Inter', 'Vazirmatn', sans-serif;
         }
 
         .receipt {

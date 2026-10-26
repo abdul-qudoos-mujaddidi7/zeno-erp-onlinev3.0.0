@@ -4,6 +4,8 @@
     import { t, lang, translate_org_type } from "../../i18n/i18n";
     import IndexPageLayout from "../../lib/components/index/IndexPageLayout.svelte";
     import ActionButton from "../../components/common/ActionButton.svelte";
+    import DataTable from "../../components/common/DataTable.svelte";
+    import TableActions from "../../components/common/TableActions.svelte";
     import EmptyState from "../../components/common/EmptyState.svelte";
     import { userRoleApi } from "../../api/userRoleApi.js";
     $: _lang = $lang;
@@ -48,44 +50,37 @@
                 <EmptyState icon="bi-person-gear" message={t("No user roles found.")} />
             </div>
         {:else}
-            <div class="table-responsive">
-                <table class="table table-hover mb-0 settings-index-table">
-                    <thead class="table-light">
+            <DataTable ariaLabel={t("User Roles")} minWidth="640px">
+                <svelte:fragment slot="head">
+                    <tr>
+                        <th>{t("ID")}</th>
+                        <th>{t("Name")}</th>
+                        <th>{t("Code")}</th>
+                        <th class="col-end">{t("Actions")}</th>
+                    </tr>
+                </svelte:fragment>
+
+                {#each userRoles as role (role.id)}
+                    {#if role.status !== 0}
                         <tr>
-                            <th>{t("ID")}</th>
-                            <th>{t("Name")}</th>
-                            <th>{t("Code")}</th>
-                            <th>{t("Actions")}</th>
+                            <td class="cell-muted">{role.id}</td>
+                            <td>{t(role.name)}</td>
+                            <td><strong>{role.code}</strong></td>
+                            <td class="col-end">
+                                <TableActions
+                                    actions={[
+                                        {
+                                            icon: 'bi-pencil',
+                                            label: t('Edit'),
+                                            tone: 'edit',
+                                            onClick: () => modalRef?.editUserRole(role),
+                                        },
+                                    ]} />
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        {#each userRoles as role}
-                            {#if role.status !== 0}
-                                <tr>
-                                    <td>{role.id}</td>
-                                    <td>{t(role.name)}</td>
-                                    <td><strong>{role.code}</strong></td>
-                                    <td>
-                                        <button
-                                            class="btn btn-sm btn-outline-secondary me-1"
-                                            on:click={()=>{modalRef?.editUserRole(role)}}
-                                        >
-                                            <i class="bi bi-pencil"></i>
-                                        </button>
-                                        <!-- <button
-                                            class="btn btn-sm btn-outline-danger"
-                                            on:click={() =>
-                                                deleteUserRole(role.id)}
-                                        >
-                                            <i class="bi bi-trash"></i>
-                                        </button> -->
-                                    </td>
-                                </tr>
-                            {/if}
-                        {/each}
-                    </tbody>
-                </table>
-            </div>
+                    {/if}
+                {/each}
+            </DataTable>
         {/if}
 </IndexPageLayout>
 <RoleModal bind:this={modalRef} on:saved={loadUserRoles} />

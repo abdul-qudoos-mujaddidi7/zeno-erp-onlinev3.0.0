@@ -1,5 +1,4 @@
 <script>
-  import { app_version } from '../config.js';
   import { warehouseApi } from '../api/warehouseApi.js';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
@@ -22,6 +21,54 @@
   let mdbRtlCss;
   let shiftPressed = false;
   let ctrlPressed = false;
+  let clockNow = Date.now();
+  let clockTimer;
+
+  $: topbarClockTime = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Kabul',
+  }).format(clockNow);
+  $: topbarClockDate = formatTopbarDate(clockNow, currentLang);
+  $: topbarClockLabel = currentLang === 'en' ? 'Time and date' : currentLang === 'ps' ? 'وخت او نېټه' : 'ساعت و تاریخ';
+
+  function formatTopbarDate(timestamp, language) {
+    const options = {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'Asia/Kabul',
+    };
+
+    if (language === 'en') {
+      return new Intl.DateTimeFormat('en-GB', options).format(timestamp);
+    }
+
+    const parts = new Intl.DateTimeFormat('fa-AF-u-ca-persian-nu-latn', options).formatToParts(timestamp);
+    const part = (type) => parts.find((item) => item.type === type)?.value || '';
+    let weekday = part('weekday');
+    let month = part('month');
+
+    if (language === 'ps') {
+      const weekdays = {
+        Sunday: 'يکشنبه',
+        Monday: 'دوشنبه',
+        Tuesday: 'سې‌شنبه',
+        Wednesday: 'چهارشنبه',
+        Thursday: 'پنجشنبه',
+        Friday: 'جمعه',
+        Saturday: 'شنبه',
+      };
+      const months = ['وری', 'غویی', 'غبرګولی', 'چنګاښ', 'زمری', 'وږی', 'تله', 'لړم', 'لیندۍ', 'مرغومی', 'سلواغه', 'کب'];
+
+      weekday = weekdays[new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'Asia/Kabul' }).format(timestamp)] || weekday;
+      month = months[['حمل', 'ثور', 'جوزا', 'سرطان', 'اسد', 'سنبله', 'میزان', 'عقرب', 'قوس', 'جدی', 'دلو', 'حوت'].indexOf(month)] || month;
+    }
+
+    return `${weekday}، ${part('day')} ${month} ${part('year')}`;
+  }
 
   $: enable_generics = $settings_all.find((s) => s.key === 'enable_generics')?.value == 1;
   $: enable_brands = $settings_all.find((s) => s.key === 'enable_brands')?.value == 1;
@@ -43,6 +90,7 @@
   onMount(async () => {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    clockTimer = window.setInterval(() => (clockNow = Date.now()), 20000);
     mdbCss = document.getElementById('mdb-css');
     mdbRtlCss = document.getElementById('mdb-rtl-css');
 
@@ -400,23 +448,15 @@
           `;
     }
     if (loc.startsWith('/dashboard/journals/') && loc.split('/').length === 4) {
-      // add back button and icon for account view
       return `
-          <ul class="navbar-nav me-auto">
-            <li class="nav-item">
-              <i class="bi bi-journal-text"></i>
-              </li>
-            <li class="nav-item">
-              <a class="nav-link ${loc.startsWith('/dashboard/journals/list') ? 'active' : ''} py-0" href="/#/dashboard/journals/list"><small>${t('Journals')}</small></a>
-            </li>
-            <li class="nav-item d-flex align-items-center">
-              <div class="nav-divider"></div>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link ${loc.startsWith('/dashboard/journals/report') ? 'active' : ''} py-0" href="/#/dashboard/journals/report"><small>${t('Report')}</small></a>
-            </li>
-          </ul>
-          `;
+          <nav class="journal-section-tabs" aria-label="${t('Journals')}">
+            <a class="${loc.startsWith('/dashboard/journals/list') ? 'active' : ''}" href="/#/dashboard/journals/list" ${loc.startsWith('/dashboard/journals/list') ? 'aria-current="page"' : ''}>
+              <span class="ms" aria-hidden="true">menu_book</span><span>${t('Journals')}</span>
+            </a>
+            <a class="${loc.startsWith('/dashboard/journals/report') ? 'active' : ''}" href="/#/dashboard/journals/report" ${loc.startsWith('/dashboard/journals/report') ? 'aria-current="page"' : ''}>
+              <span class="ms" aria-hidden="true">summarize</span><span>${t('Report')}</span>
+            </a>
+          </nav>`;
     }
 
     if (loc.startsWith('/dashboard/appointments/') && loc.split('/').length === 4) {
@@ -674,18 +714,9 @@
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('keyup', handleKeyUp);
+    window.clearInterval(clockTimer);
     unsubscribeLang();
   });
-  function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch((err) => {
-        console.error(`Error attempting fullscreen: ${err.message}`);
-      });
-    } else {
-      document.exitFullscreen();
-    }
-  }
-
   async function changeLanguage(code) {
     setLanguage(code);
     const shouldRtl = isRTL(code);
@@ -704,47 +735,44 @@
 </script>
 
 <nav class="navbar navbar-expand navbar-light erp-topbar" class:dashboard-topbar={loc === '/dashboard'}>
-  <div class="container-fluid gap-2">
-    <span class="d-lg-none mobile-actions">
-      <button
-        class="btn btn-light erp-icon-btn"
-        on:click={() => dispatch('toggleSidebar')}
-        aria-label="Toggle sidebar"
-        title="Toggle sidebar">
-        <i class="bi bi-list"></i>
-      </button>
-      <a
-        use:link
-        href="/pos"
-        class="btn btn-outline-primary px-2 {_translate_org_type == 'exchange' ? 'd-none' : ''}"
-        style="padding-left:10px !important;padding-right:10px !important;"
-        class:active={$location === '/pos'}>
-        POS
-      </a>
-    </span>
+  <div class="container-fluid">
+    <div class="topbar-left">
+      <span class="d-lg-none mobile-actions">
+        <button
+          class="btn erp-icon-btn"
+          on:click={() => dispatch('toggleSidebar')}
+          aria-label="Toggle sidebar"
+          title="Toggle sidebar">
+          <span class="ms" aria-hidden="true">menu</span>
+        </button>
+        <a
+          use:link
+          href="/pos"
+          class="btn btn-outline-primary px-2 {_translate_org_type == 'exchange' ? 'd-none' : ''}"
+          style="padding-left:10px !important;padding-right:10px !important;"
+          class:active={$location === '/pos'}>
+          POS
+        </a>
+      </span>
 
-    <div class="topbar-page-title d-none d-md-block" id="">
-      {@html pageKey}
+      <div class="topbar-clock" dir={rtl ? 'rtl' : 'ltr'} role="timer" aria-label={topbarClockLabel} title={`${topbarClockDate} · ${topbarClockTime}`}>
+        <span class="ms topbar-clock__icon" aria-hidden="true">schedule</span>
+        <b dir="ltr" class="topbar-clock__time">{topbarClockTime}</b>
+        <i aria-hidden="true"></i>
+        <span class="topbar-clock__date" dir={rtl ? 'rtl' : 'ltr'}>{topbarClockDate}</span>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="form-check form-switch d-none">
+          <input id="rtlToggle" type="checkbox" bind:checked={rtl} on:change={toggleRTL} aria-label="Toggle RTL" />
+          <label class="form-check-label" for="rtlToggle">RTL</label>
+        </div>
+        <InstallPwaButton />
+      </div>
     </div>
-    <div class="topbar-actions">
-      <div class="form-check form-switch d-none">
-        <input id="rtlToggle" type="checkbox" bind:checked={rtl} on:change={toggleRTL} aria-label="Toggle RTL" />
-        <label class="form-check-label" for="rtlToggle">RTL</label>
-      </div>
-      <InstallPwaButton />
 
-      <div class="version-pill">
-        <i class="bi bi-check-circle-fill"></i>
-        <small>{app_version}</small>
-      </div>
-
-      <button class="btn btn-sm btn-light erp-icon-btn" title="Notifications" type="button">
-        <i class="bi bi-bell"></i>
-      </button>
-
-      <button class="btn btn-sm btn-light erp-icon-btn" title="Fullscreen" on:click={toggleFullscreen}>
-        <i class="bi bi-arrows-fullscreen"></i>
-      </button>
+    <div class="topbar-page-title d-none d-md-flex" dir={rtl ? 'rtl' : 'ltr'}>
+      {@html pageKey}
     </div>
   </div>
 </nav>
@@ -758,22 +786,82 @@
 </nav>
 
 <style>
+  /* Reference top bar (Journal.dc.html): the row floats on the page surface with
+     a hairline under it - no card, no shadow, no blur. */
   .erp-topbar {
     position: sticky;
     top: 0;
     z-index: 1020;
     flex-shrink: 0;
     min-height: var(--topbar-height, 3.25rem);
-    border-bottom: 1px solid var(--erp-surface-glass-border);
+    padding-block: 8px;
+    border-bottom: 0;
     background-color: var(--erp-bg);
-    box-shadow: 0 5px 18px rgba(21, 32, 51, 0.035);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
+  /* Align the row with the page column so the tabs sit on the panel's edge. */
   .erp-topbar > .container-fluid {
-    padding-inline: var(--page-padding-x, 1.25rem);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    direction: ltr;
+    max-width: var(--content-max-width, 1400px);
+    margin-inline: auto;
+    padding-inline: var(--page-padding-x, 16px);
     min-width: 0;
+  }
+
+  .topbar-left {
+    display: flex;
+    grid-column: 1;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .topbar-clock {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    color: var(--z-muted, #64748b);
+    white-space: nowrap;
+  }
+
+  .topbar-clock__icon {
+    color: var(--z-link, #2f6fed);
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .topbar-clock__time {
+    color: var(--z-ink, #0b1530);
+    font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.3px;
+    line-height: 1;
+  }
+
+  .topbar-clock > i {
+    width: 1px;
+    height: 15px;
+    flex: 0 0 1px;
+    background: var(--z-border, #e2e8f0);
+  }
+
+  .topbar-clock__date {
+    color: var(--z-muted, #64748b);
+    font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
   }
 
   .erp-topbar.dashboard-topbar,
@@ -793,32 +881,252 @@
   }
 
   .topbar-page-title {
+    display: flex;
+    grid-column: 2;
+    justify-self: end;
+    align-items: center;
     min-width: 0;
-    color: #172033;
-    font-size: var(--topbar-title-size, 1.15rem);
-    font-weight: 900;
-    overflow: hidden;
+    color: var(--z-ink, #0b1530);
     white-space: nowrap;
   }
 
-  :global(.topbar-page-title .navbar-nav) {
-    align-items: center;
-    gap: 0.2rem;
-    flex-wrap: nowrap;
+  /* Journal tabs follow the reference's flat tab strip and active underline. */
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs),
+  .mobile-page-nav :global(.journal-section-tabs) {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 18px;
+    max-width: 100%;
+    overflow-x: auto;
+    background: transparent;
+    box-shadow: inset 0 -1px 0 var(--z-border, #e1e7f0);
   }
 
-  :global(.topbar-page-title .nav-link.active) {
-    color: #2f6fed !important;
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a),
+  .mobile-page-nav :global(.journal-section-tabs a) {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 5px;
+    height: 38px;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--z-text, #475569);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a::after),
+  .mobile-page-nav :global(.journal-section-tabs a::after) {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: #2f6fed;
+    content: '';
+    opacity: 0.35;
+    transform: scaleX(0);
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s;
+  }
+
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs .ms),
+  .mobile-page-nav :global(.journal-section-tabs .ms) {
+    color: var(--z-muted, #64748b);
+    font-size: 16px;
+    line-height: 1;
+    transition: color 0.2s, transform 0.2s;
+  }
+
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a:hover),
+  .mobile-page-nav :global(.journal-section-tabs a:hover) {
+    color: #2f6fed;
+  }
+
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a:hover .ms),
+  .mobile-page-nav :global(.journal-section-tabs a:hover .ms) {
+    color: #2f6fed;
+    transform: translateY(-1px);
+  }
+
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a:hover::after),
+  .mobile-page-nav :global(.journal-section-tabs a:hover::after) {
+    transform: scaleX(1);
+  }
+
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a:focus-visible),
+  .mobile-page-nav :global(.journal-section-tabs a:focus-visible) {
+    border-radius: 6px;
+    outline: 2px solid rgba(47, 111, 237, 0.45);
+    outline-offset: 2px;
+  }
+
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a.active),
+  .mobile-page-nav :global(.journal-section-tabs a.active) {
+    color: var(--z-ink, #0b1530);
     font-weight: 800;
   }
 
-  :global(.topbar-account-name) {
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a.active .ms),
+  .mobile-page-nav :global(.journal-section-tabs a.active .ms) {
+    color: #2f6fed;
+    font-variation-settings: 'FILL' 1;
+  }
+
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a.active::after),
+  .mobile-page-nav :global(.journal-section-tabs a.active::after) {
+    height: 3px;
+    opacity: 1;
+    box-shadow: 0 2px 10px rgba(47, 111, 237, 0.55);
+    transform: scaleX(1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .erp-topbar .topbar-page-title :global(.journal-section-tabs *),
+    .mobile-page-nav :global(.journal-section-tabs *) {
+      transition-duration: 0.01ms;
+    }
+  }
+
+  /* Every other page tab group uses the same reference underline treatment. */
+  .erp-topbar .topbar-page-title :global(.navbar-nav),
+  .mobile-page-nav.navbar :global(.navbar-nav) {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 18px;
+    margin: 0;
+    padding: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: inset 0 -1px 0 var(--z-border, #e1e7f0);
+    flex-wrap: nowrap;
+  }
+
+  .erp-topbar .topbar-page-title :global(.nav-item),
+  .mobile-page-nav.navbar :global(.nav-item) {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+  }
+
+  /* Preserve each page group's existing leading glyph. */
+  .erp-topbar .topbar-page-title :global(.nav-item > i),
+  .mobile-page-nav.navbar :global(.nav-item > i) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 38px;
+    color: var(--z-muted, #64748b);
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  /* The reference segmented control has no dividers between its tabs. */
+  .erp-topbar .topbar-page-title :global(.nav-divider),
+  .mobile-page-nav.navbar :global(.nav-divider),
+  .erp-topbar .topbar-page-title :global(.nav-item:has(.nav-divider)),
+  .mobile-page-nav.navbar :global(.nav-item:has(.nav-divider)) {
+    display: none;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link) {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 38px;
+    margin: 0;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--z-text, #475569);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.2s;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link::after),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link::after) {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: #2f6fed;
+    content: '';
+    opacity: 0.35;
+    transform: scaleX(0);
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link small),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link small) {
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: 1;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link:hover),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link:hover) {
+    color: #2f6fed;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link:hover::after),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link:hover::after) {
+    transform: scaleX(1);
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link:focus-visible),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link:focus-visible) {
+    border-radius: 6px;
+    outline: 2px solid rgba(47, 111, 237, 0.45);
+    outline-offset: 2px;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link.active),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link.active) {
+    color: var(--z-ink, #0b1530);
+    font-weight: 800;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link.active::after),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link.active::after) {
+    height: 3px;
+    opacity: 1;
+    box-shadow: 0 2px 10px rgba(47, 111, 237, 0.55);
+    transform: scaleX(1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .erp-topbar .topbar-page-title :global(.navbar-nav *),
+    .mobile-page-nav.navbar :global(.navbar-nav *) {
+      transition-duration: 0.01ms;
+    }
+  }
+
+  .topbar-page-title :global(.topbar-account-name) {
     max-width: 12rem;
     overflow: hidden;
     margin-inline-start: 0.35rem;
-    color: #172033;
-    font-size: var(--control-font, 0.82rem);
-    font-weight: 850;
+    color: var(--z-ink, #0b1530);
+    font-size: 12px;
+    font-weight: 800;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -826,7 +1134,7 @@
   .topbar-actions,
   .mobile-actions {
     display: flex;
-    gap: 0.35rem;
+    gap: 8px;
     align-items: center;
     min-width: 0;
   }
@@ -837,31 +1145,45 @@
     justify-content: flex-end;
   }
 
+  /* Reference top-row `.btn`: 30px square, radius 8, surface fill, hairline. */
   .erp-icon-btn,
   .sync-indicator .sync-btn {
-    width: var(--control-height-sm, 2.125rem);
-    height: var(--control-height-sm, 2.125rem);
-    display: flex;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    border: 1px solid #e1e7ef;
-    border-radius: 9px;
-    background: #fff;
-    color: #526176;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: 8px;
+    background: var(--z-surface, #fff);
+    color: var(--z-muted, #64748b);
+    box-shadow: none;
     transition:
-      color 0.2s ease,
-      border-color 0.2s ease,
-      transform 0.2s ease,
-      box-shadow 0.2s ease;
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .erp-icon-btn .ms {
+    font-size: 18px;
   }
 
   .erp-icon-btn:hover {
-    transform: translateY(-1px);
-    border-color: #c4d4ec;
-    background: #f4f7fb;
-    color: #2f6fed;
-    box-shadow: 0 5px 12px rgba(21, 32, 51, 0.05);
+    border-color: var(--z-border-strong, #dce6f8);
+    background: var(--z-hover, #f5f9ff);
+    color: var(--z-ink, #0b1530);
+    box-shadow: none;
+  }
+
+  /* The PWA button joins the same 30px / 8px control rhythm. */
+  .topbar-actions :global(.install-pwa-btn) {
+    height: 30px;
+    padding-inline: 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
   }
 
   .sync-status small {
@@ -870,22 +1192,6 @@
 
   .sync-progress {
     width: min(7.5rem, 18vw);
-  }
-
-  .version-pill {
-    display: inline-flex;
-    gap: 0.35rem;
-    align-items: center;
-    padding: 0.28rem 0.5rem;
-    border: 1px solid #ccebdd;
-    border-radius: 8px;
-    background: #edf9f3;
-    color: #11875d;
-    font-weight: 850;
-  }
-
-  .version-pill small {
-    font-size: var(--app-font-xs, 0.75rem);
   }
 
   .language-select {
@@ -961,24 +1267,16 @@
   }
 
   .mobile-page-nav {
-    margin: 0.5rem 0.75rem 0;
-    border: 1px solid var(--erp-surface-glass-border);
-    border-radius: 10px;
-    background-color: var(--erp-bg);
-    box-shadow: 0 8px 24px rgba(21, 32, 51, 0.045);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    margin: 0;
+    padding: 0 0 6px;
+    border: 0;
+    background: var(--erp-bg);
+    box-shadow: none;
   }
 
-  :global(.mobile-page-nav .navbar-nav) {
-    flex-wrap: nowrap;
-    align-items: center;
-    white-space: nowrap;
-  }
-
-  :global(.mobile-page-nav .nav-link.active) {
-    color: #2f6fed !important;
-    font-weight: 850;
+  .mobile-page-nav > .container-fluid {
+    padding-inline: var(--page-padding-x, 0.75rem);
+    min-width: 0;
   }
 
   @media (max-width: 991px) {
@@ -988,9 +1286,20 @@
   }
 
   @media (max-width: 767px) {
-    .sync-indicator,
-    .version-pill,
-    .topbar-actions > .erp-icon-btn[title='Notifications'] {
+    .erp-topbar > .container-fluid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .topbar-left {
+      grid-column: 1;
+    }
+
+    .topbar-clock__date,
+    .topbar-clock > i {
+      display: none;
+    }
+
+    .sync-indicator {
       display: none !important;
     }
 

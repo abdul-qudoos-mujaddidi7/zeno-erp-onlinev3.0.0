@@ -5,18 +5,23 @@
   import { currencyApi } from '../../api/currencyApi.js';
   import { lookupAccountByCode } from '../../lib/formLookups.js';
   import { t, lang, translate_org_type } from '../../i18n/i18n';
-  import { showDate, setDatePickers } from '../../calendar.js';
   import { applyCurrentFiscalYearRange } from '../../utils/currentFiscalYear.js';
   import { generatePDF } from '../generatePDF.js';
   import { generateExcel } from '../generateExcel.js';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
-  import FilterToolbar from '../../components/common/FilterToolbar.svelte';
-  import ExportMenu from '../../components/common/ExportMenu.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
-  import EmptyState from '../../components/common/EmptyState.svelte';
+  import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
+  import ActionButton from '../../components/common/ActionButton.svelte';
+  import ExportMenu from '../../components/common/ExportMenu.svelte';
   import SummaryCard from '../../components/common/SummaryCard.svelte';
+  import EmptyState from '../../components/common/EmptyState.svelte';
   import { localizeDescription } from '../../utils/localizedDescription.js';
+  import { replaceCurrencyNamesWithSymbols } from '../../utils/currencyDescription.js';
+  import {
+    attachJournalRunningBalances,
+    withJournalRunningBalances,
+  } from '../../utils/journalRunningBalance.js';
   import {
     DEFAULT_PAGE_SIZE,
     PAGE_SIZE_OPTIONS,
@@ -31,7 +36,6 @@
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
-  let componentRoot = null;
   let accounts = [];
   let currencies = [];
   let selectedCurrency = 'all';
@@ -57,6 +61,10 @@
 
   let processed = [];
   let paginated = [];
+  let runningBalanceCacheKey = '';
+  let runningBalanceCacheRows = [];
+  let runningBalanceRequest = null;
+  let runningBalanceGeneration = 0;
 
   let bootstrapped = false;
   let lastPageKey = '';
@@ -93,11 +101,6 @@
     } finally {
       loading = false;
     }
-
-    await tick();
-    if (componentRoot) {
-      setDatePickers(handleDateChange, componentRoot);
-    }
   });
 
   onDestroy(() => {
@@ -112,12 +115,6 @@
       lastPageKey = key;
       loadJournals();
     }
-  }
-
-  function handleDateChange(inputName, value) {
-    if (inputName === 'startDate') startDate = value;
-    if (inputName === 'endDate') endDate = value;
-    reloadFromFirstPage();
   }
 
   function getAccountName(id) {
@@ -165,6 +162,7 @@
       date_from: startDate || undefined,
       date_to: endDate || undefined,
       currency: selectedCurrency !== 'all' ? selectedCurrency : undefined,
+      reference_type: typeFilter !== 'all' ? typeFilter : undefined,
       exclude_system_accounts: 1,
       exclude_report_accounts: 1,
       ...extra,
@@ -197,25 +195,6 @@
     };
   }
 
-  function withPageRunning(rows) {
-    const run = {};
-    const ascending = [...rows].reverse();
-    const withRunning = ascending.map((journal) => {
-      const currency = journal.currency || 'DEFAULT';
-      run[currency] =
-        Number(run[currency] || 0) +
-        Number(journal.credit || 0) -
-        Number(journal.debit || 0);
-
-      return {
-        ...journal,
-        running: { ...run },
-      };
-    });
-
-    return withRunning.reverse();
-  }
-
   async function loadJournals({ includeSummary = page === 1 } = {}) {
     const requestId = ++loadRequestId;
     lastPageKey = `${page}|${pageSize}`;
@@ -237,7 +216,10 @@
       const rows = (journalResponse?.data || []).map(mapJournalAmounts);
       await ensurePeerAccounts(rows);
 
-      processed = withPageRunning(rows);
+      const balanceRows = await getReportRunningBalanceRows();
+      if (requestId !== loadRequestId) return;
+
+      processed = attachJournalRunningBalances(rows, balanceRows);
       paginated = processed;
 
       if (includeSummary && journalResponse?.summary) {
@@ -267,6 +249,11 @@
   }
 
   function reloadFromFirstPage() {
+    runningBalanceGeneration += 1;
+    runningBalanceCacheKey = '';
+    runningBalanceCacheRows = [];
+    runningBalanceRequest = null;
+
     if (page !== 1) {
       page = 1;
       return;
@@ -297,6 +284,13 @@
       value: selectedCurrency,
       options: [{ value: 'all', label: t('All') }, ...currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))],
     },
+    {
+      key: 'type',
+      label: lbl('typeFilter'),
+      icon: 'bi-filter',
+      value: typeFilter,
+      options: typeTabs.map((tab) => ({ value: tab.value, label: lbl(tab.labelKey) })),
+    },
   ];
 
   function handleReportFilter(event) {
@@ -305,6 +299,7 @@
     if (key === 'startDate') startDate = value;
     if (key === 'endDate') endDate = value;
     if (key === 'currency') selectedCurrency = value;
+    if (key === 'type') typeFilter = value;
 
     reloadFromFirstPage();
   }
@@ -315,6 +310,7 @@
     endDate = '';
     q = '';
     selectedCurrency = 'all';
+    typeFilter = 'all';
     reloadFromFirstPage();
   }
 
@@ -342,6 +338,19 @@
     }));
   }
 
+  function currencySymbol(code) {
+    const normalizedCode = String(code ?? '');
+    return currencies.find((item) => String(item.code ?? '') === normalizedCode)?.symbol || t(normalizedCode);
+  }
+
+  function descriptionWithCurrencySymbols(description) {
+    return replaceCurrencyNamesWithSymbols(
+      localizeDescription(description, $lang, t),
+      currencies,
+      (code) => t(code),
+    );
+  }
+
   function buildSummary(rows, type, currentLanguage) {
     void currentLanguage;
 
@@ -353,7 +362,7 @@
           maximumFractionDigits: 3,
         });
 
-        return `${amount} ${t(currency.code)}`;
+        return `${amount} ${currencySymbol(currency.code)}`;
       })
       .join('<br />');
   }
@@ -370,7 +379,7 @@
           maximumFractionDigits: 3,
         });
 
-        return `${formattedAmount} ${t(currency)}`;
+        return `${formattedAmount} ${currencySymbol(currency)}`;
       })
       .join('<br />');
   }
@@ -379,8 +388,9 @@
     const all = [];
     let exportPage = 1;
     const limit = 200;
+    const seenPages = new Set();
 
-    while (exportPage <= 100) {
+    while (true) {
       const response = await journalApi.getAll(
         reportQuery({
           page: exportPage,
@@ -390,11 +400,48 @@
       );
       const rows = response?.data || [];
       all.push(...rows);
-      if (!response?.meta?.hasMore || !rows.length) break;
+      if (!response?.meta?.hasMore) break;
+
+      const pageSignature = JSON.stringify(rows.map((row) => row.id));
+      if (!rows.length || seenPages.has(pageSignature)) {
+        throw new Error(t('Unable to complete journal pagination while calculating balances.'));
+      }
+      seenPages.add(pageSignature);
       exportPage += 1;
     }
 
-    return withPageRunning(all.map(mapJournalAmounts));
+    return withJournalRunningBalances(all.map(mapJournalAmounts));
+  }
+
+  async function getReportRunningBalanceRows() {
+    const key = JSON.stringify(reportQuery());
+    const generation = runningBalanceGeneration;
+    if (runningBalanceCacheKey === key) return runningBalanceCacheRows;
+    if (
+      runningBalanceRequest?.key === key &&
+      runningBalanceRequest?.generation === generation
+    ) {
+      return runningBalanceRequest.promise;
+    }
+
+    const promise = fetchAllReportJournals();
+    runningBalanceRequest = { key, generation, promise };
+
+    try {
+      const rows = await promise;
+      if (
+        generation === runningBalanceGeneration &&
+        key === JSON.stringify(reportQuery())
+      ) {
+        runningBalanceCacheKey = key;
+        runningBalanceCacheRows = rows;
+      }
+      return rows;
+    } finally {
+      if (runningBalanceRequest?.promise === promise) {
+        runningBalanceRequest = null;
+      }
+    }
   }
 
   function getPageNumbers(current, total) {
@@ -454,188 +501,335 @@
       generatingPDF = false;
     }
   }
+
+  /* ===================== Zeno presentation helpers ===================== */
+
+  const L = {
+    fa: {
+      search: 'جستجو', filter: 'فیلتر', clear: 'پاک‌کردن', show: 'نمایش',
+      print: 'چاپ', download: 'دانلود', prev: 'قبلی', next: 'بعدی',
+      fromDate: 'از تاریخ', toDate: 'تا تاریخ', of: 'از', to: 'تا', rows: 'ردیف',
+      tx: 'معامله', all: 'همه', empty: 'با این فیلترها معامله‌ای پیدا نشد',
+      typeFilter: 'نوع معامله', fromP: 'از', toP: 'به',
+      creditSub: 'مجموع طلبکار دوره', debitSub: 'مجموع بدهکار دوره', balanceSub: 'مانده خالص دوره',
+      journal: 'روزنامچه', sale: 'بل فروش', salePayment: 'دریافت پول',
+      purchase: 'بل خرید', purchasePayment: 'پرداخت پول', transfer: 'انتقال', exchange: 'تبادله',
+      reportTitle: 'گزارش روزنامچه',
+    },
+    ps: {
+      search: 'لټون', filter: 'فلتر', clear: 'پاکول', show: 'ښکاره کول',
+      print: 'چاپ', download: 'ډاونلوډ', prev: 'مخکې', next: 'وروسته',
+      fromDate: 'له نیټې', toDate: 'تر نیټې', of: 'له', to: 'تر', rows: 'ردیفونه',
+      tx: 'معامله', all: 'ټول', empty: 'په دې فیلترونو سره معامله ونه موندل شوه',
+      typeFilter: 'د معاملې ډول', fromP: 'له', toP: 'ته',
+      creditSub: 'د دورې ټول اعتبار', debitSub: 'د دورې ټول پور', balanceSub: 'د دورې خالص پاتې',
+      journal: 'روزنامچه', sale: 'د خرڅلاو بل', salePayment: 'د پیسو رسید',
+      purchase: 'د خرید بل', purchasePayment: 'د پیسو ورکړه', transfer: 'انتقال', exchange: 'تبادله',
+      reportTitle: 'د روزنامچې راپور',
+    },
+    en: {
+      search: 'Search', filter: 'Filter', clear: 'Clear', show: 'Show',
+      print: 'Print', download: 'Download', prev: 'Prev', next: 'Next',
+      fromDate: 'From date', toDate: 'To date', of: 'of', to: 'to', rows: 'Rows',
+      tx: 'transactions', all: 'All', empty: 'No transactions match these filters',
+      typeFilter: 'Transaction type', fromP: 'From', toP: 'To',
+      creditSub: 'Total credits in range', debitSub: 'Total debits in range', balanceSub: 'Net balance in range',
+      journal: 'Journal', sale: 'Sale bill', salePayment: 'Money received',
+      purchase: 'Purchase bill', purchasePayment: 'Money paid', transfer: 'Transfer', exchange: 'Exchange',
+      reportTitle: 'Journal report',
+    },
+  };
+
+  function lbl(key) {
+    return L[_lang]?.[key] || L.fa[key] || key;
+  }
+
+  function toDateObj(value) {
+    const d = value instanceof Date ? value : new Date(String(value || ''));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function jalaliShort(iso) {
+    const d = toDateObj(iso);
+    if (!d) return '';
+    const p = new Intl.DateTimeFormat('fa-AF-u-ca-persian-nu-latn', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(d).reduce((acc, part) => ((acc[part.type] = part.value), acc), {});
+    return `${p.year}/${p.month}/${p.day}`;
+  }
+
+  function kabulTime(iso) {
+    const d = toDateObj(iso);
+    if (!d) return '';
+    const p = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kabul', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d).reduce((acc, part) => ((acc[part.type] = part.value), acc), {});
+    return p.hour ? `${p.hour}:${p.minute}` : '';
+  }
+
+  /* Journal type filter options shown inside the shared filter popover. */
+  const typeTabs = [
+    { value: 'all', labelKey: 'all' },
+    { value: 'sale', labelKey: 'sale' },
+    { value: 'sale_payment', labelKey: 'salePayment' },
+    { value: 'purchase', labelKey: 'purchase' },
+    { value: 'purchase_payment', labelKey: 'purchasePayment' },
+    { value: 'stock_transfer', labelKey: 'transfer' },
+    { value: 'exchange', labelKey: 'exchange' },
+  ];
+  let typeFilter = 'all';
+
+  /* ===================== report presentation ===================== */
+
+  $: rangeText = startDate || endDate
+    ? `${jalaliShort(startDate) || '—'} ${lbl('to')} ${jalaliShort(endDate) || '—'}`
+    : '';
+
+  /* Per-currency KPI lines — SummaryCard renders one line per settlement currency. */
+  $: creditLines = kpiLines(currencyInfo, 'credit');
+  $: debitLines = kpiLines(currencyInfo, 'debit');
+  $: balanceLines = kpiLines(currencyInfo, 'balance');
+
+  /* ===================== KPI lines & print ===================== */
+
+  function kpiLines(info, type) {
+    return info.map((c) => ({
+      v: Number(c[type] || 0).toLocaleString(undefined, { maximumFractionDigits: 3 }),
+      sym: currencySymbol(c.code),
+    }));
+  }
+
+  function runningLines(balanceObject) {
+    if (!balanceObject || typeof balanceObject !== 'object') return [];
+    return Object.entries(balanceObject).map(([currency, amount]) => ({
+      v: Number(amount || 0).toLocaleString(undefined, { maximumFractionDigits: 3 }),
+      sym: currencySymbol(currency),
+      neg: Number(amount || 0) < 0,
+    }));
+  }
+
+  function escText(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function printReport() {
+    const body = paginated
+      .map((j) => {
+        const debit = Number(j.debit || 0);
+        const credit = Number(j.credit || 0);
+        const time = kabulTime(j.created_at);
+        return (
+          '<tr>' +
+          `<td dir="ltr">${escText(jalaliShort(j.date))}${time ? ' · ' + escText(time) : ''}</td>` +
+          `<td>${escText(getAccountName(j.first_entry_account))}<br/>${escText(getAccountName(j.second_entry_account))}</td>` +
+          `<td>${escText(descriptionWithCurrencySymbols(j.description))}</td>` +
+          `<td dir="ltr">${debit ? escText(debit.toLocaleString(undefined, { maximumFractionDigits: 3 })) + ' ' + escText(currencySymbol(j.currency)) : '—'}</td>` +
+          `<td dir="ltr">${credit ? escText(credit.toLocaleString(undefined, { maximumFractionDigits: 3 })) + ' ' + escText(currencySymbol(j.currency)) : '—'}</td>` +
+          `<td dir="ltr">${escText(formatRunningObj(j.running))}</td>` +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(
+      '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><title>گزارش روزنامچه · Zeno</title><style>' +
+      'body{font-family:Inter,Vazirmatn,Tahoma,sans-serif;color:#0B1530;margin:24px;font-size:11px}' +
+      'table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}' +
+      'th{background:#F6F8FC;border-bottom:1px solid #E7EBF3;padding:6px 8px;text-align:right;font-size:10px;color:#5B6478}' +
+      'td{border-bottom:1px solid #F0F2F7;padding:6px 8px}' +
+      '.hd{display:flex;justify-content:space-between;margin-bottom:10px;font-size:13px}' +
+      '</style></head><body>' +
+      `<div class="hd"><b>گزارش روزنامچه · Zeno</b><span dir="ltr">${escText(rangeText)}</span></div>` +
+      '<table><thead><tr><th>تاریخ</th><th>طرفین معامله</th><th>شرح</th><th>بدهکار</th><th>طلبکار</th><th>مانده</th></tr></thead><tbody>' +
+      body +
+      '</tbody></table><script>window.onload=function(){window.focus();window.print()}</scr' + 'ipt></body></html>',
+    );
+    win.document.close();
+  }
 </script>
 
-<div
-  class="journals-report-page"
-  bind:this={componentRoot}
-  dir={t('dir')}
->
+<div class="jindex" dir={t('dir')}>
   <IndexPageLayout
     dir={t('dir')}
     ariaLabel={t('Journals Report')}
-    toolbarWidth="25rem"
+    toolbarWidth="26rem"
     showStats={showBalanceCards}
-    showFooter={!loading && (processed.length > 0 || totalPages > 1)}
-    dense
-    tablePadding
-  >
-    <svelte:fragment slot="actions">
-      <ExportMenu
-        loading={generatingPDF}
-        disabled={generatingPDF || loading || processed.length === 0}
-        on:export={(event) => downloadReport(event.detail)}
-      />
-
-      <button
-        type="button"
-        class="index-settings-button"
-        class:is-active={showBalanceCards}
-        aria-label={t('Balance')}
-        title={t('Balance')}
-        on:click={() => (showBalanceCards = !showBalanceCards)}
-      >
-        <i class="bi {showBalanceCards ? 'bi-x-lg' : 'bi-wallet2'}"></i>
-      </button>
-    </svelte:fragment>
+    showFooter={totalItems > 0}
+    dense={true}
+    contained={true}
+    panelClass="journals-card"
+    contentClass="journals-content"
+    tablePadding={true}>
 
     <svelte:fragment slot="toolbar">
       <FilterToolbar
         searchValue={q}
         searchPlaceholder={t('Search transactions')}
         filters={reportFilters}
-        filterLabel={t('Filter')}
-        resetLabel={t('Show All')}
+        filterLabel={lbl('filter')}
+        resetLabel={lbl('clear')}
+        applyLabel={lbl('show')}
         showReset={true}
         on:searchChange={(event) => {
           q = event.detail;
           scheduleSearchReload();
         }}
         on:filterChange={handleReportFilter}
-        on:reset={resetReportFilters}
-      />
+        on:reset={resetReportFilters}>
+        <svelte:fragment slot="actions">
+          <span class="journal-count">
+            <b>{totalItems}</b> {lbl('tx')}
+            {#if rangeText}
+              <span class="journal-count__range" dir="ltr">· {rangeText}</span>
+            {/if}
+          </span>
+        </svelte:fragment>
+      </FilterToolbar>
+    </svelte:fragment>
+
+    <svelte:fragment slot="actions">
+      <ActionButton
+        variant="secondary"
+        icon="bi-wallet2"
+        label={t('Balance')}
+        title={t('Balance')}
+        pressed={showBalanceCards}
+        on:click={() => (showBalanceCards = !showBalanceCards)} />
+      <ActionButton
+        variant="secondary"
+        icon="bi-printer"
+        label={lbl('print')}
+        disabled={loading || processed.length === 0}
+        on:click={printReport} />
+      <ExportMenu
+        disabled={loading || processed.length === 0}
+        loading={generatingPDF}
+        on:export={(event) => downloadReport(event.detail)} />
     </svelte:fragment>
 
     <svelte:fragment slot="stats">
-      <div class="summary-grid">
+      <div class="index-summary-grid">
         <SummaryCard
-          label={t('Credit')}
           icon="bi-arrow-down-left"
           tone="green"
-        >
-          {@html creditSummary}
-        </SummaryCard>
-
+          label={t('Credit')}
+          lines={creditLines} />
         <SummaryCard
-          label={t('Debit')}
           icon="bi-arrow-up-right"
-          tone="amber"
-        >
-          {@html debitSummary}
-        </SummaryCard>
-
+          tone="red"
+          label={t('Debit')}
+          lines={debitLines} />
         <SummaryCard
-          label={t('Balance')}
           icon="bi-wallet2"
-          tone="cyan"
-        >
-          {@html balanceSummary}
-        </SummaryCard>
+          tone="blue"
+          label={t('Balance')}
+          lines={balanceLines} />
       </div>
     </svelte:fragment>
 
     {#if loading}
-      <div class="table-state">
-        <EmptyState loading message={t('Loading...')} />
+      <div class="index-table-state">
+        <EmptyState loading={true} message={t('Loading...')} />
       </div>
     {:else if loadError}
-      <div class="table-state">
+      <div class="index-table-state">
         <EmptyState icon="bi-exclamation-triangle" message={loadError} />
       </div>
     {:else if processed.length === 0}
-      <div class="table-state">
-        <EmptyState
-          icon="bi-journal-x"
-          message={t('No transactions found.')}
-        />
+      <div class="index-table-state">
+        <EmptyState icon="bi-journal-x" message={lbl('empty')} />
       </div>
     {:else}
       <DataTable
         ariaLabel={t('Journals Report')}
-        minWidth="850px"
-        dense
-        striped
-        hover={false}
-        stickyHeader
-        layout="fixed"
-        scrollbar="thin"
-      >
+        layout="auto"
+        minWidth="880px"
+        dense={true}
+        striped={false}
+        hover={true}
+        stickyHeader={true}
+        mobileCards={true}>
         <svelte:fragment slot="head">
           <tr>
             <th>{t('Date')}</th>
             <th>{t('Account')}</th>
             <th>{t('Description')}</th>
-            <th>{t('Debit')}</th>
-            <th>{t('Credit')}</th>
-            <th>{t('Balance')}</th>
+            <th class="col-end">{t('Debit')}</th>
+            <th class="col-end">{t('Credit')}</th>
+            <th class="col-end">{t('Balance')}</th>
           </tr>
         </svelte:fragment>
 
         {#each paginated as journal (journal.id)}
+          {@const runs = runningLines(journal.running)}
+          {@const dV = Number(journal.debit || 0)}
+          {@const cV = Number(journal.credit || 0)}
           <tr>
             <td>
-              <span class="date-badge">
-                {@html showDate(journal.date) || '—'}
+              <span class="report-date">
+                <b dir="ltr">{jalaliShort(journal.date)}</b>
+                {#if kabulTime(journal.created_at)}
+                  <span dir="ltr" class="report-date__time">{kabulTime(journal.created_at)}</span>
+                {/if}
               </span>
             </td>
 
             <td>
-              <div class="account-pair">
-                <span
-                  class:positive={Number(journal.first_entry_credit || 0) > 0}
-                  class:negative={Number(journal.first_entry_credit || 0) <= 0}
-                >
-                  {getAccountName(journal.first_entry_account)}
+              <span class="report-party">
+                <span class="report-party__line">
+                  <span class="report-side report-side--from">{lbl('fromP')}</span>
+                  <span class="report-name">{getAccountName(journal.first_entry_account)}</span>
                 </span>
-
-                <span
-                  class:positive={Number(journal.second_entry_credit || 0) > 0}
-                  class:negative={Number(journal.second_entry_credit || 0) <= 0}
-                >
-                  {getAccountName(journal.second_entry_account)}
+                <span class="report-party__line">
+                  <span class="report-side report-side--to">{lbl('toP')}</span>
+                  <span class="report-name report-name--to">{getAccountName(journal.second_entry_account)}</span>
                 </span>
-              </div>
-            </td>
-
-            <td>
-              <span
-                class="description-cell"
-                title={journal.description || ''}
-              >
-                {localizeDescription(journal.description, $lang, t) || '—'}
               </span>
             </td>
 
             <td>
-              {#if journal.debit}
-                <span class="amount negative">
-                  {Number(journal.debit).toLocaleString(undefined, {
-                    maximumFractionDigits: 3,
-                  })}
-                  {t(journal.currency || '')}
+              <span class="report-desc" title={descriptionWithCurrencySymbols(journal.description)}>
+                {descriptionWithCurrencySymbols(journal.description) || '—'}
+              </span>
+            </td>
+
+            <td class="col-end">
+              {#if dV}
+                <span class="report-amount report-amount--dr">
+                  <b dir="ltr">{dV.toLocaleString(undefined, { maximumFractionDigits: 3 })}</b>
+                  <span class="report-sym">{currencySymbol(journal.currency || '')}</span>
                 </span>
               {:else}
-                <span class="dash">—</span>
+                <span class="report-dash">—</span>
               {/if}
             </td>
 
-            <td>
-              {#if journal.credit}
-                <span class="amount positive">
-                  {Number(journal.credit).toLocaleString(undefined, {
-                    maximumFractionDigits: 3,
-                  })}
-                  {t(journal.currency || '')}
+            <td class="col-end">
+              {#if cV}
+                <span class="report-amount report-amount--cr">
+                  <b dir="ltr">{cV.toLocaleString(undefined, { maximumFractionDigits: 3 })}</b>
+                  <span class="report-sym">{currencySymbol(journal.currency || '')}</span>
                 </span>
               {:else}
-                <span class="dash">—</span>
+                <span class="report-dash">—</span>
               {/if}
             </td>
 
-            <td>
-              <span class="running-balance">
-                {@html formatRunningObj(journal.running)}
-              </span>
+            <td class="col-end">
+              {#if runs.length}
+                <span class="report-runs">
+                  {#each runs as rl (rl.sym)}
+                    <span class="report-amount" class:report-amount--neg={rl.neg}>
+                      <b dir="ltr">{rl.v}</b>
+                      <span class="report-sym">{rl.sym}</span>
+                    </span>
+                  {/each}
+                </span>
+              {:else}
+                <span class="report-dash">—</span>
+              {/if}
             </td>
           </tr>
         {/each}
@@ -647,28 +841,196 @@
         bind:currentPage={page}
         {totalPages}
         itemsPerPage={pageSize}
-        totalItems={totalItems}
+        {totalItems}
+        rowLabel={lbl('rows')}
         {getPageNumbers}
-        rowLabel={t('rows')}
-        perPageOptions={pageSizes}
         on:perPageChange={(event) => {
           pageSize = Number(event.detail);
           page = 1;
-        }}
-      />
+        }} />
     </svelte:fragment>
   </IndexPageLayout>
 </div>
 
 <style>
-  .journals-report-page { display:flex; flex-direction:column; width:100%; height:100%; min-height:0; overflow:hidden; }
-  .summary-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.75rem; width:100%; }
-  .index-settings-button { display:grid; place-items:center; width:2.625rem; height:2.625rem; border:1px solid #dbe4ef; border-radius:.6rem; color:#0f6efd; background:#eff6ff; }
-  .index-settings-button.is-active { color:#fff; background:#0f6efd; border-color:#0f6efd; }
-  .table-state { display:grid; place-items:center; min-height:18rem; }
-  .date-badge { color:#475569; font-size:.8rem; } .account-pair { display:flex; justify-content:center; gap:.35rem; flex-wrap:wrap; }
-  .account-pair span,.amount { display:inline; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; font-size:.75rem; font-weight:700; }
-  .positive { color:#047857; background:transparent; } .negative { color:#dc2626; background:transparent; }
-  .description-cell { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .running-balance { font-weight:700; line-height:1.5; } .dash { color:#cbd5e1; }
-  @media(max-width:700px){ .summary-grid{grid-template-columns:1fr;} }
+  /*
+   * Journals report — shares the index sheet, table, toolbar and pager with
+   * every other index page; only the report's own cells are styled here.
+   */
+  .jindex {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
+  }
+
+  :global(.jindex > .index-page) {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
+
+  /* ================= toolbar count ================= */
+  .journal-count {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    font-size: var(--z-fs-sm, 11.5px);
+    font-weight: 600;
+    color: var(--z-muted, #64748b);
+    white-space: nowrap;
+  }
+
+  .journal-count b {
+    font-family: var(--z-font-num);
+    font-size: var(--z-fs-base, 12.5px);
+    font-weight: 800;
+    color: var(--z-ink, #0b1530);
+  }
+
+  .journal-count__range {
+    font-family: var(--z-font-num);
+    font-size: var(--z-fs-xs, 10.5px);
+    color: var(--z-subtle, #94a3b8);
+  }
+
+  /* ================= report cells ================= */
+  .report-date {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    white-space: nowrap;
+  }
+
+  .report-date b {
+    font-family: var(--z-font-num);
+    font-size: var(--z-fs-base, 12.5px);
+    font-weight: 800;
+    letter-spacing: -0.2px;
+    color: var(--z-ink, #0b1530);
+  }
+
+  .report-date__time {
+    font-family: var(--z-font-num);
+    font-size: var(--z-fs-xs, 10.5px);
+    font-weight: 600;
+    color: var(--z-subtle, #94a3b8);
+  }
+
+  .report-party {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .report-party__line {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .report-side {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 17px;
+    padding: 0 5px;
+    border-radius: 5px;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-text, #475569);
+    font-size: 9.5px;
+    font-weight: 800;
+  }
+
+  .report-side--to {
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .report-name {
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--z-fs-base, 12.5px);
+    font-weight: 700;
+    color: var(--z-ink, #0b1530);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .report-name--to {
+    font-weight: 600;
+    color: var(--z-text, #475569);
+  }
+
+  .report-desc {
+    display: block;
+    max-width: 34rem;
+    overflow: hidden;
+    font-size: var(--z-fs-sm, 11.5px);
+    font-weight: 500;
+    color: var(--z-text, #475569);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .report-amount {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 3px;
+    white-space: nowrap;
+  }
+
+  .report-amount b {
+    font-family: var(--z-font-num);
+    font-size: var(--z-fs-base, 12.5px);
+    font-weight: 800;
+    letter-spacing: -0.2px;
+    color: var(--z-ink, #0b1530);
+  }
+
+  .report-amount--dr b {
+    color: var(--z-debit, #dc2626);
+  }
+
+  .report-amount--cr b {
+    color: var(--z-credit, #16a34a);
+  }
+
+  .report-amount--neg b {
+    color: var(--z-debit, #dc2626);
+  }
+
+  .report-sym {
+    font-family: var(--z-font-num);
+    font-size: var(--z-fs-2xs, 10px);
+    font-weight: 700;
+    color: var(--z-muted, #64748b);
+  }
+
+  .report-runs {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .report-dash {
+    font-size: var(--z-fs-base, 12.5px);
+    color: var(--z-subtle, #94a3b8);
+  }
+
+  /* ================= responsive ================= */
+  @media (max-width: 900px) {
+    .report-desc {
+      max-width: 15rem;
+    }
+  }
 </style>

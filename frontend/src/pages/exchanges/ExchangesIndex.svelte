@@ -506,7 +506,7 @@
                   <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
                 {/if} -->
               <!-- </th> -->
-              <th class="text-center">{t('Actions')}</th>
+              <th class="col-end">{t('Actions')}</th>
             </tr>
           </svelte:fragment>
             {#each paginatedExchanges as j, index}

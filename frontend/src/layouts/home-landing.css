@@ -21,7 +21,7 @@
   --z-shadow-lg: 0 16px 48px rgba(15, 23, 42, 0.08);
   --z-max: 1140px;
   --z-nav-h: 72px;
-  --z-font: 'Vazirmatn', 'Inter', system-ui, -apple-system, sans-serif;
+  --z-font: 'Inter', 'Vazirmatn', system-ui, -apple-system, sans-serif;
 
   font-family: var(--z-font);
   background: linear-gradient(180deg, #f8fbff 0%, #ffffff 34%, #f8fbff 100%);

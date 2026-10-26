@@ -26,27 +26,29 @@
   .empty-state {
     display: grid;
     place-items: center;
-    gap: 0.55rem;
+    align-content: center;
+    gap: 8px;
     min-height: clamp(8rem, 18vh, 12.5rem);
-    padding: var(--card-padding, 1rem);
-    color: #64748b;
+    padding: 40px 16px;
+    color: var(--z-muted, #64748b);
     text-align: center;
   }
 
   i {
-    color: #cbd5e1;
-    font-size: clamp(1.6rem, 2.5vw, 2rem);
+    color: var(--z-subtle, #94a3b8);
+    font-size: 26px;
+    line-height: 1;
   }
 
   p {
     margin: 0;
     max-width: 28rem;
-    font-size: var(--control-font, 0.86rem);
+    font-size: var(--z-fs-base, 12.5px);
     font-weight: 600;
     line-height: 1.45;
   }
 
   .empty-state-action {
-    margin-top: 0.25rem;
+    margin-top: 2px;
   }
 </style>

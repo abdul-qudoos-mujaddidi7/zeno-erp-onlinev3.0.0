@@ -1996,7 +1996,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
                 <th class="col-start">{t('Out')}</th>
                 <th class="col-start">{t('Quantity Balance')}</th>
                 <th class="col-start">{t('In-Out Balance')}</th>
-                <th>{t('Actions')}</th>
+                <th class="col-end">{t('Actions')}</th>
               </tr>
             </svelte:fragment>
 

@@ -3,6 +3,8 @@
   import CategoryModal from './CategoryModal.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import ActionButton from '../../components/common/ActionButton.svelte';
+  import DataTable from '../../components/common/DataTable.svelte';
+  import TableActions from '../../components/common/TableActions.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import {t,lang,translate_org_type,shortID,} from '../../i18n/i18n';
   import { productCategoryApi } from '../../api/productCategoryApi.js';
@@ -75,52 +77,44 @@
       />
     </div>
   {:else}
-    <div class="table-responsive">
-      <table
-        class="table table-hover mb-0 settings-index-table"
-      >
-        <thead class="table-light">
+    <DataTable ariaLabel={t('Product Categories')} minWidth="640px">
+      <svelte:fragment slot="head">
+        <tr>
+          <th>{t('ID')}</th>
+          <th>{t('Name')}</th>
+          <th>{t('Description')}</th>
+          <th class="col-end">{t('Actions')}</th>
+        </tr>
+      </svelte:fragment>
+
+      {#each productCategories as category (category.id)}
+        {#if Number(category.status) !== 0}
           <tr>
-            <th>{t('ID')}</th>
-            <th>{t('Name')}</th>
-            <th>{t('Description')}</th>
-            <th>{t('Actions')}</th>
+            <td class="cell-muted">{shortID(category.id)}</td>
+
+            <td>{category.name}</td>
+
+            <td>
+              <strong>
+                {category.description || ''}
+              </strong>
+            </td>
+
+            <td class="col-end">
+              <TableActions
+                actions={[
+                  {
+                    icon: 'bi-pencil',
+                    label: t('Edit'),
+                    tone: 'edit',
+                    onClick: () => modalRef?.editProductCategory(category),
+                  },
+                ]} />
+            </td>
           </tr>
-        </thead>
-
-        <tbody>
-          {#each productCategories as category}
-            {#if Number(category.status) !== 0}
-              <tr>
-                <td>{shortID(category.id)}</td>
-                
-
-                <td>{category.name}</td>
-
-                <td>
-                  <strong>
-                    {category.description || ''}
-                  </strong>
-                </td>
-
-                <td>
-                  <button
-                    class="btn btn-sm btn-outline-secondary me-1"
-                    on:click={() => {
-                      modalRef?.editProductCategory(
-                        category,
-                      );
-                    }}
-                  >
-                    <i class="bi bi-pencil"></i>
-                  </button>
-                </td>
-              </tr>
-            {/if}
-          {/each}
-        </tbody>
-      </table>
-    </div>
+        {/if}
+      {/each}
+    </DataTable>
   {/if}
 </IndexPageLayout>
 

@@ -124,7 +124,7 @@ import { saleApi } from '../api/saleApi.js';
 
 <style>
   .pdf-container {
-    font-family: 'Vazirmatn', sans-serif; /* make sure font is loaded */
+    font-family: 'Inter', 'Vazirmatn', sans-serif; /* make sure font is loaded */
     direction: rtl;
     text-align: right;
   }

@@ -966,7 +966,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
 
                 <th>{t('Category')}</th>
 
-                <th class="col-start cursor-pointer" on:click={() => setSort('quantity')}>
+                <th class="col-end cursor-pointer" on:click={() => setSort('quantity')}>
                   <span class="sortable-heading">
                     {t('Stock')}
 
@@ -992,15 +992,15 @@ import { saleItemApi } from '../../api/saleItemApi.js';
                   <th>{t('Expiry Date')}</th>
                 {/if}
 
-                <th class="col-start">{t('Purchase Price')}</th>
-                <th class="col-start">{t('Selling Price')}</th>
-                <th class="col-start">{t('Inventory Value')}</th>
+                <th class="col-end">{t('Purchase Price')}</th>
+                <th class="col-end">{t('Selling Price')}</th>
+                <th class="col-end">{t('Inventory Value')}</th>
 
                 {#if filterStatus === 'all' || filterStatus === 'archived'}
                   <th>{t('Status')}</th>
                 {/if}
 
-                <th>{t('Actions')}</th>
+                <th class="col-end">{t('Actions')}</th>
               </tr>
             </svelte:fragment>
 
@@ -1032,7 +1032,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
                 </td>
 
                 <!-- Quantity -->
-                <td class="col-start">
+                <td class="col-end">
                   <button
                     type="button"
                     class="quantity-cell"
@@ -1079,7 +1079,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
                 {/if}
 
                 <!-- Purchase price -->
-                <td class="col-start">
+                <td class="col-end">
                   <StatusBadge tone="info">
                     <span dir="ltr">
                       {Number(product.buy_price || 0).toLocaleString(undefined, {
@@ -1091,7 +1091,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
                 </td>
 
                 <!-- Selling price -->
-                <td class="col-start">
+                <td class="col-end">
                   <StatusBadge tone="positive">
                     <span dir="ltr">
                       {Number(product.sell_price || 0).toLocaleString(undefined, {
@@ -1103,7 +1103,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
                 </td>
 
                 <!-- Inventory Value (purchase_price * quantity) -->
-                <td class="col-start">
+                <td class="col-end">
                   {#if product}
                     {#if getProductQty(product) !== undefined}
                       <StatusBadge tone={(toNumber(product.buy_price) * getProductQty(product)) < 0 ? 'negative' : 'positive'}>

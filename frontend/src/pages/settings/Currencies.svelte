@@ -7,6 +7,9 @@
     import IndexPageLayout from "../../lib/components/index/IndexPageLayout.svelte";
     import ActionButton from "../../components/common/ActionButton.svelte";
     import PaginationBar from "../../components/common/PaginationBar.svelte";
+    import DataTable from "../../components/common/DataTable.svelte";
+    import StatusBadge from "../../components/common/StatusBadge.svelte";
+    import TableActions from "../../components/common/TableActions.svelte";
     import EmptyState from "../../components/common/EmptyState.svelte";
     import { DEFAULT_PAGE_SIZE } from "../../lib/pagination.js";
 
@@ -842,68 +845,55 @@
             />
         </div>
     {:else}
-        <div class="table-responsive">
-            <table class="table table-hover mb-0 settings-index-table">
-                <thead class="table-light">
-                    <tr>
-                        <th>{t("Name")}</th>
-                        <th>{t("Code")}</th>
-                        <th>{t("Symbol")}</th>
-                        <th>{t("Rate")}</th>
-                        <th>{t("Rate Date")}</th>
-                        <th>{t("Actions")}</th>
-                    </tr>
-                </thead>
+        <DataTable ariaLabel={t("Currencies")} minWidth="760px">
+            <svelte:fragment slot="head">
+                <tr>
+                    <th>{t("Name")}</th>
+                    <th>{t("Code")}</th>
+                    <th>{t("Symbol")}</th>
+                    <th class="col-end">{t("Rate")}</th>
+                    <th>{t("Rate Date")}</th>
+                    <th class="col-end">{t("Actions")}</th>
+                </tr>
+            </svelte:fragment>
 
-                <tbody>
-                    {#each paginatedCurrencies as currency}
-                        <tr>
-                            <td>
-                                {currency.name}
+            {#each paginatedCurrencies as currency (currency.id)}
+                <tr>
+                    <td>
+                        {currency.name}
 
-                                {#if Number(currency.isDefault) === 1}
-                                    <span class="badge badge-success">
-                                        {t("Default")}
-                                    </span>
-                                {/if}
-                            </td>
+                        {#if Number(currency.isDefault) === 1}
+                            <StatusBadge tone="positive">
+                                {t("Default")}
+                            </StatusBadge>
+                        {/if}
+                    </td>
 
-                            <td><strong>{currency.code}</strong></td>
-                            <td>{currency.symbol}</td>
+                    <td><strong>{currency.code}</strong></td>
+                    <td>{currency.symbol}</td>
 
-                            <td class="rate-cell">
-                                {formatExchangeRate(currency.exchangeRate)}
-                            </td>
+                    <td class="col-end rate-cell">
+                        {formatExchangeRate(currency.exchangeRate)}
+                    </td>
 
-                            <td>
-                                {@html showDate(currency.exchangeRateDate)}
-                            </td>
+                    <td>
+                        {@html showDate(currency.exchangeRateDate)}
+                    </td>
 
-                            <td>
-                                <button
-                                    type="button"
-                                    class="btn btn-sm btn-outline-secondary me-1"
-                                    title={t("Edit")}
-                                    on:click={() => editCurrency(currency)}
-                                >
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-
-                                <!--
-                                <button
-                                    type="button"
-                                    class="btn btn-sm btn-outline-danger"
-                                    on:click={() => deleteCurrency(currency.id)}
-                                >
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                                -->
-                            </td>
-                        </tr>
-                    {/each}
-                </tbody>
-            </table>
-        </div>
+                    <td class="col-end">
+                        <TableActions
+                            actions={[
+                                {
+                                    icon: 'bi-pencil',
+                                    label: t('Edit'),
+                                    tone: 'edit',
+                                    onClick: () => editCurrency(currency),
+                                },
+                            ]} />
+                    </td>
+                </tr>
+            {/each}
+        </DataTable>
     {/if}
 
     <svelte:fragment slot="footer">
@@ -1188,7 +1178,7 @@
 
     .rate-cell {
         direction: ltr;
-        text-align: center;
+        text-align: end;
         white-space: nowrap;
         font-variant-numeric: tabular-nums;
     }

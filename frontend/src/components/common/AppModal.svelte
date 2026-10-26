@@ -27,6 +27,7 @@
   };
 
   $: resolvedIcon = icon || variantIcons[variant] || variantIcons.default;
+  $: materialIcon = resolvedIcon.startsWith('ms:') ? resolvedIcon.slice(3) : '';
 
   function handleClose() {
     if (loading) return;
@@ -58,7 +59,11 @@
       <div class="app-modal__header-main">
         {#if showIcon && resolvedIcon}
           <span class="app-modal__icon" aria-hidden="true">
-            <i class="bi {resolvedIcon}"></i>
+            {#if materialIcon}
+              <span class="ms f">{materialIcon}</span>
+            {:else}
+              <i class="bi {resolvedIcon}"></i>
+            {/if}
           </span>
         {/if}
         <div class="app-modal__titles">

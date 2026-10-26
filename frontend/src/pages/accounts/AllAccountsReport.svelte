@@ -832,6 +832,7 @@
             <head>
                 <meta charset="utf-8" />
                 <title>${escapePrintValue(title)} - ${escapePrintValue(billLabel)}</title>
+                <link rel="stylesheet" href="/fonts/vazirmatn.css" />
                 <style>
                     @page { size: 80mm auto; margin: 4mm; }
                     * { box-sizing: border-box; }
@@ -839,7 +840,7 @@
                         width: 72mm;
                         margin: 0 auto;
                         color: #111827;
-                        font-family: Arial, sans-serif;
+                        font-family: 'Inter', 'Vazirmatn', Arial, sans-serif;
                         font-size: 10px;
                         line-height: 1.35;
                     }

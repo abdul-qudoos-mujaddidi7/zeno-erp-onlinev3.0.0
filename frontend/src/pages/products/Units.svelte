@@ -4,6 +4,11 @@
     import { onMount } from "svelte";
     import UnitModal from "./UnitModal.svelte";
     import PaginationBar from "../../components/common/PaginationBar.svelte";
+    import IndexPageLayout from "../../lib/components/index/IndexPageLayout.svelte";
+    import ActionButton from "../../components/common/ActionButton.svelte";
+    import DataTable from "../../components/common/DataTable.svelte";
+    import TableActions from "../../components/common/TableActions.svelte";
+    import EmptyState from "../../components/common/EmptyState.svelte";
 
     import { t, lang, translate_org_type,shortID } from "../../i18n/i18n";
     import { DEFAULT_PAGE_SIZE } from "../../lib/pagination.js";
@@ -68,138 +73,90 @@
 
 </script>
 
-<section class="units-page">
-<div class="my-4 d-flex justify-content-between align-items-center">
-    <p class="h5 mb-0">{t("Units")}</p>
-    <button type="button" class="btn btn-primary" on:click={()=>{unitModalRef.openUnitModal()}}>
-        <i class="bi bi-plus-circle"></i> {t("Create Unit")}
-    </button>
-</div>
+<IndexPageLayout
+    dir={t('dir')}
+    ariaLabel={t('Units')}
+    showFooter={!loading && units.length > 0}
+    dense={true}
+    contained={true}
+    contentClass="units-index-content"
+    tablePadding={true}>
+    <svelte:fragment slot="actions">
+        <ActionButton
+            icon="bi-plus-lg"
+            label={`+ ${t('Create Unit')}`}
+            on:click={() => unitModalRef?.openUnitModal()} />
+    </svelte:fragment>
 
-<div class="card shadow-sm">
-    <div class="card-body p-0">
-        {#if loading}
-            <div class="text-center p-4">
-                <div class="spinner-border text-primary" role="status"></div>
-            </div>
-        {:else}
-            <div class="table-responsive">
-                <table class="table table-hover mb-0 settings-index-table">
-                    <thead class="table-light">
-                        <tr>
-                            <th>{t("ID")}</th>
-                            <th>{t("Name")}</th>
-                            <th>{t("Code")}</th>
-                            <th>{t("Unit Category")}</th>
-                            <th>{t("Subunit")}</th>
-                            <th>{t("Actions")}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {#each paginatedUnits as unit}
-                            <tr>
-                                <td>{shortID(unit.id)}</td>
-                                <td>{unit.name}</td>
-                                <td><strong>{unit.code}</strong></td>
-                                <td>{categoryName(unit.unit_category_id)}</td>
-                                <td>
-                                    {#if unit.subunit_id}
-                                {Number(unit.subunit_multiple||0).toLocaleString(undefined,{maximumFractionDigits:6})}
-                                        {#each units as u}
-                                            {#if Number(u.id) === Number(unit.subunit_id)}
-                                                {u.name}
-                                            {/if}
-                                        {/each}
-                                    {:else}
-                                        
-                                    {/if}
-                                </td>
-                                <td>
-                                    <button
-                                        class="btn btn-sm btn-outline-secondary me-1"
-                                        on:click={() => unitModalRef.editUnit(unit)}
-                                    >
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    <!-- <button
-                                        class="btn btn-sm btn-outline-danger"
-                                        on:click={() =>
-                                            deleteUnit(unit.id)}
-                                    >
-                                        <i class="bi bi-trash"></i>
-                                    </button> -->
-                                </td>
-                            </tr>
-                        {/each}
-                        {#if units.length === 0}
-                            <tr>
-                                <td
-                                    colspan="9"
-                                    class="text-center text-muted p-4"
-                                    >No units found.</td
-                                >
-                            </tr>
+    {#if loading}
+        <div class="index-table-state">
+            <EmptyState loading message={t('Loading...')} />
+        </div>
+    {:else if units.length === 0}
+        <div class="index-table-state">
+            <EmptyState icon="bi-rulers" message={t('No units found.')} />
+        </div>
+    {:else}
+        <DataTable ariaLabel={t('Units')} minWidth="760px">
+            <svelte:fragment slot="head">
+                <tr>
+                    <th>{t('ID')}</th>
+                    <th>{t('Name')}</th>
+                    <th>{t('Code')}</th>
+                    <th>{t('Unit Category')}</th>
+                    <th class="col-end">{t('Subunit')}</th>
+                    <th class="col-end">{t('Actions')}</th>
+                </tr>
+            </svelte:fragment>
+
+            {#each paginatedUnits as unit (unit.id)}
+                <tr>
+                    <td class="cell-muted">{shortID(unit.id)}</td>
+                    <td>{unit.name}</td>
+                    <td><strong>{unit.code}</strong></td>
+                    <td>{categoryName(unit.unit_category_id)}</td>
+                    <td class="col-end">
+                        {#if unit.subunit_id}
+                            <span dir="ltr">
+                                {Number(unit.subunit_multiple || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                            </span>
+                            {#each units as u}
+                                {#if Number(u.id) === Number(unit.subunit_id)}
+                                    {u.name}
+                                {/if}
+                            {/each}
                         {/if}
-                    </tbody>
-                </table>
-            </div>
-        {/if}
-    </div>
-    {#if !loading && units.length > 0}
+                    </td>
+                    <td class="col-end">
+                        <TableActions
+                            actions={[
+                                {
+                                    icon: 'bi-pencil',
+                                    label: t('Edit'),
+                                    tone: 'edit',
+                                    onClick: () => unitModalRef?.editUnit(unit),
+                                },
+                            ]} />
+                    </td>
+                </tr>
+            {/each}
+        </DataTable>
+    {/if}
+
+    <svelte:fragment slot="footer">
         <PaginationBar
             bind:currentPage
             {totalPages}
             {itemsPerPage}
             totalItems={units.length}
-            ariaLabel={t("Units pagination")}
-            rowLabel={t("rows")}
+            ariaLabel={t('Units pagination')}
+            rowLabel={t('rows')}
             on:perPageChange={(event) => {
                 itemsPerPage = Number(event.detail);
                 currentPage = 1;
             }}
             {getPageNumbers} />
-    {/if}
-</div>
-</section>
+    </svelte:fragment>
+</IndexPageLayout>
 
 <UnitModal bind:this={unitModalRef} on:saved={loadUnits} />
-
-<style>
-    .units-page {
-        display: flex;
-        flex-direction: column;
-        width: 100%;
-        height: 100%;
-        min-height: 0;
-        overflow: hidden;
-    }
-
-    .units-page > :global(.card) {
-        display: flex;
-        flex: 1 1 auto;
-        flex-direction: column;
-        min-height: 0;
-        overflow: hidden;
-    }
-
-    .units-page > :global(.card > .card-body) {
-        display: flex;
-        flex: 1 1 auto;
-        flex-direction: column;
-        min-height: 0;
-        overflow: hidden;
-    }
-
-    .units-page :global(.table-responsive) {
-        flex: 1 1 auto;
-        min-height: 0;
-        overflow: auto;
-        scrollbar-width: thin;
-    }
-
-    .units-page :global(.table-responsive thead th) {
-        position: sticky;
-        top: 0;
-        z-index: 2;
-    }
-</style>

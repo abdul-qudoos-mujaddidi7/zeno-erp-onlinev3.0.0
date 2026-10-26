@@ -38,6 +38,7 @@
     "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
+    "material-symbols": "^0.48.1",
     "mdb-ui-kit": "^9.3.0",
     "qrcode": "^1.5.4",
     "rtl-detect": "^1.1.2",

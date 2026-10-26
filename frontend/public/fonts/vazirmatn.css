@@ -1,27 +1,98 @@
+/* =============================================================================
+   ZenoERP — local mixed-script font stack
+   -----------------------------------------------------------------------------
+   Two faces feed one family stack:
+
+     Inter      Latin letters, digits and Latin punctuation  (unicode-range: latin)
+     Vazirmatn  Dari / Persian / Pashto                      (unicode-range: arabic)
+
+   Each face only claims its own script, so a single declaration
+
+       font-family: 'Inter', 'Vazirmatn', sans-serif;
+
+   resolves glyph by glyph: English inside a Dari sentence is drawn with Inter,
+   Dari inside an English sentence is drawn with Vazirmatn. Nothing here reads
+   the page lang, dir or the selected app language, so mixed runs work the same
+   on RTL and LTR screens.
+
+   This file is the single font source for the SPA (linked from index.html) and
+   for every print/receipt document, so both contexts share the same routing.
+   ============================================================================= */
+
+/* --- Latin / numbers: Inter (vendored latin subset, variable 400-900) ------- */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('/fonts/inter/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* --- Arabic script: Vazirmatn ----------------------------------------------
+   The arabic unicode-range keeps Vazirmatn off Latin characters, even when it
+   is listed first by a legacy rule, so a missing Inter can never push English
+   into Vazirmatn's Latin glyphs. */
 @font-face {
   font-family: Vazirmatn;
-  src: url("./vazirmatn/Vazirmatn-Regular.woff2") format("woff2");
+  src: url('./vazirmatn/Vazirmatn-Regular.woff2') format('woff2');
   font-style: normal;
   font-weight: 400;
   font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1,
+    U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF,
+    U+FE70-FE74, U+FE76-FEFC;
 }
 
 @font-face {
   font-family: Vazirmatn;
-  src: url("./vazirmatn/Vazirmatn-Bold.woff2") format("woff2");
+  src: url('./vazirmatn/Vazirmatn-Medium.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1,
+    U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF,
+    U+FE70-FE74, U+FE76-FEFC;
+}
+
+@font-face {
+  font-family: Vazirmatn;
+  src: url('./vazirmatn/Vazirmatn-SemiBold.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1,
+    U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF,
+    U+FE70-FE74, U+FE76-FEFC;
+}
+
+@font-face {
+  font-family: Vazirmatn;
+  src: url('./vazirmatn/Vazirmatn-Bold.woff2') format('woff2');
   font-style: normal;
   font-weight: 700;
   font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1,
+    U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF,
+    U+FE70-FE74, U+FE76-FEFC;
 }
 
 @font-face {
   font-family: Vazirmatn;
-  src: url("./vazirmatn/Vazirmatn-ExtraBold.woff2") format("woff2");
+  src: url('./vazirmatn/Vazirmatn-ExtraBold.woff2') format('woff2');
   font-style: normal;
   font-weight: 800;
   font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1,
+    U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF,
+    U+FE70-FE74, U+FE76-FEFC;
 }
 
+/* Default UI face. Latin characters resolve to Inter, Arabic to Vazirmatn; the
+   order is what makes mixed sentences switch automatically. Deliberately not
+   `!important`: `.ms` (Material Symbols) and the icon fonts must still win. */
 * {
-  font-family: Vazirmatn !important;
+  font-family: 'Inter', 'Vazirmatn', sans-serif;
 }

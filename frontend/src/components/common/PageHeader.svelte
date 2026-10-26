@@ -31,19 +31,19 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--section-gap, 0.75rem);
-    padding: var(--card-padding, 0.85rem) clamp(0.85rem, 1.1vw, 1.1rem);
-    border: 1px solid #e5e7eb;
-    border-radius: var(--card-radius, 0.875rem);
-    background: #ffffff;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: var(--z-r-lg, 12px);
+    background: var(--z-surface, #ffffff);
+    box-shadow: var(--z-sh-1, 0 1px 2px rgba(11, 21, 48, 0.04));
     min-width: 0;
   }
 
   .header-main {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 10px;
     min-width: 0;
     flex: 1;
   }
@@ -53,12 +53,12 @@
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
-    width: clamp(2.1rem, 2.5vw, 2.5rem);
-    height: clamp(2.1rem, 2.5vw, 2.5rem);
-    border-radius: 12px;
-    color: #0f6efd;
-    background: #eff6ff;
-    font-size: 1rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    color: var(--z-link, #2f6fed);
+    background: var(--z-brand-soft, #e3ecff);
+    font-size: 15px;
   }
 
   .header-text {
@@ -68,19 +68,19 @@
 
   h1 {
     margin: 0;
-    color: #0f172a;
-    font-size: var(--app-heading-sm, 1.1rem);
+    color: var(--z-ink, #0b1530);
+    font-size: var(--z-fs-lg, 14px);
     font-weight: 800;
-    letter-spacing: -0.02em;
-    line-height: 1.25;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   p {
-    margin: 0.2rem 0 0;
-    color: #64748b;
-    font-size: var(--app-font-sm, 0.82rem);
+    margin: 2px 0 0;
+    color: var(--z-muted, #64748b);
+    font-size: var(--z-fs-sm, 11.5px);
     font-weight: 500;
     line-height: 1.45;
   }
@@ -89,7 +89,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.5rem;
+    gap: 6px;
     flex-shrink: 0;
     flex-wrap: wrap;
     min-width: 0;

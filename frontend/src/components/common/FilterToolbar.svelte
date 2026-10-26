@@ -1,18 +1,26 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, tick } from 'svelte';
   import FilterSelect from './FilterSelect.svelte';
   import AppDatePicker from './AppDatePicker.svelte';
 
   export let searchValue = '';
   export let searchPlaceholder = '';
   export let filters = [];
-  export let resetLabel = 'حذف فیلترها';
+  export let resetLabel = 'پاک‌کردن';
   export let filterLabel = 'فیلتر';
+  export let applyLabel = 'نمایش';
   export let showReset = true;
+  export let showApply = true;
+  /** Draw shared toolbar controls with the Journal Material Symbols icons. */
+  export let material = true;
 
   const dispatch = createEventDispatcher();
 
   let filtersOpen = false;
+  let filterTriggerEl;
+  let filterPanelEl;
+  let filterPanelStyle = '';
+  let filterPanelDir = 'ltr';
 
   const panelId = `filter-toolbar-panel-${Math.random().toString(36).slice(2)}`;
 
@@ -24,8 +32,48 @@
       : !['', 'all', null, undefined].includes(filter.value),
   ).length;
 
-  function toggleFilters() {
-    filtersOpen = !filtersOpen;
+  function portal(node) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
+  async function toggleFilters() {
+    if (filtersOpen) {
+      filtersOpen = false;
+      return;
+    }
+
+    filterPanelDir = getComputedStyle(filterTriggerEl).direction;
+    filtersOpen = true;
+    await tick();
+    positionFilterPanel();
+  }
+
+  function positionFilterPanel() {
+    if (!filtersOpen || !filterTriggerEl || !filterPanelEl) return;
+
+    if (window.innerWidth <= 575.98) {
+      filterPanelStyle = 'position:fixed;top:auto;right:8px;bottom:8px;left:8px;width:auto;max-width:none;';
+      return;
+    }
+
+    const triggerRect = filterTriggerEl.getBoundingClientRect();
+    const width = Math.min(filterPanelEl.offsetWidth, window.innerWidth - 16);
+    const height = filterPanelEl.offsetHeight;
+    const isRtl = filterPanelDir === 'rtl';
+    const desiredLeft = isRtl ? triggerRect.right - width : triggerRect.left;
+    const left = Math.max(8, Math.min(window.innerWidth - width - 8, desiredLeft));
+    const belowTop = triggerRect.bottom + 6;
+    const fitsBelow = belowTop + height <= window.innerHeight - 8;
+    const top = fitsBelow
+      ? belowTop
+      : Math.max(8, triggerRect.top - height - 6);
+
+    filterPanelStyle = `position:fixed;top:${top}px;right:auto;bottom:auto;left:${left}px;width:${width}px;`;
   }
 
   function closeFilters() {
@@ -59,27 +107,34 @@
       if (!filtersOpen) return;
       if (event.target.closest?.('.filter-select__menu')) return;
 
-      if (!node.contains(event.target)) {
+      if (!node.contains(event.target) && !filterPanelEl?.contains(event.target)) {
         filtersOpen = false;
       }
     }
 
-    window.addEventListener('click', handleWindowClick);
+    window.addEventListener('click', handleWindowClick, true);
 
     return {
       destroy() {
-        window.removeEventListener('click', handleWindowClick);
+        window.removeEventListener('click', handleWindowClick, true);
       },
     };
   }
 </script>
 
-<svelte:window on:keydown={closeOnEscape} />
+<svelte:window
+  on:keydown={closeOnEscape}
+  on:resize={positionFilterPanel}
+  on:scroll|capture={positionFilterPanel} />
 
 <section class="filter-toolbar">
   <div class="filter-toolbar-row">
-    <div class="filter-search" class:is-open={filtersOpen} use:clickOutside>
-      <i class="bi bi-search filter-search__icon" aria-hidden="true"></i>
+    <div class="filter-search">
+      {#if material}
+        <span class="ms filter-search__icon" aria-hidden="true">search</span>
+      {:else}
+        <i class="bi bi-search filter-search__icon" aria-hidden="true"></i>
+      {/if}
 
       <input
         type="search"
@@ -99,9 +154,12 @@
           <i class="bi bi-x-lg" aria-hidden="true"></i>
         </button>
       {/if}
+    </div>
 
-      {#if visibleFilters.length}
+    {#if visibleFilters.length}
+      <div class="filter-control" use:clickOutside>
         <button
+          bind:this={filterTriggerEl}
           type="button"
           class="filter-toggle"
           class:filter-toggle--active={filtersOpen || activeFilterCount > 0}
@@ -110,87 +168,76 @@
           aria-controls={panelId}
           title={filterLabel}
           on:click|stopPropagation={toggleFilters}>
-          <i class="bi bi-sliders2" aria-hidden="true"></i>
+          {#if material}
+            <span class="ms" aria-hidden="true">tune</span>
+          {:else}
+            <i class="bi bi-sliders2" aria-hidden="true"></i>
+          {/if}
+
+          {#if activeFilterCount > 0}
+            <span class="filter-toggle__count">{activeFilterCount}</span>
+          {/if}
         </button>
-      {/if}
 
-      {#if filtersOpen && visibleFilters.length}
-        <div class="filter-panel" id={panelId} role="dialog" aria-label={filterLabel} on:click|stopPropagation>
-          <div class="filter-panel__arrow"></div>
+        {#if filtersOpen}
+          <div
+            bind:this={filterPanelEl}
+            use:portal
+            class="filter-panel"
+            id={panelId}
+            role="dialog"
+            aria-label={filterLabel}
+            dir={filterPanelDir}
+            style={filterPanelStyle}
+            on:click|stopPropagation>
+            <header class="filter-panel__header">
+              <strong class="filter-panel__title">{filterLabel}</strong>
 
-          <header class="filter-panel__header">
-            <div class="filter-panel__title">
-              <span class="filter-panel__title-icon">
-                <i class="bi bi-sliders2" aria-hidden="true"></i>
-              </span>
+              {#if showReset}
+                <button
+                  type="button"
+                  class="filter-panel__reset"
+                  disabled={activeFilterCount === 0}
+                  on:click={handleReset}>{resetLabel}</button>
+              {/if}
+            </header>
 
-              <div>
-                <strong>{filterLabel}</strong>
-
-                <small>
-                  {#if activeFilterCount > 0}
-                    {activeFilterCount} فیلتر فعال
-                  {:else}
-                    انتخاب گزینه‌های مورد نظر
-                  {/if}
-                </small>
+            <div class="filter-panel__body">
+              <div class="filter-panel__fields">
+                {#each visibleFilters as filter (filter.key)}
+                  <div class="filter-field">
+                    {#if filter.type === 'date'}
+                      <div class="filter-date">
+                        <AppDatePicker
+                          value={filter.value || ''}
+                          label={filter.label}
+                          on:change={(event) => handleFilterChange(filter, event.detail)} />
+                      </div>
+                    {:else}
+                      <FilterSelect
+                        variant="stacked"
+                        label={filter.label}
+                        icon={filter.icon}
+                        value={filter.value}
+                        multiple={filter.multiple}
+                        options={filter.options || []}
+                        material={material}
+                        on:change={(event) => handleFilterChange(filter, event.detail)} />
+                    {/if}
+                  </div>
+                {/each}
               </div>
             </div>
 
-            <button
-              type="button"
-              class="filter-panel__close"
-              aria-label="Close filters"
-              title="Close"
-              on:click={closeFilters}>
-              <i class="bi bi-x-lg" aria-hidden="true"></i>
-            </button>
-          </header>
-
-          <div class="filter-panel__body">
-            <div class="filter-panel__fields">
-              {#each visibleFilters as filter (filter.key)}
-                <div class="filter-field">
-                  {#if filter.type === 'date'}
-                    <div class="filter-date">
-                      <AppDatePicker
-                        value={filter.value || ''}
-                        label={filter.label}
-                        on:change={(event) => handleFilterChange(filter, event.detail)} />
-                    </div>
-                  {:else}
-                    <FilterSelect
-                      variant="outline"
-                      label={filter.label}
-                      icon={filter.icon}
-                      value={filter.value}
-                      multiple={filter.multiple}
-                      options={filter.options || []}
-                      on:change={(event) => handleFilterChange(filter, event.detail)} />
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          </div>
-
-          <footer class="filter-panel__footer">
-            {#if showReset}
-              <button type="button" class="filter-reset" disabled={activeFilterCount === 0} on:click={handleReset}>
-                <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
-
-                <span>{resetLabel}</span>
-              </button>
+            {#if showApply}
+              <footer class="filter-panel__footer">
+                <button type="button" class="filter-apply" on:click={closeFilters}>{applyLabel}</button>
+              </footer>
             {/if}
-
-            <button type="button" class="filter-apply" on:click={closeFilters}>
-              <i class="bi bi-check2" aria-hidden="true"></i>
-
-              <span>تایید</span>
-            </button>
-          </footer>
-        </div>
-      {/if}
-    </div>
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     {#if $$slots.actions}
       <div class="filter-toolbar-actions">
@@ -216,106 +263,71 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 0.625rem;
+    gap: 6px;
     width: 100%;
     min-width: 0;
   }
 
-  /* Search container */
+  /* Search field — 30px tall on surface-2, exactly like the reference toolbar */
 
   .filter-search {
     position: relative;
     display: flex;
-    flex: 1 1 min(25rem, 100%);
     align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    min-width: 0;
-    min-height: 2.625rem;
-    padding-inline: 0.75rem 0.375rem;
+    gap: 5px;
+    flex: 0 1 auto;
+    width: 220px;
+    max-width: 100%;
+    height: var(--index-toolbar-control-height, 30px);
+    min-height: var(--index-toolbar-control-height, 30px);
+    padding: 0 8px;
     overflow: visible;
-    border: 1px solid #d6e0ed;
-    border-radius: 0.625rem;
-    background: #ffffff;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: var(--z-r-sm, 8px);
+    background: var(--z-surface-2, #f8fafc);
     transition:
       border-color 0.16s ease,
       box-shadow 0.16s ease,
       background 0.16s ease;
   }
 
-  :global(html.dark) .filter-search {
-    border-color: var(--erp-border);
-    background: var(--erp-surface-soft);
-    box-shadow: none;
-  }
-
   .filter-search:hover {
-    border-color: #bfd0e4;
+    border-color: var(--z-border-strong, #dce6f8);
   }
 
-  :global(html.dark) .filter-search:hover {
-    border-color: var(--erp-border-strong);
-  }
-
-  .filter-search:focus-within,
-  .filter-search.is-open {
-    border-color: #79a8f8;
-    background: #ffffff;
-    box-shadow:
-      0 0 0 3px rgba(37, 99, 235, 0.08),
-      0 4px 12px rgba(15, 23, 42, 0.04);
-  }
-
-  :global(html.dark) .filter-search:focus-within,
-  :global(html.dark) .filter-search.is-open {
-    border-color: #60a5fa;
-    background: var(--erp-surface);
-    box-shadow:
-      0 0 0 3px rgba(96, 165, 250, 0.14),
-      0 8px 18px rgba(0, 0, 0, 0.18);
+  .filter-search:focus-within {
+    border-color: var(--z-brand-300, #93b7f7);
+    background: var(--z-surface, #ffffff);
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
   .filter-search__icon {
     flex: 0 0 auto;
-    color: #9aabc0;
-    font-size: 1rem;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 16px;
     pointer-events: none;
-  }
-
-  :global(html.dark) .filter-search__icon {
-    color: var(--erp-muted);
   }
 
   .filter-search__input {
     flex: 1 1 auto;
     width: 100%;
     min-width: 0;
-    height: 2.5rem;
-    min-height: 2.5rem;
+    height: 100%;
     margin: 0;
     padding: 0;
     border: 0;
     outline: 0;
     background: transparent;
-    color: #26364b;
+    color: var(--z-ink, #0b1530);
     font-family: inherit;
-    font-size: 0.875rem;
-    font-weight: 550;
+    font-size: 12px;
+    font-weight: 400;
     line-height: 1.3;
   }
 
-  :global(html.dark) .filter-search__input {
-    color: var(--erp-text);
-  }
-
   .filter-search__input::placeholder {
-    color: #9aa8b9;
+    color: var(--z-subtle, #94a3b8);
     opacity: 1;
-  }
-
-  :global(html.dark) .filter-search__input::placeholder {
-    color: #718096;
   }
 
   .filter-search__input::-webkit-search-cancel-button {
@@ -327,15 +339,15 @@
   .search-clear {
     display: inline-grid;
     place-items: center;
-    flex: 0 0 1.75rem;
-    width: 1.75rem;
-    height: 1.75rem;
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
     padding: 0;
     border: 0;
-    border-radius: 0.4375rem;
+    border-radius: 5px;
     background: transparent;
-    color: #94a3b8;
-    font-size: 0.6875rem;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 10px;
     cursor: pointer;
     transition:
       color 0.15s ease,
@@ -343,269 +355,172 @@
   }
 
   .search-clear:hover {
-    background: #f1f5f9;
-    color: #475569;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-ink, #0b1530);
   }
 
-  :global(html.dark) .search-clear {
-    color: var(--erp-muted);
+  /* Filter trigger — its own 30px button with an active-count badge */
+
+  .filter-control {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
   }
 
-  :global(html.dark) .search-clear:hover {
-    background: rgba(148, 163, 184, 0.12);
-    color: var(--erp-text);
+  .filter-toggle {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: var(--index-toolbar-control-height, 30px);
+    min-width: 32px;
+    min-height: var(--index-toolbar-control-height, 30px);
+    padding: 0;
+    border: 1px solid #ccd6f0;
+    border-radius: var(--z-r-sm, 8px);
+    background: #e4e9f7;
+    color: #3d5ac8;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      background 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
   }
 
-  /* Filter toggle */
+  .filter-toggle:hover {
+    border-color: #ccd6f0;
+    background: #d9e1f5;
+    color: #3d5ac8;
+  }
 
-  .filter-search > .filter-toggle {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 1.75rem;
+  .filter-toggle:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
+  }
 
-  width: 1.75rem;
-  min-width: 1.75rem;
-  max-width: 1.75rem;
+  .filter-toggle.filter-toggle--active {
+    border-color: #ccd6f0;
+    background: #e4e9f7;
+    color: #3d5ac8;
+  }
 
-  height: 1.75rem;
-  min-height: 1.75rem;
-  max-height: 1.75rem;
+  .filter-toggle > .ms {
+    font-size: 17px;
+  }
 
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0.4rem;
-
-  background: #0f6efd;
-  color: #ffffff;
-  font-size: 0.85rem;
-  line-height: 1;
-  cursor: pointer;
-
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.18);
-
-  transition:
-    color 0.15s ease,
-    background 0.15s ease,
-    transform 0.15s ease;
-}
-
-.filter-search > .filter-toggle:hover {
-  background: #0f6efd;
-  color: #ffffff;
-}
-
-.filter-search > .filter-toggle:active {
-  transform: scale(0.95);
-}
-
-.filter-search > .filter-toggle.filter-toggle--active {
-  background: #0f6efd;
-  color: #ffffff;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.18);
-}
-
-.filter-search > .filter-toggle i {
-  font-size: 0.85rem;
-  color: inherit !important;
-}
-
-.filter-search > .filter-toggle:not(.filter-toggle--active) i {
-  color: #ffffff !important;
-}
-
-.filter-search > .filter-toggle.filter-toggle--active i {
-  color: #ffffff !important;
-}
-  /* Filter panel */
+  .filter-toggle__count {
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border: 2px solid var(--z-surface, #ffffff);
+    border-radius: 8px;
+    background: var(--z-brand, #2f6fed);
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  /* Filter panel — 300px popover anchored under the trigger */
 
   .filter-panel {
-    position: absolute;
-    top: calc(100% + 0.75rem);
-
-    /* Always open on the physical left side */
-    left: 0;
-    right: auto;
-
+    position: fixed;
+    top: 36px;
+    inset-inline-start: 0;
     z-index: 1000;
     display: flex;
     flex-direction: column;
-    width: 22.5rem;
+    width: 300px;
     max-width: calc(100vw - 2rem);
     max-height: min(34rem, calc(100vh - 8rem));
     overflow: visible;
-    border: 1px solid rgba(15, 23, 42, 0.1);
-    border-radius: 1rem;
-    background: #ffffff;
-    box-shadow:
-      0 24px 60px rgba(15, 23, 42, 0.17),
-      0 8px 20px rgba(15, 23, 42, 0.07);
-    transform-origin: top left;
-    animation: filter-panel-enter 0.18s ease-out;
-  }
-
-  :global(html.dark) .filter-panel {
-    border-color: var(--erp-border);
-    background: var(--erp-surface);
-    box-shadow:
-      0 24px 60px rgba(0, 0, 0, 0.38),
-      0 8px 20px rgba(0, 0, 0, 0.28);
-  }
-
-  .filter-panel__arrow {
-    position: absolute;
-    top: -0.4375rem;
-    left: 1.125rem;
-    width: 0.875rem;
-    height: 0.875rem;
-    border-top: 1px solid rgba(15, 23, 42, 0.1);
-    border-left: 1px solid rgba(15, 23, 42, 0.1);
-    background: #ffffff;
-    transform: rotate(45deg);
-  }
-
-  :global(html.dark) .filter-panel__arrow {
-    border-color: var(--erp-border);
-    background: var(--erp-surface);
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: 11px;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 18px 44px -14px rgba(11, 21, 48, 0.4);
+    animation: filter-panel-enter 0.16s ease-out;
   }
 
   @keyframes filter-panel-enter {
     from {
       opacity: 0;
-      transform: translateY(-0.375rem) scale(0.98);
+      transform: translateY(-4px);
     }
 
     to {
       opacity: 1;
-      transform: translateY(0) scale(1);
+      transform: translateY(0);
     }
   }
 
   /* Filter panel header */
 
   .filter-panel__header {
-    position: relative;
-    z-index: 2;
     display: flex;
     flex: 0 0 auto;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
-    min-height: 4rem;
-    padding: 0.75rem 0.875rem;
-    border-bottom: 1px solid #edf1f5;
-    border-radius: 1rem 1rem 0 0;
-    background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
-  }
-
-  :global(html.dark) .filter-panel__header {
-    border-bottom-color: var(--erp-border);
-    background: linear-gradient(180deg, var(--erp-surface) 0%, var(--erp-surface-soft) 100%);
+    gap: 8px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
   }
 
   .filter-panel__title {
-    display: flex;
-    align-items: center;
-    gap: 0.6875rem;
-    min-width: 0;
-  }
-
-  .filter-panel__title-icon {
-    display: inline-grid;
-    place-items: center;
-    flex: 0 0 2.25rem;
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: 0.625rem;
-    background: #eaf2ff;
-    color: #0f6efd;
-    font-size: 1rem;
-  }
-
-  :global(html.dark) .filter-panel__title-icon {
-    background: rgba(96, 165, 250, 0.16);
-    color: #93c5fd;
-  }
-
-  .filter-panel__title > div {
-    display: grid;
-    min-width: 0;
-    gap: 0.125rem;
-  }
-
-  .filter-panel__title strong {
-    color: #172033;
-    font-size: 0.875rem;
-    font-weight: 850;
+    color: var(--z-ink, #0b1530);
+    font-size: 12px;
+    font-weight: 700;
     line-height: 1.3;
   }
 
-  :global(html.dark) .filter-panel__title strong {
-    color: var(--erp-text);
-  }
-
-  .filter-panel__title small {
-    color: #8794a7;
-    font-size: 0.6875rem;
-    font-weight: 550;
-    line-height: 1.3;
-  }
-
-  :global(html.dark) .filter-panel__title small {
-    color: var(--erp-muted);
-  }
-
-  .filter-panel__close {
-    display: inline-grid;
-    place-items: center;
-    flex: 0 0 2rem;
-    width: 2rem;
-    height: 2rem;
-    padding: 0;
+  .filter-panel__reset {
+    height: 22px;
+    padding: 0 8px;
     border: 0;
-    border-radius: 0.5rem;
+    border-radius: 6px;
     background: transparent;
-    color: #7b8ba1;
-    font-size: 0.75rem;
+    color: var(--z-link, #2f6fed);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
     cursor: pointer;
     transition:
-      color 0.15s ease,
-      background 0.15s ease;
+      background 0.15s ease,
+      color 0.15s ease;
   }
 
-  .filter-panel__close:hover {
-    background: #f1f5f9;
-    color: #172033;
+  .filter-panel__reset:hover:not(:disabled) {
+    background: var(--z-brand-soft, #e3ecff);
   }
 
-  :global(html.dark) .filter-panel__close {
-    color: var(--erp-muted);
+  .filter-panel__reset:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
-  :global(html.dark) .filter-panel__close:hover {
-    background: rgba(148, 163, 184, 0.12);
-    color: var(--erp-text);
-  }
-
-  /* Filter panel body */
+  /* Filter panel body — two-column field grid */
 
   .filter-panel__body {
     flex: 1 1 auto;
     min-height: 0;
-    padding: 0.875rem;
+    padding: 9px 10px;
     overflow-y: auto;
     scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 transparent;
-  }
-
-  :global(html.dark) .filter-panel__body {
-    scrollbar-color: #526176 transparent;
+    scrollbar-color: var(--z-border, #e1e7f0) transparent;
   }
 
   .filter-panel__fields {
     display: grid;
-    gap: 0.75rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 8px;
   }
 
   .filter-field {
@@ -615,50 +530,38 @@
 
   .filter-date {
     display: grid;
-    gap: 0.35rem;
+    gap: 3px;
+    min-width: 0;
   }
 
-  .filter-date__label {
+  .filter-date :global(.date-label) {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    color: #5e6e82;
-    font-size: 0.75rem;
-    font-weight: 750;
+    gap: 4px;
+    color: var(--z-muted, #64748b);
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1.3;
   }
-
-  :global(html.dark) .filter-date__label {
-    color: var(--erp-text-soft);
-  }
-
-  .filter-date__label i { color: #0f6efd; }
 
   .filter-date input {
     width: 100%;
-    min-height: 2.75rem;
-    padding: 0.5rem 0.7rem;
-    border: 1px solid #d7e1ee;
-    border-radius: 0.625rem;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: var(--z-r-sm, 8px);
     outline: 0;
-    background: #fff;
-    color: #26364b;
-    font: inherit;
-  }
-
-  :global(html.dark) .filter-date input {
-    border-color: var(--erp-border);
-    background: var(--erp-surface-soft);
-    color: var(--erp-text);
+    background: var(--z-surface, #ffffff);
+    color: var(--z-ink, #0b1530);
+    font-family: var(--z-font-num, 'Inter', 'Vazirmatn', sans-serif);
+    font-size: var(--z-fs-sm, 11.5px);
+    font-weight: 700;
   }
 
   .filter-date input:focus {
-    border-color: #79a8f8;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
-  }
-
-  :global(html.dark) .filter-date input:focus {
-    border-color: #60a5fa;
-    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14);
+    border-color: var(--z-brand-300, #93b7f7);
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
   .filter-panel__fields :global(.filter-select) {
@@ -671,102 +574,46 @@
     z-index: 1050;
   }
 
-  .filter-panel__fields :global(.filter-select__control),
-  .filter-panel__fields :global(.filter-select-control) {
-    min-height: 2.75rem;
-    border-color: #d7e1ee;
-    border-radius: 0.625rem;
-    background: #ffffff;
-  }
-
-  :global(html.dark) .filter-panel__fields :global(.filter-select__control),
-  :global(html.dark) .filter-panel__fields :global(.filter-select-control) {
-    border-color: var(--erp-border);
-    background: var(--erp-surface-soft);
-  }
-
-  /* Footer buttons */
+  /* Footer — single full-width primary action */
 
   .filter-panel__footer {
     display: flex;
     flex: 0 0 auto;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.625rem;
-    min-height: 4rem;
-    padding: 0.75rem 0.875rem;
-    border-top: 1px solid #edf1f5;
-    border-radius: 0 0 1rem 1rem;
-    background: #fafcff;
+    padding: 8px 10px;
+    border-top: 1px solid var(--z-border-soft, #eef2f7);
+    border-radius: 0 0 11px 11px;
+    background: var(--z-surface-2, #f8fafc);
   }
 
-  :global(html.dark) .filter-panel__footer {
-    border-top-color: var(--erp-border);
-    background: var(--erp-surface-soft);
-  }
-
-  .filter-reset,
   .filter-apply {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.4375rem;
-    min-height: 2.375rem;
-    padding: 0.4375rem 0.875rem;
-    border-radius: 0.5625rem;
+    gap: 4px;
+    width: 100%;
+    height: 30px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: var(--z-r-sm, 8px);
+    background: var(--z-brand, #2f6fed);
+    color: #ffffff;
     font-family: inherit;
-    font-size: 0.8125rem;
-    font-weight: 750;
-    line-height: 1.2;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
     cursor: pointer;
     transition:
-      color 0.15s ease,
       background 0.15s ease,
-      border-color 0.15s ease,
       box-shadow 0.15s ease;
   }
 
-  .filter-reset {
-    border: 1px solid #cbd8e7;
-    background: #ffffff;
-    color: #5e6e82;
-  }
-
-  :global(html.dark) .filter-reset {
-    border-color: var(--erp-border);
-    background: var(--erp-surface);
-    color: var(--erp-text-soft);
-  }
-
-  .filter-reset:hover:not(:disabled) {
-    border-color: #f0a6ad;
-    background: #fff5f5;
-    color: #c83248;
-  }
-
-  :global(html.dark) .filter-reset:hover:not(:disabled) {
-    border-color: rgba(248, 113, 113, 0.42);
-    background: rgba(248, 113, 113, 0.12);
-    color: #fca5a5;
-  }
-
-  .filter-reset:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
-
-  .filter-apply {
-    min-width: 6rem;
-    border: 1px solid #0f6efd;
-    background: #0f6efd;
-    color: #ffffff;
-    box-shadow: 0 5px 12px rgba(37, 99, 235, 0.18);
-  }
-
   .filter-apply:hover {
-    border-color: #1d4ed8;
-    background: #1d4ed8;
-    box-shadow: 0 7px 16px rgba(37, 99, 235, 0.22);
+    background: #245fcf;
+  }
+
+  .filter-apply:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
   /* Actions slot */
@@ -776,57 +623,46 @@
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    gap: 6px;
     min-width: 0;
   }
 
   @media (max-width: 767.98px) {
-    .filter-toolbar-row {
-      align-items: stretch;
-      flex-direction: column;
-    }
-
-    .filter-search,
-    .filter-toolbar-actions {
-      width: 100%;
+    .filter-search {
+      flex: 1 1 160px;
+      width: auto;
       min-width: 0;
     }
 
-    .filter-toolbar-actions {
-      justify-content: stretch;
-    }
-
     .filter-panel {
-      left: 0;
-      right: auto;
-      width: min(22.5rem, calc(100vw - 1.5rem));
+      width: min(300px, calc(100vw - 1.5rem));
       max-width: none;
     }
   }
 
   @media (max-width: 575.98px) {
+    .filter-toolbar-actions {
+      width: 100%;
+      justify-content: stretch;
+    }
+
     .filter-panel {
       position: fixed;
       top: auto;
-      right: 0.75rem;
-      bottom: 0.75rem;
-      left: 0.75rem;
+      right: 8px;
+      bottom: 8px;
+      left: 8px;
       width: auto;
       max-width: none;
       max-height: min(80vh, 36rem);
-      border-radius: 1rem;
-      transform-origin: bottom center;
+      border-radius: 11px;
       animation: filter-sheet-enter 0.2s ease-out;
-    }
-
-    .filter-panel__arrow {
-      display: none;
     }
 
     @keyframes filter-sheet-enter {
       from {
         opacity: 0;
-        transform: translateY(1rem);
+        transform: translateY(16px);
       }
 
       to {
@@ -838,11 +674,6 @@
     .filter-panel__footer {
       position: sticky;
       bottom: 0;
-    }
-
-    .filter-reset,
-    .filter-apply {
-      flex: 1 1 50%;
     }
   }
 </style>

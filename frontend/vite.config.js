@@ -58,8 +58,10 @@ export default defineConfig(({ mode }) => {
           /**
            * Only the app shell is precached: entry + vendor, the boot-route
            * chunks (Login/Register/Dashboard/DashboardLayout/swal), the CSS
-           * and fonts index.html references, and the legacy /js libraries the
-           * shell loads synchronously. Route chunks, the PDF/editor/chart
+           * and font files needed by the shell, and the legacy /js libraries
+           * the shell loads synchronously. The mutable font-face stylesheet
+           * uses a network-first runtime cache so updates cannot stay stale.
+           * Route chunks, the PDF/editor/chart
            * bundles, images and the currency image catalogue are fetched on
            * demand and kept in the runtime caches below — this cut the
            * install/update download from ~8.3 MB to ~2.5 MB.
@@ -90,7 +92,7 @@ export default defineConfig(({ mode }) => {
             'css/bootstrap-icons.min.css',
             'css/fonts/bootstrap-icons.woff2',
             'css/mds.bs.datetimepicker.style.css',
-            'fonts/vazirmatn.css',
+            'fonts/inter/inter-latin.woff2',
             'fonts/vazirmatn/*.woff2',
             'js/mdb.umd.min.js',
             'js/mds.bs.datetimepicker.js',
@@ -136,7 +138,17 @@ export default defineConfig(({ mode }) => {
               },
             },
             {
-              urlPattern: /\/fonts\//,
+              urlPattern: /\/fonts\/.+\.css$/,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'zeno-font-styles',
+                networkTimeoutSeconds: 3,
+                expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
+            {
+              urlPattern: /\/fonts\/.+\.(woff2?|ttf|otf)$/,
               handler: 'CacheFirst',
               options: {
                 cacheName: 'zeno-fonts',

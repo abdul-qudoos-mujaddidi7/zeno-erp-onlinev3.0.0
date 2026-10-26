@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zeno · Journal table actions preview</title>
+    <link rel="stylesheet" href="/css/mdb.rtl.min.css" />
+    <link rel="stylesheet" href="/css/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="/fonts/vazirmatn.css?v=latin-inter" />
+    <script>
+      /* A throw-away session so the auth store initialises as signed in. */
+      localStorage.setItem('lang', 'fa');
+      localStorage.setItem('theme', 'light');
+      localStorage.setItem('token', 'preview-token');
+      localStorage.setItem('token_expires_at', String(Date.now() + 86400000));
+      localStorage.setItem('user_id', '8');
+      localStorage.setItem('org_id', '29');
+      localStorage.setItem('role_id', '1');
+      localStorage.setItem('username', 'preview');
+      localStorage.setItem(
+        'permissions',
+        JSON.stringify([
+          { code: 'Journals', create: true, read: true, update: true, edit: true, delete: true },
+        ]),
+      );
+      localStorage.setItem(
+        'subscription',
+        JSON.stringify({ feature_catalog: [], features: [], plan_features: [] }),
+      );
+      document.documentElement.lang = 'fa';
+      document.documentElement.dir = 'rtl';
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #eef2f8;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/ta-preview.js"></script>
+  </body>
+</html>

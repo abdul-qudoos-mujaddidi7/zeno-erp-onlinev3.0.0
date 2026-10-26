@@ -3,6 +3,8 @@
   import UnitCategoryModal from './UnitCategoryModal.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import ActionButton from '../../components/common/ActionButton.svelte';
+  import DataTable from '../../components/common/DataTable.svelte';
+  import TableActions from '../../components/common/TableActions.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import {t,lang,translate_org_type,shortID,} from '../../i18n/i18n';
   import { unitCategoryApi } from '../../api/unitCategoryApi.js';
@@ -95,56 +97,49 @@
       />
     </div>
   {:else}
-    <div class="table-responsive">
-      <table
-        class="table table-hover mb-0 settings-index-table"
-      >
-        <thead class="table-light">
+    <DataTable ariaLabel={t('Unit Categories')} minWidth="720px">
+      <svelte:fragment slot="head">
+        <tr>
+          <th>{t('ID')}</th>
+          <th>{t('Name')}</th>
+          <th class="col-end">{t('Units')}</th>
+          <th>{t('Description')}</th>
+          <th class="col-end">{t('Actions')}</th>
+        </tr>
+      </svelte:fragment>
+
+      {#each unitCategories as unitCategory (unitCategory.id)}
+        {#if Number(unitCategory.status) !== 0}
           <tr>
-            <th>{t('ID')}</th>
-            <th>{t('Name')}</th>
-            <th>{t('Units')}</th>
-            <th>{t('Description')}</th>
-            <th>{t('Actions')}</th>
+            <td class="cell-muted">{shortID(unitCategory.id)}</td>
+
+            <td>{unitCategory.name}</td>
+
+            <td class="col-end">
+              {unitCounts[Number(unitCategory.id)] || 0}
+            </td>
+
+            <td>
+              <strong>
+                {unitCategory.description || ''}
+              </strong>
+            </td>
+
+            <td class="col-end">
+              <TableActions
+                actions={[
+                  {
+                    icon: 'bi-pencil',
+                    label: t('Edit'),
+                    tone: 'edit',
+                    onClick: () => modalRef?.editUnitCategory(unitCategory),
+                  },
+                ]} />
+            </td>
           </tr>
-        </thead>
-
-        <tbody>
-          {#each unitCategories as unitCategory}
-            {#if Number(unitCategory.status) !== 0}
-              <tr>
-                <td>{shortID(unitCategory.id)}</td>
-
-                <td>{unitCategory.name}</td>
-
-                <td>
-                  {unitCounts[Number(unitCategory.id)] || 0}
-                </td>
-
-                <td>
-                  <strong>
-                    {unitCategory.description || ''}
-                  </strong>
-                </td>
-
-                <td>
-                  <button
-                    class="btn btn-sm btn-outline-secondary me-1"
-                    on:click={() => {
-                      modalRef?.editUnitCategory(
-                        unitCategory,
-                      );
-                    }}
-                  >
-                    <i class="bi bi-pencil"></i>
-                  </button>
-                </td>
-              </tr>
-            {/if}
-          {/each}
-        </tbody>
-      </table>
-    </div>
+        {/if}
+      {/each}
+    </DataTable>
   {/if}
 </IndexPageLayout>
 

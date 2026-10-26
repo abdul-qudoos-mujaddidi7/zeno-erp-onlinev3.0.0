@@ -13,11 +13,11 @@
   export let showPerPage = true;
   export let perPageOptions = PAGE_SIZE_OPTIONS;
   export let perPageSuffix = 'صفحه';
-  /** Floating label on the per-page select (e.g. نمایش). */
+  /** Accessible label for the page-size option group (e.g. نمایش). */
   export let perPageLabel = null;
   /** Label before the total count (e.g. تعداد). */
   export let countLabel = null;
-  /** Optional row unit for options; falls back to perPageSuffix (no slash). */
+  /** Visible row label and accessible option unit; falls back to perPageSuffix. */
   export let rowLabel = '';
 
   const dispatch = createEventDispatcher();
@@ -28,24 +28,53 @@
   $: pageNumbers = getPageNumbers(currentPage, totalPages);
   $: resolvedCountLabel = ($lang, countLabel ?? t('record') ?? 'تعداد');
   $: resolvedPerPageLabel = ($lang, perPageLabel ?? t('Showing') ?? 'نمایش');
-  $: optionUnit = ($lang, rowLabel || t('rows') || perPageSuffix);
+  $: resolvedRowLabel = ($lang, rowLabel || t('rows') || perPageSuffix);
+  $: optionUnit = resolvedRowLabel;
 </script>
 
 <div class="pagination-shell">
+  <div class="pagination-meta">
+    {#if totalItems != null}
+      <span class="pagination-count">
+        {resolvedCountLabel} : <b dir="ltr">{totalItems}</b>
+      </span>
+    {/if}
+
+    {#if showPerPage}
+      <div class="per-page-control" role="group" aria-label={resolvedPerPageLabel}>
+        <span class="row-label">{resolvedRowLabel}</span>
+        <div class="per-page-options">
+          {#each perPageOptions as option (option)}
+            <button
+              type="button"
+              class="per-page-option"
+              class:active={Number(itemsPerPage) === Number(option)}
+              aria-label={`${option} ${optionUnit}`}
+              aria-pressed={Number(itemsPerPage) === Number(option)}
+              on:click={() => dispatch('perPageChange', String(option))}>
+              {option}
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </div>
+
   <nav class="pagination-nav" aria-label={ariaLabel}>
     <button
       type="button"
       class="nav-arrow"
-      aria-label={isRtl ? 'صفحه بعد' : 'Previous page'}
+      aria-label={isRtl ? 'صفحه قبل' : 'Previous page'}
       disabled={prevDisabled}
       on:click={() => (currentPage -= 1)}>
-      <i class="bi bi-chevron-{isRtl ? 'right' : 'left'}"></i>
+      <span class="ms nav-icon" aria-hidden="true">{isRtl ? 'chevron_right' : 'chevron_left'}</span>
+      <span class="nav-label">{isRtl ? 'قبلی' : 'Previous'}</span>
     </button>
 
     <div class="page-numbers">
       {#each pageNumbers as pageNum, idx (pageNum === '...' ? `dot-${idx}` : pageNum)}
         {#if pageNum === '...'}
-          <span class="page-ellipsis">...</span>
+          <span class="page-ellipsis">…</span>
         {:else}
           <button
             type="button"
@@ -62,35 +91,13 @@
     <button
       type="button"
       class="nav-arrow"
-      aria-label={isRtl ? 'صفحه قبل' : 'Next page'}
+      aria-label={isRtl ? 'صفحه بعد' : 'Next page'}
       disabled={nextDisabled}
       on:click={() => (currentPage += 1)}>
-      <i class="bi bi-chevron-{isRtl ? 'left' : 'right'}"></i>
+      <span class="nav-label">{isRtl ? 'بعدی' : 'Next'}</span>
+      <span class="ms nav-icon" aria-hidden="true">{isRtl ? 'chevron_left' : 'chevron_right'}</span>
     </button>
   </nav>
-
-  <div class="pagination-meta">
-    {#if showPerPage}
-      <label class="per-page-picker">
-        <span class="picker-label">{resolvedPerPageLabel}</span>
-        <select
-          value={itemsPerPage}
-          aria-label={resolvedPerPageLabel}
-          on:change={(e) => dispatch('perPageChange', e.currentTarget.value)}>
-          {#each perPageOptions as option (option)}
-            <option value={option}>{option} {optionUnit}</option>
-          {/each}
-        </select>
-        <i class="bi bi-chevron-down picker-icon" aria-hidden="true"></i>
-      </label>
-    {/if}
-
-    {#if totalItems != null}
-      <span class="pagination-count">
-        {resolvedCountLabel} : {totalItems}
-      </span>
-    {/if}
-  </div>
 </div>
 
 <style>
@@ -99,22 +106,18 @@
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 0.65rem 1rem;
-    padding: var(--card-padding, 0.65rem 0.85rem);
-    border-top: 1px solid #eef2f7;
-    background: #fff;
+    gap: 10px 16px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--z-border-soft, #eef2f7);
+    background: #F8FAFC;
     min-width: 0;
-  }
-
-  :global(html.dark) .pagination-shell {
-    border-top-color: var(--erp-border);
-    background: var(--erp-surface);
+    border-radius: 0 0 var(--z-r-xl, 14px) var(--z-r-xl, 14px);
   }
 
   .pagination-nav {
     display: inline-flex;
     align-items: center;
-    gap: 0.15rem;
+    gap: 4px;
     min-width: 0;
     flex-wrap: wrap;
   }
@@ -123,196 +126,186 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--control-height-sm, 2rem);
-    height: var(--control-height-sm, 2rem);
-    min-width: var(--control-height-sm, 2rem);
-    padding: 0;
-    border: none;
-    border-radius: 0.35rem;
-    color: #475569;
-    background: transparent;
-    font-size: 0.85rem;
-    transition: color 0.15s ease, background 0.15s ease;
-  }
-
-  :global(html.dark) .nav-arrow {
-    color: var(--erp-text-soft);
+    gap: 2px;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: 9px;
+    color: var(--z-text, #475569);
+    background: var(--z-surface, #ffffff);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
 
   .nav-arrow:hover:not(:disabled) {
-    color: #0f172a;
-    background: #f1f5f9;
+    border-color: var(--z-brand-300, #93b7f7);
+    background: var(--z-hover, #f5f9ff);
+    color: var(--z-ink, #0b1530);
   }
 
-  :global(html.dark) .nav-arrow:hover:not(:disabled) {
-    color: var(--erp-text);
-    background: rgba(148, 163, 184, 0.12);
+  .nav-arrow:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
   .nav-arrow:disabled {
-    color: #cbd5e1;
-    background: transparent;
+    color: var(--z-subtle, #94a3b8);
+    background: var(--z-surface, #ffffff);
+    opacity: 0.6;
     cursor: not-allowed;
   }
 
-  :global(html.dark) .nav-arrow:disabled {
-    color: #475569;
+  .nav-icon {
+    font-size: 18px !important;
+  }
+
+  .nav-label {
+    line-height: 1;
   }
 
   .page-numbers {
     display: inline-flex;
     align-items: center;
-    gap: 0.1rem;
+    gap: 2px;
   }
 
   .page-num {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: var(--control-height-sm, 2rem);
-    height: var(--control-height-sm, 2rem);
-    padding: 0 0.35rem;
-    border: none;
-    border-radius: 0.35rem;
-    color: #1e293b;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 9px;
     background: transparent;
-    font-size: var(--table-font-size, 0.78rem);
-    color: #0f172a;
-    background: #f1f5f9;
+    color: var(--z-text, #475569);
+    font-family: var(--z-font-num, 'Inter', 'Vazirmatn', sans-serif);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   }
 
-  :global(html.dark) .page-num {
-    color: var(--erp-text-soft);
-    background: var(--erp-surface-soft);
+  .page-num:hover {
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-ink, #0b1530);
+  }
+
+  .page-num:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
   .page-num.active {
-    color: #fff;
-    background: #0f6efd;
-    font-weight: 700;
-    box-shadow: none;
+    background: var(--z-brand, #2f6fed);
+    color: #ffffff;
+    font-weight: 800;
+    box-shadow: 0 6px 14px -8px rgba(47, 111, 237, 0.9);
+    cursor: default;
   }
 
-  :global(html.dark) .page-num.active {
+  .page-num.active:hover {
+    background: var(--z-brand, #2f6fed);
     color: #ffffff;
-    background: #2563eb;
   }
 
   .page-ellipsis {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 1.25rem;
-    height: var(--control-height-sm, 2rem);
-    color: #64748b;
-    font-size: var(--table-font-size, 0.78rem);
+    min-width: 18px;
+    height: 32px;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 12.5px;
     font-weight: 600;
     letter-spacing: 0.04em;
-  }
-
-  :global(html.dark) .page-ellipsis {
-    color: var(--erp-muted);
   }
 
   .pagination-meta {
     display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 0.65rem 0.85rem;
+    gap: 10px 16px;
     min-width: 0;
   }
 
   .pagination-count {
-    color: #334155;
-    font-size: var(--table-font-size, 0.78rem);
-    font-weight: 600;
+    color: var(--z-muted, #64748b);
+    font-size: 12px;
+    font-weight: 400;
     white-space: nowrap;
   }
 
-  :global(html.dark) .pagination-count {
-    color: var(--erp-text-soft);
+  .pagination-count b {
+    color: var(--z-ink, #0b1530);
+    font-weight: 800;
   }
 
-  .per-page-picker {
-    position: relative;
+  .per-page-control {
     display: inline-flex;
     align-items: center;
     flex: 0 0 auto;
     margin: 0;
+    gap: 6px;
   }
 
-  .picker-label {
-    position: absolute;
-    top: 0;
-    inset-inline-start: 0.55rem;
-    z-index: 1;
-    transform: translateY(-50%);
-    padding: 0 0.28rem;
-    background: #fff;
-    color: #64748b;
-    font-size: 0.68rem;
-    font-weight: 600;
-    line-height: 1;
+  .row-label {
+    color: var(--z-muted, #64748b);
+    font-size: 11.5px;
     white-space: nowrap;
-    pointer-events: none;
   }
 
-  :global(html.dark) .picker-label {
-    background: var(--erp-surface);
-    color: var(--erp-muted);
+  .per-page-options {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background: var(--z-surface-3, #f1f5f9);
   }
 
-  .per-page-picker select {
-    appearance: none;
-    min-width: 6.5rem;
-    height: var(--control-height-sm, 2rem);
-    padding-inline: 0.7rem 1.65rem;
-    border: 1px solid #d1d5db;
-    border-radius: 0.4rem;
-    color: #1e293b;
-    background: #fff;
-    font-size: var(--table-font-size, 0.78rem);
-    font-weight: 600;
-    line-height: 1;
+  .per-page-option {
+    min-width: 34px;
+    height: 26px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--z-muted, #64748b);
+    font-family: var(--z-font-num, 'Inter', 'Vazirmatn', sans-serif);
+    font-size: 11.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
     cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   }
 
-  :global(html.dark) .per-page-picker select {
-    border-color: var(--erp-border);
-    background: var(--erp-surface-soft);
-    color: var(--erp-text);
+  .per-page-option:hover {
+    color: var(--z-ink, #0b1530);
   }
 
-  .per-page-picker select:focus {
-    outline: none;
-    border-color: #93c5fd;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+  .per-page-option.active {
+    background: var(--z-surface, #ffffff);
+    color: var(--z-ink, #0b1530);
+    box-shadow: 0 1px 3px rgba(11, 21, 48, 0.14);
   }
 
-  :global(html.dark) .per-page-picker select:focus {
-    border-color: #60a5fa;
-    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.16);
-  }
-
-  .picker-icon {
-    position: absolute;
-    inset-inline-end: 0.55rem;
-    top: 50%;
-    transform: translateY(-50%);
-    pointer-events: none;
-    color: #64748b;
-    font-size: 0.68rem;
-  }
-
-  :global(html.dark) .picker-icon {
-    color: var(--erp-muted);
+  .per-page-option:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
   @media (max-width: 767.98px) {
     .pagination-shell {
       flex-direction: column;
       align-items: stretch;
-      gap: 0.75rem;
+      gap: 8px;
     }
 
     .pagination-nav {
@@ -323,12 +316,8 @@
       justify-content: center;
     }
 
-    .per-page-picker {
-      flex: 1 1 auto;
-    }
-
-    .per-page-picker select {
-      width: 100%;
+    .nav-label {
+      display: none;
     }
   }
 </style>

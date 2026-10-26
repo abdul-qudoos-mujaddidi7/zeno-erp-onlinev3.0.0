@@ -671,7 +671,7 @@
               <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
             {/if}
           </th>
-          <th>{t('Actions')}</th>
+          <th class="col-end">{t('Actions')}</th>
         </tr>
       </svelte:fragment>
 

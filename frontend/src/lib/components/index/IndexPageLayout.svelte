@@ -21,12 +21,12 @@
   <section class={`index-panel ${panelClass}`.trim()}>
     {#if $$slots.actions || $$slots.toolbar}
       <header class="index-toolbar" style={`--index-toolbar-width: ${toolbarWidth};`}>
-        <div class="index-toolbar-actions">
-          <slot name="actions" />
-        </div>
-
         <div class="index-toolbar-main">
           <slot name="toolbar" />
+        </div>
+
+        <div class="index-toolbar-actions">
+          <slot name="actions" />
         </div>
       </header>
     {/if}
@@ -58,8 +58,13 @@
 </div>
 
 <style>
+  /*
+   * Zeno index sheet — measured from the reference Journal.dc.html
+   * (panel radius 14, toolbar 8/10 with 30px controls, hairline separators).
+   * Shared by every list page: Journal, Sales, Purchases, Products, Accounts…
+   */
   .index-page {
-    --index-toolbar-control-height: 2.625rem;
+    --index-toolbar-control-height: 30px;
 
     display: flex;
     flex-direction: column;
@@ -69,7 +74,7 @@
     min-height: 0;
     padding: 0;
     overflow: hidden;
-    color: #172033;
+    color: var(--z-text, #475569);
     background: transparent;
   }
 
@@ -81,16 +86,10 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    border: 1px solid #dfe5ed;
-    border-radius: 0.5rem;
-    background: #ffffff;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.025);
-  }
-
-  :global(html.dark) .index-panel {
-    border-color: var(--erp-border);
-    background: var(--erp-surface);
-    box-shadow: var(--erp-shadow-sm);
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: var(--z-r-xl, 14px);
+    background: var(--z-surface, #ffffff);
+    box-shadow: var(--z-sh-1, 0 1px 2px rgba(11, 21, 48, 0.04));
   }
 
   .index-page--flow {
@@ -118,77 +117,55 @@
   .index-toolbar {
     position: relative;
     z-index: 50;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    display: flex;
     align-items: center;
-    gap: 0.875rem;
+    gap: 6px;
     flex: 0 0 auto;
-    min-height: 4rem;
-    padding: 0.6875rem 1.25rem;
+    min-height: 46px;
+    padding: 8px 10px;
     overflow: visible;
-    border-bottom: 1px solid #edf1f5;
-    background: #ffffff;
-    direction: ltr;
-  }
-
-  :global(html.dark) .index-toolbar {
-    border-bottom-color: var(--erp-border);
-    background: var(--erp-surface);
-  }
-
-  .index-toolbar-actions {
-    grid-column: 1;
-    grid-row: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 0.5rem;
-    min-width: 0;
-    position: relative;
-    z-index: 2;
-  }
-
-  .index-toolbar-actions :global(.export-menu) {
-    position: relative;
-    z-index: 2;
-    flex: 0 0 auto;
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    background: var(--z-surface, #ffffff);
   }
 
   .index-toolbar-main {
-    grid-column: 2;
-    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .index-toolbar-actions {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    justify-self: end;
-    width: min(100%, var(--index-toolbar-width, 25rem));
+    gap: 6px;
+    flex: 0 0 auto;
+    margin-inline-start: auto;
     min-width: 0;
-  }
-
-  .index-page[dir='rtl'] .index-toolbar-actions,
-  .index-page[dir='rtl'] .index-toolbar-main {
-    direction: rtl;
-  }
-
-  .index-page[dir='ltr'] .index-toolbar-actions,
-  .index-page[dir='ltr'] .index-toolbar-main {
-    direction: ltr;
   }
 
   .index-toolbar-actions :global(.action-btn) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.4375rem;
+    gap: 4px;
     flex: 0 0 auto;
     height: var(--index-toolbar-control-height);
     min-height: var(--index-toolbar-control-height);
     max-height: var(--index-toolbar-control-height);
     margin: 0;
-    padding: 0 1rem;
-    border-radius: 0.5625rem;
+    padding: 0 10px;
+    border-radius: var(--z-r-sm, 8px);
+    font-size: 12px;
+    font-weight: 700;
     line-height: 1;
     white-space: nowrap;
+  }
+
+  .index-toolbar-actions :global(.action-btn.primary) {
+    padding: 0 12px;
   }
 
   .index-toolbar-actions :global(.index-settings-button) {
@@ -203,12 +180,12 @@
     max-height: var(--index-toolbar-control-height);
     margin: 0;
     padding: 0;
-    border: 1px solid #ccd8e7;
-    border-radius: 0.5625rem;
-    background: #ffffff;
-    color: #64748b;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: var(--z-r-sm, 8px);
+    background: var(--z-surface, #ffffff);
+    color: var(--z-muted, #64748b);
     font: inherit;
-    font-size: 1rem;
+    font-size: 15px;
     line-height: 1;
     cursor: pointer;
     transition:
@@ -218,29 +195,13 @@
       box-shadow 0.15s ease;
   }
 
-  :global(html.dark) .index-toolbar-actions :global(.index-settings-button) {
-    border-color: var(--erp-border);
-    background: var(--erp-surface-soft);
-    color: var(--erp-text-soft);
-  }
-
-  :global(html.dark) .index-toolbar-actions :global(.index-settings-button:hover),
-  :global(html.dark) .index-toolbar-actions :global(.index-settings-button.is-active),
-  :global(html.dark) .index-toolbar-actions :global(.index-settings-button:focus-visible) {
-    border-color: rgba(96, 165, 250, 0.48);
-    background: rgba(96, 165, 250, 0.14);
-    color: #93c5fd;
-    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.12);
-  }
-
   .index-toolbar-actions :global(.index-settings-button:hover),
   .index-toolbar-actions :global(.index-settings-button.is-active),
   .index-toolbar-actions :global(.index-settings-button:focus-visible) {
-    border-color: #93b4e7;
+    border-color: var(--z-brand-300, #93b7f7);
     outline: none;
-    background: #f5f9ff;
-    color: #0f6efd;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.07);
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
   }
 
   .index-toolbar-main :global(.filter-toolbar),
@@ -252,99 +213,40 @@
   .index-toolbar-main :global(.filter-toolbar-row) {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .index-toolbar-main :global(.filter-search) {
-    flex: 1 1 auto;
-    width: 100%;
-    min-width: 15rem;
+    flex: 0 1 auto;
+    max-width: var(--index-toolbar-width, 25rem);
     height: var(--index-toolbar-control-height);
     min-height: var(--index-toolbar-control-height);
-    max-height: var(--index-toolbar-control-height);
     margin: 0;
   }
 
   .index-toolbar-main :global(.filter-search__input) {
-    height: calc(var(--index-toolbar-control-height) - 2px);
-    min-height: calc(var(--index-toolbar-control-height) - 2px);
-    max-height: calc(var(--index-toolbar-control-height) - 2px);
-  }
-
-  .index-toolbar-main :global(.filter-toggle) {
-    flex: 0 0 1.75rem;
-    width: 1.75rem;
-    min-width: 1.75rem;
-    max-width: 1.75rem;
-    height: 1.75rem;
-    min-height: 1.75rem;
-    max-height: 1.75rem;
+    height: 100%;
+    min-height: 0;
   }
 
   .index-statistics {
     position: relative;
     z-index: 20;
     flex: 0 0 auto;
-    padding: 0.75rem 1.25rem;
-    border-bottom: 1px solid #edf1f5;
-    background: #fafcff;
-  }
-
-  :global(html.dark) .index-statistics {
-    border-bottom-color: var(--erp-border);
-    background: var(--erp-surface-soft);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    background: var(--z-surface, #ffffff);
   }
 
   .index-statistics :global(.index-summary-grid) {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
   }
 
   .index-statistics :global(.summary-card) {
-    min-height: 4.625rem;
-    padding: 0.75rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.75rem;
-    background: #ffffff;
-    box-shadow: none;
-  }
-
-  :global(html.dark) .index-statistics :global(.summary-card) {
-    border-color: var(--erp-border);
-    background: var(--erp-surface);
-  }
-
-  .index-statistics :global(.summary-icon) {
-    width: 2.25rem;
-    height: 2.25rem;
-    flex: 0 0 2.25rem;
-    border-radius: 0.625rem;
-    font-size: 0.9375rem;
-  }
-
-  .index-statistics :global(.summary-label) {
-    margin-bottom: 0.1875rem;
-    color: #64748b;
-    font-size: 0.75rem;
-    font-weight: 700;
-  }
-
-  :global(html.dark) .index-statistics :global(.summary-label) {
-    color: var(--erp-muted);
-  }
-
-  .index-statistics :global(.summary-value) {
-    color: #0f172a;
-    font-size: 1rem;
-    font-weight: 850;
-    line-height: 1.25;
-  }
-
-  :global(html.dark) .index-statistics :global(.summary-value) {
-    color: var(--erp-text);
+    min-height: 0;
   }
 
   .index-extra-actions {
@@ -353,14 +255,9 @@
     display: flex;
     flex: 0 0 auto;
     justify-content: flex-end;
-    padding: 0.625rem 1.25rem;
-    border-bottom: 1px solid #edf1f5;
-    background: #fffdf7;
-  }
-
-  :global(html.dark) .index-extra-actions {
-    border-bottom-color: var(--erp-border);
-    background: rgba(245, 158, 11, 0.08);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    background: var(--z-surface-2, #f8fafc);
   }
 
   .index-content {
@@ -369,18 +266,17 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
+    gap: 10px;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    background: #ffffff;
+    background: var(--z-surface, #ffffff);
   }
 
-  :global(html.dark) .index-content {
-    background: var(--erp-surface);
-  }
-
+  /* Keep the shared table flush with the index panel on every edge. */
   .index-content--padded {
-    padding-inline: 1.25rem;
+    padding: 0;
+    gap: 0;
   }
 
   .index-content :global(.index-table-state) {
@@ -394,7 +290,10 @@
     flex: 1 1 auto;
     width: 100%;
     min-height: 0;
+    /* Keep a fine frame without adding outer spacing around the table. */
+    margin: 0;
     overflow: auto;
+    border: 1px solid var(--z-border-soft, #eef2f7);
   }
 
   .index-page:not(.index-page--flow) .index-content :global(.data-table) {
@@ -402,124 +301,94 @@
   }
 
   .index-content :global(.erp-badge) {
-    min-height: 1.625rem;
-    padding: 0.25rem 0.625rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 750;
+    min-height: 20px;
+    padding: 0 8px;
+    border-radius: var(--z-r-pill, 999px);
+    font-size: 10.5px;
+    font-weight: 700;
     line-height: 1.15;
   }
 
   .index-content :global(.erp-badge.neutral) {
-    border: 1px solid #dfe6ee;
-    background: #f1f5f9;
-    color: #475569;
-  }
-
-  :global(html.dark) .index-content :global(.erp-badge.neutral) {
-    border-color: var(--erp-border);
-    background: var(--erp-surface-soft);
-    color: var(--erp-text-soft);
+    border: 1px solid transparent;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-text, #475569);
   }
 
   .index-content :global(.table-actions) {
     display: inline-flex;
     align-items: center;
-    gap: 0.375rem;
+    gap: 2px;
     white-space: nowrap;
   }
 
   .index-content :global(.table-actions .action-btn) {
-    width: 2.125rem;
-    height: 2.125rem;
-    min-height: 2.125rem;
+    width: 26px;
+    height: 26px;
+    min-height: 26px;
     padding: 0;
-    border-radius: 0.5rem;
+    border-radius: var(--z-r-xs, 6px);
     box-shadow: none;
   }
 
   .index-content :global(.table-actions .action-btn.tone-view),
   .index-content :global(.table-actions .action-btn.tone-edit) {
-    border-color: #bfdbfe;
-    background: #eff6ff;
-    color: #0f6efd;
+    border-color: transparent;
+    background: transparent;
+    color: var(--z-brand, #2f6fed);
   }
 
-  :global(html.dark) .index-content :global(.table-actions .action-btn.tone-view),
-  :global(html.dark) .index-content :global(.table-actions .action-btn.tone-edit) {
-    border-color: rgba(96, 165, 250, 0.38);
-    background: rgba(96, 165, 250, 0.14);
-    color: #93c5fd;
+  .index-content :global(.table-actions .action-btn.tone-view:hover),
+  .index-content :global(.table-actions .action-btn.tone-edit:hover) {
+    background: var(--z-brand-soft, #e3ecff);
   }
 
   .index-content :global(.table-actions .action-btn.tone-danger) {
-    border-color: #fecaca;
-    background: #fef2f2;
-    color: #dc2626;
+    border-color: transparent;
+    background: transparent;
+    color: var(--z-debit, #dc2626);
   }
 
-  :global(html.dark) .index-content :global(.table-actions .action-btn.tone-danger) {
-    border-color: rgba(248, 113, 113, 0.36);
-    background: rgba(248, 113, 113, 0.12);
-    color: #fca5a5;
+  .index-content :global(.table-actions .action-btn.tone-danger:hover) {
+    background: var(--z-debit-soft, #fdecec);
   }
 
   .index-footer {
     position: relative;
     z-index: 10;
     flex: 0 0 auto;
-    background: #ffffff;
-  }
-
-  :global(html.dark) .index-footer {
-    background: var(--erp-surface);
+    border-top: 1px solid var(--z-border-soft, #eef2f7);
+    background: var(--z-surface, #ffffff);
   }
 
   .index-footer :global(.pagination-shell) {
     min-height: auto;
-    padding: 0.875rem 1.25rem 1rem;
+    padding: 8px 12px;
     border: 0;
-    background: transparent;
+    background: #F8FAFC;
   }
 
   @media (max-width: 1199.98px) {
     .index-toolbar,
     .index-statistics,
     .index-extra-actions {
-      padding-inline: 1rem;
+      padding-inline: 10px;
     }
 
-    .index-content--padded {
-      padding-inline: 1rem;
-    }
-
-    .index-statistics :global(.index-summary-grid) {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
   }
 
   @media (max-width: 991.98px) {
     .index-toolbar {
-      gap: 0.75rem;
-      padding-inline: 0.75rem;
-    }
-
-    .index-toolbar-main {
-      width: min(100%, 36rem);
-    }
-
-    .index-toolbar-main :global(.filter-search) {
-      min-width: 12rem;
+      padding-inline: 8px;
     }
 
     .index-statistics,
-    .index-extra-actions,
-    .index-content--padded {
-      padding-inline: 0.75rem;
+    .index-extra-actions {
+      padding-inline: 8px;
     }
 
     .index-footer :global(.pagination-shell) {
-      padding-inline: 0.75rem;
+      padding-inline: 8px;
     }
   }
 
@@ -531,36 +400,34 @@
     .index-page:not(.index-page--flow) .index-panel {
       min-height: calc(100dvh - 1.5rem);
       overflow: hidden;
-      border-radius: 0.75rem;
+      border-radius: var(--z-r-xl, 14px);
     }
 
     .index-toolbar {
-      display: flex;
-      align-items: stretch;
       flex-direction: column;
-      gap: 0.625rem;
+      align-items: stretch;
+      gap: 6px;
       min-height: auto;
-      padding: 0.75rem;
-      direction: initial;
+      padding: 8px;
     }
 
     .index-toolbar-main {
-      order: 1;
+      flex-direction: column;
+      align-items: stretch;
       width: 100%;
-      max-width: none;
-      justify-self: stretch;
-    }
-
-    .index-toolbar-actions {
-      order: 2;
-      display: flex;
-      width: 100%;
-      justify-content: flex-start;
+      gap: 6px;
     }
 
     .index-toolbar-main :global(.filter-search) {
       width: 100%;
+      max-width: none;
       min-width: 0;
+    }
+
+    .index-toolbar-actions {
+      width: 100%;
+      justify-content: flex-start;
+      flex-wrap: wrap;
     }
 
     .index-toolbar-actions :global(.action-btn) {
@@ -569,30 +436,19 @@
 
     .index-statistics {
       max-height: 50vh;
-      padding-inline: 0.75rem;
+      padding-inline: 8px;
       overflow-y: auto;
     }
 
-    .index-statistics :global(.index-summary-grid) {
-      grid-template-columns: 1fr;
-    }
-
-    .index-content--padded {
-      padding-inline: 0.5rem;
-    }
-
     .index-footer :global(.pagination-shell) {
-      padding: 0.625rem;
+      padding: 8px;
     }
   }
 
   @media (max-width: 575.98px) {
     .index-toolbar {
-      padding: 0.625rem;
+      padding: 6px;
     }
 
-    .index-content--padded {
-      padding-inline: 0.375rem;
-    }
   }
 </style>

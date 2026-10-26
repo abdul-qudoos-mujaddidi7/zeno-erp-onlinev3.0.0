@@ -203,7 +203,7 @@ import { productCategoryApi } from '../../api/productCategoryApi.js';
 
     const extraStyle = document.createElement("style");
     extraStyle.innerHTML = `
-      body { margin:0; font-family: Arial, sans-serif; }
+      body { margin:0; font-family: 'Inter', 'Vazirmatn', Arial, sans-serif; }
       .label {
         page-break-inside: avoid;
         border: 1px solid #000;

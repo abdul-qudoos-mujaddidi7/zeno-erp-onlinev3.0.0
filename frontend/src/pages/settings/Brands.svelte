@@ -14,6 +14,12 @@
   import ActionButton
     from '../../components/common/ActionButton.svelte';
 
+  import DataTable
+    from '../../components/common/DataTable.svelte';
+
+  import TableActions
+    from '../../components/common/TableActions.svelte';
+
   import EmptyState
     from '../../components/common/EmptyState.svelte';
 
@@ -94,60 +100,43 @@
       />
     </div>
   {:else}
-    <div class="table-responsive">
-      <table
-        class="table table-hover mb-0 settings-index-table"
-      >
-        <thead class="table-light">
+    <DataTable ariaLabel={t('Product Brands')} minWidth="640px">
+      <svelte:fragment slot="head">
+        <tr>
+          <th>{t('ID')}</th>
+          <th>{t('Name')}</th>
+          <th>{t('Code')}</th>
+          <th class="col-end">{t('Actions')}</th>
+        </tr>
+      </svelte:fragment>
+
+      {#each productBrands as brand (brand.id)}
+        {#if Number(brand.status) !== 0}
           <tr>
-            <th>{t('ID')}</th>
-            <th>{t('Name')}</th>
-            <th>{t('Code')}</th>
-            <th>{t('Actions')}</th>
+            <td class="cell-muted">{brand.id}</td>
+            <td>{brand.name}</td>
+
+            <td>
+              <strong>
+                {brand.code || ''}
+              </strong>
+            </td>
+
+            <td class="col-end">
+              <TableActions
+                actions={[
+                  {
+                    icon: 'bi-pencil',
+                    label: t('Edit'),
+                    tone: 'edit',
+                    onClick: () => modalRef?.editProductBrand(brand),
+                  },
+                ]} />
+            </td>
           </tr>
-        </thead>
-
-        <tbody>
-          {#each productBrands as brand}
-            {#if Number(brand.status) !== 0}
-              <tr>
-                <td>{brand.id}</td>
-                <td>{brand.name}</td>
-
-                <td>
-                  <strong>
-                    {brand.code || ''}
-                  </strong>
-                </td>
-
-                <td>
-                  <button
-                    class="btn btn-sm btn-outline-secondary me-1"
-                    on:click={() => {
-                      modalRef?.editProductBrand(
-                        brand,
-                      );
-                    }}
-                  >
-                    <i class="bi bi-pencil"></i>
-                  </button>
-
-                  <!--
-                  <button
-                    class="btn btn-sm btn-outline-danger"
-                    on:click={() =>
-                      deleteProductBrand(brand.id)}
-                  >
-                    <i class="bi bi-trash"></i>
-                  </button>
-                  -->
-                </td>
-              </tr>
-            {/if}
-          {/each}
-        </tbody>
-      </table>
-    </div>
+        {/if}
+      {/each}
+    </DataTable>
   {/if}
 </IndexPageLayout>
 

@@ -253,7 +253,7 @@
     <svelte:fragment slot="head">
       <tr>
         <th>{t('ID')}</th><th>{t('Date')}</th><th>{t('Name')}</th><th>{t('Description')}</th>
-        <th>{t('File Type')}</th><th>{t('File Size')}</th><th>{t('Thumbnail')}</th><th>{t('Actions')}</th>
+        <th>{t('File Type')}</th><th>{t('File Size')}</th><th>{t('Thumbnail')}</th><th class="col-end">{t('Actions')}</th>
       </tr>
     </svelte:fragment>
       {#each paginatedDocuments as d}

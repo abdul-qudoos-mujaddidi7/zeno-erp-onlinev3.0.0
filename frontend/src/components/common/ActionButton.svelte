@@ -11,14 +11,49 @@
   export let type = 'button';
   export let compact = false;
   export let extraClass = '';
+  /** Toggle state for view switches (balance cards, density…) — mirrors the reference `.on` button. */
+  export let pressed = false;
+  /** Use the Journal Material Symbols throughout; set `bootstrap` only when
+      a caller specifically requires a Bootstrap glyph. */
+  export let iconSet = 'material';
 
   const dispatch = createEventDispatcher();
+  const materialIconNames = {
+    'bi-plus-lg': 'add',
+    'bi-printer': 'print',
+    'bi-printer-fill': 'print',
+    'bi-arrow-clockwise': 'refresh',
+    'bi-bar-chart': 'bar_chart',
+    'bi-clock-history': 'history',
+    'bi-pencil': 'edit',
+    'bi-lock': 'lock',
+    'bi-clipboard-data': 'assignment',
+    'bi-unlock': 'lock_open',
+    'bi-check-lg': 'check',
+    'bi-eye': 'visibility',
+    'bi-wallet2': 'account_balance_wallet',
+    'bi-calculator': 'calculate',
+    'bi-archive': 'archive',
+    'bi-box-arrow-in-up': 'move_to_inbox',
+    'bi-box-seam': 'inventory_2',
+    'bi-arrow-counterclockwise': 'undo',
+    'bi-file-earmark': 'description',
+    'bi-file-pdf-fill': 'picture_as_pdf',
+    'bi-arrow-left': 'arrow_back',
+    'bi-check2-circle': 'check_circle',
+    'bi-person-plus': 'person_add',
+  };
+
+  $: useMaterialIcon = iconSet === 'material';
+  $: renderedIcon = materialIconNames[icon] || icon;
 </script>
 
 <button
   class="action-btn {variant} tone-{tone} {extraClass}"
   class:compact
+  class:is-pressed={pressed}
   class:icon-only={variant === 'icon' && !label}
+  aria-pressed={pressed ? 'true' : undefined}
   {disabled}
   {type}
   title={title || label}
@@ -27,7 +62,11 @@
   {#if loading}
     <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
   {:else if icon}
-    <i class="bi {icon}"></i>
+    {#if useMaterialIcon}
+      <span class="ms" aria-hidden="true">{renderedIcon}</span>
+    {:else}
+      <i class="bi {icon}"></i>
+    {/if}
   {/if}
   {#if label && variant !== 'icon'}
     <span>{label}</span>
@@ -35,162 +74,175 @@
 </button>
 
 <style>
+  /* Zeno toolbar button: 30px tall, 8px radius, 12px/700.
+     Pages may shrink it by redefining --ab-h where buttons live in dense rows. */
   .action-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.3rem;
-    min-height: var(--button-height-sm, 2rem);
-    padding: 0.25rem 0.55rem;
-    border: 1px solid transparent;
-    border-radius: var(--control-radius, 0.4rem);
-    font-size: var(--control-font, 0.78rem);
-    font-weight: 600;
+    gap: 4px;
+    flex: 0 0 auto;
+    height: var(--ab-h, 30px);
+    min-height: var(--ab-h, 30px);
+    padding: 0 10px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: var(--z-r-sm, 8px);
+    background: var(--z-surface, #fff);
+    color: var(--z-ink, #0b1530);
+    font-family: inherit;
+    font-size: var(--z-fs-base, 12px);
+    font-weight: 700;
     line-height: 1;
     white-space: nowrap;
+    cursor: pointer;
     transition:
-      background 0.15s ease,
-      border-color 0.15s ease,
-      color 0.15s ease,
-      transform 0.15s ease,
-      box-shadow 0.15s ease;
+      background 0.14s ease,
+      border-color 0.14s ease,
+      color 0.14s ease,
+      box-shadow 0.14s ease;
+  }
+
+  .action-btn > i {
+    font-size: 15px;
+    line-height: 1;
   }
 
   .action-btn:hover:not(:disabled) {
-    transform: translateY(-1px);
+    background: var(--z-surface-2, #f8fafc);
+    border-color: var(--z-border-strong, #dce6f8);
+  }
+
+  .action-btn:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
+  }
+
+  .action-btn.is-pressed {
+    border-color: var(--z-brand-300, #93b7f7);
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .action-btn.is-pressed > i {
+    color: var(--z-link, #2f6fed);
   }
 
   .action-btn:disabled {
-    opacity: 0.65;
+    opacity: 0.55;
     cursor: not-allowed;
   }
 
   .primary {
+    padding: 0 12px;
+    border-color: transparent;
+    background: var(--z-brand, #2f6fed);
     color: #ffffff;
-    background: #0f6efd;
-    border-color: #0f6efd;
-    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+  }
+
+  .primary > i {
+    font-size: 17px;
+  }
+
+  .action-btn > .ms {
+    font-size: 16px;
+  }
+
+  .primary > .ms {
+    font-size: 17px;
   }
 
   .primary:hover:not(:disabled) {
-    background: #1d4ed8;
-    border-color: #1d4ed8;
+    background: #245fcf;
+    border-color: transparent;
+    color: #ffffff;
   }
 
   .secondary {
-    color: #334155;
-    background: #ffffff;
-    border-color: #e5e7eb;
-  }
-
-  :global(html.dark) .secondary {
-    color: var(--erp-text);
-    background: var(--erp-surface-soft);
-    border-color: var(--erp-border);
+    color: var(--z-ink, #0b1530);
+    background: var(--z-surface, #fff);
+    border-color: var(--z-border, #e1e7f0);
   }
 
   .secondary:hover:not(:disabled) {
-    background: #f8fafc;
-    border-color: #cbd5e1;
+    background: var(--z-surface-3, #f1f5f9);
+    border-color: var(--z-border-strong, #dce6f8);
   }
 
-  :global(html.dark) .secondary:hover:not(:disabled) {
-    background: #1e293b;
-    border-color: var(--erp-border-strong);
+  .secondary > i {
+    color: var(--z-muted, #64748b);
   }
 
   .ghost {
-    color: #64748b;
+    color: var(--z-muted, #64748b);
     background: transparent;
     border-color: transparent;
   }
 
-  :global(html.dark) .ghost {
-    color: var(--erp-text-soft);
-  }
-
   .ghost:hover:not(:disabled) {
-    background: #f8fafc;
-    color: #0f172a;
-  }
-
-  :global(html.dark) .ghost:hover:not(:disabled) {
-    background: rgba(148, 163, 184, 0.12);
-    color: var(--erp-text);
+    background: var(--z-surface-2, #f8fafc);
+    border-color: var(--z-border-soft, #eef2f7);
+    color: var(--z-ink, #0b1530);
   }
 
   .icon {
-    width: var(--control-height-sm, 2.125rem);
-    min-height: var(--button-height-sm, var(--control-height-sm));
+    width: var(--ab-h, 30px);
+    height: var(--ab-h, 30px);
+    min-height: var(--ab-h, 30px);
     padding: 0;
-    border-radius: 10px;
-    background: #ffffff;
-    border-color: #e5e7eb;
-    color: #64748b;
+    border-radius: var(--z-r-sm, 8px);
+    background: transparent;
+    border-color: transparent;
+    color: var(--z-muted, #64748b);
   }
 
-  :global(html.dark) .icon {
-    background: var(--erp-surface-soft);
-    border-color: var(--erp-border);
-    color: var(--erp-text-soft);
+  .icon > i {
+    font-size: 16px;
+  }
+
+  .icon:hover:not(:disabled) {
+    background: var(--z-surface-3, #f1f5f9);
+    border-color: transparent;
+    color: var(--z-ink, #0b1530);
   }
 
   .icon.tone-view {
-    color: #0f6efd;
-    background: #eff6ff;
-    border-color: #bfdbfe;
+    color: var(--z-link, #2f6fed);
   }
 
-  :global(html.dark) .icon.tone-view {
-    color: #93c5fd;
-    background: rgba(96, 165, 250, 0.14);
-    border-color: rgba(96, 165, 250, 0.38);
+  .icon.tone-view:hover:not(:disabled) {
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
   }
 
   .icon.tone-edit {
-    color: #475569;
-    background: #f8fafc;
-    border-color: #e5e7eb;
+    color: var(--z-text, #475569);
   }
 
-  :global(html.dark) .icon.tone-edit {
-    color: var(--erp-text-soft);
-    background: var(--erp-surface-soft);
-    border-color: var(--erp-border);
+  .icon.tone-edit:hover:not(:disabled) {
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-ink, #0b1530);
   }
 
   .icon.tone-danger {
-    color: #dc2626;
-    background: #fef2f2;
-    border-color: #fecaca;
+    color: var(--z-debit, #dc2626);
   }
 
-  :global(html.dark) .icon.tone-danger {
-    color: #fca5a5;
-    background: rgba(248, 113, 113, 0.12);
-    border-color: rgba(248, 113, 113, 0.36);
+  .icon.tone-danger:hover:not(:disabled) {
+    background: var(--z-debit-soft, #fdecec);
+    color: var(--z-debit, #dc2626);
   }
 
   .icon.tone-muted {
-    color: #64748b;
-    background: #ffffff;
-    border-color: #e5e7eb;
-  }
-
-  :global(html.dark) .icon.tone-muted {
-    color: var(--erp-muted);
-    background: var(--erp-surface-soft);
-    border-color: var(--erp-border);
+    color: var(--z-muted, #64748b);
   }
 
   .compact {
-    min-height: var(--button-height-sm, var(--control-height-sm));
-    padding: 0.22rem 0.5rem;
-    font-size: var(--app-font-sm, 0.74rem);
+    padding: 0 8px;
+    font-size: var(--z-fs-sm, 11.5px);
   }
 
   .icon-only {
-    width: var(--control-height-sm, 2.125rem);
+    width: var(--ab-h, 30px);
     padding: 0;
   }
 </style>

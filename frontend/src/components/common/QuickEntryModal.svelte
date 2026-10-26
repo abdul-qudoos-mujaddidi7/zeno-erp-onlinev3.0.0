@@ -287,204 +287,107 @@
     --journal-label-offset: 1.2rem;
   }
 
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-form-row) {
-    display: grid;
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    align-items: start;
-    gap: 0.7rem 0.75rem;
-    margin: 0;
+  .quick-entry-modal--journal {
+    --journal-modal-primary: var(--z-link, #2f6fed);
+    --journal-modal-border: var(--z-border, #e1e7f0);
+    --quick-entry-control-height: 40px;
   }
 
-  /*
-   * Journal modal layout:
-   * - Customer: 8/12
-   * - Date:     4/12
-   * - Other normal fields: 6/12
-   *
-   * This intentionally overrides the generic 50% rule above.
-   */
-  .quick-entry-modal--journal
-    .quick-entry-modal__content
-    :global(.journal-form-row > [class*='col-md-']) {
-    grid-column: span 6;
-    min-width: 0;
+  .quick-entry-modal--journal :global(.app-modal-overlay) {
+    align-items: center;
+    padding: 12px;
+    overflow-y: auto;
+    background: rgba(11, 21, 48, 0.4);
+    backdrop-filter: none;
   }
 
-  .quick-entry-modal--journal
-    .quick-entry-modal__content
-    :global(.journal-form-row > .journal-customer-field) {
-    grid-column: span 8 !important;
-    width: auto !important;
-    max-width: none !important;
+  .quick-entry-modal--journal :global(.app-modal--full) {
+    width: min(95vw, 520px);
+    max-height: calc(100vh - 24px);
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: 14px;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 30px 70px -20px rgba(11, 21, 48, 0.55);
+    overflow: hidden;
   }
 
-  .quick-entry-modal--journal
-    .quick-entry-modal__content
-    :global(.journal-form-row > .journal-date-field),
-  .quick-entry-modal--journal
-    .quick-entry-modal__content
-    :global(
-      .journal-form-row
-        > [class*='col-md-']:has(.journal-unified-input-group.persianDatePicker)
-    ) {
-    grid-column: span 4 !important;
-    width: auto !important;
-    max-width: none !important;
+  .quick-entry-modal--journal :global(.app-modal__header) {
+    min-height: 50px;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    border-radius: 13px 13px 0 0;
+    background: var(--z-surface, #ffffff);
   }
 
-  /*
-   * The bill picker always spans the full row below the
-   * customer/date line.
-   */
-  .quick-entry-modal--journal
-    .quick-entry-modal__content
-    :global(.journal-form-row > .journal-bill-field) {
-    grid-column: 1 / -1 !important;
-    width: 100% !important;
-    max-width: none !important;
+  .quick-entry-modal--journal :global(.app-modal__header-main) {
+    align-items: center;
+    gap: 9px;
   }
 
-  /*
-   * The mode controls (Track / No Track / Treasury) and the Add/Update Journal
-   * button are one cluster.
-   *
-   * The blanket `span 6` rule above leaves this field half-width and alone on
-   * its last row, where the grid - being RTL - places it at its start, so the
-   * cluster sat in the middle of the form. Spanning the row gives the field the
-   * full width, and its contents (`.journal-footer-actions`, which is
-   * `direction: ltr` with `justify-content: flex-start`) then pack together at
-   * the first edge of the form, which is what the operator asked for.
-   */
-  .quick-entry-modal--journal
-    .quick-entry-modal__content
-    :global(.journal-form-row > .journal-submit-field) {
-    grid-column: 1 / -1 !important;
-    width: 100% !important;
-    max-width: none !important;
+  .quick-entry-modal--journal :global(.app-modal__icon) {
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border: 0;
+    border-radius: 9px;
+    /* AddJournal publishes the active direction tone here (#DC2626 debit /
+       #16A34A credit) so the tile follows the reference dialog. */
+    background: color-mix(in srgb, var(--jv-accent, #dc2626) 13%, transparent);
+    color: var(--jv-accent, #dc2626);
+    box-shadow: none;
+    font-size: 18px;
   }
 
-  .quick-entry-modal--journal
-    .quick-entry-modal__content
-    :global(.journal-form-card .row > [class*='col-md-']) {
-    width: auto;
-    max-width: none;
-    padding: 0;
+  .quick-entry-modal--journal :global(.app-modal__icon .ms) {
+    font-size: 18px;
   }
 
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-form-card .card-body) {
-    padding: 0 !important;
-  }
-
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-field-label) {
+  .quick-entry-modal--journal :global(.app-modal__titles) {
     display: flex;
     align-items: center;
-    min-height: 1rem;
-    margin-bottom: 0.25rem;
-    color: #344054;
-    font-size: 0.84rem;
-    font-weight: 600;
-    line-height: 1rem;
   }
 
-  .quick-entry-modal--journal
-    .quick-entry-modal__content
-    :global(.journal-unified-input-group.persianDatePicker) {
-    position: relative;
-    z-index: 2;
-    height: var(--journal-control-height);
-    min-height: var(--journal-control-height);
-    max-height: var(--journal-control-height);
-    overflow: visible !important;
+  .quick-entry-modal--journal :global(.app-modal__title) {
+    color: var(--z-ink, #0b1530);
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 30px;
   }
 
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-unified-input-group),
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-amount-row) {
-    border-color: var(--journal-modal-border) !important;
-    border-radius: 0.5rem;
-    background: #ffffff !important;
+  .quick-entry-modal--journal :global(.app-modal__close) {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: #64748b;
+    font-size: 18px;
   }
 
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.form-control),
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.form-select) {
-    min-height: var(--journal-control-height) !important;
-    height: var(--journal-control-height);
-    border-color: var(--journal-modal-border) !important;
-    border-radius: 0.5rem;
-    background: #ffffff !important;
-    color: #0f172a;
-    font-size: 0.86rem;
+  .quick-entry-modal--journal :global(.app-modal__close:hover:not(:disabled)) {
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-ink, #0b1530);
   }
 
-  .quick-entry-modal--journal
-    .quick-entry-modal__content
-    :global(.journal-amount-row .journal-unified-input-group--inline),
-  .quick-entry-modal--journal
-    .quick-entry-modal__content
-    :global(.journal-amount-row .journal-unified-input-group--inline .form-control) {
-    border-radius: 0 !important;
-  }
-
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-unified-input-group:focus-within),
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-amount-row:focus-within) {
-    border-color: var(--journal-modal-primary) !important;
-    box-shadow: 0 0 0 3px rgba(15, 110, 253, 0.1);
-  }
-
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-currency-picker__btn) {
-    min-height: var(--journal-control-height);
-    color: #475569;
-    font-size: 0.78rem;
-  }
-
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-account-quick-btn) {
-    background: var(--journal-modal-primary) !important;
-  }
-
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-mode-actions) {
-    gap: 0.4rem;
-  }
-
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-mode-field) {
-    padding-top: var(--quick-entry-label-space) !important;
-  }
-
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-mode-btn) {
-    min-height: var(--journal-control-height);
-    border-radius: 0.5rem;
-    font-size: 0.78rem;
-    font-weight: 600;
-  }
-
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-submit-field) {
-    grid-column: 1 / -1;
+  .quick-entry-modal--journal :global(.app-modal__body) {
     display: flex;
-    width: 100%;
-    max-width: none;
-    padding-top: 0.05rem;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    max-height: calc(100vh - 90px);
+    padding: 0;
+    border-radius: 0 0 13px 13px;
+    background: var(--z-surface, #ffffff);
+    overflow: hidden;
   }
 
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-submit-btn) {
-    width: auto !important;
-    min-width: 8.5rem;
-    min-height: 2.5rem;
-    /*
-     * No `auto` start margin: it used to pin the button to the far end of the
-     * footer, away from the Track/No Track/Treasury controls. The two now sit
-     * together at the form's first edge (the `.journal-submit-field` rule above
-     * spans the row, so that edge is the left one).
-     */
-    margin-inline-start: 0;
-    padding-inline: 1.2rem;
-    border-radius: 0.5rem;
-    border-color: var(--journal-modal-primary) !important;
-    background: var(--journal-modal-primary) !important;
-    box-shadow: none !important;
-    font-size: 0.86rem;
-  }
-
-  .quick-entry-modal--journal .quick-entry-modal__content :global(.journal-submit-btn:hover) {
-    border-color: #0b5ed7 !important;
-    background: #0b5ed7 !important;
+  .quick-entry-modal--journal .quick-entry-modal__content {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .quick-entry-modal--exchange .quick-entry-modal__content :global(.exchange-form-page) {
@@ -737,6 +640,33 @@
     }
   }
 
+  @media (max-width: 576px) {
+    .quick-entry-modal--journal :global(.app-modal--full) {
+      width: min(96vw, 32.5rem);
+      max-height: calc(100vh - 16px);
+    }
+
+    .quick-entry-modal--journal :global(.app-modal__header) {
+      min-height: 50px;
+      padding: 10px 14px;
+    }
+
+    .quick-entry-modal--journal :global(.app-modal__icon) {
+      width: 30px;
+      height: 30px;
+      min-height: 30px;
+    }
+
+    .quick-entry-modal--journal :global(.app-modal__title) {
+      font-size: 14px;
+    }
+
+    .quick-entry-modal--journal :global(.app-modal__body) {
+      max-height: calc(100vh - 82px);
+      padding: 12px 14px;
+    }
+  }
+
   :global(html.dark) .quick-entry-modal--journal {
     --journal-modal-border: var(--erp-border, #2b3a4f);
     --journal-modal-muted: var(--erp-muted, #94a3b8);
@@ -754,14 +684,24 @@
   }
 
   :global(html.dark) .quick-entry-modal--journal :global(.app-modal__header) {
-    border-bottom-color: rgba(147, 197, 253, 0.2);
+    border-bottom-color: var(--erp-border, #2b3a4f);
+    background: var(--erp-surface, #111827);
   }
 
   :global(html.dark) .quick-entry-modal--journal :global(.app-modal__icon) {
-    border-color: rgba(255, 255, 255, 0.4);
+    border: 0;
+    background: color-mix(in srgb, var(--jv-accent, #dc2626) 20%, transparent);
+    color: color-mix(in srgb, var(--jv-accent, #dc2626) 65%, #ffffff);
+    box-shadow: none;
+  }
+
+  :global(html.dark) .quick-entry-modal--journal :global(.app-modal__title) {
+    color: var(--erp-text, #e5edf8);
+  }
+
+  :global(html.dark) .quick-entry-modal--journal :global(.app-modal__close:hover:not(:disabled)) {
     background: var(--erp-surface-soft, #172033);
-    color: #93c5fd;
-    box-shadow: 0 6px 18px rgba(2, 6, 23, 0.32);
+    color: var(--erp-text, #e5edf8);
   }
 
   :global(html.dark) .quick-entry-modal--journal :global(.app-modal__body),

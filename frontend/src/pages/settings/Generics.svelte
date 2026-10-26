@@ -4,6 +4,8 @@
   import { t, lang, translate_org_type } from "../../i18n/i18n.js";
   import IndexPageLayout from "../../lib/components/index/IndexPageLayout.svelte";
   import ActionButton from "../../components/common/ActionButton.svelte";
+  import DataTable from "../../components/common/DataTable.svelte";
+  import TableActions from "../../components/common/TableActions.svelte";
   import EmptyState from "../../components/common/EmptyState.svelte";
   import { productGenericApi } from "../../api/productGenericApi.js";
   $: _lang = $lang;
@@ -51,44 +53,37 @@
                 <EmptyState icon="bi-capsule" message={t("No product generics found.")} />
             </div>
         {:else}
-            <div class="table-responsive">
-                <table class="table table-hover mb-0 settings-index-table">
-                    <thead class="table-light">
+            <DataTable ariaLabel={t("Product Generics")} minWidth="640px">
+                <svelte:fragment slot="head">
+                    <tr>
+                        <th>{t("ID")}</th>
+                        <th>{t("Name")}</th>
+                        <th>{t("Code")}</th>
+                        <th class="col-end">{t("Actions")}</th>
+                    </tr>
+                </svelte:fragment>
+
+                {#each productGenerics as generic (generic.id)}
+                    {#if generic.status !== 0}
                         <tr>
-                            <th>{t("ID")}</th>
-                            <th>{t("Name")}</th>
-                            <th>{t("Code")}</th>
-                            <th>{t("Actions")}</th>
+                            <td class="cell-muted">{generic.id}</td>
+                            <td>{generic.name}</td>
+                            <td><strong>{generic.code}</strong></td>
+                            <td class="col-end">
+                                <TableActions
+                                    actions={[
+                                        {
+                                            icon: 'bi-pencil',
+                                            label: t('Edit'),
+                                            tone: 'edit',
+                                            onClick: () => modalRef?.editProductGeneric(generic),
+                                        },
+                                    ]} />
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        {#each productGenerics as generic}
-                            {#if generic.status !== 0}
-                                <tr>
-                                    <td>{generic.id}</td>
-                                    <td>{generic.name}</td>
-                                    <td><strong>{generic.code}</strong></td>
-                                    <td>
-                                        <button
-                                            class="btn btn-sm btn-outline-secondary me-1"
-                                            on:click={()=>{modalRef?.editProductGeneric(generic)}}
-                                        >
-                                            <i class="bi bi-pencil"></i>
-                                        </button>
-                                        <!-- <button
-                                            class="btn btn-sm btn-outline-danger"
-                                            on:click={() =>
-                                                deleteProductGeneric(generic.id)}
-                                        >
-                                            <i class="bi bi-trash"></i>
-                                        </button> -->
-                                    </td>
-                                </tr>
-                            {/if}
-                        {/each}
-                    </tbody>
-                </table>
-            </div>
+                    {/if}
+                {/each}
+            </DataTable>
         {/if}
 </IndexPageLayout>
 <GenericModal bind:this={modalRef} on:saved={loadProductGenerics} />

@@ -400,7 +400,7 @@
             {/if}
           </th>
           <th>{t('Status')}</th>
-          <th>{t('Actions')}</th>
+          <th class="col-end">{t('Actions')}</th>
         </tr>
       </svelte:fragment>
 
@@ -497,60 +497,7 @@
   </svelte:fragment>
 </IndexPageLayout>
 
-<style>:global(.productions-index-content .data-table) {
-    width: 100%;
-    margin: 0;
-    border-collapse: separate;
-    border-spacing: 0;
-    color: #46536a;
-    font-size: var(--table-font-size, 0.78rem);
-  }
-
-:global(.productions-index-content .data-table thead th) {
-    height: 3rem;
-    padding: 0.625rem 0.875rem;
-    border: 0;
-    border-bottom: 1px solid #dfe5ed;
-    background: #ffffff;
-    color: #66758a;
-    font-size: var(--table-header-font-size, 0.78125rem);
-    font-weight: 800;
-    line-height: 1.25;
-    text-align: center;
-    vertical-align: middle;
-    white-space: nowrap;
-  }
-
-:global(.productions-index-content .data-table tbody tr) {
-    height: auto;
-    background: #ffffff;
-  }
-
-:global(.productions-index-content .data-table tbody td) {
-    height: auto;
-    padding: 0.4rem 0.875rem;
-    border: 0;
-    border-bottom: 1px solid #e0e0e0;
-    background: transparent;
-    color: #46536a;
-    font-size: var(--table-font-size, 0.75rem);
-    line-height: 1.5;
-    text-align: center;
-    vertical-align: middle;
-  }
-
-:global(.productions-index-content .data-table tbody tr:nth-child(even)) {
-    background: #f5f7fa;
-  }
-
-:global(.productions-index-content .data-table tbody tr:nth-child(odd):hover) {
-    background: #ffffff;
-  }
-
-:global(.productions-index-content .data-table tbody tr:nth-child(even):hover) {
-    background: #f5f7fa;
-  }
-
+<style>
 :global(.data-table tbody tr.row-overdue) {
     background: #fef2f2 !important;
   }

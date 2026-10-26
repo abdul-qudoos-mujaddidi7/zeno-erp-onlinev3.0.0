@@ -848,20 +848,20 @@ import { saleApi } from '../api/saleApi.js';
                       <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
                     {/if}
                   </th>
-                  <th class="cursor-pointer" on:click={() => setSort('total_amount')}>
+                  <th class="col-end cursor-pointer" on:click={() => setSort('total_amount')}>
                     {t('Total')}
                     {#if sortColumn === 'total_amount'}
                       <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
                     {/if}
                   </th>
-                  <th class="cursor-pointer" on:click={() => setSort('remaining')}>
+                  <th class="col-end cursor-pointer" on:click={() => setSort('remaining')}>
                     {t('Remaining')}
                     {#if sortColumn === 'remaining'}
                       <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
                     {/if}
                   </th>
                   {#if showBenefit}
-                    <th class="cursor-pointer" on:click={() => setSort('benefit')}>
+                    <th class="col-end cursor-pointer" on:click={() => setSort('benefit')}>
                       {t('Benefit')}
                       {#if sortColumn === 'benefit'}
                         <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
@@ -883,7 +883,7 @@ import { saleApi } from '../api/saleApi.js';
                     {/if}
                   </th>
                   <th>{t('Status')}</th>
-                  <th>{t('Actions')}</th>
+                  <th class="col-end">{t('Actions')}</th>
             </tr>
               </svelte:fragment>
 
@@ -915,13 +915,13 @@ import { saleApi } from '../api/saleApi.js';
                     {getAccountName(accounts.find((a) => a.id == s.account_id))}
                     </button>
                   </td>
-                  <td>
+                  <td class="col-end">
                     <span class="amount-pill">
                       <span dir="ltr">{Number(s.total_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
                       {t(s.currency)}
                     </span>
                   </td>
-                  <td>
+                  <td class="col-end">
                     <div class="remaining-cell">
                       <button
                         type="button"
@@ -944,7 +944,7 @@ import { saleApi } from '../api/saleApi.js';
                     </div>
                   </td>
                   {#if showBenefit}
-                    <td>
+                    <td class="col-end">
                       {#if s.benefit !== undefined}
                         <StatusBadge tone={Number(s.benefit) > 0 ? 'positive' : 'negative'}>
                           <span dir="ltr"
@@ -1070,60 +1070,6 @@ import { saleApi } from '../api/saleApi.js';
 </div>
 
 <style>
-  :global(.sales-index-content .data-table) {
-    width: 100%;
-    margin: 0;
-    border-collapse: separate;
-    border-spacing: 0;
-    color: #46536a;
-    font-size: var(--table-font-size, 0.78rem);
-  }
-
-  :global(.sales-index-content .data-table thead th) {
-    height: 3rem;
-    padding: 0.625rem 0.875rem;
-    border: 0;
-    border-bottom: 1px solid #dfe5ed;
-    background: #ffffff;
-    color: #66758a;
-    font-size: var(--table-header-font-size, 0.78125rem);
-    font-weight: 800;
-    line-height: 1.25;
-    text-align: center;
-    vertical-align: middle;
-    white-space: nowrap;
-  }
-
-  :global(.sales-index-content .data-table tbody tr) {
-    height: auto;
-    background: #ffffff;
-  }
-
-  :global(.sales-index-content .data-table tbody td) {
-    height: auto;
-    padding: 0.4rem 0.875rem;
-    border: 0;
-    border-bottom: 1px solid #e0e0e0;
-    background: transparent;
-    color: #46536a;
-    font-size: var(--table-font-size, 0.75rem);
-    line-height: 1.5;
-    text-align: center;
-    vertical-align: middle;
-  }
-
-  :global(.sales-index-content .data-table tbody tr:nth-child(even)) {
-    background: #f5f7fa;
-  }
-
-  :global(.sales-index-content .data-table tbody tr:nth-child(odd):hover) {
-    background: #ffffff;
-  }
-
-  :global(.sales-index-content .data-table tbody tr:nth-child(even):hover) {
-    background: #f5f7fa;
-  }
-
   .cursor-pointer {
     cursor: pointer;
   }

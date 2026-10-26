@@ -6,7 +6,7 @@
   export let ariaLabel = '';
   export let dense = true;
   export let striped = true;
-  export let hover = false;
+  export let hover = true;
   export let stickyHeader = true;
   export let layout = 'fixed';
   export let scrollbar = 'thin';
@@ -17,6 +17,26 @@
    * false for a table that only makes sense as a grid.
    */
   export let mobileCards = true;
+  /**
+   * Column template, e.g. ['156px', 'auto', '162px', '162px', '102px'].
+   *
+   * The reference journal sheet is a grid — 136 / minmax(0,1fr) / 150 / 150 / 64
+   * with a 12px gutter and a 14px inset at both edges. A table reproduces that
+   * rhythm with 6px of cell padding per side (6 + 6 = the 12px gutter) and 14px
+   * on the two edge cells, so a reference 150px column is declared 162px here.
+   * Supplying widths pins the table to a fixed layout, which is what keeps the
+   * columns where the reference puts them.
+   *
+   * @type {string[] | null}
+   */
+  export let columns = null;
+  /**
+   * Vertical padding of a body cell, e.g. '9px'. The reference journal row pads
+   * 9px top and bottom; the default stays at the denser 7px.
+   *
+   * @type {string | null}
+   */
+  export let cellPaddingY = null;
 
   $: tableLayout = layout === 'auto' ? 'auto' : 'fixed';
   $: scrollbarMode = ['thin', 'hidden', 'normal'].includes(scrollbar) ? scrollbar : 'thin';
@@ -59,10 +79,19 @@
     class:data-table--hover={hover}
     class:data-table--sticky={stickyHeader}
     class:data-table--clip-cells={clipCells}
-    style:min-width={minWidth}
-    style:table-layout={tableLayout}
+    style={`min-width: ${minWidth}; table-layout: ${
+      columns?.length ? 'fixed' : tableLayout
+    };${cellPaddingY ? ` --dt-cell-pad-y: ${cellPaddingY};` : ''}`}
     aria-label={ariaLabel || undefined}
   >
+    {#if columns?.length}
+      <colgroup>
+        {#each columns as width, index (index)}
+          <col style:width={width} />
+        {/each}
+      </colgroup>
+    {/if}
+
     <thead>
       <slot name="head" />
     </thead>
@@ -74,22 +103,27 @@
 </div>
 
 <style>
+  /*
+   * Zeno table — reference purchase header: 40px on surface-2, 11.5/600 muted
+   * labels, 12px column gutters and a single border-colored bottom rule.
+   */
   .data-table-wrap {
     width: 100%;
     min-width: 0;
     min-height: 0;
     overflow: auto;
     -webkit-overflow-scrolling: touch;
+    background: var(--z-surface, #ffffff);
   }
 
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #b8c4d2 transparent;
+    scrollbar-color: #cbd5e1 transparent;
   }
 
   .scrollbar-thin::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+    width: 8px;
+    height: 8px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-track {
@@ -97,24 +131,13 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: #b8c4d2;
+    border: 2px solid var(--erp-bg, #eef2f8);
+    border-radius: 8px;
+    background: #cbd5e1;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-  }
-
-  :global(html.dark) .scrollbar-thin {
-    scrollbar-color: #526176 transparent;
-  }
-
-  :global(html.dark) .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #526176;
-  }
-
-  :global(html.dark) .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
+    background: #cbd5e1;
   }
 
   .scrollbar-hidden {
@@ -134,80 +157,117 @@
   }
 
   .data-table {
-    --data-table-row-bg: #ffffff;
-    --data-table-alt-row-bg: #f5f7fa;
-    --data-table-hover-bg: #f0f5ff;
+    --data-table-row-bg: var(--z-surface, #ffffff);
+    --data-table-alt-row-bg: color-mix(in srgb, var(--z-surface-2, #f8fafc) 60%, var(--z-surface, #ffffff));
+    --data-table-hover-bg: var(--z-hover, #f5f9ff);
 
     width: 100%;
     margin: 0;
     border-collapse: separate;
     border-spacing: 0;
-    color: #46536a;
-    font-size: var(--table-font-size, 0.78rem);
-  }
-
-  :global(html.dark) .data-table {
-    --data-table-row-bg: var(--erp-surface, #111827);
-    --data-table-alt-row-bg: var(--erp-surface-soft, #172033);
-    --data-table-hover-bg: rgba(96, 165, 250, 0.12);
-
-    color: var(--erp-text);
+    color: var(--z-text, #475569);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
   }
 
   .data-table :global(thead th) {
-    height: auto;
-    padding: 0.625rem 0.875rem;
+    height: 40.67px;
+    padding: 0 12px;
 
-    border-bottom: 1px solid #dfe5ed;
-    background: #ffffff;
-    color: #66758a;
+    border-bottom: 1px solid var(--z-border, #E1E7F0);
+    background: var(--z-th-bg, #f8fafc);
+    color: var(--z-muted, #64748b);
 
-    font-size: var(--table-header-font-size, 0.78125rem);
-    font-weight: 800;
+    font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
+    font-size: 11.5px;
+    font-weight: 600;
     line-height: 1.25;
 
-    text-align: center;
+    text-align: start;
     vertical-align: middle;
     white-space: nowrap;
-  }
-
-  :global(html.dark) .data-table :global(thead th) {
-    border-bottom-color: var(--erp-border);
-    background: var(--erp-surface);
-    color: var(--erp-text-soft);
   }
 
   .data-table--sticky :global(thead th) {
     position: sticky;
     top: 0;
-    z-index: 5;
+    z-index: 3;
   }
 
   .data-table :global(tbody tr) {
-    height: auto;
+    height: 40.67px;
     min-height: 0;
-    background: var(--data-table-row-bg);
-  }
-
-  :global(html.dark) .data-table :global(tbody tr) {
     background: var(--data-table-row-bg);
   }
 
   .data-table :global(tbody td) {
     height: auto;
     min-height: 0;
-    padding: 0.625rem 0.875rem;
-    border-bottom: 1px solid rgb(224, 224, 224);
+    padding: var(--dt-cell-pad-y, 7px) 6px;
+    border-bottom: 1px solid var(--z-row-border, #f0f2f7);
     background: inherit;
-    font-size: var(--table-font-size, 0.75rem);
-    line-height: 1.5;
-    text-align: center;
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: start;
     vertical-align: middle;
   }
 
-  :global(html.dark) .data-table :global(tbody td) {
-    border-bottom-color: var(--erp-border);
-    color: var(--erp-text);
+  .data-table :global(tbody tr:last-child td) {
+    border-bottom: 0;
+  }
+
+  /* Keep header labels aligned with the purchase reference's 16px edge insets. */
+  .data-table :global(thead th:first-child) {
+    padding-inline-start: 16px;
+  }
+
+  .data-table :global(thead th:last-child) {
+    padding-inline-end: 16px;
+  }
+
+  /* Body cells retain their existing edge inset and column alignment. */
+  .data-table :global(tbody td:first-child) {
+    padding-inline-start: 14px;
+  }
+
+  .data-table :global(tbody td:last-child) {
+    padding-inline-end: 14px;
+  }
+
+  .data-table :global(thead th.col-center) {
+    text-align: center;
+  }
+
+  .data-table :global(thead th.cursor-pointer) {
+    cursor: pointer;
+  }
+
+  .data-table :global(thead th[aria-sort] > button) {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 26px;
+    margin-inline-start: -6px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: var(--z-r-xs, 6px);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: inherit;
+    cursor: pointer;
+  }
+
+  .data-table :global(thead th[aria-sort="ascending"] > button),
+  .data-table :global(thead th[aria-sort="descending"] > button) {
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+    font-weight: 800;
+  }
+
+  .data-table :global(thead th[aria-sort] > button:focus-visible) {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
   .data-table--clip-cells :global(tbody td) {
@@ -216,12 +276,12 @@
   }
 
   .data-table--dense :global(thead th) {
-    height: 3rem;
-    padding-block: 0.625rem;
+    height: 40px;
+    padding-block: 0;
   }
 
   .data-table--dense :global(tbody td) {
-    padding-block: 0.4rem;
+    padding-block: var(--dt-cell-pad-y, 7px);
   }
 
   .data-table--striped :global(tbody tr:nth-child(odd)) {
@@ -232,46 +292,36 @@
     background: var(--data-table-alt-row-bg);
   }
 
-  :global(html.dark) .data-table--striped :global(tbody tr:nth-child(odd)) {
-    background: var(--data-table-row-bg);
-  }
-
-  :global(html.dark) .data-table--striped :global(tbody tr:nth-child(even)) {
-    background: var(--data-table-alt-row-bg);
-  }
-
   .data-table--hover :global(tbody tr:hover) {
     background: var(--data-table-hover-bg);
   }
 
-  :global(html.dark) .data-table--hover :global(tbody tr:hover) {
-    background: var(--data-table-hover-bg);
+  /* Amounts and codes read as numbers, flush to the end of their column. */
+  .data-table :global(.col-end),
+  .data-table :global(.cell-end) {
+    text-align: end;
   }
 
-  .data-table:not(.data-table--hover):not(.data-table--striped) :global(tbody tr:hover),
-  .data-table--striped:not(.data-table--hover) :global(tbody tr:nth-child(odd):hover) {
-    background: var(--data-table-row-bg);
-  }
-
-  .data-table--striped:not(.data-table--hover) :global(tbody tr:nth-child(even):hover) {
-    background: var(--data-table-alt-row-bg);
-  }
-
-  :global(html.dark) .data-table:not(.data-table--hover):not(.data-table--striped) :global(tbody tr:hover),
-  :global(html.dark) .data-table--striped:not(.data-table--hover) :global(tbody tr:nth-child(odd):hover) {
-    background: var(--data-table-row-bg);
-  }
-
-  :global(html.dark) .data-table--striped:not(.data-table--hover) :global(tbody tr:nth-child(even):hover) {
-    background: var(--data-table-alt-row-bg);
+  .data-table :global(.num) {
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    direction: ltr;
   }
 
   .data-table :global(.col-start) {
     text-align: start;
   }
 
+  .data-table :global(.cell-muted) {
+    color: var(--z-muted, #64748b);
+  }
+
   .data-table :global(.sort-icon) {
-    margin-inline-start: 0.25rem;
+    margin-inline-start: 3px;
+    font-size: 14px;
+    opacity: 0.55;
+    vertical-align: middle;
   }
 
   .data-table :global(td > *) {
@@ -285,12 +335,27 @@
     vertical-align: middle;
   }
 
-  /*
-   * Phone layout: every row becomes a card, every cell a label/value line.
-   * This replaces the sideways drag of a 720px+ table, so the amount and the
-   * row actions are reachable without scrolling. The label comes from the
-   * column header copied by labelRows() above.
-   */
+  /* Action cells sit at the end of the row. An actions column header wants
+     `col-end` too, so the label sits over its buttons. A page that centres the
+     column (the reference journal row does) opts out with `col-center`. */
+  .data-table :global(td:has(.table-actions):not(.col-center)),
+  .data-table :global(td:has(.action-btn):not(.col-center)) {
+    text-align: end;
+    white-space: nowrap;
+  }
+
+  .data-table :global(td.col-center) {
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Expanded detail row (journal lines, invoice items). */
+  .data-table :global(tr.data-table__detail > td) {
+    padding: 4px 14px 10px;
+    border-bottom: 1px solid var(--z-row-border, #f0f2f7);
+    background: var(--z-surface-2, #f8fafc);
+  }
+
   @media (max-width: 767px) {
     .data-table-wrap.mobile-cards {
       overflow-x: hidden;
@@ -313,10 +378,11 @@
 
     .data-table-wrap.mobile-cards .data-table :global(tbody tr) {
       display: block;
-      margin-bottom: 0.6rem;
-      border: 1px solid var(--erp-border, #e2e8f0);
-      border-radius: 12px;
-      background: var(--erp-surface, #ffffff);
+      height: auto;
+      margin-bottom: 8px;
+      border: 1px solid var(--z-border, #e1e7f0);
+      border-radius: var(--z-r-lg, 12px);
+      background: var(--z-surface, #ffffff);
       overflow: hidden;
     }
 
@@ -328,11 +394,11 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 0.75rem;
+      gap: 12px;
       width: auto;
       min-width: 0;
-      padding: 0.4rem 0.7rem;
-      border-bottom: 1px solid #eef2f7;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--z-border-soft, #eef2f7);
       text-align: end;
       white-space: normal;
       overflow: visible;
@@ -347,8 +413,8 @@
       content: attr(data-label);
       flex: 0 1 auto;
       min-width: 0;
-      color: #66758a;
-      font-size: 0.72rem;
+      color: var(--z-muted, #64748b);
+      font-size: 10.5px;
       font-weight: 800;
       text-align: start;
       overflow-wrap: anywhere;
@@ -373,7 +439,19 @@
     .data-table-wrap.mobile-cards .data-table :global(tbody tr),
     .data-table-wrap.mobile-cards .data-table--striped :global(tbody tr:nth-child(odd)),
     .data-table-wrap.mobile-cards .data-table--striped :global(tbody tr:nth-child(even)) {
-      background: var(--erp-surface, #ffffff);
+      background: var(--z-surface, #ffffff);
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(tr.data-table__detail) {
+      margin-top: -8px;
+      border-top: 0;
+      border-radius: 0 0 var(--z-r-lg, 12px) var(--z-r-lg, 12px);
+    }
+
+    .data-table-wrap.mobile-cards .data-table :global(tr.data-table__detail > td) {
+      display: block;
+      padding: 8px 10px;
+      text-align: start;
     }
   }
 </style>

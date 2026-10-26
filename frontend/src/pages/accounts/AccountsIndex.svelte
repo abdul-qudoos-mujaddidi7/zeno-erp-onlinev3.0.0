@@ -480,7 +480,7 @@
                 {/if}
               </th>
               {#if showTotalPercentage}
-                <th class="cursor-pointer" on:click={() => setSort('percentage')}>
+                <th class="col-end cursor-pointer" on:click={() => setSort('percentage')}>
                   {t('Percentage')}
                   {#if sortColumn === 'percentage'}
                       <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
@@ -497,7 +497,7 @@
               {#if enable_account_groups}
                   <th class="cursor-pointer" on:click={() => setSort('group')}>{t('Group')}</th>
                   {/if}
-                <th class="cursor-pointer" on:click={() => setSort('balance')}>{t('Balance')}</th>
+                <th class="col-end cursor-pointer" on:click={() => setSort('balance')}>{t('Balance')}</th>
               {#if filterStatus.size > 1 || filterStatus.has('archived')}
                   <th class="cursor-pointer" on:click={() => setSort('account_status')}>{t('Status')}</th>
               {/if}
@@ -520,7 +520,7 @@
                   </div>
                 </td>
                 {#if showTotalPercentage}
-                  <td>
+                  <td class="col-end">
                     {#if acc?.account_type_id == 7}
                       <span dir="ltr" class="percentage-value">
                         {Number(acc?.percentage).toLocaleString(undefined, { maximumFractionDigits: 3 })}%
@@ -539,7 +539,7 @@
                     </StatusBadge>
                   </td>
                 {/if}
-                <td>
+                <td class="col-end">
                   {#if !acc.balancesLoaded}
                     <span aria-busy="true">...</span>
                   {:else if acc.computedBalances}
@@ -609,66 +609,6 @@
 <DeferredModal loader={loadAccountModal} bind:this={modalRef} {accountTypes} on:saved={loadAccounts} />
 
 <style>
-  :global(.accounts-index-content .data-table) {
-    width: 100%;
-    margin: 0;
-    border-collapse: separate;
-    border-spacing: 0;
-    color: #46536a;
-    font-size: var(--table-font-size, 0.78rem);
-  }
-
-  :global(.accounts-index-content .data-table thead th) {
-    height: 3rem;
-    padding: 0.625rem 0.875rem;
-    border: 0;
-    border-bottom: 1px solid #dfe5ed;
-    background: #ffffff;
-    color: #66758a;
-    font-size: var(--table-header-font-size, 0.78125rem);
-    font-weight: 800;
-    line-height: 1.25;
-    text-align: center;
-    vertical-align: middle;
-    white-space: nowrap;
-  }
-
-  :global(.accounts-index-content .data-table tbody tr) {
-    height: auto;
-    min-height: 0;
-    background: #ffffff;
-  }
-
-  :global(.accounts-index-content .data-table tbody td) {
-    height: auto;
-    min-height: 0;
-    padding: 0.4rem 0.875rem;
-    border: 0;
-    border-bottom: 1px solid #e0e0e0;
-    background: transparent;
-    color: #46536a;
-    font-size: var(--table-font-size, 0.75rem);
-    line-height: 1.5;
-    text-align: center;
-    vertical-align: middle;
-  }
-
-  :global(.accounts-index-content .data-table tbody tr:nth-child(even)) {
-    background: #f5f7fa;
-  }
-
-  :global(.accounts-index-content .data-table tbody tr:nth-child(odd):hover) {
-    background: #ffffff;
-  }
-
-  :global(.accounts-index-content .data-table tbody tr:nth-child(even):hover) {
-    background: #f5f7fa;
-  }
-
-  :global(.accounts-index-content .data-table .col-start) {
-    text-align: start;
-  }
-
   .cursor-pointer {
     cursor: pointer;
   }
@@ -965,7 +905,7 @@
   .accounts-page :global(.pagination-shell) {
     padding: 0.65rem 0.85rem;
     border-top: 1px solid #eef2f7;
-    background: #ffffff;
+    background: #F8FAFC;
   }
 
 </style>

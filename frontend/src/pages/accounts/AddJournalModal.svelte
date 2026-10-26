@@ -81,6 +81,7 @@
                 bind:this={modalRefs[index]}
                 {genInp}
                 selectedAccountID={shareHolder.id}
+                on:close={closeModal}
                 on:saved={() => {
                   shareHolder.show = false;
                 }} />

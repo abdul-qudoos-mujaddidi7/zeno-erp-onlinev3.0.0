@@ -10,18 +10,23 @@
 </span>
 
 <style>
+  /* Zeno status chip: 20px tall, pill radius, 10.5px/700 on a soft tint. */
   .erp-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.22rem;
-    min-height: 22px;
-    padding: 0.18rem 0.48rem;
-    border-radius: 999px;
-    font-size: 0.68rem;
+    gap: 4px;
+    min-height: 20px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: var(--z-r-pill, 999px);
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-text, #475569);
+    font-size: 10.5px;
     font-weight: 700;
-    line-height: 1;
+    line-height: 1.15;
     white-space: nowrap;
+    vertical-align: middle;
   }
 
   .erp-badge.ltr {
@@ -31,37 +36,53 @@
   .erp-badge.stacked {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.14rem;
-    line-height: 1.15;
+    justify-content: center;
+    gap: 2px;
+    padding-block: 3px;
   }
 
-  .erp-badge.stacked :global(br) { display: none; }
-  .erp-badge.stacked :global(small) { display: block; margin: 0; }
+  .erp-badge.stacked :global(br) {
+    display: none;
+  }
+
+  .erp-badge.stacked :global(small) {
+    display: block;
+    margin: 0;
+    font-size: 9.5px;
+    font-weight: 600;
+    opacity: 0.85;
+  }
 
   .neutral {
-    color: #475569;
-  }
-
-  .ghost {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-text, #475569);
   }
 
   .positive {
-    color: #047857;
+    background: var(--z-ok-soft, #dcfce7);
+    color: var(--z-ok, #15803d);
   }
 
   .negative {
-    color: #b91c1c;
+    background: var(--z-debit-soft, #fdecec);
+    color: var(--z-debit, #dc2626);
   }
 
   .warning {
-    color: #92400e;
+    background: var(--z-warn-soft, #fef3c7);
+    color: var(--z-warn, #92400e);
   }
 
   .info {
-    color: #1d4ed8;
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .ghost {
+    padding-inline: 0;
+    border-color: transparent !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 </style>

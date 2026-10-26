@@ -396,7 +396,7 @@
     width: 100%;
     max-width: var(--content-max-width);
     margin-inline: auto;
-    padding: var(--page-padding) var(--page-padding-x);
+    padding: var(--page-padding) var(--page-padding-x) var(--page-padding-block-end, var(--page-padding));
     min-width: 0;
     flex: 1 1 auto;
     min-height: 0;
@@ -409,7 +409,7 @@
      is capped at 1400px with a 14/20px gutter and owns the page scroll. */
   .erp-page-main.dashboard-page {
     max-width: 1400px;
-    padding: 0 20px 32px;
+    padding: 0 var(--page-padding-x) 32px;
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-width: thin;
