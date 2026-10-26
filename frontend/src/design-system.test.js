@@ -167,12 +167,20 @@ describe('shared index page stack', () => {
     expect(report).toContain('sym: currencySymbol(currency)');
   });
 
-  it('calculates report balances from the full filtered result, not the visible page', () => {
+  it('seeds report balances from the server instead of sweeping the ledger', () => {
     const report = read('pages/journals/JournalsReport.svelte');
 
-    expect(report).toContain('getReportRunningBalanceRows()');
-    expect(report).toContain('attachJournalRunningBalances(rows, balanceRows)');
-    expect(report).toContain('runningBalanceCacheKey === key');
+    /*
+     * A row's balance counts every older movement, so the page asks the API
+     * for that opening total and runs its own rows forward. Downloading the
+     * whole ledger first made the report wait on hundreds of requests.
+     */
+    expect(report).toContain('include_opening_balance: 1');
+    expect(report).toContain('journalResponse?.opening_balance');
+    expect(report).not.toContain('getReportRunningBalanceRows()');
+    expect(report).not.toContain('attachJournalRunningBalances(');
+
+    /* Export still needs every row, so its sweep stays where it belongs. */
     expect(report).toContain('return withJournalRunningBalances(all.map(mapJournalAmounts))');
   });
 

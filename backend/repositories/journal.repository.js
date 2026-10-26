@@ -47,6 +47,7 @@ async function findAll(
     excludeSystemAccounts = false,
     excludeReportAccounts = false,
     skipCount = false,
+    includeOpeningBalance = false,
     pagination = null,
   }) {
   const conditions = [
@@ -140,7 +141,7 @@ async function findAll(
     excludedIds,
   );
 
-  return paginateSelect(executor, {
+  const result = await paginateSelect(executor, {
     tableSql: 'journals',
     whereSql: conditions.join(' AND '),
     values,
@@ -149,6 +150,109 @@ async function findAll(
     pagination,
     skipCount,
   });
+
+  if (includeOpeningBalance && result.data.length) {
+    result.openingBalance = await findOpeningBalanceTotals(executor, {
+      orgId,
+      conditions,
+      values,
+      cursor: result.data[result.data.length - 1],
+    });
+  }
+
+  return result;
+}
+
+/*
+ * The per-currency balance a page opens on: every row that sorts after the
+ * page's oldest row (the list is newest-first) added up. A caller that wants a
+ * running balance therefore reads one page plus this total instead of
+ * downloading the whole ledger a page at a time.
+ *
+ * Amounts follow the same TREASURY rule as the rows themselves: a movement that
+ * touches the treasury account contributes only its counterpart.
+ */
+async function findOpeningBalanceTotals(
+  executor,
+  {
+    orgId,
+    conditions,
+    values,
+    cursor,
+  },
+) {
+  const [treasuryRows] = await executor.execute(
+    `
+      SELECT MIN(local_id) AS local_id
+      FROM accounts
+      WHERE org_id = ?
+        AND code = 'TREASURY'
+        AND status = 1
+    `,
+    [orgId],
+  );
+
+  const treasuryId = treasuryRows[0]?.local_id ?? null;
+
+  const [rows] = await executor.execute(
+    `
+      SELECT
+        currency,
+        SUM(
+          CASE
+            WHEN first_entry_account = ?
+              THEN COALESCE(second_entry_debit, 0)
+            WHEN second_entry_account = ?
+              THEN COALESCE(first_entry_debit, 0)
+            ELSE COALESCE(first_entry_debit, 0)
+              + COALESCE(second_entry_debit, 0)
+          END
+        ) AS debit,
+        SUM(
+          CASE
+            WHEN first_entry_account = ?
+              THEN COALESCE(second_entry_credit, 0)
+            WHEN second_entry_account = ?
+              THEN COALESCE(first_entry_credit, 0)
+            ELSE COALESCE(first_entry_credit, 0)
+              + COALESCE(second_entry_credit, 0)
+          END
+        ) AS credit
+      FROM journals
+      WHERE ${conditions.join(' AND ')}
+        AND (
+          date < ?
+          OR (date <=> ? AND local_id < ?)
+        )
+      GROUP BY currency
+    `,
+    [
+      treasuryId,
+      treasuryId,
+      treasuryId,
+      treasuryId,
+      ...values,
+      cursor.date,
+      cursor.date,
+      cursor.local_id,
+    ],
+  );
+
+  const totals = {};
+
+  for (const row of rows) {
+    const currency = row.currency || 'DEFAULT';
+    const debit = Number(row.debit) || 0;
+    const credit = Number(row.credit) || 0;
+
+    totals[currency] = {
+      debit,
+      credit,
+      balance: credit - debit,
+    };
+  }
+
+  return totals;
 }
 
 // Calculate against the ledger before restricting to the visible page. Search,

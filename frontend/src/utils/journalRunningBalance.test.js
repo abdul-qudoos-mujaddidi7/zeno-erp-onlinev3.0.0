@@ -37,4 +37,27 @@ describe('journal report running balances', () => {
       attachJournalRunningBalances([{ id: 999 }], withJournalRunningBalances(rows)),
     ).toThrow('Missing running balance for journal 999');
   });
+
+  it('matches the full run when a page is seeded with its opening balance', () => {
+    const allBalancedRows = withJournalRunningBalances(rows);
+
+    for (const [offset, size] of [[0, 15], [45, 15], [110, 15]]) {
+      const page = rows.slice(offset, offset + size);
+
+      /*
+       * What the API returns: per-currency totals of everything older than the
+       * page, i.e. the rows that follow it in this newest-first list.
+       */
+      const opening = {};
+
+      for (const row of rows.slice(offset + size)) {
+        const balance = (opening[row.currency]?.balance || 0) + row.credit - row.debit;
+        opening[row.currency] = { balance };
+      }
+
+      expect(withJournalRunningBalances(page, opening)).toEqual(
+        allBalancedRows.slice(offset, offset + size),
+      );
+    }
+  });
 });

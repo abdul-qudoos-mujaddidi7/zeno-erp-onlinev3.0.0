@@ -155,6 +155,20 @@ const journalListQuerySchema = z.object({
     .optional()
     .default(0),
 
+  /*
+   * Per-currency totals of everything older than the returned page, so a
+   * report can render a running balance from one page instead of sweeping the
+   * whole ledger.
+   */
+  include_opening_balance: z
+    .coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1)
+    .optional()
+    .default(0),
+
   account_id: z
     .coerce
     .number()

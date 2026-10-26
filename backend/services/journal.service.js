@@ -132,6 +132,8 @@ async function listJournals({
     excludeReportAccounts:
       Number(filters.exclude_report_accounts) === 1,
     skipCount: Number(filters.skip_count) === 1,
+    includeOpeningBalance:
+      Number(filters.include_opening_balance) === 1,
     pagination,
   };
 
@@ -146,6 +148,16 @@ async function listJournals({
 
   if (summary) {
     result.summary = summary;
+  }
+
+  /*
+   * A running balance used to be calculated in the browser, which meant
+   * downloading every journal in the filter first. The page now receives the
+   * balance it opens on and can accumulate from there.
+   */
+  if (result.openingBalance) {
+    result.opening_balance = result.openingBalance;
+    delete result.openingBalance;
   }
 
   if (Number(filters.include_running_balance) === 1 && filters.account_id) {

@@ -3,7 +3,6 @@
   import { journalApi } from '../../api/journalApi.js';
   import { accountApi } from '../../api/accountApi.js';
   import { currencyApi } from '../../api/currencyApi.js';
-  import { lookupAccountByCode } from '../../lib/formLookups.js';
   import { t, lang, translate_org_type } from '../../i18n/i18n';
   import { applyCurrentFiscalYearRange } from '../../utils/currentFiscalYear.js';
   import { generatePDF } from '../generatePDF.js';
@@ -19,7 +18,6 @@
   import { localizeDescription } from '../../utils/localizedDescription.js';
   import { replaceCurrencyNamesWithSymbols } from '../../utils/currencyDescription.js';
   import {
-    attachJournalRunningBalances,
     withJournalRunningBalances,
   } from '../../utils/journalRunningBalance.js';
   import {
@@ -61,10 +59,6 @@
 
   let processed = [];
   let paginated = [];
-  let runningBalanceCacheKey = '';
-  let runningBalanceCacheRows = [];
-  let runningBalanceRequest = null;
-  let runningBalanceGeneration = 0;
 
   let bootstrapped = false;
   let lastPageKey = '';
@@ -87,10 +81,26 @@
     });
 
     try {
-      const treasuryAccount = await lookupAccountByCode('TREASURY');
-      currencies = (await currencyApi.getAll({ status: 1 }))?.data || [];
-      TREASURY_ID = treasuryAccount?.id ?? null;
-      if (treasuryAccount) accounts = [treasuryAccount];
+      /*
+       * One account list for the visit: both sides of every row are named from
+       * it, so no page has to look accounts up row by row.
+       */
+      const [accountsResponse, currenciesResponse] = await Promise.all([
+        accountApi.getAll({ status: 1 }),
+        currencyApi.getAll({ status: 1 }),
+      ]);
+
+      accounts = accountsResponse?.data || [];
+      currencies = currenciesResponse?.data || [];
+
+      /*
+       * Same treasury account the API resolves for the report's amounts and
+       * opening balances (the lowest local id), so both sides agree.
+       */
+      const treasuryAccounts = accounts.filter((item) => item.code === 'TREASURY');
+      TREASURY_ID = treasuryAccounts.length
+        ? Math.min(...treasuryAccounts.map((item) => Number(item.id)))
+        : null;
 
       lastPageKey = `${page}|${pageSize}`;
       bootstrapped = true;
@@ -127,32 +137,27 @@
   }
 
   async function ensurePeerAccounts(journalRows) {
-    const needed = new Set();
-    for (const journal of journalRows || []) {
-      if (journal.first_entry_account) {
-        needed.add(Number(journal.first_entry_account));
-      }
-      if (journal.second_entry_account) {
-        needed.add(Number(journal.second_entry_account));
-      }
-    }
-
+    /*
+     * The bootstrap already holds every account, so the report never has to
+     * resolve names one row at a time. Kept as a guard for a page rendered
+     * before that list arrives.
+     */
     const have = new Set(accounts.map((item) => Number(item.id)));
-    const missing = [...needed].filter((id) => !have.has(id));
-    if (!missing.length) return;
+    const missing = new Set();
 
-    if (missing.length > 40) {
-      const accountsResponse = await accountApi.getAll({ status: 1 });
-      accounts = accountsResponse?.data || accounts;
-      return;
+    for (const journal of journalRows || []) {
+      if (journal.first_entry_account && !have.has(Number(journal.first_entry_account))) {
+        missing.add(Number(journal.first_entry_account));
+      }
+      if (journal.second_entry_account && !have.has(Number(journal.second_entry_account))) {
+        missing.add(Number(journal.second_entry_account));
+      }
     }
 
-    const fetched = await Promise.all(
-      missing.map((id) =>
-        accountApi.getById(id).then((res) => res?.data).catch(() => null),
-      ),
-    );
-    accounts = [...accounts, ...fetched.filter(Boolean)];
+    if (!missing.size) return;
+
+    const accountsResponse = await accountApi.getAll({ status: 1 });
+    accounts = accountsResponse?.data || accounts;
   }
 
   function reportQuery(extra = {}) {
@@ -208,6 +213,12 @@
           limit: pageSize,
           skip_count: 1,
           include_summary: includeSummary ? 1 : 0,
+          /*
+           * The running balance of a row counts every older movement, so the
+           * page asks the server for that opening total instead of downloading
+           * the rest of the ledger to add it up here.
+           */
+          include_opening_balance: 1,
         }),
       );
 
@@ -216,10 +227,12 @@
       const rows = (journalResponse?.data || []).map(mapJournalAmounts);
       await ensurePeerAccounts(rows);
 
-      const balanceRows = await getReportRunningBalanceRows();
       if (requestId !== loadRequestId) return;
 
-      processed = attachJournalRunningBalances(rows, balanceRows);
+      processed = withJournalRunningBalances(
+        rows,
+        journalResponse?.opening_balance || {},
+      );
       paginated = processed;
 
       if (includeSummary && journalResponse?.summary) {
@@ -249,11 +262,6 @@
   }
 
   function reloadFromFirstPage() {
-    runningBalanceGeneration += 1;
-    runningBalanceCacheKey = '';
-    runningBalanceCacheRows = [];
-    runningBalanceRequest = null;
-
     if (page !== 1) {
       page = 1;
       return;
@@ -384,6 +392,11 @@
       .join('<br />');
   }
 
+  /*
+   * Export only: a download needs the whole filtered ledger in one array, which
+   * is the one place a full sweep is still worth paying for. Viewing the report
+   * no longer uses it.
+   */
   async function fetchAllReportJournals() {
     const all = [];
     let exportPage = 1;
@@ -411,37 +424,6 @@
     }
 
     return withJournalRunningBalances(all.map(mapJournalAmounts));
-  }
-
-  async function getReportRunningBalanceRows() {
-    const key = JSON.stringify(reportQuery());
-    const generation = runningBalanceGeneration;
-    if (runningBalanceCacheKey === key) return runningBalanceCacheRows;
-    if (
-      runningBalanceRequest?.key === key &&
-      runningBalanceRequest?.generation === generation
-    ) {
-      return runningBalanceRequest.promise;
-    }
-
-    const promise = fetchAllReportJournals();
-    runningBalanceRequest = { key, generation, promise };
-
-    try {
-      const rows = await promise;
-      if (
-        generation === runningBalanceGeneration &&
-        key === JSON.stringify(reportQuery())
-      ) {
-        runningBalanceCacheKey = key;
-        runningBalanceCacheRows = rows;
-      }
-      return rows;
-    } finally {
-      if (runningBalanceRequest?.promise === promise) {
-        runningBalanceRequest = null;
-      }
-    }
   }
 
   function getPageNumbers(current, total) {
@@ -1033,4 +1015,5 @@
       max-width: 15rem;
     }
   }
+
 </style>

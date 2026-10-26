@@ -19,6 +19,10 @@ function sendListResponse(res, result, statusCode = 200) {
     payload.summary = result.summary;
   }
 
+  if (result?.opening_balance != null) {
+    payload.opening_balance = result.opening_balance;
+  }
+
   return res.status(statusCode).json(payload);
 }
 

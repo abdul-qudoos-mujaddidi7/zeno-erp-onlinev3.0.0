@@ -1,6 +1,18 @@
-export function withJournalRunningBalances(rows) {
+/*
+ * Balances accumulate oldest-first, so a page that is handed the totals of
+ * everything older than it (`opening`, in the same shape as the API's
+ * `opening_balance`) can run its own rows forward without downloading the rest
+ * of the ledger.
+ */
+export function withJournalRunningBalances(rows, opening = {}) {
   const runningById = new Map();
   const running = {};
+
+  for (const [currency, totals] of Object.entries(opening || {})) {
+    running[currency] = Number(
+      typeof totals === 'number' ? totals : totals?.balance,
+    ) || 0;
+  }
 
   for (const journal of [...rows].reverse()) {
     const currency = journal.currency || 'DEFAULT';
