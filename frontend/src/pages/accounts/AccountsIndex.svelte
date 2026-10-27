@@ -476,7 +476,7 @@
             hover={true}
             stickyHeader={true}
             layout="fixed"
-            scrollbar="thin">
+            scrollbar="hidden">
             <svelte:fragment slot="head">
           {#if showTotalPercentage}
                 <tr class="shareholders-banner-row">
@@ -964,7 +964,7 @@
     font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
     font-size: 11.5px;
     font-weight: 600;
-    line-height: 1;
+    line-height: 1.55;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
