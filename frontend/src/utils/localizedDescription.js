@@ -16,8 +16,51 @@ const SUBJECTS = {
   'inventory record': { en: 'inventory journal', fa: 'سند روزنامه موجودی', ps: 'د موجودۍ ورځپاڼې سند' },
 };
 
+const NOTE_MARKERS = ['توضیحات', 'یادونه', 'Note'];
+
+/*
+ * A bill payment description is built on the client as
+ * "<summary> | <note label>: <note>". Saves made before that split existed
+ * stored the whole generated summary as the note, so the stored row reads
+ * twice. Collapse the repeat here: every surface that prints a journal
+ * description (the voucher dialog, receipts, reports) runs through this file.
+ */
+function splitDescriptionNote(text) {
+  for (const marker of NOTE_MARKERS) {
+    const separator = ` | ${marker}: `;
+    const index = text.indexOf(separator);
+
+    if (index > 0) {
+      return {
+        head: text.slice(0, index).trim(),
+        note: text.slice(index + separator.length).trim(),
+      };
+    }
+  }
+
+  return null;
+}
+
+export function collapseDuplicatedDescription(value = '') {
+  let text = String(value ?? '').trim();
+
+  /* A description is one summary plus at most one note, so a handful of passes
+     unwinds even the older rows that nested the summary more than once. */
+  for (let pass = 0; pass < 5; pass += 1) {
+    const split = splitDescriptionNote(text);
+    if (!split) return text;
+
+    const noteHead = splitDescriptionNote(split.note)?.head ?? split.note;
+    if (noteHead !== split.head) return text;
+
+    text = split.head;
+  }
+
+  return text;
+}
+
 export function localizeDescription(description, language = 'en', translate = (value) => value) {
-  const source = String(description || '').trim();
+  const source = collapseDuplicatedDescription(description);
   if (!source) return '';
 
   // Handles fixed legacy descriptions already present in translations.json.

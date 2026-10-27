@@ -1488,6 +1488,17 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     display: none;
   }
 
+  /*
+   * The reports row is the only item whose label grows, which is how the
+   * chevron is pushed to the far edge when the sidebar is open. In the rail
+   * there is no chevron left to push, so the grown label kept eating the free
+   * space and pinned the bar-chart icon to the inline-start edge while every
+   * other icon sat in the middle.
+   */
+  #erp-sidebar.collapsed .sidebar-report-toggle > span {
+    flex: 0 0 auto;
+  }
+
   #erp-sidebar.collapsed .sidebar-menu :global(.list-group-item i) {
     margin: 0 !important;
     font-size: 16px;

@@ -513,8 +513,30 @@
     min-height: 0;
     padding: 9px 10px;
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--z-border, #e1e7f0) transparent;
+  }
+
+  /*
+   * Styled through ::-webkit-scrollbar only: `scrollbar-width` / `scrollbar-color`
+   * would hand the panel to Chromium's native painter and bring back the arrow
+   * buttons at both ends of the bar.
+   */
+  .filter-panel__body::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .filter-panel__body::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .filter-panel__body::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .filter-panel__body::-webkit-scrollbar-thumb {
+    border-radius: 6px;
+    background: var(--z-border, #e1e7f0);
   }
 
   .filter-panel__fields {

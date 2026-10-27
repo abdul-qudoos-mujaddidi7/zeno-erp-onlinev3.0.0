@@ -950,30 +950,42 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     return `${amount} ${t(currency || 'AFN')}`;
   }
 
-  function getPaymentDescriptionLabels() {
-    const currentLanguage = t('Lang');
-
-    if (currentLanguage === 'fa') {
-      return {
-        totalSale: 'مجموع فروش',
-        paid: 'پرداخت',
-        note: 'توضیحات',
-      };
-    }
-
-    if (currentLanguage === 'ps') {
-      return {
-        totalSale: 'ټول پلور',
-        paid: 'تادیه',
-        note: 'یادونه',
-      };
-    }
-
-    return {
+  const PAYMENT_DESCRIPTION_LABELS = {
+    fa: {
+      totalSale: 'مجموع فروش',
+      paid: 'پرداخت',
+      note: 'توضیحات',
+    },
+    ps: {
+      totalSale: 'ټول پلور',
+      paid: 'تادیه',
+      note: 'یادونه',
+    },
+    en: {
       totalSale: 'Total sale',
       paid: 'Paid',
       note: 'Note',
-    };
+    },
+  };
+
+  function getPaymentDescriptionLabels() {
+    const currentLanguage = t('Lang');
+
+    return PAYMENT_DESCRIPTION_LABELS[currentLanguage] || PAYMENT_DESCRIPTION_LABELS.en;
+  }
+
+  /*
+   * A payment saved without a note stores the generated summary on its own, so
+   * the summary must never be read back as the user's note — that is what used
+   * to append it a second time on the next save.
+   */
+  function isGeneratedPaymentDescription(value) {
+    const text = String(value || '').trim();
+
+    return Object.values(PAYMENT_DESCRIPTION_LABELS).some(
+      (labels) =>
+        text.startsWith(`${labels.totalSale}: `) && text.includes(` | ${labels.paid}: `),
+    );
   }
 
   function buildDefaultPaymentDescription() {
@@ -1042,11 +1054,16 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       const markerIndex = description.lastIndexOf(marker);
 
       if (markerIndex >= 0) {
-        return description.slice(markerIndex + marker.length).trim();
+        const note = description.slice(markerIndex + marker.length).trim();
+
+        /* Older saves wrote the generated summary into the note itself, so the
+           note is only real text when it is not that summary again. */
+        return isGeneratedPaymentDescription(note) ? '' : note;
       }
     }
 
-    return description;
+    /* No note marker: the row is the generated summary, not a user note. */
+    return isGeneratedPaymentDescription(description) ? '' : description;
   }
 
   function initDropdowns() {

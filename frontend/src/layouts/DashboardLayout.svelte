@@ -406,13 +406,15 @@
   }
 
   /* Zeno dashboard geometry (measured from Main.dc.html at 1440): the board
-     is capped at 1400px with a 14/20px gutter and owns the page scroll. */
+     is capped at 1400px with a 14/20px gutter and owns the page scroll.
+     No `scrollbar-width` here — it hands the bar to Chromium's native painter,
+     which brings back the up/down arrows; app.css styles it via
+     ::-webkit-scrollbar for the whole app instead. */
   .erp-page-main.dashboard-page {
     max-width: 1400px;
     padding: 0 var(--page-padding-x) 32px;
     overflow-x: hidden;
     overflow-y: auto;
-    scrollbar-width: thin;
   }
 
   @media (max-width: 860px) {
@@ -437,7 +439,6 @@
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
   }
 
   /* Non-list form pages still need to scroll the whole page */
@@ -448,7 +449,6 @@
   .erp-page-main.erp-form-route {
     overflow-y: auto;
     overflow-x: hidden;
-    scrollbar-width: thin;
   }
 
   :global(html[dir='ltr']) .content-wrapper {

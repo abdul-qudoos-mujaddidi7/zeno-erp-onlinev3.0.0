@@ -456,7 +456,7 @@
             minWidth="760px"
             dense={true}
             striped={true}
-            hover={false}
+            hover={true}
             stickyHeader={true}
             layout="fixed"
             scrollbar="thin">
@@ -467,56 +467,77 @@
               </tr>
           {/if}
             <tr>
-                <th class="col-start cursor-pointer" on:click={() => setSort('id')}>
-                {t('ID')}
-                {#if sortColumn === 'id'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                {/if}
-              </th>
-                <th class="col-start cursor-pointer" on:click={() => setSort('name')}>
-                {t('Name')}
-                {#if sortColumn === 'name'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                {/if}
-              </th>
-              {#if showTotalPercentage}
-                <th class="col-end cursor-pointer" on:click={() => setSort('percentage')}>
-                  {t('Percentage')}
-                  {#if sortColumn === 'percentage'}
+                  <th class="col-start" aria-sort={sortColumn === 'name' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                    <button type="button" on:click={() => setSort('name')}>
+                      {t('Name')}
+                  {#if sortColumn === 'name'}
                       <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
                   {/if}
+                    </button>
                 </th>
-              {:else}
-                  <th class="cursor-pointer" on:click={() => setSort('type')}>
-                  {t('Type')}
-                  {#if sortColumn === 'type'}
-                      <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                {#if showTotalPercentage}
+                  <th class="col-end" aria-sort={sortColumn === 'percentage' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                    <button type="button" on:click={() => setSort('percentage')}>
+                      {t('Percentage')}
+                    {#if sortColumn === 'percentage'}
+                        <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                    {/if}
+                    </button>
+                  </th>
+                {:else}
+                    <th aria-sort={sortColumn === 'type' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                      <button type="button" on:click={() => setSort('type')}>
+                        {t('Type')}
+                    {#if sortColumn === 'type'}
+                        <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
                   {/if}
-                </th>
-              {/if}
-              {#if enable_account_groups}
-                  <th class="cursor-pointer" on:click={() => setSort('group')}>{t('Group')}</th>
-                  {/if}
-                <th class="col-end cursor-pointer" on:click={() => setSort('balance')}>{t('Balance')}</th>
-              {#if filterStatus.size > 1 || filterStatus.has('archived')}
-                  <th class="cursor-pointer" on:click={() => setSort('account_status')}>{t('Status')}</th>
-              {/if}
+                      </button>
+                  </th>
+                {/if}
+                {#if enable_account_groups}
+                    <th aria-sort={sortColumn === 'group' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                      <button type="button" on:click={() => setSort('group')}>
+                        {t('Group')}
+                        {#if sortColumn === 'group'}
+                          <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                        {/if}
+                      </button>
+                    </th>
+                    {/if}
+                  <th class="col-end" aria-sort={sortColumn === 'balance' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                    <button type="button" on:click={() => setSort('balance')}>
+                      {t('Balance')}
+                      {#if sortColumn === 'balance'}
+                        <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                      {/if}
+                    </button>
+                  </th>
+                {#if filterStatus.size > 1 || filterStatus.has('archived')}
+                    <th aria-sort={sortColumn === 'account_status' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                      <button type="button" on:click={() => setSort('account_status')}>
+                        {t('Status')}
+                        {#if sortColumn === 'account_status'}
+                          <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                        {/if}
+                      </button>
+                    </th>
+                {/if}
             </tr>
             </svelte:fragment>
 
-            {#each paginatedAccounts as acc, index (acc.id)}
+            {#each paginatedAccounts as acc (acc.id)}
               <tr class="account-row" on:click={() => push(`/dashboard/account/${acc.id}`)}>
-                <td class="col-start cell-muted">{(currentPage - 1) * itemsPerPage + index + 1}</td>
                 <td class="col-start">
                   <div class="account-info">
-                  {#if acc.imageUrl}
-                      <img class="account-avatar" src={acc.imageUrl || '/img/no-image.png'} alt="" />
-                  {:else}
-                    <div class="account-avatar account-avatar-fallback">
-                        {showInitials(getAccountDisplayName(acc))}
-                    </div>
-                  {/if}
-                    <span class="account-name">{getAccountDisplayName(acc)}</span>
+                    <span class="account-avatar account-avatar-fallback" aria-hidden="true">
+                      {showInitials(getAccountDisplayName(acc))}
+                    </span>
+                    <span class="account-identity">
+                      <span class="account-name">{getAccountDisplayName(acc)}</span>
+                      <span class="account-meta" dir="auto">
+                        #{acc.id}{#if acc.phone || acc.phone2} · {acc.phone || acc.phone2}{/if}{#if acc.account_status === 'archived'} · {t(acc.account_status)}{/if}
+                      </span>
+                    </span>
                   </div>
                 </td>
                 {#if showTotalPercentage}
@@ -529,7 +550,7 @@
                   </td>
                 {:else}
                   <td>
-                    <StatusBadge tone="neutral" ghost>{getTypeName(acc.account_type_id) || '—'}</StatusBadge>
+                    <StatusBadge tone="neutral">{getTypeName(acc.account_type_id) || '—'}</StatusBadge>
                   </td>
                 {/if}
                 {#if enable_account_groups}
@@ -753,7 +774,7 @@
   }
 
   .filter-toggle__chevron {
-    font-size: 0.72rem;
+    font-size: 11px;
     transition: transform 0.16s ease;
   }
 
@@ -817,16 +838,16 @@
   .account-info {
     display: flex;
     align-items: center;
-    gap: 0.65rem;
+    gap: 0.6rem;
     min-width: 0;
     text-align: start;
   }
 
   .account-avatar {
     flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
     object-fit: cover;
   }
 
@@ -834,18 +855,34 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid #e2e8f0;
-    background: #edf2f8;
-    color: #8b9bb0;
-    font-size: 0.82rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--z-link, #2f6fed) 14%, transparent);
+    color: var(--z-link, #2f6fed);
+    font-size: 0.72rem;
     font-weight: 800;
+  }
+
+  .account-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
   }
 
   .account-name {
     overflow: hidden;
     color: #0f172a;
-    font-size: var(--table-font-size, 0.78rem);
-    font-weight: 800;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-meta {
+    overflow: hidden;
+    color: var(--z-muted, #64748b);
+    font-size: 10.5px;
+    line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

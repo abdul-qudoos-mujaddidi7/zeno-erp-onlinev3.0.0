@@ -652,35 +652,36 @@
   const L = {
     fa: {
       search: 'جستجو', filter: 'فیلتر', clear: 'پاک‌کردن', show: 'نمایش',
-      print: 'چاپ', download: 'دانلود', newDoc: 'سند جدید',
+      download: 'دانلود', newDoc: 'سند جدید',
       debtor: 'بدهکار', creditor: 'طلبکار', dateTime: 'تاریخ و ساعت', parties: 'طرفین معامله',
       type: 'نوع', amount: 'مبلغ', actions: 'اقدامات', empty: 'در این بازه سندی نیست',
       rows: 'ردیف', prev: 'قبلی', next: 'بعدی', fromDate: 'از تاریخ', toDate: 'تا تاریخ',
       doc: 'سند', of: 'از', to: 'تا', exportDone: 'فایل Excel روزنامچه دانلود شد',
       journal: 'روزنامچه', exchange: 'تبادله', transfer: 'انتقال',
-      sale: 'بل فروش', salePayment: 'دریافت پول', purchase: 'بل خرید', purchasePayment: 'پرداخت پول',
+      /* The invoice reads «فروش»; the payment it posts names that same bill. */
+      sale: 'فروش', salePayment: 'بل فروش', purchase: 'بل خرید', purchasePayment: 'پرداخت خرید',
       searchPlaceholder: 'جستجوی سند، شرح یا حساب',
     },
     ps: {
       search: 'لټون', filter: 'فلتر', clear: 'پاکول', show: 'ښکاره کول',
-      print: 'چاپ', download: 'ډاونلوډ', newDoc: 'نوی سند',
+      download: 'ډاونلوډ', newDoc: 'نوی سند',
       debtor: 'بدهکار', creditor: 'طلبکار', dateTime: 'نیټه او وخت', parties: 'معامله اړخونه',
       type: 'ډول', amount: 'مقدار', actions: 'کړنې', empty: 'په دې دوره کې سند نشته',
       rows: 'ردیفونه', prev: 'مخکې', next: 'وروسته', fromDate: 'له نیټې', toDate: 'تر نیټې',
       doc: 'سند', of: 'له', to: 'تر', exportDone: 'د Excel فایل ډاونلوډ شو',
       journal: 'روزنامچه', exchange: 'تبادله', transfer: 'انتقال',
-      sale: 'د خرڅلاو بل', salePayment: 'د پیسو رسید', purchase: 'د خرید بل', purchasePayment: 'د پیسو ورکړه',
+      sale: 'خرڅلاو', salePayment: 'د خرڅلاو بل', purchase: 'د خرید بل', purchasePayment: 'د خرید تادیه',
       searchPlaceholder: 'د سند، شرح یا حساب لټون',
     },
     en: {
       search: 'Search', filter: 'Filter', clear: 'Clear', show: 'Show',
-      print: 'Print', download: 'Download', newDoc: 'New journal',
+      download: 'Download', newDoc: 'New journal',
       debtor: 'Debit', creditor: 'Credit', dateTime: 'Date & time', parties: 'Parties',
       type: 'Type', amount: 'Amount', actions: 'Actions', empty: 'No journals in this range',
       rows: 'Rows', prev: 'Prev', next: 'Next', fromDate: 'From date', toDate: 'To date',
       doc: 'documents', of: 'of', to: 'to', exportDone: 'Journal Excel file downloaded',
       journal: 'Journal', exchange: 'Exchange', transfer: 'Transfer',
-      sale: 'Sale bill', salePayment: 'Money received', purchase: 'Purchase bill', purchasePayment: 'Money paid',
+      sale: 'Sale', salePayment: 'Sale bill', purchase: 'Purchase bill', purchasePayment: 'Purchase payment',
       searchPlaceholder: 'Search journal, description or account',
     },
   };
@@ -783,14 +784,7 @@
     return lines;
   }
 
-  function getAccountCode(id) {
-    const acc = accounts.find((a) => a.id === id);
-    return acc?.code || '';
-  }
-
-  /* ===================== expand & toolbar presentation ===================== */
-
-  let expandedId = null;
+  /* ===================== toolbar presentation ===================== */
 
   /* Reference format: `1405/06/17 – 1405/07/16` (en-dash), as-of: `تا 1405/07/16`. */
   $: rangeText = (() => {
@@ -802,13 +796,14 @@
   })();
 
   /*
-   * The row's action menu lives inside the clickable row, so a click on a
-   * control must not also expand the row underneath it.
+   * The row itself is the «نمایش» shortcut: a click anywhere on it opens the
+   * read-only voucher dialog, the same one the kebab's first entry triggers.
+   * The row's own controls (kebab, links) keep their click.
    */
-  function toggleRow(j, event) {
+  function openRow(journal, event) {
     const target = event?.target;
     if (target?.closest?.('button, a, .table-actions')) return;
-    expandedId = expandedId === j.id ? null : j.id;
+    openJournalView(journal);
   }
 
   /* ===================== print & excel ===================== */
@@ -970,13 +965,6 @@
     </svelte:fragment>
 
     <svelte:fragment slot="actions">
-      <ActionButton
-        variant="secondary"
-        iconSet="material"
-        icon="print"
-        label={lbl('print')}
-        extraClass="toolbar-print"
-        on:click={printList} />
       <ExportMenu material={true} on:export={(event) => (event.detail === 'excel' ? exportExcel() : printList())} />
       <ActionButton
         iconSet="material"
@@ -1022,12 +1010,16 @@
           {@const tmeta = journalTypeMeta(j)}
           <tr
             class="journal-row"
-            class:is-open={expandedId === j.id}
             role="button"
             tabindex="0"
-            aria-expanded={expandedId === j.id}
-            on:click={(event) => toggleRow(j, event)}
-            on:keydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleRow(j); } }}>
+            aria-haspopup="dialog"
+            on:click={(event) => openRow(j, event)}
+            on:keydown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openJournalView(j);
+              }
+            }}>
             <td>
               <span class="journal-date">
                 <b dir="ltr">{latinDigits(info.dateText)}</b>
@@ -1078,31 +1070,6 @@
               <TableActions actions={getJournalActions(j)} menuTitle={j.reference || shortID(j.id)} foldAll material />
             </td>
           </tr>
-
-          {#if expandedId === j.id}
-            <tr class="data-table__detail">
-              <td colspan="5" class="journal-detail-cell">
-                <div class="journal-desc">{localizeDescription(j.description, $lang, t) || '—'}</div>
-                <table class="journal-lines">
-                  <tbody>
-                    {#each journalLines(j) as l (l.id + l.dr + l.cr)}
-                      <tr>
-                        <td class="journal-lines__code" dir="ltr">{getAccountCode(l.id) || '—'}</td>
-                        <td class="journal-lines__acc">
-                          <span class="journal-lines__ind" class:journal-lines__ind--in={!l.dr && l.cr}>
-                            <span class="journal-side {l.dr ? 'journal-side--dr' : 'journal-side--cr'}">{l.dr ? lbl('debtor') : lbl('creditor')}</span>
-                            <b>{getAccountName(l.id)}</b>
-                          </span>
-                        </td>
-                        <td class="journal-lines__dr" dir="ltr">{l.dr ? fmtNum(l.dr) : ''}</td>
-                        <td class="journal-lines__cr" dir="ltr">{l.cr ? fmtNum(l.cr) : ''}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </td>
-            </tr>
-          {/if}
         {/each}
       </DataTable>
     {/if}
@@ -1208,13 +1175,6 @@
     white-space: nowrap;
   }
 
-  /* Reference print button: ink icon (not muted), 16px. */
-  :global(.action-btn.toolbar-print > i),
-  :global(.action-btn.toolbar-print > .ms) {
-    font-size: 16px;
-    color: var(--z-ink, #0b1530);
-  }
-
   /* ================= row ================= */
   .journal-row {
     cursor: pointer;
@@ -1223,12 +1183,6 @@
   .journal-row:focus-visible {
     outline: 2px solid var(--z-brand, #2f6fed);
     outline-offset: -2px;
-  }
-
-  /* Reference open state: the expanded row is surface-2 (the table header tone),
-     not the app's blue hover wash. */
-  .journal-row.is-open td {
-    background: var(--z-surface-2, #f8fafc);
   }
 
   /* --- date --- */
@@ -1402,87 +1356,6 @@
     font-size: 13.5px;
     font-weight: 800;
     color: var(--z-ink, #0b1530);
-  }
-
-  /* --- expanded ledger --- */
-  /* Reference detail header: 11.5px muted caption, 4px/6px breathing room. */
-  .journal-desc {
-    padding: 4px 0 6px;
-    font-size: var(--z-fs-sm, 11.5px);
-    font-weight: 400;
-    color: var(--z-muted, #64748b);
-  }
-
-  .journal-detail-cell .journal-lines {
-    width: 100%;
-    overflow: hidden;
-    border: 1px solid var(--z-border-soft, #eef2f7);
-    border-radius: 9px;
-    border-collapse: separate;
-    border-spacing: 0;
-    background: var(--z-surface, #ffffff);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .journal-detail-cell .journal-lines td {
-    padding: 6px;
-    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
-  }
-
-  .journal-detail-cell .journal-lines tr:last-child td {
-    border-bottom: 0;
-  }
-
-  .journal-detail-cell .journal-lines__code {
-    width: 56px;
-    padding: 6px 12px 6px 6px;
-    font-family: var(--z-font-num);
-    font-size: var(--z-fs-xs, 10.5px);
-    font-weight: 400;
-    color: var(--z-muted, #64748b);
-    text-align: end;
-  }
-
-  /* Detail rows use the smaller pill: 18px tall, 10px/800, 7px inset. */
-  .journal-detail-cell .journal-lines .journal-side {
-    width: auto;
-    height: 18px;
-    padding: 0 7px;
-    border-radius: 999px;
-    font-size: 10px;
-    white-space: nowrap;
-  }
-
-  .journal-detail-cell .journal-lines__ind {
-    display: inline-block;
-  }
-
-  .journal-detail-cell .journal-lines__ind b {
-    margin-inline-start: 5px;
-    font-weight: 700;
-    color: var(--z-ink, #0b1530);
-  }
-
-  .journal-detail-cell .journal-lines__ind--in {
-    padding-inline-start: 22px;
-  }
-
-  .journal-detail-cell .journal-lines__dr,
-  .journal-detail-cell .journal-lines__cr {
-    width: 120px;
-    font-family: var(--z-font-num);
-    font-weight: 700;
-    text-align: left;
-  }
-
-  .journal-detail-cell .journal-lines__dr {
-    color: var(--z-debit, #dc2626);
-  }
-
-  .journal-detail-cell .journal-lines__cr {
-    padding-inline-start: 12px;
-    color: var(--z-credit, #16a34a);
   }
 
   /* ================= responsive ================= */

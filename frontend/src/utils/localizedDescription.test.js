@@ -75,3 +75,33 @@ describe('localizeDescription – existing behaviour', () => {
     expect(localizeDescription(null, 'fa', identity)).toBe('');
   });
 });
+
+describe('localizeDescription – repeated payment summary', () => {
+  /*
+   * A payment saved without a note stores "<summary> | <note label>: <summary>"
+   * once the summary has been read back as the note. The voucher dialog must
+   * print it once, a real note stays untouched.
+   */
+  const summary = 'مجموع فروش: 8,160 افغانی | پرداخت: 8,160 افغانی';
+
+  it('drops a note that only repeats the generated summary', () => {
+    expect(localizeDescription(`${summary} | توضیحات: ${summary}`, 'fa', identity)).toBe(summary);
+  });
+
+  it('unwinds a summary nested more than once', () => {
+    expect(
+      localizeDescription(`${summary} | توضیحات: ${summary} | توضیحات: ${summary}`, 'fa', identity),
+    ).toBe(summary);
+  });
+
+  it('keeps a real note', () => {
+    const withNote = `${summary} | توضیحات: مشتری بعداً می‌پردازد`;
+    expect(localizeDescription(withNote, 'fa', identity)).toBe(withNote);
+  });
+
+  it('leaves ordinary journal descriptions alone', () => {
+    expect(localizeDescription('Manual journal entry', 'en', identity)).toBe(
+      'Manual journal entry',
+    );
+  });
+});

@@ -15,6 +15,9 @@
   import ExportMenu from '../../components/common/ExportMenu.svelte';
   import SummaryCard from '../../components/common/SummaryCard.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import ViewJournalModal from './ViewJournalModal.svelte';
+  import JournalReceiptModal from './JournalReceiptModal.svelte';
+  import JournalA4ReceiptModal from './JournalA4ReceiptModal.svelte';
   import { localizeDescription } from '../../utils/localizedDescription.js';
   import { replaceCurrencyNamesWithSymbols } from '../../utils/currencyDescription.js';
   import {
@@ -59,6 +62,12 @@
 
   let processed = [];
   let paginated = [];
+
+  /* Row click opens the same read-only voucher the journals list shows. */
+  let viewedJournal = null;
+  let selectedJournal = null;
+  let showReceipt = false;
+  let showA4Receipt = false;
 
   let bootstrapped = false;
   let lastPageKey = '';
@@ -359,6 +368,122 @@
     );
   }
 
+  /* ===================== voucher dialog ===================== */
+
+  /*
+   * The report rows are the same journals the list shows, so a click opens the
+   * same read-only voucher instead of expanding anything inline. The report
+   * itself stays read-only: the dialog offers no edit or delete, only print,
+   * which reuses the receipt sheets the journals list already prints with.
+   */
+  const TYPE_META = {
+    sale: ['sale', 'receipt_long', '#2F6FED'],
+    sale_payment: ['salePayment', 'call_received', '#16A34A'],
+    purchase: ['purchase', 'shopping_bag', '#7C5CE0'],
+    purchase_payment: ['purchasePayment', 'call_made', '#D64560'],
+    stock_transfer: ['transfer', 'swap_horiz', '#0EA5E9'],
+    exchange: ['exchange', 'currency_exchange', '#7C3AED'],
+    sale_return: ['sale', 'assignment_return', '#DB2777'],
+  };
+
+  function typeMeta(journal) {
+    const meta = TYPE_META[journal?.reference_type];
+    if (meta) return { label: lbl(meta[0]), icon: meta[1], color: meta[2] };
+    return { label: lbl('journal'), icon: 'edit_note', color: '#0891B2' };
+  }
+
+  function fmtAmount(value) {
+    return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 3 });
+  }
+
+  function gregorianShort(value) {
+    const date = toDateObj(value);
+    if (!date) return '';
+    return new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    }).format(date);
+  }
+
+  /*
+   * Both legs, read from the raw columns: the row's own debit/credit are the
+   * treasury-netted amounts the report prints, not the two postings.
+   */
+  function voucherLegs(journal) {
+    return [
+      {
+        id: journal.first_entry_account,
+        dr: Number(journal.first_entry_debit || 0),
+        cr: Number(journal.first_entry_credit || 0),
+      },
+      {
+        id: journal.second_entry_account,
+        dr: Number(journal.second_entry_debit || 0),
+        cr: Number(journal.second_entry_credit || 0),
+      },
+    ].filter((leg) => leg.dr || leg.cr);
+  }
+
+  function voucherView(journal) {
+    const meta = typeMeta(journal);
+    const legs = voucherLegs(journal);
+    const symbol = currencySymbol(journal.currency);
+    const totalDr = legs.reduce((sum, leg) => sum + leg.dr, 0);
+    const totalCr = legs.reduce((sum, leg) => sum + leg.cr, 0);
+    const linked = journal.reference_type !== 'account' && journal.reference_id != null;
+
+    const story = [
+      { side: 'dr', icon: 'north_west', rows: legs.filter((leg) => leg.dr) },
+      { side: 'cr', icon: 'south_east', rows: legs.filter((leg) => leg.cr) },
+    ]
+      .filter((group) => group.rows.length)
+      .map((group) => ({
+        side: group.side,
+        icon: group.icon,
+        names: group.rows.map((leg) => getAccountName(leg.id) || '—').join('، '),
+        amount: `${symbol}\u200E ${fmtAmount(group.rows.reduce((sum, leg) => sum + (leg.dr || leg.cr), 0))}`,
+      }));
+
+    return {
+      no: journal.reference || `#${journal.id}`,
+      typeLabel: meta.label,
+      typeIcon: meta.icon,
+      typeColor: meta.color,
+      active: Number(journal.status) === 1,
+      dateText: jalaliShort(journal.date),
+      gregorian: gregorianShort(journal.date),
+      time: '',
+      description: descriptionWithCurrencySymbols(journal.description) || '—',
+      lines: legs.map((leg, index) => ({
+        key: `${leg.id}-${index}`,
+        name: getAccountName(leg.id) || '—',
+        dr: leg.dr ? fmtAmount(leg.dr) : '',
+        cr: leg.cr ? fmtAmount(leg.cr) : '',
+      })),
+      story,
+      totalDr: fmtAmount(totalDr),
+      totalCr: fmtAmount(totalCr),
+      balanced: Math.abs(totalDr - totalCr) < 0.005,
+      sourceLabel: linked ? `#${journal.reference_id}` : '',
+      sourceType: linked ? meta.label : '',
+      editMode: 'none',
+      canDelete: false,
+    };
+  }
+
+  $: voucherData = viewedJournal ? voucherView(viewedJournal) : null;
+
+  function openJournal(journal) {
+    viewedJournal = journal;
+  }
+
+  function printViewedJournal() {
+    const journal = viewedJournal;
+    viewedJournal = null;
+    if (!journal) return;
+    selectedJournal = journal;
+    showA4Receipt = true;
+  }
+
   function buildSummary(rows, type, currentLanguage) {
     void currentLanguage;
 
@@ -489,35 +614,35 @@
   const L = {
     fa: {
       search: 'جستجو', filter: 'فیلتر', clear: 'پاک‌کردن', show: 'نمایش',
-      print: 'چاپ', download: 'دانلود', prev: 'قبلی', next: 'بعدی',
+      download: 'دانلود', prev: 'قبلی', next: 'بعدی',
       fromDate: 'از تاریخ', toDate: 'تا تاریخ', of: 'از', to: 'تا', rows: 'ردیف',
       tx: 'معامله', all: 'همه', empty: 'با این فیلترها معامله‌ای پیدا نشد',
       typeFilter: 'نوع معامله', fromP: 'از', toP: 'به',
       creditSub: 'مجموع طلبکار دوره', debitSub: 'مجموع بدهکار دوره', balanceSub: 'مانده خالص دوره',
-      journal: 'روزنامچه', sale: 'بل فروش', salePayment: 'دریافت پول',
-      purchase: 'بل خرید', purchasePayment: 'پرداخت پول', transfer: 'انتقال', exchange: 'تبادله',
+      journal: 'روزنامچه', sale: 'فروش', salePayment: 'بل فروش',
+      purchase: 'بل خرید', purchasePayment: 'پرداخت خرید', transfer: 'انتقال', exchange: 'تبادله',
       reportTitle: 'گزارش روزنامچه',
     },
     ps: {
       search: 'لټون', filter: 'فلتر', clear: 'پاکول', show: 'ښکاره کول',
-      print: 'چاپ', download: 'ډاونلوډ', prev: 'مخکې', next: 'وروسته',
+      download: 'ډاونلوډ', prev: 'مخکې', next: 'وروسته',
       fromDate: 'له نیټې', toDate: 'تر نیټې', of: 'له', to: 'تر', rows: 'ردیفونه',
       tx: 'معامله', all: 'ټول', empty: 'په دې فیلترونو سره معامله ونه موندل شوه',
       typeFilter: 'د معاملې ډول', fromP: 'له', toP: 'ته',
       creditSub: 'د دورې ټول اعتبار', debitSub: 'د دورې ټول پور', balanceSub: 'د دورې خالص پاتې',
-      journal: 'روزنامچه', sale: 'د خرڅلاو بل', salePayment: 'د پیسو رسید',
-      purchase: 'د خرید بل', purchasePayment: 'د پیسو ورکړه', transfer: 'انتقال', exchange: 'تبادله',
+      journal: 'روزنامچه', sale: 'خرڅلاو', salePayment: 'د خرڅلاو بل',
+      purchase: 'د خرید بل', purchasePayment: 'د خرید تادیه', transfer: 'انتقال', exchange: 'تبادله',
       reportTitle: 'د روزنامچې راپور',
     },
     en: {
       search: 'Search', filter: 'Filter', clear: 'Clear', show: 'Show',
-      print: 'Print', download: 'Download', prev: 'Prev', next: 'Next',
+      download: 'Download', prev: 'Prev', next: 'Next',
       fromDate: 'From date', toDate: 'To date', of: 'of', to: 'to', rows: 'Rows',
       tx: 'transactions', all: 'All', empty: 'No transactions match these filters',
       typeFilter: 'Transaction type', fromP: 'From', toP: 'To',
       creditSub: 'Total credits in range', debitSub: 'Total debits in range', balanceSub: 'Net balance in range',
-      journal: 'Journal', sale: 'Sale bill', salePayment: 'Money received',
-      purchase: 'Purchase bill', purchasePayment: 'Money paid', transfer: 'Transfer', exchange: 'Exchange',
+      journal: 'Journal', sale: 'Sale', salePayment: 'Sale bill',
+      purchase: 'Purchase bill', purchasePayment: 'Purchase payment', transfer: 'Transfer', exchange: 'Exchange',
       reportTitle: 'Journal report',
     },
   };
@@ -590,45 +715,6 @@
     }));
   }
 
-  function escText(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
-
-  function printReport() {
-    const body = paginated
-      .map((j) => {
-        const debit = Number(j.debit || 0);
-        const credit = Number(j.credit || 0);
-        return (
-          '<tr>' +
-          `<td dir="ltr">${escText(jalaliShort(j.date))}</td>` +
-          `<td>${escText(getAccountName(j.first_entry_account))}<br/>${escText(getAccountName(j.second_entry_account))}</td>` +
-          `<td>${escText(descriptionWithCurrencySymbols(j.description))}</td>` +
-          `<td dir="ltr">${debit ? escText(debit.toLocaleString(undefined, { maximumFractionDigits: 3 })) + ' ' + escText(currencySymbol(j.currency)) : '—'}</td>` +
-          `<td dir="ltr">${credit ? escText(credit.toLocaleString(undefined, { maximumFractionDigits: 3 })) + ' ' + escText(currencySymbol(j.currency)) : '—'}</td>` +
-          `<td dir="ltr">${escText(formatRunningObj(j.running))}</td>` +
-          '</tr>'
-        );
-      })
-      .join('');
-
-    const win = window.open('', '_blank');
-    if (!win) return;
-    win.document.write(
-      '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><title>گزارش روزنامچه · Zeno</title><style>' +
-      'body{font-family:Inter,Vazirmatn,Tahoma,sans-serif;color:#0B1530;margin:24px;font-size:11px}' +
-      'table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}' +
-      'th{background:#F6F8FC;border-bottom:1px solid #E7EBF3;padding:6px 8px;text-align:right;font-size:10px;color:#5B6478}' +
-      'td{border-bottom:1px solid #F0F2F7;padding:6px 8px}' +
-      '.hd{display:flex;justify-content:space-between;margin-bottom:10px;font-size:13px}' +
-      '</style></head><body>' +
-      `<div class="hd"><b>گزارش روزنامچه · Zeno</b><span dir="ltr">${escText(rangeText)}</span></div>` +
-      '<table><thead><tr><th>تاریخ</th><th>طرفین معامله</th><th>شرح</th><th>بدهکار</th><th>طلبکار</th><th>مانده</th></tr></thead><tbody>' +
-      body +
-      '</tbody></table><script>window.onload=function(){window.focus();window.print()}</scr' + 'ipt></body></html>',
-    );
-    win.document.close();
-  }
 </script>
 
 <div class="jindex" dir={t('dir')}>
@@ -675,12 +761,6 @@
         title={t('Balance')}
         pressed={showBalanceCards}
         on:click={() => (showBalanceCards = !showBalanceCards)} />
-      <ActionButton
-        variant="secondary"
-        icon="bi-printer"
-        label={lbl('print')}
-        disabled={loading || processed.length === 0}
-        on:click={printReport} />
       <ExportMenu
         disabled={loading || processed.length === 0}
         loading={generatingPDF}
@@ -733,7 +813,6 @@
           <tr>
             <th>{t('Date')}</th>
             <th>{t('Account')}</th>
-            <th>{t('Description')}</th>
             <th class="col-end">{t('Debit')}</th>
             <th class="col-end">{t('Credit')}</th>
             <th class="col-end">{t('Balance')}</th>
@@ -744,7 +823,18 @@
           {@const runs = runningLines(journal.running)}
           {@const dV = Number(journal.debit || 0)}
           {@const cV = Number(journal.credit || 0)}
-          <tr>
+          <tr
+            class="report-row"
+            role="button"
+            tabindex="0"
+            aria-haspopup="dialog"
+            on:click={() => openJournal(journal)}
+            on:keydown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openJournal(journal);
+              }
+            }}>
             <td>
               <b class="report-date" dir="ltr">{jalaliShort(journal.date)}</b>
             </td>
@@ -762,20 +852,12 @@
               </span>
             </td>
 
-            <td>
-              <span class="report-desc" title={descriptionWithCurrencySymbols(journal.description)}>
-                {descriptionWithCurrencySymbols(journal.description) || '—'}
-              </span>
-            </td>
-
             <td class="col-end">
               {#if dV}
                 <span class="report-amount report-amount--dr">
                   <b dir="ltr">{dV.toLocaleString(undefined, { maximumFractionDigits: 3 })}</b>
                   <span class="report-sym">{currencySymbol(journal.currency || '')}</span>
                 </span>
-              {:else}
-                <span class="report-dash">—</span>
               {/if}
             </td>
 
@@ -785,8 +867,6 @@
                   <b dir="ltr">{cV.toLocaleString(undefined, { maximumFractionDigits: 3 })}</b>
                   <span class="report-sym">{currencySymbol(journal.currency || '')}</span>
                 </span>
-              {:else}
-                <span class="report-dash">—</span>
               {/if}
             </td>
 
@@ -800,8 +880,6 @@
                     </span>
                   {/each}
                 </span>
-              {:else}
-                <span class="report-dash">—</span>
               {/if}
             </td>
           </tr>
@@ -823,6 +901,23 @@
         }} />
     </svelte:fragment>
   </IndexPageLayout>
+
+  {#if voucherData}
+    <ViewJournalModal
+      view={voucherData}
+      on:close={() => (viewedJournal = null)}
+      on:print={printViewedJournal} />
+  {/if}
+
+  {#if showReceipt}
+    <JournalReceiptModal journal={selectedJournal} on:close={() => (showReceipt = false)} />
+  {/if}
+  {#if showA4Receipt}
+    <JournalA4ReceiptModal
+      journal={selectedJournal}
+      on:close={() => (showA4Receipt = false)}
+      on:show80mm={() => ((showReceipt = true), (showA4Receipt = false))} />
+  {/if}
 </div>
 
 <style>
@@ -858,6 +953,16 @@
   }
 
   /* ================= report cells ================= */
+  /* The whole row is the «نمایش» control, exactly like the journals list. */
+  .report-row {
+    cursor: pointer;
+  }
+
+  .report-row:focus-visible {
+    outline: 2px solid var(--z-brand, #2f6fed);
+    outline-offset: -2px;
+  }
+
   /* The date stands alone: the row's Kabul time was dropped from the column. */
   .report-date {
     font-family: var(--z-font-num);
@@ -882,23 +987,20 @@
     min-width: 0;
   }
 
+  /*
+   * Plain direction words. The tinted pills behind «از» / «به» read as a badge
+   * and boxed in two prepositions, so only the colour is left.
+   */
   .report-side {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-width: 34px;
-    height: 17px;
-    padding: 0 5px;
-    border-radius: 5px;
-    background: var(--z-surface-3, #f1f5f9);
-    color: var(--z-text, #475569);
     font-size: 9.5px;
     font-weight: 800;
+    color: var(--z-text, #475569);
   }
 
   .report-side--to {
-    background: var(--z-brand-soft, #e3ecff);
     color: var(--z-link, #2f6fed);
   }
 
@@ -915,17 +1017,6 @@
   .report-name--to {
     font-weight: 600;
     color: var(--z-text, #475569);
-  }
-
-  .report-desc {
-    display: block;
-    max-width: 34rem;
-    overflow: hidden;
-    font-size: var(--z-fs-sm, 11.5px);
-    font-weight: 500;
-    color: var(--z-text, #475569);
-    white-space: nowrap;
-    text-overflow: ellipsis;
   }
 
   .report-amount {
@@ -970,17 +1061,10 @@
     gap: 2px;
   }
 
-  .report-dash {
-    font-family: var(--z-font-num);
-    font-size: var(--z-fs-base, 12.5px);
-    color: var(--z-subtle, #94a3b8);
-  }
-
   /*
    * A body cell carries 6px of inline padding while a header cell carries 12,
-   * so every figure in the amount columns — and the lone "—" placeholder — sat
-   * a few pixels outside the heading it belongs to. Both edges now match, the
-   * way the reference report reads.
+   * so every figure in the amount columns sat a few pixels outside the heading
+   * it belongs to. Both edges now match, the way the reference report reads.
    */
   :global(.jindex .data-table thead th.col-end),
   :global(.jindex .data-table tbody td.col-end) {
@@ -991,13 +1075,6 @@
   :global(.jindex .data-table thead th.col-end:last-child),
   :global(.jindex .data-table tbody td.col-end:last-child) {
     padding-inline-end: 16px;
-  }
-
-  /* ================= responsive ================= */
-  @media (max-width: 900px) {
-    .report-desc {
-      max-width: 15rem;
-    }
   }
 
 </style>

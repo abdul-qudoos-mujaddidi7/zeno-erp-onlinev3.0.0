@@ -120,11 +120,13 @@ async function findAll(
   }
 
   /*
-   * Hide system double-entry rows whose counterpart is
-   * PAYABLE/RECEIVABLE. Prefer a tiny NOT IN list over
-   * building a huge IN (...) of every valid account id —
-   * that large placeholder list forces full scans and
-   * heavy query planning when the journals table is large.
+   * Hide the internal rows that sit entirely between system
+   * accounts, without hiding real documents: a sale invoice
+   * touches RECEIVABLE on one side but its other side is a
+   * party account, so it must stay in the list. Prefer a tiny
+   * NOT IN list over building a huge IN (...) of every valid
+   * account id — that large placeholder list forces full scans
+   * and heavy query planning when the journals table is large.
    */
   const excludedIds = await resolveExcludedAccountIds(
     executor,
@@ -331,12 +333,20 @@ async function resolveExcludedAccountIds(
     .filter((id) => Number.isFinite(id) && id > 0);
 }
 
+/*
+ * A journal is internal only when BOTH of its legs are system
+ * accounts. Excluding every row that merely touches RECEIVABLE or
+ * PAYABLE also removed every sale and purchase invoice, whose other
+ * leg is a real party account, which emptied the journals list of
+ * the documents it is meant to show.
+ */
 function appendExcludedAccountFilters(conditions, values, excludedIds) {
   if (!excludedIds.length) return;
 
   const placeholders = excludedIds.map(() => '?').join(', ');
-  conditions.push(`first_entry_account NOT IN (${placeholders})`);
-  conditions.push(`second_entry_account NOT IN (${placeholders})`);
+  conditions.push(
+    `NOT (first_entry_account IN (${placeholders}) AND second_entry_account IN (${placeholders}))`,
+  );
   values.push(...excludedIds, ...excludedIds);
 }
 
@@ -428,8 +438,10 @@ async function findSummary(
 
   if (excludedIds.length) {
     const placeholders = excludedIds.map(() => '?').join(', ');
-    conditions.push(`j.first_entry_account NOT IN (${placeholders})`);
-    conditions.push(`j.second_entry_account NOT IN (${placeholders})`);
+    /* Same rule as the list query, so a summary never disagrees with it. */
+    conditions.push(
+      `NOT (j.first_entry_account IN (${placeholders}) AND j.second_entry_account IN (${placeholders}))`,
+    );
     values.push(...excludedIds, ...excludedIds);
   }
 

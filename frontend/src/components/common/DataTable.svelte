@@ -103,10 +103,7 @@
 </div>
 
 <style>
-  /*
-   * Zeno table — reference purchase header: 40px on surface-2, 11.5/600 muted
-   * labels, 12px column gutters and a single border-colored bottom rule.
-   */
+  /* Shared Zeno table header, matched to the accounts reference list. */
   .data-table-wrap {
     width: 100%;
     min-width: 0;
@@ -116,14 +113,21 @@
     background: var(--z-surface, #ffffff);
   }
 
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 transparent;
-  }
-
+  /*
+   * Chromium drops the ::-webkit-scrollbar-* painting as soon as the standard
+   * `scrollbar-width` / `scrollbar-color` are set and falls back to the native
+   * scrollbar, which comes with up/down arrow buttons and a track line. The thin
+   * look is produced by the webkit rules below instead.
+   */
   .scrollbar-thin::-webkit-scrollbar {
     width: 8px;
     height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
   }
 
   .scrollbar-thin::-webkit-scrollbar-track {
@@ -171,16 +175,16 @@
   }
 
   .data-table :global(thead th) {
-    height: 40.67px;
-    padding: 0 12px;
+    height: 34px;
+    padding: 0 8px;
 
-    border-bottom: 1px solid var(--z-border, #E1E7F0);
-    background: var(--z-th-bg, #f8fafc);
-    color: var(--z-muted, #64748b);
+    border-bottom: 1px solid var(--z-border-strong, #cbd5e1);
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-text, #475569);
 
     font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
-    font-size: 11.5px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 700;
     line-height: 1.25;
 
     text-align: start;
@@ -246,15 +250,16 @@
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    height: 26px;
-    margin-inline-start: -6px;
-    padding: 0 6px;
+    height: 24px;
+    margin-inline-start: -5px;
+    padding: 0 5px;
     border: 0;
-    border-radius: var(--z-r-xs, 6px);
+    border-radius: 6px;
     background: transparent;
     color: inherit;
     font: inherit;
-    font-size: inherit;
+    font-size: 11px;
+    font-weight: 700;
     cursor: pointer;
   }
 
@@ -276,7 +281,7 @@
   }
 
   .data-table--dense :global(thead th) {
-    height: 40px;
+    height: 34px;
     padding-block: 0;
   }
 

@@ -204,12 +204,17 @@ describe('shared index page stack', () => {
     expect(report).toContain('return withJournalRunningBalances(all.map(mapJournalAmounts))');
   });
 
-  it('replaces currency names next to amounts in journal report descriptions', () => {
+  it('keeps currency names out of the description the voucher prints', () => {
     const report = read('pages/journals/JournalsReport.svelte');
 
+    /*
+     * The report table and its printout no longer carry a description column,
+     * so the text only appears inside the voucher dialog — which is the one
+     * place it still has to resolve a currency name to its symbol.
+     */
     expect(report).toContain('replaceCurrencyNamesWithSymbols(');
-    expect(report).toContain('descriptionWithCurrencySymbols(journal.description)');
-    expect(report).toContain('descriptionWithCurrencySymbols(j.description)');
+    expect(report).toContain('description: descriptionWithCurrencySymbols(journal.description)');
+    expect(report).not.toContain('descriptionWithCurrencySymbols(j.description)');
   });
 
   it('places journal type choices inside the shared filter popover', () => {
@@ -348,6 +353,79 @@ describe('shared index page stack', () => {
     expect(page).not.toContain('journal-type__icon');
   });
 
+  it('opens the voucher dialog from the row itself', () => {
+    const page = read('pages/journals/JournalsIndex.svelte');
+
+    /* The reference turns a whole row into the «نمایش» control, so a click
+       anywhere on it shows the read-only voucher instead of expanding a
+       second copy of the ledger underneath the row. */
+    expect(page).toMatch(/on:click=\{\(event\) => openRow\(j, event\)\}/);
+    expect(page).toMatch(
+      /function openRow\(journal, event\) \{[\s\S]*?openJournalView\(journal\);/,
+    );
+    expect(page).not.toContain('toggleRow');
+    expect(page).not.toContain('expandedId');
+  });
+
+  it('names the sale voucher and the payment it posts for the same bill', () => {
+    /* Every surface of the list takes its type label from this one dictionary:
+       the pill, the voucher dialog header, print and the Excel export. The
+       invoice reads «فروش» and the payment it creates reads «بل فروش», so both
+       rows of one sale name the bill instead of «بل فروش» / «دریافت پول». The
+       purchase payment follows the wording the app already uses for its type. */
+    const page = read('pages/journals/JournalsIndex.svelte');
+
+    expect(page).toContain("sale: 'فروش',");
+    expect(page).toContain("salePayment: 'بل فروش',");
+    expect(page).not.toContain("sale: 'بل فروش',");
+    expect(page).toContain("sale: 'Sale',");
+    expect(page).toContain("salePayment: 'Sale bill',");
+    expect(page).toContain("purchasePayment: 'پرداخت خرید',");
+    expect(page).toContain("purchasePayment: 'Purchase payment',");
+  });
+
+  it('drops the description column from the journals report', () => {
+    const report = read('pages/journals/JournalsReport.svelte');
+
+    /* The report keeps date, both parties, debit, credit and the running
+       balance; the description lives in the voucher dialog instead, so the
+       screen and the printout stay the same width. */
+    expect(report).not.toContain("<th>{t('Description')}</th>");
+    expect(report).not.toContain('report-desc');
+    expect(report).not.toContain('<th>شرح</th>');
+  });
+
+  it('leaves the report direction words without a background', () => {
+    const report = read('pages/journals/JournalsReport.svelte');
+
+    /* «از» / «به» are prepositions, not badges: only their colour separates the
+       two legs, so no pill follows them around the table. */
+    expect(report).toMatch(/\.report-side \{[^}]*color: var\(--z-text, #475569\);/);
+    expect(report).toMatch(/\.report-side--to \{[^}]*color: var\(--z-link, #2f6fed\);/);
+    expect(report).not.toMatch(/\.report-side[^{]*\{[^}]*background:/);
+  });
+
+  it('leaves an empty amount cell empty in the journals report', () => {
+    const report = read('pages/journals/JournalsReport.svelte');
+
+    /* A leg with no amount keeps the column blank; the «—» placeholder that
+       used to stand in for it is gone. */
+    expect(report).not.toContain('report-dash');
+    expect(report).not.toContain('<span class="report-dash">—</span>');
+  });
+
+  it('opens the voucher dialog from a report row', () => {
+    const report = read('pages/journals/JournalsReport.svelte');
+
+    expect(report).toContain('<ViewJournalModal');
+    expect(report).toMatch(/on:click=\{\(\) => openJournal\(journal\)\}/);
+    expect(report).toMatch(
+      /function voucherView\(journal\) \{[\s\S]*?editMode: 'none',/,
+    );
+    /* The printed voucher reuses the receipt sheets, as the list does. */
+    expect(report).toContain('<JournalA4ReceiptModal');
+  });
+
   it('folds the journal row actions into the reference kebab', () => {
     /* The reference row shows a single more_vert button; every action, print
        included, lives in its menu, and both the label and the kebab are centred. */
@@ -372,6 +450,21 @@ describe('shared index page stack', () => {
 
     /* Only «نمایش» is link-blue; «چاپ» keeps the muted reference glyph. */
     expect(page).toContain("tone: 'muted',");
+  });
+
+  it('keeps the print pill out of the journals toolbars', () => {
+    /* Printing a journal lives in the row kebab, and the toolbars keep only the
+       export menu — its «چاپ» entry still runs the page's own print path. */
+    const list = read('pages/journals/JournalsIndex.svelte');
+    const report = read('pages/journals/JournalsReport.svelte');
+
+    expect(list).not.toContain('toolbar-print');
+    expect(list).not.toContain('icon="print"');
+    expect(list).toContain('? exportExcel() : printList()');
+
+    /* The report prints from the voucher dialog; its toolbar has no printer. */
+    expect(report).not.toContain('function printReport');
+    expect(report).not.toContain('icon="bi-printer"');
   });
 
   it('opens every journal in the reference read-only voucher card', () => {
@@ -447,6 +540,9 @@ describe('shared index page stack', () => {
     expect(filterToolbar).toContain('>tune</span>');
     expect(exportMenu).toContain('export let material = true;');
     expect(exportMenu).toContain('>download</span>');
+    /* The trigger is icon-only: «دانلود» belongs to the tooltip, not the pill. */
+    expect(exportMenu).not.toContain("<span>{t('Download')}</span>");
+    expect(exportMenu).toContain("title={t('Download')}");
     expect(actionButton).toContain("export let iconSet = 'material';");
     expect(actionButton).toContain("'bi-printer-fill': 'print'");
     expect(actionButton).toContain("'bi-plus-lg': 'add'");
@@ -468,6 +564,39 @@ describe('shared index page stack', () => {
       .map((file) => file.path);
 
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('scrollbars', () => {
+  /*
+   * Chromium draws the two arrow buttons at the ends of any scrollbar whose
+   * ends are not declared, so the bar reads as a line with triangles on top of
+   * the app's own 8px rounded thumb.
+   */
+  it('hides the scrollbar arrow buttons and the track', () => {
+    const app = readFileSync(join(SRC, 'app.css'), 'utf8');
+
+    expect(app).toMatch(/::-webkit-scrollbar-button \{[^}]*display: none;/);
+    expect(app).toMatch(
+      /\.table-container::-webkit-scrollbar-track,[\s\S]*?background: transparent;/,
+    );
+  });
+
+  /*
+   * `scrollbar-width` / `scrollbar-color` hand the element to Chromium's native
+   * painter, which ignores the webkit rules and paints the arrows back.
+   */
+  it('styles the scrollers with webkit rules instead of the standard properties', () => {
+    const table = read('components/common/DataTable.svelte');
+    const layout = read('layouts/DashboardLayout.svelte');
+    const toolbar = read('components/common/FilterToolbar.svelte');
+    const app = readFileSync(join(SRC, 'app.css'), 'utf8');
+
+    expect(table).not.toMatch(/\.scrollbar-thin \{[^}]*scrollbar-width/);
+    expect(table).toMatch(/\.scrollbar-thin::-webkit-scrollbar-button \{[^}]*display: none;/);
+    expect(layout).not.toContain('scrollbar-width: thin;');
+    expect(toolbar).not.toMatch(/\.filter-panel__body \{[^}]*scrollbar-width/);
+    expect(app).not.toMatch(/\.table-container \{[^}]*scrollbar-width/);
   });
 });
 
@@ -563,6 +692,21 @@ describe('shell sidebar rail', () => {
 
     expect(baseIdx).toBeGreaterThan(-1);
     expect(hideIdx).toBeGreaterThan(baseIdx);
+  });
+
+  it('centres the reports icon in the rail', () => {
+    const rail = read('components/Sidebar.svelte');
+
+    /*
+     * Every other item is icon + zero-width label, so the centred flex row
+     * leaves the icon in the middle. The reports toggle grows its label to
+     * push the chevron away; with the chevron hidden in the rail that grow
+     * ate the free space and pinned the icon to the inline-start edge.
+     */
+    expect(rail).toMatch(/\.sidebar-report-toggle span \{\s+flex: 1 1 auto;/);
+    expect(rail).toMatch(
+      /#erp-sidebar\.collapsed \.sidebar-report-toggle > span \{\s+flex: 0 0 auto;/,
+    );
   });
 });
 

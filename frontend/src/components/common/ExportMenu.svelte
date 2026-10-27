@@ -107,7 +107,7 @@
     {:else}
       <i class="bi bi-download"></i>
     {/if}
-    <span>{t('Download')}</span>
+    <!-- Icon-only trigger; the label lives in `title` / `aria-label`. -->
     {#if material}
       <span class="ms export-menu__caret" aria-hidden="true">expand_more</span>
     {:else}
