@@ -258,7 +258,7 @@
     background: transparent;
     color: inherit;
     font: inherit;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     cursor: pointer;
   }

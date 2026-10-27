@@ -363,7 +363,7 @@
 
   .index-footer :global(.pagination-shell) {
     min-height: auto;
-    padding: 8px 12px;
+    padding: 10px 16px;
     border: 0;
     background: #F8FAFC;
   }

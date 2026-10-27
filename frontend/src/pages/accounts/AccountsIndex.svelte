@@ -1,7 +1,6 @@
 <script>
   import { onceAsync } from '../../lib/onceAsync.js';
   import { onMount, onDestroy } from 'svelte';
-  import { accountImageApi } from '../../api/accountImageApi.js';
   import { accountApi } from '../../api/accountApi.js';
   import { accountTypeApi } from '../../api/accountTypeApi.js';
   import { accountGroupApi } from '../../api/accountGroupApi.js';
@@ -15,12 +14,12 @@
   import { toast } from '../../ToastUI/toast.js';
   import DataTable from '../../components/common/DataTable.svelte';
   import ActionButton from '../../components/common/ActionButton.svelte';
-  import StatusBadge from '../../components/common/StatusBadge.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../../lib/pagination.js';
+  import { formatBalance, formatBalanceNumber, isPartyBalanceAccount } from '../../utils/accountBalanceDisplay.js';
 
   $: enable_account_groups = $settings_all.find((s) => s.key === 'enable_account_groups')?.value == 1;
   // ensure component re-renders when language changes
@@ -30,7 +29,6 @@
   import { auth } from '../../auth/authStore';
   $: permissions = $auth.permissions;
 
-  import { resolveMediaUrl } from '../../lib/mediaUrl.js';
   import { isSystemAccount } from '../../lib/systemAccounts.js';
 
   let accounts = [];
@@ -109,7 +107,7 @@
       loading = false;
       if (!ids.length) return;
 
-      // Balances and images enrich the visible page independently.
+      // Balances enrich the visible page independently.
       void accountApi.getBalances({ status: 1, account_ids: idsCsv }).then((response) => {
         if (requestId !== loadRequestId) return;
         const balances = response?.data || {};
@@ -119,14 +117,6 @@
           computedBalances: balances[account.id] || {},
         }));
       }).catch((error) => console.error('Failed to load account balances', error));
-      void accountImageApi.getAll({ status: 1, account_ids: idsCsv }).then((response) => {
-        if (requestId !== loadRequestId) return;
-        const images = new Map((response?.data || []).map((img) => [Number(img.account_id), img]));
-        accounts = accounts.map((account) => ({
-          ...account,
-          imageUrl: resolveMediaUrl(images.get(Number(account.id))?.image, null),
-        }));
-      }).catch((error) => console.error('Failed to load account images', error));
     } catch (err) {
       console.error('Failed to load accounts', err);
       if (requestId === loadRequestId) {
@@ -331,6 +321,32 @@
       ],
     },
   ];
+  $: showAccountActions = filterStatus.size > 1 || filterStatus.has('archived');
+  $: accountTableColumns = [
+    '240px',
+    '120px',
+    ...(enable_account_groups ? ['190px'] : []),
+    '150px',
+    ...(showAccountActions ? ['44px'] : []),
+  ];
+
+  function getBalanceLines(account) {
+    return formatBalance(account, {
+      accountTypes,
+      labels: { debit: t('Debit'), credit: t('Credit') },
+    });
+  }
+
+  function getBalanceTitle(account) {
+    const party = isPartyBalanceAccount(account, accountTypes);
+    return Object.entries(account?.computedBalances || {})
+      .map(([currency, rawBalance]) => {
+        const balance = Number(rawBalance) || 0;
+        const amount = `${balance < 0 && !party ? '−' : ''}${formatBalanceNumber(balance)}`;
+        return `${t(currency)}: ${amount}`;
+      })
+      .join(' · ');
+  }
 
   function handleAccountToolbarFilter(event) {
     const { key, value } = event.detail;
@@ -368,7 +384,7 @@
   function showInitials(name) {
     if (!name) return '';
     const parts = name.trim().split(' ');
-    return parts[0].charAt(0).toUpperCase();
+    return parts[0].charAt(0);
   }
 
   async function changeAccountStatus(id, newStatus) {
@@ -454,6 +470,7 @@
           <DataTable
             ariaLabel={t('Accounts')}
             minWidth="760px"
+            columns={accountTableColumns}
             dense={true}
             striped={true}
             hover={true}
@@ -463,7 +480,7 @@
             <svelte:fragment slot="head">
           {#if showTotalPercentage}
                 <tr class="shareholders-banner-row">
-                  <th colspan="12">{t('List')}{t('-of-')}{t('Shareholders')}</th>
+                    <th colspan={accountTableColumns.length}>{t('List')}{t('-of-')}{t('Shareholders')}</th>
               </tr>
           {/if}
             <tr>
@@ -512,14 +529,9 @@
                       {/if}
                     </button>
                   </th>
-                {#if filterStatus.size > 1 || filterStatus.has('archived')}
-                    <th aria-sort={sortColumn === 'account_status' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                      <button type="button" on:click={() => setSort('account_status')}>
-                        {t('Status')}
-                        {#if sortColumn === 'account_status'}
-                          <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                        {/if}
-                      </button>
+                {#if showAccountActions}
+                    <th class="account-actions-heading col-end">
+                      <span class="sr-only">{t('Actions')}</span>
                     </th>
                 {/if}
             </tr>
@@ -534,8 +546,8 @@
                     </span>
                     <span class="account-identity">
                       <span class="account-name">{getAccountDisplayName(acc)}</span>
-                      <span class="account-meta" dir="auto">
-                        #{acc.id}{#if acc.phone || acc.phone2} · {acc.phone || acc.phone2}{/if}{#if acc.account_status === 'archived'} · {t(acc.account_status)}{/if}
+                      <span class="account-meta" dir="rtl">
+                        {#if acc.phone || acc.phone2}<bdi dir="ltr">{acc.phone || acc.phone2}</bdi>{/if}
                       </span>
                     </span>
                   </div>
@@ -550,46 +562,47 @@
                   </td>
                 {:else}
                   <td>
-                    <StatusBadge tone="neutral">{getTypeName(acc.account_type_id) || '—'}</StatusBadge>
+                    <span class="account-type-badge">{getTypeName(acc.account_type_id) || '—'}</span>
                   </td>
                 {/if}
                 {#if enable_account_groups}
                   <td>
-                    <StatusBadge tone="neutral" ghost>
+                    <span class="account-group-name">
                       {accountGroups.find((ac) => ac.id == acc.account_group_id)?.name || '—'}
-                    </StatusBadge>
+                    </span>
                   </td>
                 {/if}
                 <td class="col-end">
                   {#if !acc.balancesLoaded}
                     <span aria-busy="true">...</span>
-                  {:else if acc.computedBalances}
-                    <div class="balance-list">
-                    {#each Object.keys(acc.computedBalances) as cur}
-                        <StatusBadge
-                          tone={acc.computedBalances[cur] > 0
-                            ? 'positive'
-                          : acc.computedBalances[cur] < 0
-                              ? 'negative'
-                              : 'neutral'}>
-                          <span dir="ltr">
-                            {Number(acc.computedBalances[cur]).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                  {:else}
+                    {@const balanceLines = getBalanceLines(acc)}
+                    {#if balanceLines.length}
+                      <div class="balance-list" title={getBalanceTitle(acc)}>
+                        {#each balanceLines as line}
+                          <span class="balance-line">
+                            <span
+                              class="balance-amount"
+                              class:balance-amount--single={balanceLines.length === 1}
+                              style:color={line.color}>
+                              {line.amount}
+                            </span>
+                            <span class="currency-chip">{line.symbol}</span>
                           </span>
-                          <span>{t(cur)}</span>
-                        </StatusBadge>
-                    {/each}
-                    </div>
+                        {/each}
+                      </div>
+                    {:else}
+                      <span class="balance-settled">{t('Settled')}</span>
+                    {/if}
                   {/if}
                 </td>
-                {#if filterStatus.size > 1 || filterStatus.has('archived')}
-                  <td>
+                {#if showAccountActions}
+                  <td class="col-end">
                     <div class="status-cell" on:click|stopPropagation>
-                      <StatusBadge tone={acc.account_status === 'active' ? 'positive' : 'negative'}>
-                        {t(acc.account_status)}
-                      </StatusBadge>
                     <button
                         type="button"
                         class="archive-btn"
+                        aria-label={acc.account_status === 'active' ? t('Archived') : t('Active')}
                         disabled={isSystemAccount(acc)}
                         title={isSystemAccount(acc)
                           ? t('System accounts cannot be edited.')
@@ -826,6 +839,52 @@
     text-align: center;
   }
 
+  :global(.accounts-index-content .data-table) {
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--z-text, #475569);
+  }
+
+  :global(.accounts-index-content .data-table tbody tr.account-row) {
+    height: auto;
+    transition: background 0.15s ease;
+  }
+
+  :global(.accounts-index-content .data-table tbody tr.account-row > td) {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--z-border, #e1e7f0);
+    vertical-align: middle;
+    text-align: start;
+  }
+
+  :global(.accounts-index-content .data-table tbody tr.account-row > td:first-child) {
+    padding-inline-start: 12px;
+  }
+
+  :global(.accounts-index-content .data-table tbody tr.account-row > td:last-child) {
+    padding-inline-end: 12px;
+  }
+
+  :global(.accounts-index-content .data-table--striped tbody tr.account-row:nth-child(even) > td) {
+    background: var(--z-surface-2, #f8fafc);
+  }
+
+  :global(.accounts-index-content .data-table tbody tr.account-row:hover > td) {
+    background: var(--z-hover, #f5f9ff);
+  }
+
+  :global(.accounts-index-content .data-table tbody tr.account-row > td.col-end) {
+    text-align: end;
+  }
+
+  :global(.accounts-index-content .data-table thead th:first-child) {
+    padding-inline-start: 12px;
+  }
+
+  :global(.accounts-index-content .data-table thead th:last-child) {
+    padding-inline-end: 12px;
+  }
+
   .account-row {
     cursor: pointer;
   }
@@ -838,7 +897,7 @@
   .account-info {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 10px;
     min-width: 0;
     text-align: start;
   }
@@ -853,12 +912,15 @@
 
   .account-avatar-fallback {
     display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: center;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
-    background: color-mix(in srgb, var(--z-link, #2f6fed) 14%, transparent);
+    background: color-mix(in srgb, #2f6fed 14%, transparent);
     color: var(--z-link, #2f6fed);
-    font-size: 0.72rem;
+    font-size: 11.5px;
     font-weight: 800;
   }
 
@@ -870,19 +932,50 @@
   }
 
   .account-name {
-    overflow: hidden;
-    color: #0f172a;
+    display: block;
+    color: var(--z-ink, #0b1530);
+    font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
     font-size: 12.5px;
     font-weight: 700;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    text-align: right;
   }
 
   .account-meta {
     overflow: hidden;
     color: var(--z-muted, #64748b);
     font-size: 10.5px;
-    line-height: 1.35;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-type-badge {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    height: 22px;
+    padding: 0 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-text, #475569);
+    font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-group-name {
+    display: block;
+    overflow: hidden;
+    color: var(--z-text, #475569);
+    font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
+    font-size: 12px;
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -895,9 +988,61 @@
     display: inline-flex;
     flex-direction: column;
     flex-wrap: nowrap;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 2px;
+    max-width: 100%;
+  }
+
+  .balance-line {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .balance-amount {
+    display: inline-block;
+    min-width: 66px;
+    color: var(--z-ink, #0b1530);
+    direction: ltr;
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 12px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .balance-amount--single {
+    font-size: 12.5px;
+  }
+
+  .currency-chip {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.25rem;
+    box-sizing: border-box;
+    min-width: 22px;
+    height: 16px;
+    padding: 0 3px;
+    border-radius: 4px;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-text, #475569);
+    direction: ltr;
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 9.5px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .balance-settled {
+    color: var(--z-subtle, #94a3b8);
+    font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   .status-cell {

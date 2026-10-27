@@ -127,8 +127,8 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    height: 32px;
-    padding: 0 10px;
+    height: 28px;
+    padding: 0 9px;
     border: 1px solid var(--z-border, #e1e7f0);
     border-radius: 9px;
     color: var(--z-text, #475569);
@@ -177,8 +177,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 32px;
-    height: 32px;
+    min-width: 28px;
+    height: 28px;
     padding: 0 6px;
     border: 0;
     border-radius: 9px;
@@ -220,7 +220,7 @@
     align-items: center;
     justify-content: center;
     min-width: 18px;
-    height: 32px;
+    height: 28px;
     color: var(--z-subtle, #94a3b8);
     font-size: 12.5px;
     font-weight: 600;
