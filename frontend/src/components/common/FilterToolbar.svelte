@@ -157,8 +157,14 @@
       {/if}
     </div>
 
-    {#if visibleFilters.length}
-      <div class="filter-control" use:clickOutside>
+    {#if $$slots.beforeFilters || visibleFilters.length}
+      <div class="filter-tools" class:filter-tools--grouped={$$slots.beforeFilters}>
+        {#if $$slots.beforeFilters}
+          <slot name="beforeFilters" />
+        {/if}
+
+        {#if visibleFilters.length}
+          <div class="filter-control" use:clickOutside>
         <button
           bind:this={filterTriggerEl}
           type="button"
@@ -238,6 +244,8 @@
                 <button type="button" class="filter-apply" on:click={closeFilters}>{applyLabel}</button>
               </footer>
             {/if}
+          </div>
+        {/if}
           </div>
         {/if}
       </div>
@@ -361,6 +369,31 @@
   .search-clear:hover {
     background: var(--z-surface-3, #f1f5f9);
     color: var(--z-ink, #0b1530);
+  }
+
+  /*
+   * Quick filters and the filter trigger share one capsule, as in the
+   * Accounts reference: 24px segments beside a 28px tune button.
+   */
+  .filter-tools {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .filter-tools--grouped {
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background: var(--z-surface-3, #f1f5f9);
+  }
+
+  .filter-tools--grouped .filter-toggle {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 9px;
   }
 
   /* Filter trigger — its own 30px button with an active-count badge */
@@ -600,25 +633,8 @@
     line-height: 1.3;
   }
 
-  .filter-date input {
-    width: 100%;
-    height: 30px;
-    min-height: 30px;
-    padding: 0 8px;
-    border: 1px solid var(--z-border, #e1e7f0);
-    border-radius: var(--z-r-sm, 8px);
-    outline: 0;
-    background: var(--z-surface, #ffffff);
-    color: var(--z-ink, #0b1530);
-    font-family: var(--z-font-num, 'Inter', 'Vazirmatn', sans-serif);
-    font-size: var(--z-fs-sm, 11.5px);
-    font-weight: 700;
-  }
+ 
 
-  .filter-date input:focus {
-    border-color: var(--z-brand-300, #93b7f7);
-    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
-  }
 
   .filter-panel__fields :global(.filter-select) {
     width: 100%;

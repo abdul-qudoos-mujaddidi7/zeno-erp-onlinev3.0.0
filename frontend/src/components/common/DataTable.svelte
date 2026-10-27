@@ -37,6 +37,10 @@
    * @type {string | null}
    */
   export let cellPaddingY = null;
+  /** Horizontal padding of a body cell, e.g. '8px'. */
+  export let cellPaddingX = null;
+  /** Inset of the first/last cell and header, e.g. '12px'. */
+  export let edgePaddingX = null;
 
   $: tableLayout = layout === 'auto' ? 'auto' : 'fixed';
   $: scrollbarMode = ['thin', 'hidden', 'normal'].includes(scrollbar) ? scrollbar : 'thin';
@@ -81,7 +85,9 @@
     class:data-table--clip-cells={clipCells}
     style={`min-width: ${minWidth}; table-layout: ${
       columns?.length ? 'fixed' : tableLayout
-    };${cellPaddingY ? ` --dt-cell-pad-y: ${cellPaddingY};` : ''}`}
+    };${cellPaddingY ? ` --dt-cell-pad-y: ${cellPaddingY};` : ''}${
+      cellPaddingX ? ` --dt-cell-pad-x: ${cellPaddingX};` : ''
+    }${edgePaddingX ? ` --dt-edge-pad-x: ${edgePaddingX};` : ''}`}
     aria-label={ariaLabel || undefined}
   >
     {#if columns?.length}
@@ -207,7 +213,7 @@
   .data-table :global(tbody td) {
     height: auto;
     min-height: 0;
-    padding: var(--dt-cell-pad-y, 7px) 6px;
+    padding: var(--dt-cell-pad-y, 7px) var(--dt-cell-pad-x, 6px);
     border-bottom: 1px solid var(--z-row-border, #f0f2f7);
     background: inherit;
     font-size: 12px;
@@ -222,20 +228,20 @@
 
   /* Keep header labels aligned with the purchase reference's 16px edge insets. */
   .data-table :global(thead th:first-child) {
-    padding-inline-start: 16px;
+    padding-inline-start: var(--dt-edge-pad-x, 16px);
   }
 
   .data-table :global(thead th:last-child) {
-    padding-inline-end: 16px;
+    padding-inline-end: var(--dt-edge-pad-x, 16px);
   }
 
   /* Body cells retain their existing edge inset and column alignment. */
   .data-table :global(tbody td:first-child) {
-    padding-inline-start: 14px;
+    padding-inline-start: var(--dt-edge-pad-x, 14px);
   }
 
   .data-table :global(tbody td:last-child) {
-    padding-inline-end: 14px;
+    padding-inline-end: var(--dt-edge-pad-x, 14px);
   }
 
   .data-table :global(thead th.col-center) {

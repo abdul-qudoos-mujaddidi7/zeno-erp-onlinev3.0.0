@@ -330,7 +330,7 @@ async function reconcileProductStock(
     }
   }
 
-  const warehouseRows =
+  const { data: warehouseRows } =
     await warehouseProductRepository.findAll(
       connection,
       {
@@ -440,7 +440,7 @@ async function syncWarehouseBalancesToProduct(
     return;
   }
 
-  const warehouseRows =
+  const { data: warehouseRows } =
     await warehouseProductRepository.findAll(
       connection,
       {

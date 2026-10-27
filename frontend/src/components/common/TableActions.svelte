@@ -30,6 +30,9 @@
     'bi-pencil': 'edit',
     'bi-trash': 'delete',
     'bi-printer': 'print',
+    'bi-journal-text': 'menu_book',
+    'bi-archive': 'archive',
+    'bi-box-arrow-in-up': 'unarchive',
   };
   /** @param {string} icon */
   const materialMenuIcon = (icon) => MATERIAL_MENU_ICONS[icon] || '';

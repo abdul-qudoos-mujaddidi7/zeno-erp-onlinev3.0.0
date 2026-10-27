@@ -19,6 +19,9 @@
   export let countLabel = null;
   /** Visible row label and accessible option unit; falls back to perPageSuffix. */
   export let rowLabel = '';
+  /** Optional reference-style range: "Showing 1–15 of 53 rows". */
+  export let rangeStart = null;
+  export let rangeEnd = null;
 
   const dispatch = createEventDispatcher();
 
@@ -34,7 +37,12 @@
 
 <div class="pagination-shell">
   <div class="pagination-meta">
-    {#if totalItems != null}
+    {#if rangeStart != null && rangeEnd != null}
+      <span class="pagination-count">
+        {resolvedPerPageLabel} <b dir="ltr">{rangeStart}–{rangeEnd}</b> {t('of')}
+        <b>{totalItems}</b> {optionUnit}
+      </span>
+    {:else if totalItems != null}
       <span class="pagination-count">
         {resolvedCountLabel} : <b dir="ltr">{totalItems}</b>
       </span>
