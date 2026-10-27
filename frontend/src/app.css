@@ -607,7 +607,22 @@
      margin-right: var(--sidebar-width);
    }
    
-   @media (max-width: 991px) {
+   /* Tablet (Main.dc.html): the rail folds to 72px from 1100px down but stays in
+      flow, so the page keeps a gutter of exactly the rail width instead of
+      sliding underneath it. */
+   @media (min-width: 768px) and (max-width: 1100px) {
+     html[dir='ltr'] .content-wrapper {
+       margin-left: var(--sidebar-width-collapsed);
+     }
+     html[dir='rtl'] .content-wrapper {
+       margin-left: 0;
+       margin-right: var(--sidebar-width-collapsed);
+     }
+   }
+
+   /* Phone (Main.dc.html): the rail is an off-canvas drawer, so the page owns the
+      full width and the drawer slides over it. */
+   @media (max-width: 767px) {
      .content-wrapper,
      html[dir='ltr'] .content-wrapper,
      html[dir='rtl'] .content-wrapper {

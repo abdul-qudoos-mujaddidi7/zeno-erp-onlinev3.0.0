@@ -75,6 +75,62 @@ describe('main dashboard cards', () => {
     expect(linkCount(board)).toBeGreaterThanOrEqual(8);
   });
 
+  test('operations and quick-action cards fill responsive grid tracks', () => {
+    expect(board).toContain(
+      'grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));',
+    );
+    expect(board).toMatch(/width:\s*100%;\s*min-width:\s*0;\s*height:\s*75\.52px;/);
+    // The quick actions share one row on desktop: one auto-generated track per
+    // card, never a fixed card width that pushes the last action down a line.
+    expect(board).toMatch(
+      /\.zb \.zb-qa-grid\s*\{\s*grid-template-columns: none;\s*grid-auto-flow: column;/,
+    );
+    // Narrower screens reflow them to three per row (two on small phones); those
+    // overrides must stay below the single-row rule so desktop keeps one line.
+    const oneRow = board.indexOf('grid-auto-flow: column;');
+    const threeUp = board.indexOf('grid-template-columns: repeat(3, minmax(0, 1fr));');
+    expect(threeUp).toBeGreaterThan(oneRow);
+    expect(board).toMatch(
+      /@media \(max-width: 420px\) \{\s*\.zb \.zb-qa-grid \{\s*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/,
+    );
+    expect(board).toMatch(/width:\s*100%;\s*min-width:\s*0;\s*height:\s*65\.33px;/);
+    expect(board).not.toMatch(/\.zb-kpi-grid\s*\{\s*grid-template-columns: repeat\(2,/);
+  });
+
+  test('alerts search keeps its left alignment when the header wraps', () => {
+    expect(board).toContain('margin-inline-start: auto;');
+    expect(board).toMatch(/\.zb-search\s*\{\s*width:\s*100%;\s*max-width:\s*320px;/);
+    expect(board).not.toMatch(/\.zb-search\s*\{\s*margin-inline-start:\s*0;/);
+  });
+
+  test('journal quick actions navigate to the journal page and open the matching direction', () => {
+    const journalForm = read('./journals/AddJournal.svelte');
+    const journalsPage = read('./journals/JournalsIndex.svelte');
+
+    expect(dashboard).toContain("href: '/dashboard/journals/list?addJournal=1&side=cr'");
+    expect(dashboard).toContain(
+      "href: '/dashboard/journals/list?addJournal=1&side=dr&accountCode=EXPENSES'",
+    );
+    expect(board).toContain('href={action.href} use:link');
+    expect(dashboard).not.toContain('QuickEntryModal');
+    expect(journalsPage).toContain("journalParams.get('addJournal') === '1'");
+    expect(journalsPage).toContain('initialJournalSide={addJournalSide}');
+    expect(journalsPage).toContain('initialAccountCode={addJournalAccountCode}');
+    expect(journalForm).toContain("export let initialJournalSide = 'dr'");
+    expect(journalForm).toContain("export let initialAccountCode = ''");
+    expect(journalForm).toContain("String(item.code || '').toUpperCase()");
+    expect(journalForm).toContain('let journalSide = initialJournalSide');
+  });
+
+  test('exchange quick action opens the Add Exchange popup on the exchanges page', () => {
+    const exchangesPage = read('./exchanges/ExchangesIndex.svelte');
+
+    expect(dashboard).toContain("href: '/dashboard/exchanges/list?addExchange=1'");
+    expect(exchangesPage).toContain("get('addExchange') === '1'");
+    expect(exchangesPage).toContain('openAddExchange();');
+    expect(exchangesPage).toContain("push('/dashboard/exchanges/list')");
+  });
+
   test('the treasury card opens the treasury account profile itself', () => {
     // The card shows treasury balances, so it must land on that account's own
     // profile (`…/dashboard/account/<id>`), not on an unrelated report. The
@@ -103,6 +159,53 @@ describe('main dashboard cards', () => {
 
     expect(dashboard).toContain('if (cardStockAlerts && enable_expiry_date)');
     expect(dashboard).toContain('debtors: cardDebtors');
+  });
+
+  test('financial trend totals use the selected chart period', () => {
+    expect(dashboard).toContain('(trendData.benefit || []).reduce(');
+    expect(dashboard).toContain('(trendData.expenses || []).reduce(');
+    expect(dashboard).toContain('benefit: chartBenefitTotal');
+    expect(dashboard).toContain('expenses: chartExpenseTotal');
+    expect(dashboard).toContain('net: chartBenefitTotal - chartExpenseTotal');
+  });
+});
+
+describe('dashboard chart ranges', () => {
+  /* Every report card owns its own range: picking a range on the financial trend
+     must not repaint the warehouse chart, and the warehouse buttons must not
+     change the trend the page reloads. */
+  test('the warehouse card drives its own period', () => {
+    expect(board).toMatch(/export let warehousePeriod = 'week';/);
+    expect(board).toMatch(
+      /function pickWarehousePeriod\(next\) \{[\s\S]{0,140}dispatch\('warehouseperiod', next\)/,
+    );
+    expect(board).toMatch(
+      /aria-pressed=\{warehousePeriod === 'week'\}[\s\S]{0,120}pickWarehousePeriod\('week'\)/,
+    );
+    expect(board).toMatch(
+      /aria-pressed=\{warehousePeriod === 'month'\}[\s\S]{0,120}pickWarehousePeriod\('month'\)/,
+    );
+  });
+
+  test('the page keeps the trend and warehouse ranges apart', () => {
+    const setPeriodBody = dashboard.match(/async function setPeriod\(period\) \{([\s\S]*?)\n  \}/)[1];
+    // Rebuilding the inventory series here is exactly what made the two filters
+    // move together.
+    expect(setPeriodBody).not.toContain('loadWarehouseHistory');
+    expect(setPeriodBody).toContain('activePeriod = period;');
+
+    expect(dashboard).toMatch(/async function setWarehousePeriod\(period\) \{[\s\S]{0,120}loadWarehouseHistory\(\);/);
+    expect(dashboard).toMatch(/function handleWarehousePeriod\(event\)/);
+    expect(dashboard).toMatch(/function handleWarehouseCustomRange\(event\)/);
+    expect(dashboard).toMatch(/warehousePeriod=\{warehousePeriod\}/);
+    expect(dashboard).toMatch(/on:warehouseperiod=\{handleWarehousePeriod\}/);
+    expect(dashboard).toMatch(/on:warehousecustom=\{handleWarehouseCustomRange\}/);
+  });
+
+  test('the warehouse chart buckets follow the warehouse period', () => {
+    const dates = dashboard.match(/function buildWarehouseHistoryDates\(\) \{([\s\S]*?)\n  \}/)[1];
+    expect(dates).toContain("warehousePeriod === 'week'");
+    expect(dates).not.toContain('activePeriod');
   });
 });
 
@@ -144,5 +247,62 @@ describe('alternate dashboard cards', () => {
   test('the treasury card opens the treasury account profile itself', () => {
     expect(dashboard2).toMatch(/href={treasuryHref}/);
     expect(dashboard2).toMatch(/findTreasuryAccountId/);
+  });
+});
+
+describe('dashboard card icons', () => {
+  /* Every dashboard card tile reproduces Main.dc.html's Material Symbols glyph
+     (`.ktile`, `.qa-ic`, `.ch3 .ct`, `.dz-ic`, `.dz-bt`), not a Bootstrap icon. */
+  const GLYPHS = {
+    dashboard: 'More Reports header',
+    monitoring: 'Financial Trend block + Sales/Expenses chart',
+    inventory_2: 'Inventory & Returns block',
+    assignment_return: 'Returns & Wastes card',
+    warehouse: 'Warehouses card',
+    emoji_events: 'Top Products card',
+    account_balance_wallet: 'Treasury card',
+    person_search: 'Top Debtors card',
+    currency_exchange: 'Exchange Rate card',
+  };
+
+  test('each card tile carries its reference glyph', () => {
+    for (const [glyph, card] of Object.entries(GLYPHS)) {
+      expect(board, card).toContain(`class="ms f" aria-hidden="true">${glyph}</span>`);
+    }
+  });
+
+  test('the replaced Bootstrap icons are gone', () => {
+    for (const icon of [
+      'bi-grid-1x2-fill',
+      'bi-graph-up',
+      'bi-boxes',
+      'bi-arrow-return-left',
+      'bi-trophy-fill',
+      'bi-wallet2',
+      'bi-person-lines-fill',
+    ]) {
+      expect(board, icon).not.toContain(icon);
+    }
+    // The warehouse tile used to be a hand-drawn outline; the reference glyph
+    // replaces it.
+    expect(board).not.toContain('<path d="M3 9.5 12 4l9 5.5V20H3z">');
+  });
+
+  test('the KPI and quick-action tiles use the reference glyph set', () => {
+    // Main.dc.html: ktile shopping_cart / shopping_bag / receipt_long /
+    // trending_up, qa-ic add_shopping_cart / payments / shopping_bag /
+    // add_box / receipt_long / currency_exchange.
+    for (const glyph of [
+      'shopping_cart',
+      'shopping_bag',
+      'receipt_long',
+      'trending_up',
+      'add_shopping_cart',
+      'payments',
+      'add_box',
+    ]) {
+      expect(dashboard, glyph).toContain(`icon: '${glyph}'`);
+    }
+    expect(dashboard).not.toMatch(/icon: 'bi-/);
   });
 });

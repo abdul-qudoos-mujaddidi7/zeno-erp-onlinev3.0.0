@@ -5,7 +5,7 @@
   import ActionButton from '../../components/common/ActionButton.svelte';
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, readListMeta } from '../../lib/pagination.js';
 
-  import { push } from 'svelte-spa-router';
+  import { push, querystring } from 'svelte-spa-router';
   import ExchangeReceiptModal from './ExchangeReceiptModal.svelte';
   let showReceipt = false;
   let selectedExchange = null;
@@ -147,6 +147,11 @@
   let searchDebounceTimer = null;
 
   onMount(async () => {
+    if (new URLSearchParams($querystring || '').get('addExchange') === '1') {
+      openAddExchange();
+      push('/dashboard/exchanges/list');
+    }
+
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     bootstrapped = true;
     await Promise.all([loadCurrencies(), loadExchanges()]);

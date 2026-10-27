@@ -819,24 +819,6 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     display: none;
   }
 
-  @media (min-width: 768px) and (max-width: 1100px) {
-    .sidebar-collapse-icon-btn {
-      display: none;
-    }
-  }
-
-  @media (max-width: 767px) {
-    .sidebar-close-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .sidebar-collapse-icon-btn {
-      display: none;
-    }
-  }
-
   .sidebar-collapse-icon-btn {
     position: absolute;
     top: 13px;
@@ -876,6 +858,25 @@ import { subscriptionApi } from '../api/subscriptionApi.js';
     margin: 0 !important;
     font-size: 15px;
     line-height: 1;
+  }
+
+  /* Main.dc.html keeps the rail pinned at 72px on tablet and swaps it for the
+     drawer on phones, so the expand/collapse toggle only belongs to the wide
+     desktop rail. These blocks must follow the base rule above — declared
+     earlier, the base `display: inline-flex` would win and leave the toggle
+     floating over the page next to the icons. */
+  @media (max-width: 1100px) {
+    .sidebar-collapse-icon-btn {
+      display: none;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .sidebar-close-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
   }
 
   .sidebar-pos-row {

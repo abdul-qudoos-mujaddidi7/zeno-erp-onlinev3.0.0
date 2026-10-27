@@ -20,6 +20,11 @@
   export let returnsPeriod = 'today';
   export let returnsCustomStart = '';
   export let returnsCustomEnd = '';
+  /* The warehouse chart keeps its own range: picking "this month" on the
+     financial trend must not repaint the inventory chart and vice versa. */
+  export let warehousePeriod = 'week';
+  export let warehouseCustomStart = '';
+  export let warehouseCustomEnd = '';
 
   const dispatch = createEventDispatcher();
 
@@ -102,6 +107,9 @@
     { id: 'year', label: t('This Year') },
   ];
   $: currentPeriodLabel = periodLabels[period] || periodLabels.today;
+  $: warehousePeriodLabel = warehousePeriod === 'week'
+    ? t('Warehouse 7 days')
+    : periodLabels[warehousePeriod] || periodLabels.week;
   $: returnCountSuffix = returnsPeriod === 'today'
     ? t('items today')
     : returnsPeriod === 'month'
@@ -115,12 +123,26 @@
     dispatch('period', next);
   }
 
+  function pickWarehousePeriod(next) {
+    showCustomDates = false;
+    if (next === warehousePeriod) return;
+    dispatch('warehouseperiod', next);
+  }
+
   function toggleCustomDates(origin = 'trend') {
     showCustomDates = !showCustomDates || customRangeOrigin !== origin;
     customRangeOrigin = origin;
     if (showCustomDates) {
-      fromDate = origin === 'returns' ? returnsCustomStart || customStart : customStart;
-      toDate = origin === 'returns' ? returnsCustomEnd || customEnd : customEnd;
+      fromDate = origin === 'returns'
+        ? returnsCustomStart || customStart
+        : origin === 'warehouse'
+          ? warehouseCustomStart || customStart
+          : customStart;
+      toDate = origin === 'returns'
+        ? returnsCustomEnd || customEnd
+        : origin === 'warehouse'
+          ? warehouseCustomEnd || customEnd
+          : customEnd;
       selectedCustomPreset = '';
     }
   }
@@ -136,6 +158,13 @@
     showCustomDates = false;
     selectedCustomPreset = '';
     dispatch('returnsperiod', { period: 'custom', from: fromDate, to: toDate });
+  }
+
+  function applyWarehouseCustom() {
+    if (!fromDate || !toDate || fromDate > toDate) return;
+    showCustomDates = false;
+    selectedCustomPreset = '';
+    dispatch('warehousecustom', { from: fromDate, to: toDate });
   }
 
   function formatDateInput(date) {
@@ -446,7 +475,8 @@
     <div class="zb-kpi-grid">
       {#each data?.kpi || [] as card (card.key)}
         <a class="zb-kpi" data-hue={card.hue} href={card.href} use:link title={card.label}>
-          <span class="zb-kpi-ic"><i class="bi {card.icon}" aria-hidden="true"></i></span>
+          <!-- Main.dc.html draws every KPI tile with a filled Material glyph. -->
+          <span class="zb-kpi-ic"><span class="ms f" aria-hidden="true">{card.icon}</span></span>
           <div class="zb-kpi-body">
             <span class="zb-kpi-label">{card.label}</span>
             <span class="zb-kpi-row">
@@ -477,7 +507,7 @@
       <div class="zb-qa-grid">
         {#each data.quickActions as action (action.label)}
           <a class="zb-qa" data-hue={action.hue} href={action.href} use:link>
-            <span class="zb-qa-ic"><i class="bi {action.icon}" aria-hidden="true"></i></span>
+            <span class="zb-qa-ic"><span class="ms f" aria-hidden="true">{action.icon}</span></span>
             <span>{action.label}</span>
           </a>
         {/each}
@@ -505,7 +535,7 @@
           <span class="zb-treasury-glow" aria-hidden="true"></span>
           <header class="zb-treasury-hd">
             <h3 class="zb-treasury-title">
-              <span class="zb-treasury-ic"><i class="bi bi-wallet2" aria-hidden="true"></i></span>
+              <span class="zb-treasury-ic"><span class="ms f" aria-hidden="true">account_balance_wallet</span></span>
               {t('Treasury')}
             </h3>
             <a href={data.treasury.href} use:link class="zb-treasury-link">{t('Details')}</a>
@@ -553,7 +583,7 @@
                   on:click={() => selectAlert(tile.key)}>
                   <span class="zb-tile-top">
                     <span class="zb-tile-ic" class:text={tile.symbol} aria-hidden="true">
-                      {#if tile.symbol}{tile.symbol}{:else}<i class="bi {tile.icon}"></i>{/if}
+                      {#if tile.symbol}{tile.symbol}{:else}<span class="ms f">{tile.icon}</span>{/if}
                     </span>
                     <span class="zb-tile-count" dir="ltr">{tile.count}</span>
                   </span>
@@ -570,7 +600,7 @@
                 <span>{activePanel.title}</span>
                 <a href={activePanel.href} use:link>
                   {activePanel.linkLabel || t('Open')}
-                  <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                  <span class="ms" aria-hidden="true">open_in_new</span>
                 </a>
               </header>
 
@@ -592,7 +622,7 @@
                       <span class="zb-panel-value" data-hue={row.valueHue || row.hue} class:negative={row.negative} dir="ltr">{row.value}</span>
                       <span class="zb-panel-actions">
                         <a class="zb-panel-open" href={row.href || activePanel.href} use:link title={t('Open')} aria-label={`${t('Open')}: ${row.title}`}>
-                          <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                          <span class="ms" aria-hidden="true">open_in_new</span>
                         </a>
                         <a class="zb-panel-review" href={row.href || activePanel.href} use:link aria-label={`${t('Review')}: ${row.title}`}>{t('Review')}</a>
                         {#if row.actionLabel}
@@ -638,7 +668,7 @@
         <section class="zb-card matte" data-hue="emerald" aria-label={t('Top Debtors')}>
           <header class="zb-card-hd">
             <h3 class="zb-card-title" data-hue="emerald">
-              <span class="zb-card-ic" data-hue="emerald"><i class="bi bi-person-lines-fill" aria-hidden="true"></i></span>
+              <span class="zb-card-ic" data-hue="emerald"><span class="ms f" aria-hidden="true">person_search</span></span>
               {t('Top Debtors')}
             </h3>
             <span class="zb-chip" data-hue="emerald">
@@ -707,7 +737,7 @@
           <header class="zb-card-hd">
             <div class="zb-fx-title">
               <h3 class="zb-card-title" data-hue="cyan">
-                <span class="zb-card-ic" data-hue="cyan"><i class="bi bi-currency-exchange" aria-hidden="true"></i></span>
+                <span class="zb-card-ic" data-hue="cyan"><span class="ms f" aria-hidden="true">currency_exchange</span></span>
                 {t('Exchange Rate')}
               </h3>
             </div>
@@ -748,7 +778,7 @@
   {#if data?.reports}
     <details class="zb-more">
       <summary>
-        <span class="zb-more-ic"><i class="bi bi-grid-1x2-fill" aria-hidden="true"></i></span>
+        <span class="zb-more-ic"><span class="ms f" aria-hidden="true">dashboard</span></span>
         <b>{t('More Reports')}</b>
         <span class="zb-more-sub">{data.reports.summary}</span>
         <span class="zb-chev"><i class="bi bi-chevron-down" aria-hidden="true"></i></span>
@@ -757,14 +787,14 @@
       <div class="zb-more-body">
         <div class="zb-block">
           <h3 class="zb-block-title zb-trend-section-title">
-            <i class="bi bi-graph-up" aria-hidden="true"></i>
+            <span class="ms f" aria-hidden="true">monitoring</span>
             {t('Financial Trend')}
           </h3>
 
             <section class="zb-trend" aria-label={t('Financial Trend')}>
               <header class="zb-trend-hd">
                 <div class="zb-trend-title">
-                  <span class="zb-trend-icon" aria-hidden="true"><i class="bi bi-graph-up"></i></span>
+                  <span class="zb-trend-icon" aria-hidden="true"><span class="ms f">monitoring</span></span>
                   <b>{t('Sales')} / {t('Expenses')}</b>
                   <small>{t(data.currency)} · {currentPeriodLabel}</small>
                 </div>
@@ -773,7 +803,7 @@
                     <button type="button" class:active={period === range} aria-pressed={period === range}
                       on:click={() => pickPeriod(range)}>{periodLabels[range]}</button>
                   {/each}
-                  <button type="button" class:active={showCustomDates || period === 'custom'} aria-pressed={period === 'custom'} aria-expanded={showCustomDates}
+                  <button type="button" class:active={(showCustomDates && customRangeOrigin === 'trend') || period === 'custom'} aria-pressed={period === 'custom'} aria-expanded={showCustomDates && customRangeOrigin === 'trend'}
                     on:click={() => toggleCustomDates('trend')}>{periodLabels.custom}</button>
                 </div>
               </header>
@@ -792,10 +822,10 @@
                 </div>
               {/if}
 
-              {#if period === 'custom' && !showCustomDates && customRangeOrigin === 'trend'}
+              {#if period === 'custom' && !(showCustomDates && customRangeOrigin === 'trend')}
                 <button type="button" class="zb-custom-chip" on:click={() => toggleCustomDates('trend')}>
                   <i class="bi bi-calendar-range" aria-hidden="true"></i>
-                  <span dir="ltr">{fromDate || customStart} – {toDate || customEnd}</span>
+                  <span dir="ltr">{customStart} – {customEnd}</span>
                   <i class="bi bi-pencil" aria-hidden="true"></i>
                 </button>
               {/if}
@@ -899,12 +929,12 @@
           </div>
 
         <div class="zb-block">
-          <h3 class="zb-block-title zb-inventory-title"><i class="bi bi-boxes" aria-hidden="true"></i>{t('Inventory & Returns')}</h3>
+          <h3 class="zb-block-title zb-inventory-title"><span class="ms f" aria-hidden="true">inventory_2</span>{t('Inventory & Returns')}</h3>
           <div class="zb-block-row zb-inventory-row">
             <section class="zb-returns" aria-label={t('Returns & Wastes')}>
               <header class="zb-returns-hd">
                 <h3 class="zb-card-title zb-returns-title">
-                  <span class="zb-card-ic" data-hue="rose"><i class="bi bi-arrow-return-left" aria-hidden="true"></i></span>
+                  <span class="zb-card-ic" data-hue="rose"><span class="ms f" aria-hidden="true">assignment_return</span></span>
                   {t('Returns & Wastes')}
                 </h3>
                 <div class="zb-period-group" role="group" aria-label={t('Chart range')}>
@@ -931,7 +961,7 @@
                 </div>
               {/if}
 
-              {#if returnsPeriod === 'custom' && !showCustomDates && customRangeOrigin === 'returns'}
+              {#if returnsPeriod === 'custom' && !(showCustomDates && customRangeOrigin === 'returns')}
                 <button type="button" class="zb-custom-chip" on:click={() => toggleCustomDates('returns')}>
                   <i class="bi bi-calendar-range" aria-hidden="true"></i>
                   <span dir="ltr">{returnsCustomStart || customStart} – {returnsCustomEnd || customEnd}</span>
@@ -969,21 +999,18 @@
                 <div class="zb-warehouse-heading">
                   <h4 class="zb-card-title zb-warehouse-title">
                     <span class="zb-card-ic" data-hue="violet">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M3 9.5 12 4l9 5.5V20H3z"></path>
-                        <path d="M6 11v6m4-6v6m4-6v6m4-6v6M5 20v-3h14v3"></path>
-                      </svg>
+                      <span class="ms f" aria-hidden="true">warehouse</span>
                     </span>
                     {t('Warehouses')}
                   </h4>
-                  <span class="zb-warehouse-sub">{t('Warehouse value')} · {t(data.currency)}</span>
+                  <span class="zb-warehouse-sub">{t('Warehouse value')} · {t(data.currency)} · {warehousePeriodLabel}</span>
                 </div>
                 <div class="zb-period-group zb-warehouse-period" role="group" aria-label={t('Chart range')}>
-                  <button type="button" class:active={period === 'week'} aria-pressed={period === 'week'}
-                    on:click={() => pickPeriod('week')}>{t('Warehouse 7 days')}</button>
-                  <button type="button" class:active={period === 'month'} aria-pressed={period === 'month'}
-                    on:click={() => pickPeriod('month')}>{periodLabels.month}</button>
-                  <button type="button" class:active={(showCustomDates && customRangeOrigin === 'warehouse') || period === 'custom'} aria-pressed={period === 'custom'} aria-expanded={showCustomDates && customRangeOrigin === 'warehouse'}
+                  <button type="button" class:active={warehousePeriod === 'week'} aria-pressed={warehousePeriod === 'week'}
+                    on:click={() => pickWarehousePeriod('week')}>{t('Warehouse 7 days')}</button>
+                  <button type="button" class:active={warehousePeriod === 'month'} aria-pressed={warehousePeriod === 'month'}
+                    on:click={() => pickWarehousePeriod('month')}>{periodLabels.month}</button>
+                  <button type="button" class:active={(showCustomDates && customRangeOrigin === 'warehouse') || warehousePeriod === 'custom'} aria-pressed={warehousePeriod === 'custom'} aria-expanded={showCustomDates && customRangeOrigin === 'warehouse'}
                     on:click={() => toggleCustomDates('warehouse')}>{periodLabels.custom}</button>
                 </div>
               </header>
@@ -996,14 +1023,14 @@
                   <span class="zb-custom-separator" aria-hidden="true"></span>
                   <label>{t('From')}<input type="date" dir="ltr" bind:value={fromDate} on:input={() => (selectedCustomPreset = '')} /></label>
                   <label>{t('To')}<input type="date" dir="ltr" bind:value={toDate} on:input={() => (selectedCustomPreset = '')} /></label>
-                  <button type="button" class="apply" on:click={applyCustom}>{t('Apply')}</button>
+                  <button type="button" class="apply" on:click={applyWarehouseCustom}>{t('Apply')}</button>
                   <button type="button" aria-label={t('Close')} on:click={() => (showCustomDates = false)}><i class="bi bi-x-lg" aria-hidden="true"></i></button>
                 </div>
               {/if}
-              {#if period === 'custom' && !showCustomDates && customRangeOrigin === 'warehouse'}
+              {#if warehousePeriod === 'custom' && !(showCustomDates && customRangeOrigin === 'warehouse')}
                 <button type="button" class="zb-custom-chip" on:click={() => toggleCustomDates('warehouse')}>
                   <i class="bi bi-calendar-range" aria-hidden="true"></i>
-                  <span dir="ltr">{customStart} – {customEnd}</span>
+                  <span dir="ltr">{warehouseCustomStart || customStart} – {warehouseCustomEnd || customEnd}</span>
                   <i class="bi bi-pencil" aria-hidden="true"></i>
                 </button>
               {/if}
@@ -1074,7 +1101,7 @@
             <section class="zb-card zb-top-products matte" aria-label={t('Top Products')}>
               <header class="zb-top-products-hd">
                 <h3 class="zb-card-title" data-hue="indigo">
-                  <span class="zb-card-ic" data-hue="indigo"><i class="bi bi-trophy-fill" aria-hidden="true"></i></span>
+                  <span class="zb-card-ic" data-hue="indigo"><span class="ms f" aria-hidden="true">emoji_events</span></span>
                   {t('Top Products')}
                 </h3>
                 <a href="/dashboard/product-alerts?tab=products" use:link>{t('All')}</a>
@@ -1522,7 +1549,7 @@
   /* ---------- KPI cards ---------- */
   .zb-kpi-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
     gap: 16px;
   }
 
@@ -1712,12 +1739,6 @@
     background: var(--g);
     color: #fff;
     font-size: 17px;
-  }
-
-  .zb-qa-ic i {
-    display: block;
-    margin: 0;
-    line-height: 1;
   }
 
   .zb-qa[data-hue='sale'] .zb-qa-ic {
@@ -2057,6 +2078,11 @@
     font-size: 14px;
   }
 
+  /* The reference alert tabs carry a filled 16px Material glyph. */
+  .zb-tile-ic .ms {
+    font-size: 16px;
+  }
+
   .zb-tile-ic.text {
     font-size: 16px;
     font-weight: 800;
@@ -2111,6 +2137,11 @@
     color: var(--brand);
     font-size: 11.5px;
     font-weight: 600;
+  }
+
+  /* The reference panel header links out with a 14px open_in_new glyph. */
+  .zb-panel-hd a .ms {
+    font-size: 14px;
   }
 
   .zb-panel-rows {
@@ -2274,6 +2305,10 @@
   .zb a.zb-panel-open:hover {
     background: var(--surface);
     color: var(--brand);
+  }
+
+  .zb a.zb-panel-open .ms {
+    font-size: 17px;
   }
 
   .zb a.zb-panel-review,
@@ -2894,17 +2929,32 @@
     font-weight: 800;
   }
 
-  .zb-block-title i {
-    color: var(--brand);
-    font-size: 14px;
+  /* Main.dc.html's block titles ("روند مالی", "موجودی و برگشت‌ها") draw a bare
+     17px glyph in the link tone, with no tile behind it (`.dz-bt .ms`). */
+  .zb-block-title .ms {
+    color: var(--link);
+    font-size: 17px;
   }
 
   .zb-trend-section-title {
     font-size: 14px;
   }
 
-  .zb-trend-section-title i {
+  /* The reference pins each tile's glyph size explicitly (`.ktile` 16px,
+     `.qa-ic` 18px, `.ch3 .ct` 16px, `.dz-ic` 17px); `.ms` defaults to 20px. */
+  .zb-kpi-ic .ms,
+  .zb-card-ic .ms,
+  .zb-trend-icon .ms,
+  .zb-treasury-ic .ms {
     font-size: 16px;
+  }
+
+  .zb-qa-ic .ms {
+    font-size: 18px;
+  }
+
+  .zb-more-ic .ms {
+    font-size: 17px;
   }
 
   .zb-block-link {
@@ -2933,10 +2983,6 @@
   .zb-inventory-title {
     font-size: 13px;
     font-weight: 800;
-  }
-
-  .zb-inventory-title i {
-    font-size: 17px;
   }
 
   /* ---------- financial trend ---------- */
@@ -3759,8 +3805,6 @@
 
   /* ---------- responsive ---------- */
   @media (max-width: 1100px) {
-    .zb-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
     .zb-row-2,
     .zb-row-2.solo,
     .zb-row-3,
@@ -3776,7 +3820,6 @@
     }
 
     .zb-search {
-      margin-inline-start: 0;
       width: 100%;
       max-width: 320px;
     }
@@ -3793,10 +3836,7 @@
     .zb-warehouse-heading { flex: 1 1 100%; justify-content: space-between; }
     .zb-warehouse-period { max-width: 100%; }
 
-    .zb-kpi-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
+    .zb-kpi-grid { gap: 8px; }
 
     .zb-kpi {
       min-height: 190px;
@@ -3826,10 +3866,6 @@
     .zb-clock { min-height: 44px; padding: 0 13px; gap: 8px; font-size: 13px; }
     .zb-clock-time { font-size: 16px; }
     .zb-clock-date { font-size: 12px; }
-
-    .zb-qa-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
 
     .zb-qa {
       flex-direction: column;
@@ -3888,7 +3924,8 @@
     align-items: center;
     gap: 10px;
     box-sizing: border-box;
-    width: 244px;
+    width: 100%;
+    min-width: 0;
     height: 75.52px;
     min-height: 75.52px;
     padding: 11px 13px;
@@ -3898,6 +3935,9 @@
     box-shadow: none;
     color: var(--ink);
     transform: none;
+  }
+  .zb .zb-kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
   }
 
   .zb .zb-kpi:hover { transform: translateY(-2px); box-shadow: 0 10px 22px -14px var(--c); }
@@ -3916,12 +3956,21 @@
   .zb .zb-kpi-chip + .zb-kpi-chip::before { content: ''; height: 10px; margin-inline-end: 4px; border-inline-start: 1px solid var(--border); }
   .zb .zb-kpi-sub b { color: var(--ink); font-size: 10.5px; }
 
-  .zb .zb-qa-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+  /* The quick actions share a single row: one auto-generated track per card, so
+     the row never wraps and every card splits the width evenly — even when a
+     permission hides one of the actions. */
+  .zb .zb-qa-grid {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
   .zb .zb-qa {
     --g: #4f46e5;
     justify-content: flex-start;
     box-sizing: border-box;
-    width: 160px;
+    width: 100%;
+    min-width: 0;
     height: 65.33px;
     min-height: 65.33px;
     padding: 8px 10px 8px 14px;
@@ -3943,6 +3992,7 @@
     transform: translateY(-2px);
   }
   .zb .zb-qa > span:last-child {
+    min-width: 0;
     font-size: 13px;
     font-weight: 800;
     line-height: 1.3;
@@ -3956,8 +4006,22 @@
   .zb .zb-qa[data-hue='expense'] { --g: #334155; }
   .zb .zb-qa[data-hue='exchange'] { --g: #0891b2; }
   .zb .zb-qa-ic { width: 34px; height: 34px; border-radius: 11px; background: var(--g); color: #fff; }
-  .zb .zb-qa-ic i { display: flex; align-items: center; justify-content: center; width: 19px; height: 19px; font-size: 19px; line-height: 1; }
   .zb .zb-qa[data-hue='sale'] .zb-qa-ic { background: var(--g); color: #fff; }
+
+  /* Under the desktop width a single row squeezes the labels onto two lines, so
+     the actions reflow into three per row. */
+  @media (max-width: 900px) {
+    .zb .zb-qa-grid {
+      grid-auto-flow: row;
+      grid-auto-columns: auto;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 420px) {
+    .zb .zb-qa-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
   @media (max-width: 767px) {
     .zb .zb-kpi { width: 100%; height: 75.52px; min-height: 75.52px; padding: 11px 13px; border-radius: 14px; }
     .zb .zb-kpi-ic { position: static; inset: auto; width: 34px; height: 34px; border-radius: 10px; }

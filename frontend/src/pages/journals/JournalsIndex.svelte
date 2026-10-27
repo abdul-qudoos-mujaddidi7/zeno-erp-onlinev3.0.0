@@ -1,6 +1,6 @@
 <script>
   import { onMount, tick } from 'svelte';
-  import { push } from 'svelte-spa-router';
+  import { push, querystring } from 'svelte-spa-router';
   import { auth } from '../../auth/authStore';
   import { toast } from '../../ToastUI/toast.js';
   import { t, lang, translate_org_type, settings_all, shortID } from '../../i18n/i18n';
@@ -194,6 +194,15 @@
   }
 
   onMount(async () => {
+    const journalParams = new URLSearchParams($querystring || '');
+    if (journalParams.get('addJournal') === '1') {
+      addJournalSide = journalParams.get('side') === 'cr' ? 'cr' : 'dr';
+      addJournalAccountCode = journalParams.get('accountCode') || '';
+      addJournalIcon = addJournalSide === 'cr' ? 'ms:south_east' : 'ms:north_west';
+      showAddJournal = true;
+      push('/dashboard/journals/list');
+    }
+
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     bootstrapped = true;
 
@@ -534,11 +543,14 @@
 
   let reloadAddJournal = true;
   let showAddJournal = false;
+  let addJournalSide = 'dr';
+  let addJournalAccountCode = '';
   /* The reference dialog draws its header glyph from the voucher direction:
      north_west for debit, south_east for credit. */
   let addJournalIcon = 'ms:north_west';
 
   function openAddJournal() {
+    addJournalSide = 'dr';
     addJournalIcon = 'ms:north_west';
     showAddJournal = true;
   }
@@ -547,6 +559,8 @@
     reloadAddJournal = false;
     await tick(); // wait for the component to unmount
     reloadAddJournal = true; // mount a fresh instance
+    addJournalSide = 'dr';
+    addJournalAccountCode = '';
     addJournalIcon = 'ms:north_west';
     showAddJournal = false;
     await loadJournals();
@@ -911,6 +925,8 @@
       {#if reloadAddJournal}
         <AddJournal
           selectedAccountID={account_id ? Number(account_id) : null}
+          initialJournalSide={addJournalSide}
+          initialAccountCode={addJournalAccountCode}
           referenceModal={true}
           on:side={(event) =>
             (addJournalIcon = event.detail === 'cr' ? 'ms:south_east' : 'ms:north_west')}

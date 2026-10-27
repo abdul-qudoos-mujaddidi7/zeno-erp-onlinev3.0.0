@@ -78,6 +78,11 @@
   let returnsPeriod = 'today';
   let returnsCustomStartDate = customStartDate;
   let returnsCustomEndDate = customEndDate;
+  /* The warehouse history chart owns its range so a financial-trend change does
+     not reload it (and vice versa). */
+  let warehousePeriod = 'week';
+  let warehouseCustomStartDate = customStartDate;
+  let warehouseCustomEndDate = customEndDate;
   let returnMetricRequest = 0;
   let returnMetricData = { saleReturns: 0, purchaseReturns: 0, wastes: 0, saleReturnCount: 0, purchaseReturnCount: 0, wasteCount: 0 };
   let lastRefreshed = null;
@@ -134,6 +139,14 @@
   $: benefitTotal = Number(metricDataTotal.benefit) || 0;
   $: expenseTotal = Number(metricDataTotal.expenses) || 0;
   $: netProfit = benefitTotal - expenseTotal;
+  $: chartBenefitTotal = (trendData.benefit || []).reduce(
+    (sum, value) => sum + (Number(value) || 0),
+    0,
+  );
+  $: chartExpenseTotal = (trendData.expenses || []).reduce(
+    (sum, value) => sum + (Number(value) || 0),
+    0,
+  );
   $: marginPercent = Number(metricDataTotal.sales) > 0
     ? (netProfit / Number(metricDataTotal.sales)) * 100
     : 0;
@@ -296,9 +309,9 @@
       if (point > today) return;
       const key = toDateParam(point);
       if (!dates.some((item) => item.key === key)) {
-        const label = activePeriod === 'week'
+        const label = warehousePeriod === 'week'
           ? point.toLocaleDateString(_lang || 'fa', { weekday: 'short' })
-          : activePeriod === 'today'
+          : warehousePeriod === 'today'
             ? t('Today')
             : (_lang === 'fa' || _lang === 'ps')
               ? formatPersianDay(point)
@@ -307,9 +320,9 @@
       }
     };
 
-    if (activePeriod === 'today') {
+    if (warehousePeriod === 'today') {
       addDate(today);
-    } else if (activePeriod === 'month') {
+    } else if (warehousePeriod === 'month') {
       const { start } = getPersianMonthRange(today);
       const dayCount = Math.max(1, Math.floor((today - start) / 86400000));
       const step = Math.max(1, Math.ceil(dayCount / 6));
@@ -319,7 +332,7 @@
         addDate(date);
       }
       addDate(today);
-    } else if (activePeriod === 'year') {
+    } else if (warehousePeriod === 'year') {
       const { start } = getPeriodRange('year');
       const startJalaali = toJalaali(start.getFullYear(), start.getMonth() + 1, start.getDate());
       for (let month = 1; month <= 12; month += 1) {
@@ -327,9 +340,9 @@
         addDate(new Date(monthStart.gy, monthStart.gm - 1, monthStart.gd));
       }
       addDate(today);
-    } else if (activePeriod === 'custom' && customStartDate && customEndDate) {
-      const start = new Date(`${customStartDate}T00:00:00`);
-      const end = new Date(`${customEndDate}T00:00:00`);
+    } else if (warehousePeriod === 'custom' && warehouseCustomStartDate && warehouseCustomEndDate) {
+      const start = new Date(`${warehouseCustomStartDate}T00:00:00`);
+      const end = new Date(`${warehouseCustomEndDate}T00:00:00`);
       if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start > end) return [];
       if (start > today) return [];
       if (end > today) end.setTime(today.getTime());
@@ -357,9 +370,13 @@
     const requestId = ++warehouseHistoryRequestId;
     const snapshot = warehouseValuationSnapshot;
     const points = buildWarehouseHistoryDates();
-    warehouseHistoryLabels = points.map((point) => point.label);
+    /* Publish the labels together with the series they belong to: assigning them
+       first would render one frame of new labels against the previous range's
+       values, which the board drops as a length mismatch. */
+    const labels = points.map((point) => point.label);
 
     if (!snapshot || !points.length || !warehouseRows.length) {
+      warehouseHistoryLabels = labels;
       warehouseRows = warehouseRows.map((warehouse) => ({ ...warehouse, history: [] }));
       return;
     }
@@ -376,6 +393,7 @@
     } catch (historyError) {
       console.warn('Dashboard warehouse history load failed:', historyError);
       if (requestId === warehouseHistoryRequestId) {
+        warehouseHistoryLabels = labels;
         warehouseRows = warehouseRows.map((warehouse) => ({ ...warehouse, history: [] }));
       }
       return;
@@ -451,6 +469,7 @@
     }
 
     if (requestId !== warehouseHistoryRequestId) return;
+    warehouseHistoryLabels = labels;
     warehouseRows = warehouseRows.map((warehouse) => ({
       ...warehouse,
       history: valuesByWarehouse.get(Number(warehouse.id)) || [],
@@ -1057,9 +1076,15 @@
     activePeriod = period;
     loadingMetricData = true;
     await getData({ includeOverview: false, includeMetrics: true });
-    await loadWarehouseHistory();
     loadingMetricData = false;
     writeLocalSnapshot();
+  }
+
+  /* The warehouse chart keeps its own range: reloading it here would redraw the
+     inventory series whenever the financial trend range changes. */
+  async function setWarehousePeriod(period) {
+    warehousePeriod = period;
+    await loadWarehouseHistory();
   }
 
   async function loadReturnsMetrics(period = returnsPeriod, from = returnsCustomStartDate, to = returnsCustomEndDate) {
@@ -1127,6 +1152,20 @@
     }
     returnsPeriod = period;
     loadReturnsMetrics(period, from, to);
+  }
+
+  function handleWarehousePeriod(event) {
+    const { period } = event.detail || {};
+    if (!['week', 'today', 'month', 'year'].includes(period)) return;
+    setWarehousePeriod(period);
+  }
+
+  function handleWarehouseCustomRange(event) {
+    const { from, to } = event.detail || {};
+    if (!from || !to || from > to) return;
+    warehouseCustomStartDate = from;
+    warehouseCustomEndDate = to;
+    setWarehousePeriod('custom');
   }
 
   /* ---------- view model for the board ---------- */
@@ -1219,7 +1258,7 @@
         label: t("Today's Sales (Dashboard Card)"),
         value: fmt(metricDataTotal.sales),
         unit: t(defaultCurrency),
-        icon: 'bi-cart-fill',
+        icon: 'shopping_cart',
         hue: 'sale',
         href: '/dashboard/sales',
         sub: [
@@ -1239,7 +1278,7 @@
         label: t("Today's Purchases (Dashboard Card)"),
         value: fmt(metricDataTotal.purchases),
         unit: t(defaultCurrency),
-        icon: 'bi-bag-fill',
+        icon: 'shopping_bag',
         hue: 'purchase',
         href: '/dashboard/purchases',
         sub: [
@@ -1259,7 +1298,7 @@
         label: t("Today's Expenses (Dashboard Card)"),
         value: fmt(expenseTotal),
         unit: t(defaultCurrency),
-        icon: 'bi-receipt',
+        icon: 'receipt_long',
         hue: 'expense',
         href: '/dashboard/journals/list',
         sub: [
@@ -1276,7 +1315,7 @@
         label: t("Today's Profit (Dashboard Card)"),
         value: fmt(netProfit),
         unit: t(defaultCurrency),
-        icon: 'bi-graph-up-arrow',
+        icon: 'trending_up',
         hue: 'profit',
         href: '/dashboard/reports',
         sub: [
@@ -1309,44 +1348,44 @@
     return [
       {
         label: t('New Sale'),
-        icon: 'bi-cart-fill',
+        icon: 'add_shopping_cart',
         hue: 'sale',
         href: '/dashboard/sale-form/0',
         show: canViewSales,
       },
       {
         label: t('Receive Money'),
-        icon: 'bi-cash-coin',
+        icon: 'payments',
         hue: 'receive',
-        href: '/dashboard/journals/list',
+        href: '/dashboard/journals/list?addJournal=1&side=cr',
         show: canViewJournals,
       },
       {
         label: t('New Purchase'),
-        icon: 'bi-bag-plus-fill',
+        icon: 'shopping_bag',
         hue: 'purchase',
         href: '/dashboard/purchase-form/0',
         show: canViewPurchases,
       },
       {
         label: t('New Product'),
-        icon: 'bi-box-seam-fill',
+        icon: 'add_box',
         hue: 'product',
         href: '/dashboard/product-form/new',
         show: canViewProducts,
       },
       {
         label: t('Record Expense'),
-        icon: 'bi-receipt-cutoff',
+        icon: 'receipt_long',
         hue: 'expense',
-        href: '/dashboard/journals/list',
+        href: '/dashboard/journals/list?addJournal=1&side=dr&accountCode=EXPENSES',
         show: canViewJournals,
       },
       {
         label: t('Exchange'),
-        icon: 'bi-currency-exchange',
+        icon: 'currency_exchange',
         hue: 'exchange',
-        href: '/dashboard/exchanges/list',
+        href: '/dashboard/exchanges/list?addExchange=1',
         show: canViewExchange,
       },
     ].filter((action) => action.show);
@@ -1397,7 +1436,7 @@
     if (cardStockAlerts && enable_expiry_date) {
       tiles.push({
         key: 'expiry',
-        icon: 'bi-hourglass-split',
+        icon: 'hourglass_bottom',
         hue: 'expiry',
         label: t('Expiry'),
         count: fmt(expiringTotal),
@@ -1408,7 +1447,7 @@
     if (cardStockAlerts) {
       tiles.push({
         key: 'stock',
-        symbol: '−',
+        icon: 'inventory',
         hue: 'stock',
         label: t('Low Stock'),
         count: fmt(lowStockTotal),
@@ -1419,7 +1458,7 @@
     if (canViewSales && enable_sales_due_date) {
       tiles.push({
         key: 'late',
-        icon: 'bi-hourglass-split',
+        icon: 'pending_actions',
         hue: 'expiry',
         label: t('Late Bills'),
         count: fmt(overdueBills.length),
@@ -1430,7 +1469,7 @@
     if (canViewSales || canViewPurchases) {
       tiles.push({
         key: 'drafts',
-        icon: 'bi-pencil-square',
+        icon: 'edit_note',
         hue: 'wastes',
         label: t('Drafts'),
         count: fmt(draftBills.length),
@@ -1876,9 +1915,9 @@
           }
         : null,
     totals: {
-      benefit: benefitTotal,
-      expenses: expenseTotal,
-      net: netProfit,
+      benefit: chartBenefitTotal,
+      expenses: chartExpenseTotal,
+      net: chartBenefitTotal - chartExpenseTotal,
     },
   };
 </script>
@@ -1912,9 +1951,14 @@
     returnsPeriod={returnsPeriod}
     returnsCustomStart={returnsCustomStartDate}
     returnsCustomEnd={returnsCustomEndDate}
+    warehousePeriod={warehousePeriod}
+    warehouseCustomStart={warehouseCustomStartDate}
+    warehouseCustomEnd={warehouseCustomEndDate}
     on:period={handlePeriod}
     on:applycustom={handleCustomPeriod}
     on:returnsperiod={handleReturnsPeriod}
+    on:warehouseperiod={handleWarehousePeriod}
+    on:warehousecustom={handleWarehouseCustomRange}
     on:refresh={refreshAll} />
 {/if}
 

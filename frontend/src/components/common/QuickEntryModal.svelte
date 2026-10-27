@@ -302,9 +302,17 @@
   }
 
   .quick-entry-modal--journal :global(.app-modal--full) {
-    width: min(95vw, 520px);
+    /* Journal.dc.html's "Create Journal" dialog: a 520px column that is as tall
+       as its content (header + fields + footer), not a fixed 34rem frame. The
+       viewport clamp keeps it usable on short screens, where the field body —
+       not the dialog — scrolls. */
+    width: 520px;
+    max-width: calc(100vw - 24px);
+    height: auto;
     max-height: calc(100vh - 24px);
-    border: 1px solid var(--z-border, #e1e7f0);
+    /* The reference shell has no outline: the shadow carries the edge, so the
+       box measures exactly 520px instead of 522px with a hairline. */
+    border: 0;
     border-radius: 14px;
     background: var(--z-surface, #ffffff);
     box-shadow: 0 30px 70px -20px rgba(11, 21, 48, 0.55);
@@ -642,7 +650,11 @@
 
   @media (max-width: 576px) {
     .quick-entry-modal--journal :global(.app-modal--full) {
-      width: min(96vw, 32.5rem);
+      /* Same 520px column as the reference, clamped to the phone viewport; the
+         height still follows the content. */
+      width: 520px;
+      max-width: calc(100vw - 24px);
+      height: auto;
       max-height: calc(100vh - 16px);
     }
 
@@ -663,7 +675,9 @@
 
     .quick-entry-modal--journal :global(.app-modal__body) {
       max-height: calc(100vh - 82px);
-      padding: 12px 14px;
+      /* The form body and footer own their 12px/14px inset (as in the reference),
+         so the dialog shell must not add a second one on phones. */
+      padding: 0;
     }
   }
 

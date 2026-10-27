@@ -540,15 +540,6 @@
     return `${p.year}/${p.month}/${p.day}`;
   }
 
-  function kabulTime(iso) {
-    const d = toDateObj(iso);
-    if (!d) return '';
-    const p = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kabul', hour: '2-digit', minute: '2-digit', hour12: false,
-    }).formatToParts(d).reduce((acc, part) => ((acc[part.type] = part.value), acc), {});
-    return p.hour ? `${p.hour}:${p.minute}` : '';
-  }
-
   /* Journal type filter options shown inside the shared filter popover. */
   const typeTabs = [
     { value: 'all', labelKey: 'all' },
@@ -563,9 +554,18 @@
 
   /* ===================== report presentation ===================== */
 
-  $: rangeText = startDate || endDate
-    ? `${jalaliShort(startDate) || '—'} ${lbl('to')} ${jalaliShort(endDate) || '—'}`
-    : '';
+  /*
+   * Same shape as the journals list: `1405/06/17 – 1405/07/16`. The Persian
+   * «تا» separator the report used to print sat inside a dir="ltr" span, so it
+   * rendered as a stray glyph between the two dates.
+   */
+  $: rangeText = (() => {
+    const from = jalaliShort(startDate);
+    const to = jalaliShort(endDate);
+    if (from && to) return `${from} – ${to}`;
+    if (to) return `${lbl('to')} ${to}`;
+    return from || '';
+  })();
 
   /* Per-currency KPI lines — SummaryCard renders one line per settlement currency. */
   $: creditLines = kpiLines(currencyInfo, 'credit');
@@ -599,10 +599,9 @@
       .map((j) => {
         const debit = Number(j.debit || 0);
         const credit = Number(j.credit || 0);
-        const time = kabulTime(j.created_at);
         return (
           '<tr>' +
-          `<td dir="ltr">${escText(jalaliShort(j.date))}${time ? ' · ' + escText(time) : ''}</td>` +
+          `<td dir="ltr">${escText(jalaliShort(j.date))}</td>` +
           `<td>${escText(getAccountName(j.first_entry_account))}<br/>${escText(getAccountName(j.second_entry_account))}</td>` +
           `<td>${escText(descriptionWithCurrencySymbols(j.description))}</td>` +
           `<td dir="ltr">${debit ? escText(debit.toLocaleString(undefined, { maximumFractionDigits: 3 })) + ' ' + escText(currencySymbol(j.currency)) : '—'}</td>` +
@@ -661,12 +660,9 @@
         on:filterChange={handleReportFilter}
         on:reset={resetReportFilters}>
         <svelte:fragment slot="actions">
-          <span class="journal-count">
-            <b>{totalItems}</b> {lbl('tx')}
-            {#if rangeText}
-              <span class="journal-count__range" dir="ltr">· {rangeText}</span>
-            {/if}
-          </span>
+          {#if rangeText}
+            <span class="journal-range" dir="ltr">{rangeText}</span>
+          {/if}
         </svelte:fragment>
       </FilterToolbar>
     </svelte:fragment>
@@ -750,12 +746,7 @@
           {@const cV = Number(journal.credit || 0)}
           <tr>
             <td>
-              <span class="report-date">
-                <b dir="ltr">{jalaliShort(journal.date)}</b>
-                {#if kabulTime(journal.created_at)}
-                  <span dir="ltr" class="report-date__time">{kabulTime(journal.created_at)}</span>
-                {/if}
-              </span>
+              <b class="report-date" dir="ltr">{jalaliShort(journal.date)}</b>
             </td>
 
             <td>
@@ -855,51 +846,26 @@
     min-height: 0;
   }
 
-  /* ================= toolbar count ================= */
-  .journal-count {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 4px;
+  /* ================= toolbar date range ================= */
+  /* The transaction count is gone; only the range the report is scoped to
+     stays, in LTR Inter-700 against --z-text. */
+  .journal-range {
+    font-family: var(--z-font-num);
     font-size: var(--z-fs-sm, 11.5px);
-    font-weight: 600;
-    color: var(--z-muted, #64748b);
+    font-weight: 700;
+    color: var(--z-text, #475569);
     white-space: nowrap;
-  }
-
-  .journal-count b {
-    font-family: var(--z-font-num);
-    font-size: var(--z-fs-base, 12.5px);
-    font-weight: 800;
-    color: var(--z-ink, #0b1530);
-  }
-
-  .journal-count__range {
-    font-family: var(--z-font-num);
-    font-size: var(--z-fs-xs, 10.5px);
-    color: var(--z-subtle, #94a3b8);
   }
 
   /* ================= report cells ================= */
+  /* The date stands alone: the row's Kabul time was dropped from the column. */
   .report-date {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 5px;
-    white-space: nowrap;
-  }
-
-  .report-date b {
     font-family: var(--z-font-num);
     font-size: var(--z-fs-base, 12.5px);
     font-weight: 800;
     letter-spacing: -0.2px;
     color: var(--z-ink, #0b1530);
-  }
-
-  .report-date__time {
-    font-family: var(--z-font-num);
-    font-size: var(--z-fs-xs, 10.5px);
-    font-weight: 600;
-    color: var(--z-subtle, #94a3b8);
+    white-space: nowrap;
   }
 
   .report-party {
@@ -1005,8 +971,26 @@
   }
 
   .report-dash {
+    font-family: var(--z-font-num);
     font-size: var(--z-fs-base, 12.5px);
     color: var(--z-subtle, #94a3b8);
+  }
+
+  /*
+   * A body cell carries 6px of inline padding while a header cell carries 12,
+   * so every figure in the amount columns — and the lone "—" placeholder — sat
+   * a few pixels outside the heading it belongs to. Both edges now match, the
+   * way the reference report reads.
+   */
+  :global(.jindex .data-table thead th.col-end),
+  :global(.jindex .data-table tbody td.col-end) {
+    padding-inline: 12px;
+  }
+
+  /* The outermost column keeps the wider 16px edge inset its header uses. */
+  :global(.jindex .data-table thead th.col-end:last-child),
+  :global(.jindex .data-table tbody td.col-end:last-child) {
+    padding-inline-end: 16px;
   }
 
   /* ================= responsive ================= */

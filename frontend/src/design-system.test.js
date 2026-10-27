@@ -42,7 +42,16 @@ describe('shared index page stack', () => {
     const journals = read('pages/journals/JournalsIndex.svelte');
     const journalForm = read('pages/journals/AddJournal.svelte');
 
-    expect(modal).toContain('width: min(95vw, 520px);');
+    /* Journal.dc.html's Create Journal dialog is a 520px column whose height
+       follows its content; the old fixed 34rem frame made the shell either
+       shorter or taller than the reference. */
+    const journalShell = modal.match(
+      /\.quick-entry-modal--journal :global\(\.app-modal--full\) \{([\s\S]*?)\n  \}/,
+    )[1];
+    expect(journalShell).toContain('width: 520px;');
+    expect(journalShell).toContain('max-width: calc(100vw - 24px);');
+    expect(journalShell).toContain('height: auto;');
+    expect(journalShell).not.toMatch(/height:\s*min\(34rem/);
     expect(modal).toContain('padding: 10px 14px;');
     expect(modal).toContain('width: 30px;');
     expect(modal).toContain('--quick-entry-control-height: 40px;');
@@ -114,7 +123,7 @@ describe('shared index page stack', () => {
     const journalForm = read('pages/journals/AddJournal.svelte');
 
     /* Search row with the "new" chip, then one row per account carrying a
-       class-tinted tile, name over code · type, the balance and a pin. */
+       class-tinted tile, name, type, numeric balance and a pin. */
     expect(journalForm).toContain('class="jv-dd__search"');
     expect(journalForm).toContain('id="form_account_panel_search"');
     expect(journalForm).toContain('{t(\'New\')}');
@@ -123,7 +132,18 @@ describe('shared index page stack', () => {
     expect(journalForm).toContain('style={tint.style}');
     expect(journalForm).toContain('class="jv-opt__bal"');
     expect(journalForm).toContain('class="jv-opt__pin"');
+    expect(journalForm).not.toContain('<small>{balanceByAccount[acc.id].label}</small>');
+    expect(journalForm).toContain('{accountTypeLabel(acc) === \'N/A\' ? \'\' : accountTypeLabel(acc)}');
     expect(journalForm).toContain('on:click|stopPropagation={() => toggleAccountPin(acc.id)}');
+  });
+
+  it('shows account type and hides balance status captions in the track dropdown', () => {
+    const journalForm = read('pages/journals/AddJournal.svelte');
+
+    expect(journalForm).toContain('class="jvp-row__copy"');
+    expect(journalForm).toContain('class="jvp-row__bal"');
+    expect(journalForm).not.toContain('<small>{balanceByAccount[acc.id].label}</small>');
+    expect(journalForm).toContain('{accountTypeLabel(acc) === \'N/A\' ? \'\' : accountTypeLabel(acc)}');
   });
 
   it('has index pages on the shared table', () => {
@@ -495,6 +515,57 @@ describe('shell top bar', () => {
   });
 });
 
+describe('shell sidebar rail', () => {
+  /*
+   * Main.dc.html folds the sidebar into a 72px icon rail from 1100px down and
+   * turns it into an off-canvas drawer on phones. The shell has to reserve the
+   * rail width, otherwise the fixed rail sits on top of the page content.
+   */
+  const shell = read('app.css');
+
+  it('keeps a gutter beside the tablet rail', () => {
+    expect(shell).toMatch(
+      /@media \(min-width: 768px\) and \(max-width: 1100px\) \{\s+html\[dir='ltr'\] \.content-wrapper \{\s+margin-left: var\(--sidebar-width-collapsed\);/,
+    );
+    expect(shell).toMatch(
+      /html\[dir='rtl'\] \.content-wrapper \{\s+margin-left: 0;\s+margin-right: var\(--sidebar-width-collapsed\);/,
+    );
+    /* The old 991px reset dropped the gutter while the rail was still pinned. */
+    expect(shell).not.toMatch(/@media \(max-width: 991px\) \{\s+\.content-wrapper,/);
+  });
+
+  it('drops the gutter only for the phone drawer', () => {
+    expect(shell).toMatch(
+      /@media \(max-width: 767px\) \{\s+\.content-wrapper,\s+html\[dir='ltr'\] \.content-wrapper,\s+html\[dir='rtl'\] \.content-wrapper \{\s+margin: 0 !important;/,
+    );
+  });
+
+  it('hides the drawer toggle while the rail is pinned on tablet', () => {
+    const bar = read('components/Topbar.svelte');
+
+    expect(bar).toMatch(
+      /@media \(min-width: 768px\) and \(max-width: 991px\) \{\s+\.mobile-actions > \.erp-icon-btn \{\s+display: none;/,
+    );
+  });
+
+  it('hides the rail toggle with a rule that wins the cascade', () => {
+    const rail = read('components/Sidebar.svelte');
+
+    /*
+     * The base button is `display: inline-flex`; a hide rule declared above it
+     * loses the cascade and leaves the toggle floating over the page beside the
+     * icon rail. The media block must come after the base declaration.
+     */
+    const baseIdx = rail.search(/\.sidebar-collapse-icon-btn \{\s+position: absolute;/);
+    const hideIdx = rail.search(
+      /@media \(max-width: 1100px\) \{\s+\.sidebar-collapse-icon-btn \{\s+display: none;/,
+    );
+
+    expect(baseIdx).toBeGreaterThan(-1);
+    expect(hideIdx).toBeGreaterThan(baseIdx);
+  });
+});
+
 describe('mixed-script fonts', () => {
   /* One family stack, two faces: Inter owns the latin unicode-range and
      Vazirmatn the arabic one. Glyph-by-glyph selection is what lets an RTL
@@ -528,11 +599,14 @@ describe('mixed-script fonts', () => {
 });
 
 describe('icon set', () => {
-  it('keeps Material Symbols scoped to the opt-in journal toolbar', () => {
+  it('keeps Material Symbols scoped to the journal toolbar and dashboard cards', () => {
     /* The reference journal design draws its toolbar with Material Symbols.
-       The shared primitives opt in through `material` / `iconSet="material"`;
-       every other page keeps the lighter, offline Bootstrap Icons. */
+       The shared primitives opt in through `material` / `iconSet="material"`.
+       Main.dc.html also draws every dashboard card tile with Material glyphs,
+       so the dashboard board joins the list; every other page keeps the
+       lighter, offline Bootstrap Icons. */
     const materialUsers = new Set([
+      'components/DashboardBoard.svelte',
       'components/common/ActionButton.svelte',
       'components/common/AppModal.svelte',
       'components/common/ExportMenu.svelte',

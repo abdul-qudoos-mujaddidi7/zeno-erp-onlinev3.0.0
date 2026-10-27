@@ -1285,6 +1285,14 @@
     }
   }
 
+  /* Main.dc.html keeps the rail permanently visible on tablet, so the drawer
+     toggle belongs to the phone layout only. */
+  @media (min-width: 768px) and (max-width: 991px) {
+    .mobile-actions > .erp-icon-btn {
+      display: none;
+    }
+  }
+
   @media (max-width: 767px) {
     .erp-topbar > .container-fluid {
       grid-template-columns: minmax(0, 1fr);

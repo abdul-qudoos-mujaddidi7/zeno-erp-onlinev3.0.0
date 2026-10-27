@@ -43,6 +43,8 @@
   export let selectedAccountID = null;
   export let journalId = null;
   export let referenceModal = false;
+  export let initialJournalSide = 'dr';
+  export let initialAccountCode = '';
 
   let general = false;
   export let genInp = null;
@@ -121,6 +123,11 @@
   let treasury_ID = 0;
   let notrack_ID = 0;
   let account = null;
+  // Account balances are credit minus debit, so available treasury funds are
+  // the negated balance for the currency currently selected in the form.
+  $: treasury_balance = Number(
+    accountBalances?.[treasury_ID]?.[currency] || 0,
+  );
 
   async function loadAccounts() {
     await loadAccountBalances();
@@ -156,7 +163,7 @@
         Number(first_entry_account),
     );
 
-    applySelectedAccount();
+    if (!applyInitialAccount()) applySelectedAccount();
   }
 
   async function loadCurrencies() {
@@ -862,16 +869,34 @@
     return true;
   }
 
+  function applyInitialAccount() {
+    if (journalId || !initialAccountCode || !accounts.length) return false;
+
+    const selectedAccount = accounts.find(
+      (item) =>
+        String(item.code || '').toUpperCase() ===
+        String(initialAccountCode).toUpperCase(),
+    );
+
+    if (!selectedAccount) return false;
+
+    first_entry_account = Number(selectedAccount.id);
+    first_entry_account_search = getAccountName(selectedAccount.id);
+    account = selectedAccount;
+    showAccountDropdown = false;
+
+    return true;
+  }
+
   /*
    * This also handles a selectedAccountID that changes after the
    * component has mounted.
    */
   $: if (
     !journalId &&
-    selectedAccountID &&
     accounts.length > 0
   ) {
-    applySelectedAccount();
+    if (!applyInitialAccount() && selectedAccountID) applySelectedAccount();
   }
 
   function selectCurrency(code) {
@@ -896,6 +921,16 @@
     return labels[_lang]?.[status] || labels.en[status];
   }
 
+  const counterAccountLabels = {
+    en: { creditor: 'Creditor', debtor: 'Debtor' },
+    fa: { creditor: 'طلبکار', debtor: 'باقیدار' },
+    ps: { creditor: 'طلبکار', debtor: 'پوروړی' },
+  };
+
+  $: counterAccountLanguage = counterAccountLabels[_lang] || counterAccountLabels.en;
+  $: counterAccountLabel =
+    journalSide === 'dr' ? counterAccountLanguage.creditor : counterAccountLanguage.debtor;
+
   function toggleCurrencyMenu(which) {
     if (isBillCurrencyLocked) return;
     currencyMenuFor = currencyMenuFor === which ? null : which;
@@ -914,11 +949,6 @@
     const balance = accountBalances?.[accountId] || {};
 
     const amount = Number(balance[targetCurrency] || 0);
-
-    if (accounts.find((a) => a.id === accountId)?.code === 'TREASURY') {
-      // Real balance for the selected journal currency only — no conversion.
-      treasury_balance = amount;
-    }
 
     return Object.prototype.toString.call(balance) === '[object Object]'
       ? Object.entries(balance)
@@ -977,7 +1007,7 @@ import { purchaseApi } from '../../api/purchaseApi.js';
      * the debit/credit tab list. The two amount fields stay mutually exclusive
      * (typing in one clears the other), so the tab simply exposes that state.
      */
-    let journalSide = 'dr';
+    let journalSide = initialJournalSide;
   
     $: if (Number(first_entry_credit) > 0) journalSide = 'cr';
     $: if (Number(first_entry_debit) > 0) journalSide = 'dr';
@@ -1204,7 +1234,9 @@ import { purchaseApi } from '../../api/purchaseApi.js';
 
 <svelte:window on:click={handleWindowClick} />
 
-{#if !permissions?.some((p) => p.code === 'Journals' && p.create)}
+{#if !permissions?.some(
+  (p) => p.code === 'Journals' && (journalId ? p.edit : p.create),
+)}
   <!-- <h3 class="text-danger m-3"><i class="bi bi-exclamation-triangle me-2"></i>{t('No access allowed')}</h3> -->
 {:else}
   <div class="journal-form-page" bind:this={componentRoot}>
@@ -1381,7 +1413,6 @@ import { purchaseApi } from '../../api/purchaseApi.js';
 
                         <span class="jv-opt__copy">
                           <strong>{accountSearchName(acc)}</strong>
-
                           <small>
                             {accountTypeLabel(acc) === 'N/A' ? '' : accountTypeLabel(acc)}
                           </small>
@@ -1397,7 +1428,6 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                               {balanceByAccount[acc.id].amount}
                               <span class="jv-opt__cur">{balanceByAccount[acc.id].symbol}</span>
                             </b>
-                            <small>{balanceByAccount[acc.id].label}</small>
                           </span>
                         {/if}
                       </button>
@@ -1673,8 +1703,7 @@ import { purchaseApi } from '../../api/purchaseApi.js';
       <div class="jv-row jv-row--ctr">
         <div class="jv-cell">
           <span class="jv-label">
-            {t('Account')}
-            <span class="jv-req" aria-hidden="true">*</span>
+            {counterAccountLabel}
           </span>
 
           <div class="jv-account-row">
@@ -1858,7 +1887,9 @@ import { purchaseApi } from '../../api/purchaseApi.js';
 
                             <span class="jvp-row__copy">
                               <strong>{accountSearchName(acc)}</strong>
-                              <small>{accountTypeLabel(acc) === 'N/A' ? '' : accountTypeLabel(acc)}</small>
+                              <small>
+                                {accountTypeLabel(acc) === 'N/A' ? '' : accountTypeLabel(acc)}
+                              </small>
                             </span>
 
                             {#if balanceByAccount[acc.id]}
@@ -1871,7 +1902,6 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                                   {balanceByAccount[acc.id].amount}
                                   <span class="jvp-row__cur">{balanceByAccount[acc.id].symbol}</span>
                                 </b>
-                                <small>{balanceByAccount[acc.id].label}</small>
                               </span>
                             {/if}
                           </button>
@@ -1910,7 +1940,9 @@ import { purchaseApi } from '../../api/purchaseApi.js';
 
                             <span class="jvp-row__copy">
                               <strong>{accountSearchName(acc)}</strong>
-                              <small>{accountTypeLabel(acc) === 'N/A' ? '' : accountTypeLabel(acc)}</small>
+                              <small>
+                                {accountTypeLabel(acc) === 'N/A' ? '' : accountTypeLabel(acc)}
+                              </small>
                             </span>
 
                             {#if balanceByAccount[acc.id]}
@@ -1923,7 +1955,6 @@ import { purchaseApi } from '../../api/purchaseApi.js';
                                   {balanceByAccount[acc.id].amount}
                                   <span class="jvp-row__cur">{balanceByAccount[acc.id].symbol}</span>
                                 </b>
-                                <small>{balanceByAccount[acc.id].label}</small>
                               </span>
                             {/if}
                           </button>
