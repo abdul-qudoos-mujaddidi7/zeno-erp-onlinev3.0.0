@@ -11,6 +11,7 @@
   export let applyLabel = 'نمایش';
   export let showReset = true;
   export let showApply = true;
+  export let showFilterText = false;
   /** Draw shared toolbar controls with the Journal Material Symbols icons. */
   export let material = true;
 
@@ -162,19 +163,22 @@
           bind:this={filterTriggerEl}
           type="button"
           class="filter-toggle"
+          class:filter-toggle--action={showFilterText}
           class:filter-toggle--active={filtersOpen || activeFilterCount > 0}
           aria-label={filterLabel}
           aria-expanded={filtersOpen}
           aria-controls={panelId}
           title={filterLabel}
           on:click|stopPropagation={toggleFilters}>
-          {#if material}
+          {#if showFilterText}
+            <span class="filter-toggle__label">{filterLabel}</span>
+          {:else if material}
             <span class="ms" aria-hidden="true">tune</span>
           {:else}
             <i class="bi bi-sliders2" aria-hidden="true"></i>
           {/if}
 
-          {#if activeFilterCount > 0}
+          {#if activeFilterCount > 0 && !showFilterText}
             <span class="filter-toggle__count">{activeFilterCount}</span>
           {/if}
         </button>
@@ -369,13 +373,15 @@
 
   .filter-toggle {
     position: relative;
-    display: inline-grid;
-    place-items: center;
-    width: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: auto;
     height: var(--index-toolbar-control-height, 30px);
     min-width: 32px;
     min-height: var(--index-toolbar-control-height, 30px);
-    padding: 0;
+    padding: 0 10px;
     border: 1px solid #ccd6f0;
     border-radius: var(--z-r-sm, 8px);
     background: #e4e9f7;
@@ -409,6 +415,34 @@
 
   .filter-toggle > .ms {
     font-size: 17px;
+  }
+
+  .filter-toggle__label {
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .filter-toggle.filter-toggle--action {
+    padding: 0 12px;
+    border-color: transparent;
+    background: var(--z-brand, #2f6fed);
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .filter-toggle.filter-toggle--action:hover {
+    border-color: transparent;
+    background: #245fcf;
+    color: #ffffff;
+  }
+
+  .filter-toggle.filter-toggle--action.filter-toggle--active {
+    border-color: transparent;
+    background: var(--z-brand, #2f6fed);
+    color: #ffffff;
   }
 
   .filter-toggle__count {

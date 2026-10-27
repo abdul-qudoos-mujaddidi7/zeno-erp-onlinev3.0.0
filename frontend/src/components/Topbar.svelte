@@ -261,7 +261,7 @@
       return `
           <ul class="navbar-nav me-auto">
             <li class="nav-item">
-              <i class="bi bi-people"></i>
+              <span class="ms" aria-hidden="true">group</span>
               </li>
             <li class="nav-item">
               <a class="nav-link ${locPath === '/dashboard/accounts/list' ? 'active' : ''} py-0" href="/#/dashboard/accounts/list"><small>${t('Accounts')}</small></a>

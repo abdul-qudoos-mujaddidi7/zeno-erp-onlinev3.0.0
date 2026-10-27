@@ -419,7 +419,7 @@
 
   @media (max-width: 860px) {
     .erp-page-main.dashboard-page {
-      padding: 0 12px 92px;
+      padding: 0 var(--page-padding-x) 92px;
     }
   }
   

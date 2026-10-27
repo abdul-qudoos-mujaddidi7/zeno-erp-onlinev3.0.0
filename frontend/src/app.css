@@ -51,7 +51,7 @@
      /* Reference `.wrap` in Journal.dc.html: padding 10px 16px 16px. Absolute px so
         the page gutter does not shrink with the 82% rem baseline below. */
      --page-padding: 10px;
-     --page-padding-x: 24px;
+     --page-padding-x: 20px;
      --page-padding-block-end: 16px;
      --section-gap: clamp(0.55rem, 0.75vw, 0.9rem);
      --card-padding: clamp(0.65rem, 0.85vw, 1rem);
@@ -284,7 +284,7 @@
    
    @media (max-width: 1199px) {
      :root {
-       --page-padding-x: clamp(16px, 2vw, 24px);
+       --page-padding-x: clamp(16px, 2vw, 20px);
        --sidebar-width-expanded: 232px;
      }
    }
@@ -292,7 +292,7 @@
    @media (max-width: 991px) {
      :root {
        --page-padding: 0.7rem;
-       --page-padding-x: 20px;
+       --page-padding-x: 16px;
        --section-gap: 0.65rem;
        --topbar-height: 3.125rem;
      }
@@ -301,7 +301,7 @@
    @media (max-width: 767px) {
      :root {
        --page-padding: 0.65rem;
-       --page-padding-x: 16px;
+       --page-padding-x: 12px;
        --card-padding: 0.75rem;
        --section-gap: 0.65rem;
        /* Keep accessible mobile touch targets */
@@ -316,7 +316,7 @@
    @media (max-width: 575px) {
      :root {
        --page-padding: 0.6rem;
-       --page-padding-x: 14px;
+       --page-padding-x: 12px;
        --control-height: 2.75rem; /* 44px */
        --button-height: 2.75rem;
      }

@@ -609,15 +609,16 @@ describe('design tokens', () => {
     }
   });
 
-  it('uses increased responsive page gutters across the shell and dashboard', () => {
+  it('uses consistent reference-sized responsive page gutters across the shell and dashboard', () => {
     const app = read('app.css');
     const layout = read('layouts/DashboardLayout.svelte');
 
-    expect(app).toContain('--page-padding-x: 24px;');
     expect(app).toContain('--page-padding-x: 20px;');
+    expect(app).toContain('--page-padding-x: clamp(16px, 2vw, 20px);');
     expect(app).toContain('--page-padding-x: 16px;');
-    expect(app).toContain('--page-padding-x: 14px;');
+    expect(app).toContain('--page-padding-x: 12px;');
     expect(layout).toContain('padding: 0 var(--page-padding-x) 32px;');
+    expect(layout).toContain('padding: 0 var(--page-padding-x) 92px;');
   });
 
   it('draws the table from tokens rather than literal greys', () => {

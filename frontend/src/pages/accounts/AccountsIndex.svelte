@@ -438,7 +438,7 @@
   tablePadding={true}>
   <svelte:fragment slot="actions">
     {#if permissions?.some((p) => p.code === 'Accounts' && p.create)}
-      <ActionButton icon="bi-plus-lg" label={t('Add Account')} on:click={() => openModal()} />
+      <ActionButton icon="person_add" label={t('New')} on:click={() => openModal()} />
     {/if}
   </svelte:fragment>
 
@@ -448,6 +448,7 @@
       searchPlaceholder={t('Search accounts...')}
       filters={accountToolbarFilters}
       filterLabel={t('Filter')}
+      showFilterText={true}
       resetLabel={t('Clear Filters')}
       showReset={true}
       on:searchChange={(event) => {
@@ -512,7 +513,7 @@
                   </th>
                 {/if}
                 {#if enable_account_groups}
-                    <th aria-sort={sortColumn === 'group' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                    <th class="col-end" aria-sort={sortColumn === 'group' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
                       <button type="button" on:click={() => setSort('group')}>
                         {t('Group')}
                         {#if sortColumn === 'group'}
@@ -566,9 +567,9 @@
                   </td>
                 {/if}
                 {#if enable_account_groups}
-                  <td>
-                    <span class="account-group-name">
-                      {accountGroups.find((ac) => ac.id == acc.account_group_id)?.name || '—'}
+                  <td class="account-group-cell">
+                    <span class="account-group-name" dir="auto">
+                      {accountGroups.find((ac) => ac.id == acc.account_group_id)?.name || ''}
                     </span>
                   </td>
                 {/if}
@@ -857,6 +858,10 @@
     text-align: start;
   }
 
+  :global(.accounts-index-content .data-table tbody tr.account-row > td.account-group-cell) {
+    text-align: end;
+  }
+
   :global(.accounts-index-content .data-table tbody tr.account-row > td:first-child) {
     padding-inline-start: 12px;
   }
@@ -899,7 +904,7 @@
     align-items: center;
     gap: 10px;
     min-width: 0;
-    text-align: start;
+    text-align: end;
   }
 
   .account-avatar {
@@ -976,6 +981,8 @@
     font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
     font-size: 12px;
     font-weight: 500;
+    line-height: 1.55;
+    text-align: end;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
