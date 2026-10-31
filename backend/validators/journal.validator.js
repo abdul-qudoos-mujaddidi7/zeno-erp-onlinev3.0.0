@@ -146,7 +146,32 @@ const journalListQuerySchema = z.object({
     .optional()
     .default(0),
 
+  /*
+   * Keeps the receivable/payable control accounts out of the day book
+   * entirely: a sale or purchase invoice is an internal posting that only
+   * moves those two accounts against the party, so the sheet shows the
+   * payment rows (the money) and not the invoice row. Off by default — the
+   * invoice itself is still the document that owns the bill.
+   */
+  exclude_control_accounts: z
+    .coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1)
+    .optional()
+    .default(0),
+
   include_summary: z
+    .coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1)
+    .optional()
+    .default(0),
+
+  summary_only: z
     .coerce
     .number()
     .int()

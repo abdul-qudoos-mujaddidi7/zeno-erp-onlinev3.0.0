@@ -331,10 +331,14 @@ describe('shared index page stack', () => {
   });
 
   it('pads the reference journal row through DataTable instead of a page override', () => {
-    /* The reference row is 9px top and bottom; DataTable takes that as a prop so
-       the page never restates cell padding. */
+    /* The current sheet pads its ledger row 6px top and bottom under a 40px
+       header; DataTable takes both as props so the page never restates cell
+       padding. */
     expect(read('components/common/DataTable.svelte')).toContain('--dt-cell-pad-y');
-    expect(read('pages/journals/JournalsIndex.svelte')).toContain('cellPaddingY="9px"');
+    const page = read('pages/journals/JournalsIndex.svelte');
+    expect(page).toContain('cellPaddingY="6px"');
+    expect(page).toContain('headerHeight="40px"');
+    expect(page).toContain('edgePaddingX="16px"');
   });
 
   it('matches the Journal reference type pill dimensions, icon, and colors', () => {
@@ -432,7 +436,7 @@ describe('shared index page stack', () => {
     const page = read('pages/journals/JournalsIndex.svelte');
 
     expect(page).toContain('foldAll material');
-    expect(page).toMatch(/<th class="col-center">\{lbl\('actions'\)\}/);
+    expect(page).toMatch(/<th class="col-center">\s*<span class="jth-label">\{lbl\('actions'\)\}/);
     expect(page).toMatch(/<td class="col-center">\s*(?:<!--[\s\S]*?-->\s*)?<TableActions/);
 
     /* Reference kebab: 28×28, 7px radius, 18px more_vert glyph. */
@@ -452,15 +456,17 @@ describe('shared index page stack', () => {
     expect(page).toContain("tone: 'muted',");
   });
 
-  it('keeps the print pill out of the journals toolbars', () => {
-    /* Printing a journal lives in the row kebab, and the toolbars keep only the
-       export menu — its «چاپ» entry still runs the page's own print path. */
+  it('keeps the journal list toolbar to the new-voucher action only', () => {
+    /* The export split and the «چاپ» pill were removed from the list toolbar;
+       printing stays on the report and in the voucher dialog. */
     const list = read('pages/journals/JournalsIndex.svelte');
     const report = read('pages/journals/JournalsReport.svelte');
 
-    expect(list).not.toContain('toolbar-print');
     expect(list).not.toContain('icon="print"');
-    expect(list).toContain('? exportExcel() : printList()');
+    expect(list).not.toContain('printList');
+    expect(list).not.toContain('exportExcel');
+    expect(list).not.toContain('ExportMenu');
+    expect(list).toContain('on:click={openAddJournal}');
 
     /* The report prints from the voucher dialog; its toolbar has no printer. */
     expect(report).not.toContain('function printReport');
@@ -554,10 +560,12 @@ describe('shared index page stack', () => {
     const users = FILES.filter((file) => file.source.includes('<TableActions'));
     expect(users.length).toBeGreaterThan(5);
 
+    /* The label may sit in a wrapper span, so allow markup before the
+       expression while still requiring it in the same header cell. */
     const offenders = users
       .filter(
         (file) =>
-          !/<th[^>]*col-(?:end|center)[^>]*>\s*\{[^}]*['"](?:actions|Actions)['"][^}]*\}/.test(
+          !/<th[^>]*col-(?:end|center)[^>]*>[\s\S]{0,120}?\{[^}]*['"](?:actions|Actions)['"][^}]*\}/.test(
             file.source,
           ),
       )
@@ -763,6 +771,18 @@ describe('icon set', () => {
       'pages/journals/AddJournal.svelte',
       'pages/journals/JournalsIndex.svelte',
       'pages/journals/ViewJournalModal.svelte',
+      /* The purchases and accounts lists were redrawn from their reference
+         sheets, whose KPI tiles, warehouse/status glyphs and row menus are
+         drawn with Material Symbols. */
+      'pages/Purchases.svelte',
+      /* The sales list follows the same reference sheet: its sub-navigation,
+         KPI tiles, warehouse glyph and row menu are Material Symbols. */
+      'pages/Sales.svelte',
+      'pages/sales/SalesTabs.svelte',
+      /* The products sheet follows the same reference: pill sub-navigation,
+         KPI tiles and the row menu are drawn with Material Symbols. */
+      'pages/products/ProductsIndex.svelte',
+      'pages/accounts/AccountsIndex.svelte',
     ]);
 
     const offenders = FILES.filter(

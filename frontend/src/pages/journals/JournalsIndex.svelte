@@ -9,7 +9,6 @@
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import ActionButton from '../../components/common/ActionButton.svelte';
-  import ExportMenu from '../../components/common/ExportMenu.svelte';
   import TableActions from '../../components/common/TableActions.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import JournalReceiptModal from './JournalReceiptModal.svelte';
@@ -44,6 +43,11 @@
   let currencies = [];
   let journals = [];
 
+  /* Per-currency debit/credit totals for the filtered range (server summary). */
+  let summary = null;
+  /* Vouchers that were cancelled (soft-deleted); the sheet's fourth KPI tile. */
+  let cancelledCount = null;
+
   let loading = true;
   let TREASURY_ID = null;
   let totalItems = 0;
@@ -52,6 +56,10 @@
   let lastPageKey = '';
   let searchDebounceTimer = null;
   let loadRequestId = 0;
+  let summaryRequestId = 0;
+  let summaryFilterKey = '';
+  let summaryLoadingKey = '';
+  let summaryLoadedKey = '';
 
   let modalRef;
 
@@ -142,55 +150,201 @@
     }
   }
 
-  async function loadJournals() {
+  /*
+   * How long the sheet will wait for one list read before treating it as
+   * failed. A stalled request used to hold the spinner open forever, so the
+   * page looked empty until it was reloaded by hand — several times, until one
+   * attempt happened to get through.
+   */
+  const LIST_TIMEOUT_MS = 15000;
+
+  function readJournals(params) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('slow')), LIST_TIMEOUT_MS);
+
+      journalApi.getAll(params).then(resolve, reject).finally(() => clearTimeout(timer));
+    });
+  }
+
+  async function loadJournals({ refreshSummary = false } = {}) {
     const requestId = ++loadRequestId;
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     loading = true;
 
-    const journalResponse =
-      await journalApi.getAll({
-        status: 1,
+    const params = {
+      status: 1,
+      search: searchTerm.trim(),
+      date_from: startDate || undefined,
+      date_to: endDate || undefined,
+      /*
+       * When viewing a specific account, do NOT exclude system
+       * PAYABLE/RECEIVABLE counterparts — customer/supplier journals
+       * almost always touch those accounts.
+       */
+      exclude_system_accounts: account_id ? 0 : 1,
+      /*
+       * Collapse a payment's two vouchers into one row (see
+       * `accountScopedView()`).
+       */
+      exclude_report_accounts: accountScopedView() ? 0 : 1,
+      /*
+       * And drop the invoice rows that only move a control account, so a sale
+       * or a purchase shows up as the one payment row it produced.
+       */
+      exclude_control_accounts: accountScopedView() ? 0 : 1,
+      skip_count: 1,
+      account_id:
+        account_id ||
+        (filterAccount !== 'all' ? Number(filterAccount) : undefined),
+      reference_type: reference_type || undefined,
+      currency: filterCurrency !== 'all' ? filterCurrency : undefined,
+      page: currentPage,
+      limit: itemsPerPage,
+    };
+    const summaryParams = Object.fromEntries(
+      Object.entries(params).filter(
+        ([key]) => !['page', 'limit', 'skip_count'].includes(key),
+      ),
+    );
+    const summaryKey = JSON.stringify(summaryParams);
+    if (refreshSummary) {
+      summaryLoadedKey = '';
+      summaryLoadingKey = '';
+      summaryRequestId += 1;
+    }
+    if (summaryKey !== summaryFilterKey) {
+      summaryFilterKey = summaryKey;
+      summaryLoadingKey = '';
+      summaryLoadedKey = '';
+      summary = null;
+      summaryRequestId += 1;
+    }
+
+    try {
+      let journalResponse;
+
+      try {
+        journalResponse = await readJournals(params);
+      } catch (error) {
+        /*
+         * One quiet retry: a single dropped or slow request should not send
+         * the user to the reload button.
+         */
+        journalResponse = await readJournals(params);
+      }
+
+      if (requestId !== loadRequestId) return;
+
+      journals = journalResponse?.data || [];
+      /*
+       * Counterparty names are decoration. A failed lookup leaves the row with
+       * its own ids; it must never keep the whole sheet in its spinner.
+       */
+      void ensurePeerAccounts(journals).catch((error) =>
+        console.error('Failed to load journal account names', error),
+      );
+
+      if (summaryLoadedKey !== summaryKey && summaryLoadingKey !== summaryKey) {
+        void loadJournalSummary(summaryParams, summaryKey);
+      }
+      void loadCancelledCount(requestId);
+
+      const meta = readListMeta(journalResponse, journals.length);
+      const hasMore = Boolean(journalResponse?.meta?.hasMore);
+
+      totalItems = hasMore
+        ? Math.max(meta.total, currentPage * itemsPerPage + 1)
+        : Math.max(meta.total, (currentPage - 1) * itemsPerPage + journals.length);
+      totalPages = hasMore
+        ? Math.max(currentPage + 1, Math.ceil(totalItems / itemsPerPage) || 0)
+        : Math.max(currentPage, Math.ceil(totalItems / itemsPerPage) || 0);
+
+      journals.forEach((j) => {
+        if (!reference_types.includes(j.reference_type)) {
+          reference_types = [...reference_types, j.reference_type];
+        }
+      });
+    } catch (error) {
+      if (requestId !== loadRequestId) return;
+
+      journals = [];
+      totalItems = 0;
+      totalPages = 0;
+      console.error('Journal list failed to load', error);
+    } finally {
+      /*
+       * Whatever happened above, the sheet stops waiting: the rows it managed
+       * to read are shown, and a read that never arrived shows the empty state
+       * instead of an endless spinner.
+       */
+      if (requestId === loadRequestId) loading = false;
+    }
+  }
+
+  /*
+   * A bill payment is one document but two vouchers: `customer ↔ treasury`
+   * plus the internal `SALES ↔ RECEIVABLE` settlement. Only the first one is
+   * the document the user recognizes, so the day book leaves the settlement
+   * out and lists one row per payment. An account-scoped view is a ledger —
+   * both legs are that account's real movements there — so nothing is
+   * collapsed.
+   */
+  function accountScopedView() {
+    return Boolean(account_id) || filterAccount !== 'all';
+  }
+
+  async function loadJournalSummary(params, summaryKey) {
+    const requestId = ++summaryRequestId;
+    summaryLoadingKey = summaryKey;
+
+    try {
+      const response = await journalApi.getAll({
+        ...params,
+        include_summary: 1,
+        summary_only: 1,
+      });
+
+      if (requestId !== summaryRequestId || summaryKey !== summaryFilterKey) return;
+      summary = response?.summary || null;
+      summaryLoadedKey = summaryKey;
+      summaryLoadingKey = '';
+    } catch (error) {
+      if (requestId !== summaryRequestId || summaryKey !== summaryFilterKey) return;
+
+      summaryLoadingKey = '';
+      summary = null;
+      console.error('Could not load journal summary', error);
+    }
+  }
+
+  async function loadCancelledCount(requestId) {
+    try {
+      const response = await journalApi.getAll({
+        status: 0,
         search: searchTerm.trim(),
         date_from: startDate || undefined,
         date_to: endDate || undefined,
-        /*
-         * When viewing a specific account, do NOT exclude system
-         * PAYABLE/RECEIVABLE counterparts — customer/supplier journals
-         * almost always touch those accounts.
-         */
         exclude_system_accounts: account_id ? 0 : 1,
-        skip_count: 1,
+        exclude_report_accounts: accountScopedView() ? 0 : 1,
+        exclude_control_accounts: accountScopedView() ? 0 : 1,
         account_id:
           account_id ||
           (filterAccount !== 'all' ? Number(filterAccount) : undefined),
         reference_type: reference_type || undefined,
         currency: filterCurrency !== 'all' ? filterCurrency : undefined,
-        page: currentPage,
-        limit: itemsPerPage,
+        page: 1,
+        limit: 1,
       });
 
-    if (requestId !== loadRequestId) return;
+      if (requestId !== loadRequestId) return;
 
-    journals = journalResponse?.data || [];
-    await ensurePeerAccounts(journals);
+      cancelledCount = readListMeta(response, 0).total;
+    } catch (error) {
+      if (requestId !== loadRequestId) return;
 
-    const meta = readListMeta(journalResponse, journals.length);
-    const hasMore = Boolean(journalResponse?.meta?.hasMore);
-
-    totalItems = hasMore
-      ? Math.max(meta.total, currentPage * itemsPerPage + 1)
-      : Math.max(meta.total, (currentPage - 1) * itemsPerPage + journals.length);
-    totalPages = hasMore
-      ? Math.max(currentPage + 1, Math.ceil(totalItems / itemsPerPage) || 0)
-      : Math.max(currentPage, Math.ceil(totalItems / itemsPerPage) || 0);
-
-    if (requestId === loadRequestId) loading = false;
-
-    journals.forEach((j) => {
-      if (!reference_types.includes(j.reference_type)) {
-        reference_types = [...reference_types, j.reference_type];
-      }
-    });
+      cancelledCount = null;
+      console.error('Could not count cancelled journals', error);
+    }
   }
 
   onMount(async () => {
@@ -206,17 +360,21 @@
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     bootstrapped = true;
 
-    /*
-     * Default the list to the working fiscal year BEFORE the first request, and
-     * show that year as the selected value of the fiscal-year filter so the
-     * scope on screen always matches the scope applied to the query.
-     */
-    workingFiscalYear = await applyCurrentFiscalYearRange(({ from, to }) => {
+    // These reads decorate controls and row labels; they must not delay rows.
+    void loadAccounts().catch((error) => console.error('Failed to load journal accounts', error));
+    void loadCurrencies().catch((error) => console.error('Failed to load journal currencies', error));
+    void loadFiscalYears();
+
+    // The fiscal range is the only lookup required to scope the first list read.
+    const fiscalYearScope = await applyCurrentFiscalYearRange(({ from, to }) => {
       startDate = from;
       endDate = to;
+    }).catch((error) => {
+      console.error('Failed to determine the working fiscal year', error);
+      return null;
     });
 
-    await Promise.all([loadAccounts(), loadCurrencies(), loadFiscalYears()]);
+    workingFiscalYear = fiscalYearScope;
 
     if (workingFiscalYear?.id) {
       filterFiscalYear = workingFiscalYear.id;
@@ -332,7 +490,7 @@
     // The backend soft-deletes the journal and records the
     // activity log entry atomically.
     await journalApi.remove(id);
-    await loadJournals();
+    await loadJournals({ refreshSummary: true });
   }
   function getAccountName(id) {
     const acc = accounts.find((a) => a.id === id) || {};
@@ -340,6 +498,22 @@
     if (t('Lang') === 'fa') return acc.name_fa || acc.name || '';
     if (t('Lang') === 'ps') return acc.name_ps || acc.name || '';
     return acc.name || '';
+  }
+
+  /*
+   * The two control accounts the sales/purchase postings move internally. They
+   * are not switched on in the day book yet, so the list shows the party the
+   * entry is really about and leaves these two out. The postings themselves are
+   * untouched — the balances keep moving exactly as before.
+   */
+  const HIDDEN_ACCOUNT_CODES = ['RECEIVABLE', 'PAYABLE'];
+
+  function isHiddenAccount(id) {
+    if (id == null) return false;
+    /* Opening the account's own ledger is the one place it must stay visible. */
+    if (account_id) return false;
+    const acc = accounts.find((a) => String(a.id) === String(id));
+    return HIDDEN_ACCOUNT_CODES.includes(String(acc?.code || '').toUpperCase());
   }
 
   function getJournalReferenceRoute(journal) {
@@ -383,14 +557,25 @@
     viewedJournal = journal;
   }
 
+  function closeJournalView() {
+    viewedJournal = null;
+  }
+
   /*
    * Everything the read-only voucher dialog prints, resolved once so the dialog
    * never re-derives account names, currency symbols or permissions.
+   *
+   * One row, one voucher: the payment row the day book shows is its
+   * `customer ↔ treasury` voucher, so the dialog totals the payment amount
+   * once (8,160 for an 8,160 payment) instead of stacking the internal
+   * settlement voucher on top and doubling both sides.
    */
   function journalView(j) {
     const info = rowInfo(j);
     const tmeta = journalTypeMeta(j);
     const lines = journalLines(j);
+    const totalDr = lines.reduce((sum, line) => sum + (line.dr || 0), 0);
+    const totalCr = lines.reduce((sum, line) => sum + (line.cr || 0), 0);
     const symbol = currencySymbol(j.currency);
     const linked = j.reference_type != 'account' && !!j.reference_id;
     const route = linked ? getJournalReferenceRoute(j) : null;
@@ -427,9 +612,9 @@
         cr: line.cr ? fmtNum(line.cr) : '',
       })),
       story,
-      totalDr: fmtNum(info.drAmt),
-      totalCr: fmtNum(info.crAmt),
-      balanced: Math.abs(info.drAmt - info.crAmt) < 0.005,
+      totalDr: fmtNum(totalDr),
+      totalCr: fmtNum(totalCr),
+      balanced: Math.abs(totalDr - totalCr) < 0.005,
       sourceLabel: linked ? `#${j.reference_id}` : '',
       sourceType: linked ? tmeta.label : '',
       /* Linked vouchers are edited in their source document, exactly like the
@@ -563,7 +748,7 @@
     addJournalAccountCode = '';
     addJournalIcon = 'ms:north_west';
     showAddJournal = false;
-    await loadJournals();
+    await loadJournals({ refreshSummary: true });
   }
 
   $: journalToolbarFilters = [
@@ -575,10 +760,15 @@
       key: 'fiscal_year', label: t('Fiscal Year'), value: filterFiscalYear,
       options: [
         { value: 'all', label: t('All') },
-        ...fiscalYears.map((year) => ({
-          value: year.id ?? year.local_id,
-          label: `${year.name} (${year.start_date} → ${year.end_date})`,
-        })),
+        ...fiscalYears.map((year) => {
+          /* Fiscal years are stored as Gregorian dates; the sheet reads every
+             date in the Hijri Shamsi calendar, so the option shows that range. */
+          const range = jalaliRangeOf(year.start_date, year.end_date);
+          return {
+            value: year.id ?? year.local_id,
+            label: range ? `${year.name} · ${range}` : year.name,
+          };
+        }),
       ],
     },
     {
@@ -661,6 +851,9 @@
       /* The invoice reads «فروش»; the payment it posts names that same bill. */
       sale: 'فروش', salePayment: 'بل فروش', purchase: 'بل خرید', purchasePayment: 'پرداخت خرید',
       searchPlaceholder: 'جستجوی سند، شرح یا حساب',
+      docs: 'سندها', totalDebit: 'جمع بدهکار', totalCredit: 'جمع طلبکار',
+      voided: 'باطل شده', noVoided: 'هیچ سندی باطل نشده',
+      balanced: 'متوازن', unbalanced: 'نامتوازن', print: 'چاپ',
     },
     ps: {
       search: 'لټون', filter: 'فلتر', clear: 'پاکول', show: 'ښکاره کول',
@@ -672,6 +865,9 @@
       journal: 'روزنامچه', exchange: 'تبادله', transfer: 'انتقال',
       sale: 'خرڅلاو', salePayment: 'د خرڅلاو بل', purchase: 'د خرید بل', purchasePayment: 'د خرید تادیه',
       searchPlaceholder: 'د سند، شرح یا حساب لټون',
+      docs: 'سندونه', totalDebit: 'ټول ډیبیټ', totalCredit: 'ټول کریډیټ',
+      voided: 'باطل شوي', noVoided: 'هیڅ سند باطل شوی نه دی',
+      balanced: 'متوازن', unbalanced: 'ناسمتوازن', print: 'چاپ',
     },
     en: {
       search: 'Search', filter: 'Filter', clear: 'Clear', show: 'Show',
@@ -683,6 +879,9 @@
       journal: 'Journal', exchange: 'Exchange', transfer: 'Transfer',
       sale: 'Sale', salePayment: 'Sale bill', purchase: 'Purchase bill', purchasePayment: 'Purchase payment',
       searchPlaceholder: 'Search journal, description or account',
+      docs: 'Documents', totalDebit: 'Total debit', totalCredit: 'Total credit',
+      voided: 'Voided', noVoided: 'No voided documents',
+      balanced: 'Balanced', unbalanced: 'Unbalanced', print: 'Print',
     },
   };
 
@@ -734,6 +933,15 @@
     return `${latin(p.year)}/${latin(p.month)}/${latin(p.day)}`;
   }
 
+  /* A fiscal year carries Gregorian ISO dates; `1405/06/29 – 1406/06/28` is what
+     the sheet shows for it. */
+  function jalaliRangeOf(start, end) {
+    const from = jalaliShort(start);
+    const to = jalaliShort(end);
+    if (from && to) return `${from} – ${to}`;
+    return from || to;
+  }
+
   function gregorianDay(iso) {
     const d = toDateObj(iso);
     if (!d) return '';
@@ -762,9 +970,26 @@
     const fCr = Number(j.first_entry_credit || 0);
     const sDr = Number(j.second_entry_debit || 0);
     const sCr = Number(j.second_entry_credit || 0);
+    /*
+     * The leg that carries a non-zero amount names that side. Testing `> 0`
+     * sent both sides to the second leg on a negative amount (a return), which
+     * printed the same account as debtor and creditor.
+     */
+    const drId = fDr !== 0 ? j.first_entry_account : j.second_entry_account;
+    const crId = fCr !== 0 ? j.first_entry_account : j.second_entry_account;
+
+    /*
+     * A control account only hides its own side; a voucher that is nothing but
+     * control accounts (an internal settlement) keeps both, so no row is ever
+     * left without a party.
+     */
+    const hideDr = isHiddenAccount(drId);
+    const hideCr = isHiddenAccount(crId);
+    const hideBoth = hideDr && hideCr;
+
     return {
-      drId: fDr > 0 ? j.first_entry_account : j.second_entry_account,
-      crId: fCr > 0 ? j.first_entry_account : j.second_entry_account,
+      drId: hideDr && !hideBoth ? null : drId,
+      crId: hideCr && !hideBoth ? null : crId,
       drAmt: fDr + sDr,
       crAmt: fCr + sCr,
       total: fDr + sDr,
@@ -784,6 +1009,77 @@
     return lines;
   }
 
+  /* ===================== KPI row (reference `.jr-kpi`) ===================== */
+
+  function currencyLabel(code) {
+    if (!code) return '';
+    const match = currencies.find((item) => String(item.code) === String(code));
+    return t(String(code)) || match?.name || String(code);
+  }
+
+  $: summaryCurrencies = Object.keys(summary || {});
+  $: baseCurrency =
+    filterCurrency !== 'all'
+      ? filterCurrency
+      : currency || summaryCurrencies[0] || '';
+  $: baseTotals = summary?.[baseCurrency] || { debit: 0, credit: 0, balance: 0 };
+  $: balanced =
+    Math.abs(Number(baseTotals.credit || 0) - Number(baseTotals.debit || 0)) < 0.005;
+  $: balancedText = balanced ? `${lbl('balanced')} ✓` : lbl('unbalanced');
+
+  /* A second currency only ever appears beside the first one's totals. */
+  $: otherCurrencyDebit = summaryCurrencies
+    .filter((code) => code !== baseCurrency)
+    .map((code) => `${currencyLabel(code)} ${fmtNum(summary[code].debit)}`)
+    .join(' · ');
+
+  $: kpiCards = (($lang, [
+    {
+      key: 'docs',
+      label: lbl('docs'),
+      icon: 'receipt_long',
+      ink: '#2F6FED',
+      soft: 'var(--z-brand-soft, #e3ecff)',
+      value: fmtNum(totalItems),
+      unit: lbl('doc'),
+      sub: `${summaryCurrencies.length} ${t('Currency')}`,
+      title: lbl('docs'),
+    },
+    {
+      key: 'debit',
+      label: lbl('totalDebit'),
+      icon: 'north_west',
+      ink: '#DC2626',
+      soft: '#FDECEC',
+      value: fmtNum(baseTotals.debit),
+      unit: currencyLabel(baseCurrency),
+      sub: otherCurrencyDebit || balancedText,
+      title: lbl('totalDebit'),
+    },
+    {
+      key: 'credit',
+      label: lbl('totalCredit'),
+      icon: 'south_east',
+      ink: '#16A34A',
+      soft: '#E7F6EC',
+      value: fmtNum(baseTotals.credit),
+      unit: currencyLabel(baseCurrency),
+      sub: balancedText,
+      title: lbl('totalCredit'),
+    },
+    {
+      key: 'voided',
+      label: lbl('voided'),
+      icon: 'block',
+      ink: 'var(--z-danger, #b91c1c)',
+      soft: 'var(--z-danger-soft, #fee2e2)',
+      value: fmtNum(cancelledCount || 0),
+      unit: lbl('doc'),
+      sub: cancelledCount ? `${fmtNum(cancelledCount)} ${lbl('doc')}` : lbl('noVoided'),
+      title: lbl('voided'),
+    },
+  ]));
+
   /* ===================== toolbar presentation ===================== */
 
   /* Reference format: `1405/06/17 – 1405/07/16` (en-dash), as-of: `تا 1405/07/16`. */
@@ -795,6 +1091,94 @@
     return from || '';
   })();
 
+  /* One named handler per chip: a closure that assigns here would make the
+     chip list depend on the very state it clears. */
+  function clearFiscalYearChip() {
+    applyFiscalYearFilter(workingFiscalYear?.id ?? 'all');
+    currentPage = 1;
+    loadJournals();
+  }
+
+  function clearDateChip() {
+    startDate = '';
+    endDate = '';
+    currentPage = 1;
+    loadJournals();
+  }
+
+  function clearAccountChip() {
+    filterAccount = 'all';
+    currentPage = 1;
+    loadJournals();
+  }
+
+  function clearCurrencyChip() {
+    filterCurrency = 'all';
+    currentPage = 1;
+    loadJournals();
+  }
+
+  function clearReferenceChip() {
+    reference_type = null;
+    currentPage = 1;
+    loadJournals();
+  }
+
+  /*
+   * Every applied toolbar filter reports itself as a chip under the search row,
+   * exactly like the sales sheet: the chip names the field and its value, and
+   * clicking it drops only that one filter. A fiscal year already describes the
+   * date window, so the two never appear together.
+   */
+  $: activeChips = (() => {
+    const chips = [];
+
+    if (filterFiscalYear !== 'all') {
+      const year = fiscalYears.find(
+        (item) => String(item.id ?? item.local_id) === String(filterFiscalYear),
+      );
+      const range = year ? jalaliRangeOf(year.start_date, year.end_date) : '';
+      chips.push({
+        key: 'fiscal_year',
+        label: `${t('Fiscal Year')}: ${range || year?.name || filterFiscalYear}`,
+        clear: clearFiscalYearChip,
+      });
+    } else if (rangeText) {
+      chips.push({
+        key: 'date',
+        label: `${lbl('fromDate')} / ${lbl('toDate')}: ${rangeText}`,
+        clear: clearDateChip,
+      });
+    }
+
+    if (!account_id && filterAccount !== 'all') {
+      const acc = accounts.find((a) => String(a.id) === String(filterAccount));
+      chips.push({
+        key: 'account',
+        label: `${t('Account')}: ${acc ? getAccountName(acc.id) : filterAccount}`,
+        clear: clearAccountChip,
+      });
+    }
+
+    if (filterCurrency !== 'all') {
+      chips.push({
+        key: 'currency',
+        label: `${t('Currency')}: ${t(filterCurrency)}`,
+        clear: clearCurrencyChip,
+      });
+    }
+
+    if (reference_type) {
+      chips.push({
+        key: 'reference',
+        label: `${t('Reference Type')}: ${t(reference_type)}`,
+        clear: clearReferenceChip,
+      });
+    }
+
+    return chips;
+  })();
+
   /*
    * The row itself is the «نمایش» shortcut: a click anywhere on it opens the
    * read-only voucher dialog, the same one the kebab's first entry triggers.
@@ -804,104 +1188,6 @@
     const target = event?.target;
     if (target?.closest?.('button, a, .table-actions')) return;
     openJournalView(journal);
-  }
-
-  /* ===================== print & excel ===================== */
-
-  function escText(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
-
-  function printList() {
-    const body = filteredJournals
-      .map((j) => {
-        const info = rowInfo(j);
-        const meta = journalTypeMeta(j);
-        return (
-          '<tr>' +
-          `<td dir="ltr">${escText(info.dateText)}${info.tm ? ' · ' + escText(info.tm) : ''}</td>` +
-          `<td>${escText(getAccountName(info.drId))}<br/>${escText(getAccountName(info.crId))}</td>` +
-          `<td>${escText(meta.label)}</td>` +
-          `<td dir="ltr">${escText(fmtNum(info.total))} ${escText(t(j.currency))}</td>` +
-          `<td>${escText(localizeDescription(j.description, $lang, t))}</td>` +
-          '</tr>'
-        );
-      })
-      .join('');
-
-    const win = window.open('', '_blank');
-    if (!win) return;
-    win.document.write(
-      '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><title>روزنامچه · Zeno</title><style>' +
-      'body{font-family:Inter,Vazirmatn,Tahoma,sans-serif;color:#0B1530;margin:24px;font-size:11px}' +
-      'table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}' +
-      'th{background:#F6F8FC;border-bottom:1px solid #E7EBF3;padding:6px 8px;text-align:right;font-size:10px;color:#5B6478}' +
-      'td{border-bottom:1px solid #F0F2F7;padding:6px 8px}' +
-      '.hd{display:flex;justify-content:space-between;margin-bottom:10px;font-size:13px}' +
-      '</style></head><body>' +
-      `<div class="hd"><b>روزنامچه · Zeno</b><span dir="ltr">${escText(rangeText)}</span></div>` +
-      '<table><thead><tr><th>تاریخ</th><th>طرفین معامله</th><th>نوع</th><th>مبلغ</th><th>شرح</th></tr></thead><tbody>' +
-      body +
-      '</tbody></table><script>window.onload=function(){window.focus();window.print()}</scr' + 'ipt></body></html>',
-    );
-    win.document.close();
-  }
-
-  async function exportExcel() {
-    const all = [];
-    let exportPage = 1;
-    const limit = 200;
-
-    while (exportPage <= 100) {
-      const response = await journalApi.getAll({
-        status: 1,
-        search: searchTerm.trim(),
-        date_from: startDate || undefined,
-        date_to: endDate || undefined,
-        exclude_system_accounts: account_id ? 0 : 1,
-        skip_count: 1,
-        account_id: account_id || (filterAccount !== 'all' ? Number(filterAccount) : undefined),
-        reference_type: reference_type || undefined,
-        currency: filterCurrency !== 'all' ? filterCurrency : undefined,
-        page: exportPage,
-        limit,
-      });
-      const rows = response?.data || [];
-      all.push(...rows);
-      if (!response?.meta?.hasMore || !rows.length) break;
-      exportPage += 1;
-    }
-
-    const lines = [['تاریخ', 'سند', 'نوع', 'شرح', 'ارز', 'حساب بدهکار', 'بدهکار', 'حساب طلبکار', 'طلبکار']];
-    for (const j of all) {
-      const info = rowInfo(j);
-      const meta = journalTypeMeta(j);
-      lines.push([
-        info.dateText,
-        j.reference || '',
-        meta.label,
-        localizeDescription(j.description, $lang, t) || '',
-        j.currency || '',
-        getAccountName(info.drId),
-        info.drAmt ? fmtNum(info.drAmt) : '',
-        getAccountName(info.crId),
-        info.crAmt ? fmtNum(info.crAmt) : '',
-      ]);
-    }
-
-    const csv = '\uFEFF' + lines
-      .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
-      .join('\r\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `روزنامچه-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success(lbl('exportDone'));
   }
 </script>
 
@@ -934,14 +1220,45 @@
   <IndexPageLayout
     dir={t('dir')}
     ariaLabel={t('Journals')}
-    toolbarWidth="22rem"
-    showStats={false}
+    showStats={true}
+    showExtra={true}
     showFooter={totalItems > 0}
     dense={true}
     contained={true}
     panelClass="journals-card"
     contentClass="journals-content"
     tablePadding={true}>
+
+    <svelte:fragment slot="extra">
+      <div class="journal-actions">
+        <ActionButton
+          iconSet="material"
+          icon="add"
+          label={lbl('newDoc')}
+          extraClass="journal-new"
+          on:click={openAddJournal} />
+      </div>
+    </svelte:fragment>
+
+    <svelte:fragment slot="stats">
+      <section class="jkpi" aria-label={lbl('docs')}>
+        {#each kpiCards as card (card.key)}
+          <article class="jkcard" title={card.title}>
+            <span class="jtile" style={`--tile-ink: ${card.ink}; --tile-soft: ${card.soft};`} aria-hidden="true">
+              <span class="ms f">{card.icon}</span>
+            </span>
+            <span class="jbody">
+              <span class="jlabel">{card.label}</span>
+              <span class="jvalue-line">
+                <b class="jvalue" dir="ltr" style={`color: ${card.ink};`}>{card.value}</b>
+                <span class="junit">{card.unit}</span>
+              </span>
+              <span class="jsub">{card.sub}</span>
+            </span>
+          </article>
+        {/each}
+      </section>
+    </svelte:fragment>
 
     <svelte:fragment slot="toolbar">
       <FilterToolbar
@@ -951,27 +1268,28 @@
         filterLabel={lbl('filter')}
         resetLabel={lbl('clear')}
         applyLabel={lbl('show')}
+        activeCount={activeChips.length}
         showReset={true}
         material={true}
         on:searchChange={(event) => { searchTerm = event.detail; scheduleSearchReload(); }}
         on:filterChange={handleJournalFilterChange}
         on:reset={resetJournalFilters}>
-        <svelte:fragment slot="actions">
-          {#if rangeText}
-            <span class="journal-range" dir="ltr">{rangeText}</span>
-          {/if}
-        </svelte:fragment>
       </FilterToolbar>
     </svelte:fragment>
 
-    <svelte:fragment slot="actions">
-      <ExportMenu material={true} on:export={(event) => (event.detail === 'excel' ? exportExcel() : printList())} />
-      <ActionButton
-        iconSet="material"
-        icon="add"
-        label={lbl('newDoc')}
-        on:click={openAddJournal} />
-    </svelte:fragment>
+    {#if activeChips.length}
+      <div class="active-filters">
+        {#each activeChips as chip (chip.key)}
+          <button type="button" class="active-chip" on:click={chip.clear}>
+            {chip.label}
+            <span class="ms" aria-hidden="true">close</span>
+          </button>
+        {/each}
+        <button type="button" class="active-filters__clear" on:click={resetJournalFilters}>
+          {t('Clear Filters')}
+        </button>
+      </div>
+    {/if}
 
     {#if loading && journals.length === 0}
       <div class="index-table-state">
@@ -983,25 +1301,30 @@
       </div>
     {:else}
       <!-- Reference `.jth` grid: date 136 · parties 1fr · type 150 · amount 150 ·
-           actions 64. The declared widths add the 6px cell padding per side (and
-           the 14px edge insets). -->
+           actions 64, a 12px gutter and a 16px inset at both edges. Each
+           declared width carries that gutter as a trailing pad on the edge
+           cells; the 6px row pad and the type block give the 54px row. -->
       <DataTable
         ariaLabel={t('Journals')}
-        columns={['156px', 'auto', '162px', '162px', '84px']}
+        columns={['158px', 'auto', '162px', '162px', '87px']}
         minWidth="820px"
         dense={true}
         striped={false}
         hover={false}
-        cellPaddingY="9px"
+        headerHeight="40px"
+        cellPaddingY="6px"
+        edgePaddingX="16px"
+        headEdgePaddingX="16px"
+        headBorderColor="var(--z-border-soft, #eef2f7)"
         stickyHeader={true}
         mobileCards={true}>
         <svelte:fragment slot="head">
           <tr>
-            <th>{lbl('dateTime')}</th>
-            <th>{lbl('parties')}</th>
-            <th>{lbl('type')}</th>
-            <th class="col-end">{lbl('amount')}</th>
-            <th class="col-center">{lbl('actions')}</th>
+            <th><span class="jth-label">{lbl('dateTime')}</span></th>
+            <th><span class="jth-label">{lbl('parties')}</span></th>
+            <th><span class="jth-label">{lbl('type')}</span></th>
+            <th class="col-end"><span class="jth-label">{lbl('amount')}</span></th>
+            <th class="col-center"><span class="jth-label">{lbl('actions')}</span></th>
           </tr>
         </svelte:fragment>
 
@@ -1035,14 +1358,18 @@
 
             <td>
               <span class="journal-party">
-                <span class="journal-party__line">
-                  <span class="journal-side journal-side--dr">{lbl('debtor')}</span>
-                  <span class="journal-party__name">{getAccountName(info.drId)}</span>
-                </span>
-                <span class="journal-party__line">
-                  <span class="journal-side journal-side--cr">{lbl('creditor')}</span>
-                  <span class="journal-party__name journal-party__name--cr">{getAccountName(info.crId)}</span>
-                </span>
+                {#if info.drId}
+                  <span class="journal-party__line">
+                    <span class="journal-side journal-side--dr">{lbl('debtor')}</span>
+                    <span class="journal-party__name">{getAccountName(info.drId)}</span>
+                  </span>
+                {/if}
+                {#if info.crId}
+                  <span class="journal-party__line">
+                    <span class="journal-side journal-side--cr">{lbl('creditor')}</span>
+                    <span class="journal-party__name journal-party__name--cr">{getAccountName(info.crId)}</span>
+                  </span>
+                {/if}
               </span>
             </td>
 
@@ -1092,7 +1419,7 @@
   {#if viewData}
     <ViewJournalModal
       view={viewData}
-      on:close={() => (viewedJournal = null)}
+      on:close={closeJournalView}
       on:print={printViewedJournal}
       on:edit={editViewedJournal}
       on:delete={deleteViewedJournal} />
@@ -1131,48 +1458,232 @@
     padding: 6px 0 10px;
   }
 
-  :global(.jindex .index-toolbar-main .filter-search) {
-    flex: 0 1 220px;
-    width: 220px;
-    max-width: 100%;
-    height: 30px;
-    min-height: 30px;
-    padding: 0 9px;
-    gap: 6px;
-    border: 1px solid var(--z-border, #e1e7f0);
-    border-radius: 8px;
-    background: var(--z-surface-2, #f8fafc);
+  /*
+   * Reference stack: the action buttons and the KPI tiles sit on the page
+   * surface, and only the toolbar, the ledger and the pager share the 14px
+   * sheet. The shared panel is therefore unwrapped and its children re-ordered.
+   */
+  .jindex :global(.index-panel) {
+    gap: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     box-shadow: none;
+    overflow: visible;
   }
 
-  :global(.jindex .index-toolbar-main .filter-search__icon) {
-    flex: 0 0 16px;
-    width: 16px;
-    height: 16px;
-    font-size: 16px;
-    line-height: 16px;
+  .jindex :global(.index-statistics) {
+    order: -1;
+    flex: 0 0 auto;
+    padding: 0;
+    margin-bottom: 10px;
+    border: 0;
+    background: transparent;
   }
 
-  :global(.jindex .index-toolbar-main .filter-search__input) {
-    font-size: 12.5px;
+  .jindex :global(.index-toolbar) {
+    order: 0;
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 8px 12px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    border-radius: var(--z-r-xl, 14px) var(--z-r-xl, 14px) 0 0;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+  .jindex :global(.index-toolbar-main .filter-toolbar-row) {
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .jindex :global(.index-content) {
+    order: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    border-inline: 1px solid var(--z-border, #e1e7f0);
+    background: var(--z-surface, #ffffff);
+  }
+
+  .jindex :global(.journals-content .data-table-wrap) {
+    border: 0;
+  }
+
+  /*
+   * Applied filters, reported the way the sales sheet does it: a surface-2
+   * band under the search row with one removable chip per filter and a single
+   * "clear" link after them.
+   */
+  .active-filters {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    background: var(--z-surface-2, #f8fafc);
+  }
+
+  .active-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding-inline-start: 10px;
+    padding-inline-end: 6px;
+    border: 1px solid var(--z-border-strong, #dce6f8);
+    border-radius: 999px;
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .active-chip .ms {
+    font-size: 14px;
+  }
+
+  .active-filters__clear {
+    height: 26px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--z-muted, #64748b);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .active-filters__clear:hover {
     color: var(--z-ink, #0b1530);
+  }
+
+  .jindex :global(.index-footer) {
+    order: 2;
+    flex: 0 0 auto;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-top: 1px solid var(--z-border-soft, #eef2f7);
+    border-radius: 0 0 var(--z-r-xl, 14px) var(--z-r-xl, 14px);
+    background: var(--z-surface-2, #f8fafc);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+  /* ---------- action group: download split, print, new voucher ---------- */
+  .journal-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  /* ---------- KPI row (reference `.jr-kpi`) ---------- */
+  .jkpi {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .jkcard {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    min-height: 72px;
+    padding: 9px 12px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: 12px;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+  .jtile {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: var(--tile-soft, var(--z-brand-soft, #e3ecff));
+    color: var(--tile-ink, var(--z-link, #2f6fed));
+    line-height: 1;
+  }
+
+  .jtile .ms {
+    font-size: 17px;
+  }
+
+  .jbody {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+  }
+
+  .jlabel {
+    overflow: hidden;
+    color: var(--z-text, #475569);
+    font-size: 11.5px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jvalue-line {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .jvalue {
+    min-width: 0;
+    overflow: hidden;
+    font-family: var(--z-font-num);
+    font-size: 17px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .junit {
+    flex: 0 0 auto;
+    overflow: hidden;
+    color: var(--z-muted, #64748b);
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .jsub {
+    overflow: hidden;
+    color: var(--z-muted, #64748b);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ---------- header labels ---------- */
+  .jth-label {
+    color: var(--z-muted, #64748b);
+    font-size: 11.5px;
+    font-weight: 600;
   }
 
   /* Reference actions column: the header label and the kebab are centred, not
      end-aligned (`text-align: center` + `justify-content: center`). */
   .jindex .col-center {
     text-align: center;
-  }
-
-  /* ================= toolbar date range ================= */
-  /* The document count is gone; only the range the list is scoped to stays,
-     in LTR Inter-700 against --z-text. */
-  .journal-range {
-    font-family: var(--z-font-num);
-    font-size: var(--z-fs-sm, 11.5px);
-    font-weight: 700;
-    color: var(--z-text, #475569);
-    white-space: nowrap;
   }
 
   /* ================= row ================= */
@@ -1324,7 +1835,9 @@
     color: var(--z-muted, #64748b);
     font-size: 10.5px;
     font-weight: 400;
-    line-height: normal;
+    /* The sheet's sub-line sits in a 16.8px line box, so the two-line type
+       block (22 + 3 + 16.8) is what sets the 54px row height. */
+    line-height: 1.6;
     white-space: nowrap;
     text-overflow: ellipsis;
   }

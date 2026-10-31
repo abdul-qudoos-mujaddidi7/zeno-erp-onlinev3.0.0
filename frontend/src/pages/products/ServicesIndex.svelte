@@ -525,7 +525,6 @@
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('Services')}
-  toolbarWidth="28rem"
   showStats={showSummary}
   showExtra={shiftPressed && ctrlPressed}
   showFooter={!loading && totalItems > 0}

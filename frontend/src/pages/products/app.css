@@ -412,7 +412,7 @@ iframe {
   position: sticky;
   top: 0;
   z-index: 2;
-  padding: var(--table-cell-padding-y, 0.8125rem) var(--table-cell-padding-x, 0.875rem);
+  padding: var(--table-cell-padding-y, 0.8125rem) var(--table-header-padding-x, 0.5rem);
   border-bottom: 1px solid #dfe5ed;
   background: #fbfcfe;
   color: #64748b;
@@ -652,7 +652,7 @@ html[dir='rtl'] .content-wrapper {
 }
 
 .content-wrapper main .table > thead > tr > th {
-  padding: var(--table-cell-padding-y) var(--table-cell-padding-x);
+  padding: var(--table-cell-padding-y) var(--table-header-padding-x, 0.5rem);
   border-bottom: 1px solid var(--erp-border);
   background: #fbfcfe;
   color: #64748b;
@@ -1180,6 +1180,10 @@ html[dir='rtl'] .content-wrapper {
   padding-inline: var(--table-cell-padding-x);
 }
 
+.content-wrapper main .table > thead > tr > th {
+  padding-inline: var(--table-header-padding-x, 0.5rem);
+}
+
 .content-wrapper main .table .btn,
 .content-wrapper main .data-table .btn {
   min-height: var(--button-height-sm);
@@ -1308,4 +1312,3 @@ html[dir='rtl'] .content-wrapper {
     margin: 0.5rem;
   }
 }
-

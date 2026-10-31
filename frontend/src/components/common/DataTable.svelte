@@ -39,8 +39,46 @@
   export let cellPaddingY = null;
   /** Horizontal padding of a body cell, e.g. '8px'. */
   export let cellPaddingX = null;
-  /** Inset of the first/last cell and header, e.g. '12px'. */
+  /** Inset of the first/last body cell, e.g. '12px'. */
   export let edgePaddingX = null;
+  /**
+   * Horizontal padding of a header cell, e.g. '10px'. Left unset the header
+   * keeps its denser default; a page whose reference sheet gives the header row
+   * the same gutters as the body passes it through here.
+   *
+   * @type {string | null}
+   */
+  export let headPaddingX = null;
+  /** Inset of the first/last header cell, e.g. '16px'. */
+  export let headEdgePaddingX = null;
+  /**
+   * Colour of the header's bottom rule, e.g. 'var(--z-border-soft)'. The
+   * journal sheet closes its header with the same hairline the rows use, not
+   * the stronger default rule.
+   *
+   * @type {string | null}
+   */
+  export let headBorderColor = null;
+  /**
+   * Height of the header row, e.g. '40px'. The reference purchases sheet is
+   * taller than the default 34px header, so the page passes it through here
+   * instead of restating table chrome in its own stylesheet.
+   *
+   * @type {string | null}
+   */
+  export let headerHeight = null;
+  /**
+   * Header type scale. A reference sheet whose head row is lighter than the
+   * shared default (the products sheet prints 11.5px/600 in the muted colour)
+   * passes it through here instead of restating `thead th` in page CSS.
+   *
+   * @type {string | null}
+   */
+  export let headFontSize = null;
+  /** @type {string | null} */
+  export let headFontWeight = null;
+  /** @type {string | null} */
+  export let headColor = null;
 
   $: tableLayout = layout === 'auto' ? 'auto' : 'fixed';
   $: scrollbarMode = ['thin', 'hidden', 'normal'].includes(scrollbar) ? scrollbar : 'thin';
@@ -87,7 +125,15 @@
       columns?.length ? 'fixed' : tableLayout
     };${cellPaddingY ? ` --dt-cell-pad-y: ${cellPaddingY};` : ''}${
       cellPaddingX ? ` --dt-cell-pad-x: ${cellPaddingX};` : ''
-    }${edgePaddingX ? ` --dt-edge-pad-x: ${edgePaddingX};` : ''}`}
+    }${edgePaddingX ? ` --dt-edge-pad-x: ${edgePaddingX};` : ''}${
+      headPaddingX ? ` --dt-head-pad-x: ${headPaddingX};` : ''
+    }    ${headEdgePaddingX ? ` --dt-head-edge-pad-x: ${headEdgePaddingX};` : ''}${
+      headBorderColor ? ` --dt-head-border: ${headBorderColor};` : ''}${
+      headerHeight ? ` --dt-head-h: ${headerHeight};` : ''}${
+      headFontSize ? ` --dt-head-fs: ${headFontSize};` : ''
+    }${headFontWeight ? ` --dt-head-weight: ${headFontWeight};` : ''}${
+      headColor ? ` --dt-head-color: ${headColor};` : ''
+    }`}
     aria-label={ariaLabel || undefined}
   >
     {#if columns?.length}
@@ -181,16 +227,16 @@
   }
 
   .data-table :global(thead th) {
-    height: 34px;
-    padding: 0 8px;
+    height: var(--dt-head-h, 34px);
+    padding: 0 var(--dt-head-pad-x, 6px);
 
-    border-bottom: 1px solid var(--z-border-strong, #cbd5e1);
-    background: var(--z-surface-3, #f1f5f9);
-    color: var(--z-text, #475569);
+    border-bottom: 1px solid var(--dt-head-border, var(--z-border-strong, #cbd5e1));
+    background: var(--z-th-bg, var(--z-surface-3, #f1f5f9));
+    color: var(--dt-head-color, var(--z-text, #475569));
 
     font-family: var(--z-font, 'Inter', 'Vazirmatn', sans-serif);
-    font-size: 12px;
-    font-weight: 700;
+    font-size: var(--dt-head-fs, 12px);
+    font-weight: var(--dt-head-weight, 700);
     line-height: 1.25;
 
     text-align: start;
@@ -226,13 +272,13 @@
     border-bottom: 0;
   }
 
-  /* Keep header labels aligned with the purchase reference's 16px edge insets. */
+  /* Use a compact, consistent inset at both table edges. */
   .data-table :global(thead th:first-child) {
-    padding-inline-start: var(--dt-edge-pad-x, 16px);
+    padding-inline-start: var(--dt-head-edge-pad-x, 8px);
   }
 
   .data-table :global(thead th:last-child) {
-    padding-inline-end: var(--dt-edge-pad-x, 16px);
+    padding-inline-end: var(--dt-head-edge-pad-x, 8px);
   }
 
   /* Body cells retain their existing edge inset and column alignment. */
@@ -264,8 +310,9 @@
     background: transparent;
     color: inherit;
     font: inherit;
-    font-size: 12px;
-    font-weight: 700;
+    /* A page that restyles the head row takes the sort label with it. */
+    font-size: var(--dt-head-fs, 12px);
+    font-weight: var(--dt-head-weight, 700);
     cursor: pointer;
   }
 
@@ -287,7 +334,7 @@
   }
 
   .data-table--dense :global(thead th) {
-    height: 34px;
+    height: var(--dt-head-h, 34px);
     padding-block: 0;
   }
 

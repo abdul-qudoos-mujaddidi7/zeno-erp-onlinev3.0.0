@@ -316,7 +316,6 @@
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('Stock Transactions')}
-  toolbarWidth="25rem"
   showFooter={!loading && totalEntries > 0}
   dense={true}
   contained={true}

@@ -194,7 +194,6 @@
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('Warehouses')}
-  toolbarWidth="25rem"
   showStats={showSummaryCards}
   showFooter={!loading && filteredWarehouses.length > 0}
   dense={true}

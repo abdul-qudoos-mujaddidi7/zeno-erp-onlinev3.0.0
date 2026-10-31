@@ -46,6 +46,20 @@ export function labelsForSpans(labels = [], spans = []) {
 }
 
 /**
+ * Header text without its icon glyphs.
+ *
+ * A sortable header is `<th>Date <i class="bi bi-arrow-down"></i></th>`; the
+ * Bootstrap glyph is an empty element, but a Material Symbols glyph carries its
+ * ligature name as text (`swap_vert`), which would otherwise be printed in
+ * front of the value on a phone card.
+ */
+function headerText(th) {
+  const clone = th.cloneNode(true);
+  clone.querySelectorAll('.ms, .bi').forEach((icon) => icon.remove());
+  return clone.textContent;
+}
+
+/**
  * Copy each column header onto the matching cell of every row as `data-label`.
  *
  * The headers live in a slot or in hand-written markup, so the rendered
@@ -58,7 +72,7 @@ export function labelsForSpans(labels = [], spans = []) {
 export function labelTableRows(table) {
   if (!table) return;
 
-  const labels = columnLabels([...table.querySelectorAll('thead th')].map((th) => th.textContent));
+  const labels = columnLabels([...table.querySelectorAll('thead th')].map(headerText));
   if (!labels.length) return;
 
   table.querySelectorAll('tbody tr').forEach((row) => {

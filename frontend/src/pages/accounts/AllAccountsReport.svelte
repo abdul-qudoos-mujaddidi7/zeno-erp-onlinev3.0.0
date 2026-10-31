@@ -916,7 +916,6 @@
 <IndexPageLayout
     dir={t('dir')}
     ariaLabel={t('Accounts Report')}
-    toolbarWidth="25rem"
     showStats={showBalanceCards}
     showFooter={!loading && filteredAccounts.length > 0}
     dense={true}

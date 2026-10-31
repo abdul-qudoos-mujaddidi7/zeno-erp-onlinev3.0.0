@@ -1,8 +1,2 @@
-◇ injected env (7) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
-Server running on port 3001
-◇ injected env (7) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
-Server running on port 0
-◇ injected env (7) from .env // tip: ⌘ enable debugging { debug: true }
-Server running on port 3001
-◇ injected env (7) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+◇ injected env (9) from .env // tip: ⌁ auth for agents [www.vestauth.com]
 Server running on port 3001

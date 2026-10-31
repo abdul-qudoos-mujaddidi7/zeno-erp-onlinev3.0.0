@@ -31,6 +31,10 @@ const JOURNAL_COLUMNS = `
 const {
   paginateSelect,
 } = require('../utils/pagination');
+
+/* The two accounts every sale/purchase posting moves internally. */
+const CONTROL_ACCOUNT_CODES = ['PAYABLE', 'RECEIVABLE'];
+
 async function findAll(
   executor,
   {
@@ -46,6 +50,7 @@ async function findAll(
     currency,
     excludeSystemAccounts = false,
     excludeReportAccounts = false,
+    excludeControlAccounts = false,
     skipCount = false,
     includeOpeningBalance = false,
     pagination = null,
@@ -142,6 +147,14 @@ async function findAll(
     values,
     excludedIds,
   );
+
+  if (excludeControlAccounts) {
+    appendControlAccountFilter(
+      conditions,
+      values,
+      await resolveAccountIdsByCodes(executor, orgId, CONTROL_ACCOUNT_CODES),
+    );
+  }
 
   const result = await paginateSelect(executor, {
     tableSql: 'journals',
@@ -317,6 +330,12 @@ async function resolveExcludedAccountIds(
 
   if (!codes.length) return [];
 
+  return resolveAccountIdsByCodes(executor, orgId, codes);
+}
+
+async function resolveAccountIdsByCodes(executor, orgId, codes) {
+  if (!codes.length) return [];
+
   const placeholders = codes.map(() => '?').join(', ');
   const [rows] = await executor.execute(
     `
@@ -350,6 +369,24 @@ function appendExcludedAccountFilters(conditions, values, excludedIds) {
   values.push(...excludedIds, ...excludedIds);
 }
 
+/*
+ * The stricter rule the day book asks for: a row touches RECEIVABLE or
+ * PAYABLE on either side, so the whole row goes. That is what turns a sale
+ * into a single line — the invoice posting (party ↔ control account) drops
+ * out and the payment posting (customer ↔ treasury) is what is left.
+ * Separate from `appendExcludedAccountFilters` on purpose: the invoice row is
+ * still the document behind the bill, so every other reader keeps it.
+ */
+function appendControlAccountFilter(conditions, values, controlIds) {
+  if (!controlIds.length) return;
+
+  const placeholders = controlIds.map(() => '?').join(', ');
+  conditions.push(
+    `NOT (first_entry_account IN (${placeholders}) OR second_entry_account IN (${placeholders}))`,
+  );
+  values.push(...controlIds, ...controlIds);
+}
+
 async function findSummary(
   executor,
   {
@@ -365,6 +402,7 @@ async function findSummary(
     currency,
     excludeSystemAccounts = false,
     excludeReportAccounts = false,
+    excludeControlAccounts = false,
   },
 ) {
   const conditions = [
@@ -443,6 +481,23 @@ async function findSummary(
       `NOT (j.first_entry_account IN (${placeholders}) AND j.second_entry_account IN (${placeholders}))`,
     );
     values.push(...excludedIds, ...excludedIds);
+  }
+
+  if (excludeControlAccounts) {
+    const controlIds = await resolveAccountIdsByCodes(
+      executor,
+      orgId,
+      CONTROL_ACCOUNT_CODES,
+    );
+
+    if (controlIds.length) {
+      const placeholders = controlIds.map(() => '?').join(', ');
+      /* Same rule as the list query, so a summary never disagrees with it. */
+      conditions.push(
+        `NOT (j.first_entry_account IN (${placeholders}) OR j.second_entry_account IN (${placeholders}))`,
+      );
+      values.push(...controlIds, ...controlIds);
+    }
   }
 
   const [rows] = await executor.execute(

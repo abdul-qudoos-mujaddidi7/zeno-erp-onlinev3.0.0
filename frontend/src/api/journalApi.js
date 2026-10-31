@@ -15,7 +15,9 @@ export const journalApi = {
     date_to,
     exclude_system_accounts = 0,
     exclude_report_accounts = 0,
+    exclude_control_accounts = 0,
     include_summary = 0,
+    summary_only = 0,
     include_opening_balance = 0,
     include_running_balance = 0,
     balance_date_to,
@@ -62,8 +64,16 @@ export const journalApi = {
       params.set('exclude_report_accounts', '1');
     }
 
+    if (exclude_control_accounts) {
+      params.set('exclude_control_accounts', '1');
+    }
+
     if (include_summary) {
       params.set('include_summary', '1');
+    }
+
+    if (summary_only) {
+      params.set('summary_only', '1');
     }
 
     if (include_opening_balance) {

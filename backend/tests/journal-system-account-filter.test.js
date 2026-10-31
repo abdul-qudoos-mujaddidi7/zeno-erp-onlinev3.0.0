@@ -143,3 +143,63 @@ test('summary follows the same both-leg rule as the list', async () => {
   );
   assert.equal(countPlaceholders(sql), values.length);
 });
+
+/*
+ * `excludeControlAccounts` is the stricter, opt-in rule the day book uses: a
+ * sale invoice is `Dr customer / Cr RECEIVABLE`, so it has one real party leg
+ * and survives the both-leg rule. The day book wants the sale to appear once —
+ * as the payment it produced — so it asks for the row that touches a control
+ * account to go as well.
+ */
+test('drops a row that touches a control account on either side', async () => {
+  const statements = await captureStatements((executor) =>
+    journalRepository.findAll(executor, {
+      orgId: ORG_ID,
+      status: 1,
+      excludeSystemAccounts: true,
+      excludeReportAccounts: true,
+      excludeControlAccounts: true,
+    }),
+  );
+
+  const { sql, values } = journalStatement(statements);
+
+  assert.match(
+    sql,
+    /NOT \(first_entry_account IN \(\?, \?\) OR second_entry_account IN \(\?, \?\)\)/,
+  );
+  assert.equal(countPlaceholders(sql), values.length);
+});
+
+test('control-account rule is off unless asked for', async () => {
+  const statements = await captureStatements((executor) =>
+    journalRepository.findAll(executor, {
+      orgId: ORG_ID,
+      status: 1,
+      excludeSystemAccounts: true,
+    }),
+  );
+
+  const { sql } = journalStatement(statements);
+
+  assert.doesNotMatch(sql, /OR second_entry_account IN/);
+});
+
+test('summary drops the same control rows as the list', async () => {
+  const statements = await captureStatements((executor) =>
+    journalRepository.findSummary(executor, {
+      orgId: ORG_ID,
+      status: 1,
+      excludeSystemAccounts: true,
+      excludeControlAccounts: true,
+    }),
+  );
+
+  const { sql, values } = journalStatement(statements);
+
+  assert.match(
+    sql,
+    /NOT \(j\.first_entry_account IN \(\?, \?\) OR j\.second_entry_account IN \(\?, \?\)\)/,
+  );
+  assert.equal(countPlaceholders(sql), values.length);
+});

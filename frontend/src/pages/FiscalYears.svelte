@@ -464,9 +464,9 @@
 
 <IndexPageLayout
   ariaLabel={t('Fiscal years')}
-  showExtra={true}
+  showExtra={false}
   showFooter={false}
-  toolbarWidth="16rem">
+ >
   <svelte:fragment slot="actions">
     <ActionButton
       label={t('New fiscal year')}
@@ -496,13 +496,11 @@
     </div>
   </svelte:fragment>
 
-  <svelte:fragment slot="extra">
+  <div class="fiscal-body">
     {#if error}
       <div class="fiscal-alert" role="alert">{error}</div>
     {/if}
-  </svelte:fragment>
 
-  <div class="fiscal-body">
     {#if loading}
       <EmptyState loading={true} message={t('Loading')} />
     {:else if !years.length}

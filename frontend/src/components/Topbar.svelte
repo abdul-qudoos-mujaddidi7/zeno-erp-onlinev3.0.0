@@ -210,7 +210,134 @@
 
     return ['products', 'quantity', 'expiry'].includes(tab) ? tab : 'products';
   })();
-  $: pageKey = (function () {
+  function topbarTabIcon(href, content) {
+    const route = href.includes('#/')
+      ? href.slice(href.indexOf('#/') + 1)
+      : href;
+    const [path, query = ''] = route.split('?');
+    const tab = new URLSearchParams(query).get('tab');
+    const routeIcons = {
+      '/dashboard/account/': {
+        info: 'person',
+        documents: 'folder',
+        journals: 'menu_book',
+        exchanges: 'currency_exchange',
+        'financial-report': 'account_balance',
+        bills: 'receipt_long',
+        products: 'inventory_2',
+      },
+      '/dashboard/accounts/': {
+        list: 'group',
+        report: 'bar_chart_4_bars',
+        'general-report': 'query_stats',
+      },
+      '/dashboard/exchanges/': { list: 'currency_exchange', report: 'summarize' },
+      '/dashboard/master-exchanges/': {
+        list: 'account_balance',
+        purchases: 'shopping_bag',
+        sales: 'point_of_sale',
+        pos: 'storefront',
+      },
+      '/dashboard/apartments/': {
+        list: 'apartment',
+        floors: 'stairs',
+        buildings: 'domain',
+        leases: 'contract',
+        'rent-invoices': 'receipt_long',
+        meters: 'speed',
+        'meter-readings': 'electric_meter',
+        records: 'inventory',
+      },
+      '/dashboard/transfers/': {
+        list: 'swap_horiz',
+        incoming: 'move_to_inbox',
+        outgoing: 'outbox',
+        report: 'bar_chart_4_bars',
+      },
+      '/dashboard/appointments/': { list: 'event', report: 'summarize' },
+      '/dashboard/settings/': { main: 'tune', departments: 'settings' },
+      '/dashboard/stock/': {
+        products: 'inventory_2',
+        warehouses: 'warehouse',
+        returns: 'assignment_return',
+        wastes: 'delete_sweep',
+      },
+      '/dashboard/product-alerts': {
+        products: 'inventory',
+        quantity: 'inventory_2',
+        expiry: 'event_busy',
+      },
+      '/dashboard/sales': {
+        sales: 'receipt_long',
+        products: 'bar_chart_4_bars',
+        visitors: 'badge',
+      },
+    };
+
+    for (const [prefix, tabs] of Object.entries(routeIcons)) {
+      if (!path.startsWith(prefix)) continue;
+      const key = prefix === '/dashboard/account/' ? tab || 'info' : tab || path.split('/').pop();
+      if (tabs[key]) return tabs[key];
+    }
+
+    if (path.includes('/dashboard/product/')) {
+      const section = path.split('/').pop() || 'overview';
+      return {
+        overview: 'inventory_2',
+        buy: 'shopping_bag',
+        sale: 'point_of_sale',
+        warehouses: 'warehouse',
+        report: 'bar_chart_4_bars',
+      }[section] || 'inventory_2';
+    }
+
+    const label = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const labelIcons = [
+      ['Overview', 'person'],
+      ['Documents', 'folder'],
+      ['Journals', 'menu_book'],
+      ['Exchanges', 'currency_exchange'],
+      ['Financial Report', 'account_balance'],
+      ['Bills', 'receipt_long'],
+      ['Products Report', 'inventory_2'],
+      ['Accounts', 'group'],
+      ['Report', 'bar_chart_4_bars'],
+      ['Main Settings', 'tune'],
+      ['System Settings', 'settings'],
+      ['Subscription', 'workspace_premium'],
+      ['Sale Form', 'point_of_sale'],
+      ['Purchase Form', 'shopping_bag'],
+      ['Prescriptions', 'prescriptions'],
+      ['POS', 'storefront'],
+      ['Purchases', 'shopping_bag'],
+      ['Work Centers', 'factory'],
+      ['Bill of Materials', 'receipt_long'],
+      ['Services', 'support_agent'],
+      ['Stock Transactions', 'inventory'],
+      ['Users', 'group'],
+      ['Top Products', 'inventory'],
+      ['Low Stock', 'inventory_2'],
+      ['Expiry', 'event_busy'],
+      ['Dashboard', 'dashboard'],
+    ];
+
+    const match = labelIcons.find(([name]) => label.includes(t(name)));
+    return match?.[1] || 'widgets';
+  }
+
+  function addTopbarTabIcons(markup) {
+    return markup.replace(
+      /(<a\b(?=[^>]*\bnav-link\b)[^>]*>)([\s\S]*?)(<\/a>)/g,
+      (anchor, openingTag, content, closingTag) => {
+        if (content.includes('topbar-tab-icon')) return anchor;
+        const href = openingTag.match(/\bhref="([^"]*)"/)?.[1] || '';
+        const icon = topbarTabIcon(href, content);
+        return `${openingTag}<span class="ms topbar-tab-icon" aria-hidden="true">${icon}</span>${content}${closingTag}`;
+      },
+    );
+  }
+
+  $: pageKey = addTopbarTabIcons((function () {
     // if dashboard/accounts/5, extract accounts part and show "Accounts - View"
     if (locPath.startsWith('/dashboard/account/') && locPath.split('/').length === 4) {
       const accountId = locPath.split('/').pop();
@@ -706,7 +833,7 @@
             </li>
           </ul>`;
     }
-  })();
+  })());
 
   // reflect store
   const unsubscribeLang = lang.subscribe((v) => (currentLang = v));
@@ -1332,6 +1459,139 @@
 
     .user-chip {
       padding: 0.2rem;
+    }
+  }
+
+  /* Match top-level navigation to the segmented tabs used within pages. */
+  .erp-topbar .topbar-page-title :global(.navbar-nav),
+  .mobile-page-nav.navbar :global(.navbar-nav),
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs),
+  .mobile-page-nav :global(.journal-section-tabs) {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 100%;
+    padding: 3px;
+    overflow-x: auto;
+    border-radius: 10px;
+    background: var(--z-surface-3, #f1f5f9);
+    box-shadow: none;
+    flex-wrap: nowrap;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link),
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a),
+  .mobile-page-nav :global(.journal-section-tabs a) {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    margin: 0;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--z-muted, #64748b);
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.2s, background-color 0.2s, box-shadow 0.2s;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link::after),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link::after),
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a::after),
+  .mobile-page-nav :global(.journal-section-tabs a::after) {
+    display: none;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link small),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link small) {
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: 1;
+  }
+
+  .erp-topbar .topbar-page-title :global(.topbar-tab-icon),
+  .mobile-page-nav.navbar :global(.topbar-tab-icon) {
+    flex: 0 0 auto;
+    color: var(--z-muted, #64748b);
+    font-size: 16px;
+    line-height: 1;
+    font-variation-settings: 'FILL' 0;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link:hover),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link:hover),
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a:hover),
+  .mobile-page-nav :global(.journal-section-tabs a:hover) {
+    color: var(--z-ink, #0b1530);
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link:hover .topbar-tab-icon),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link:hover .topbar-tab-icon) {
+    color: #2f6fed;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link.active),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link.active),
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a.active),
+  .mobile-page-nav :global(.journal-section-tabs a.active) {
+    border-radius: 8px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-ink, #0b1530);
+    font-weight: 700;
+    box-shadow: 0 1px 3px rgba(11, 21, 48, 0.14);
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link.active .topbar-tab-icon),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link.active .topbar-tab-icon) {
+    color: #0f172a;
+    font-variation-settings: 'FILL' 0;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav .nav-link:focus-visible),
+  .mobile-page-nav.navbar :global(.navbar-nav .nav-link:focus-visible),
+  .erp-topbar .topbar-page-title :global(.journal-section-tabs a:focus-visible),
+  .mobile-page-nav :global(.journal-section-tabs a:focus-visible) {
+    outline: 2px solid rgba(47, 111, 237, 0.55);
+    outline-offset: 2px;
+  }
+
+  .erp-topbar .topbar-page-title :global(.nav-item > i),
+  .mobile-page-nav.navbar :global(.nav-item > i) {
+    height: 30px;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav > .stock-top-tabs__icon:not(:has(.topbar-account-name))),
+  .mobile-page-nav.navbar :global(.navbar-nav > .stock-top-tabs__icon:not(:has(.topbar-account-name))) {
+    display: none;
+  }
+
+  .erp-topbar .topbar-page-title :global(.stock-top-tabs__icon:has(.topbar-account-name) > i),
+  .mobile-page-nav.navbar :global(.stock-top-tabs__icon:has(.topbar-account-name) > i) {
+    display: none;
+  }
+
+  .erp-topbar .topbar-page-title :global(.navbar-nav > .nav-item:not(.stock-top-tabs__icon):has(> i:only-child)),
+  .mobile-page-nav.navbar :global(.navbar-nav > .nav-item:not(.stock-top-tabs__icon):has(> i:only-child)),
+  .erp-topbar .topbar-page-title :global(.navbar-nav > .nav-item:not(.stock-top-tabs__icon):has(> span.ms:only-child)),
+  .mobile-page-nav.navbar :global(.navbar-nav > .nav-item:not(.stock-top-tabs__icon):has(> span.ms:only-child)) {
+    display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .erp-topbar .topbar-page-title :global(.navbar-nav *),
+    .mobile-page-nav.navbar :global(.navbar-nav *),
+    .erp-topbar .topbar-page-title :global(.journal-section-tabs *),
+    .mobile-page-nav :global(.journal-section-tabs *) {
+      transition-duration: 0.01ms;
     }
   }
 </style>

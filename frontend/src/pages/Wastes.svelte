@@ -223,7 +223,6 @@
   <IndexPageLayout
     dir={t('dir')}
     ariaLabel={t('Wastes')}
-    toolbarWidth="25rem"
     showStats={showSummaryCards}
     showFooter={!loading && totalItems > 0}
     dense={true}

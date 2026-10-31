@@ -810,7 +810,7 @@ import { dashboardApi } from '../../api/dashboardApi.js';
   }
 
   .general-report-table thead th {
-    padding: 0.85rem 0.9rem;
+    padding: 0.85rem 0.5rem;
     border-bottom: 1px solid #e2e8f0;
     background: #f8fafc;
     color: #64748b;
@@ -967,7 +967,10 @@ import { dashboardApi } from '../../api/dashboardApi.js';
 
   @media (max-width: 767.98px) {
     .report-hero{align-items:flex-start;padding:1rem}.report-heading p,.report-as-of span{display:none}.executive-summary{grid-template-columns:1fr 1fr}.executive-card.primary-card{grid-column:1/-1}.general-report-table-body{margin:.6rem}
-    .general-report-table thead th,
+    .general-report-table thead th {
+      padding: 0.75rem 0.5rem;
+    }
+
     .general-report-table tbody td {
       padding: 0.75rem;
     }

@@ -823,7 +823,7 @@ import { warehouseApi } from '../../api/warehouseApi.js';
 
     .transfer-items-table :global(thead th) {
         height: 2.875rem;
-        padding: 0.55rem 0.625rem;
+        padding: 0.55rem 0.5rem;
         border: 0;
         border-bottom: 1px solid #dfe5ed;
         background: #f7f9fc !important;

@@ -721,7 +721,6 @@
   <IndexPageLayout
     dir={t('dir')}
     ariaLabel={t('Journals Report')}
-    toolbarWidth="26rem"
     showStats={showBalanceCards}
     showFooter={totalItems > 0}
     dense={true}

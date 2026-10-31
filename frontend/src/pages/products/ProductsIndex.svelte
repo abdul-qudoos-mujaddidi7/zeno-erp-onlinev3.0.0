@@ -15,10 +15,8 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { push } from 'svelte-spa-router';
   import OpenFoodAPIModal from './OpenFoodAPIModal.svelte';
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
-  import SummaryCard from '../../components/common/SummaryCard.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import ActionButton from '../../components/common/ActionButton.svelte';
-  import StatusBadge from '../../components/common/StatusBadge.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import TableActions from '../../components/common/TableActions.svelte';
@@ -100,6 +98,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
 
   // --- Table State ---
   let searchTerm = '';
+  let filtersOpen = false;
   let filterCategory = 'all';
   let filterBrand = 'all';
   let filterCurrency = 'all';
@@ -109,42 +108,129 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   let itemsPerPage = DEFAULT_PAGE_SIZE;
   let sortColumn = 'created_at';
   let sortDirection = 'desc'; // 'asc' or 'desc'
+  let expandedStockRows = new Set();
 
-  // --- Helper Functions ---
-  function getStockTone(qty, alarm_quantity) {
-    if (qty <= 0) return 'negative';
-    if (qty < alarm_quantity) return 'warning';
-    return 'positive';
+  // --- Reference formatting -------------------------------------------------
+  /* Money reads in hundredths, like the prices the catalogue prints. */
+  const amountFormatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+  const CURRENCY_SYMBOL_FALLBACKS = { AFN: '؋', USD: '$', EUR: '€', PKR: 'Rs', IRR: '﷼' };
+
+  function amountText(value) {
+    const number = Number(value);
+    return amountFormatter.format(Number.isFinite(number) ? number : 0);
   }
 
-  function getExpiryTone(expiryDate) {
-    if (!expiryDate) return 'neutral';
-
-    const parsedDate = new Date(expiryDate);
-    if (Number.isNaN(parsedDate.getTime())) return 'neutral';
-
-    const now = new Date();
-    const diffDays = Math.ceil((parsedDate - now) / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) return 'negative';
-    if (diffDays <= 30) return 'warning';
-    return 'info';
+  function currencySymbol(code) {
+    const normalizedCode = String(code ?? '').toUpperCase();
+    if (!normalizedCode) return '';
+    const match = currencies.find(
+      (currency) => String(currency.code ?? '').toUpperCase() === normalizedCode,
+    );
+    return match?.symbol || CURRENCY_SYMBOL_FALLBACKS[normalizedCode] || t(normalizedCode);
   }
 
   function formatQty(qty) {
-    return qty.toLocaleString(undefined, { maximumFractionDigits: 3 });
+    return Number(qty || 0).toLocaleString(undefined, { maximumFractionDigits: 3 });
   }
 
-  function getStockBadge(qty, unitName, alarm_quantity) {
-    let cls = 'badge-success';
-    if (qty <= 0) {
-      cls = 'badge-danger';
-    } else if (qty < alarm_quantity) {
-      cls = 'badge-warning';
-    }
-    return `<span class="badge ${cls}"><span dir='ltr'>${qty.toLocaleString(undefined, {
-      maximumFractionDigits: 3,
-    })}</span> ${unitName}</span>`;
+  /*
+   * Stock state drives the row tone exactly like the reference sheet:
+   * negative, out, low (below the alarm quantity) and healthy.
+   */
+  function stockState(product) {
+    const quantity = toNumber(product?.quantity);
+    const alarm = toNumber(product?.alarm_quantity);
+    if (quantity < 0) return 'negative';
+    if (quantity === 0) return 'out';
+    if (alarm > 0 && quantity < alarm) return 'low';
+    return 'ok';
+  }
+
+  function daysUntil(value) {
+    if (!value) return null;
+    const date = new Date(String(value).replace(' ', 'T'));
+    if (Number.isNaN(date.getTime())) return null;
+    return Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  }
+
+  function expiryState(product) {
+    const days = daysUntil(product?.expiry_date);
+    if (days === null) return 'none';
+    if (days < 0) return 'expired';
+    if (days <= 30) return 'warning';
+    return 'ok';
+  }
+
+  function expiryTone(product) {
+    const state = expiryState(product);
+    if (state === 'expired') return 'danger';
+    if (state === 'warning') return 'warn';
+    return 'ink';
+  }
+
+  function expiryTitle(product) {
+    const days = daysUntil(product?.expiry_date);
+    if (days === null) return t('Expiry Date');
+    if (days < 0) return t('Expired');
+    return `${Math.abs(days)} ${t('Day')}`;
+  }
+
+  /*
+   * The reference keeps one warehouse on every row (`گدام`). A product stores
+   * the warehouse its stock was opened in, so the column reads that existing
+   * field instead of inventing a balance: products opened without one print '—'.
+   */
+  function warehouseLabel(product) {
+    const warehouse = warehouses.find(
+      (item) => Number(item.id) === Number(product?.initial_warehouse_id),
+    );
+    return warehouse?.name || '';
+  }
+
+  function brandLabel(product) {
+    const brand = brands.find((item) => Number(item.id) === Number(product?.brand_id));
+    return brand?.name || '';
+  }
+
+  function expiryRemaining(product) {
+    const days = daysUntil(product?.expiry_date);
+    if (days === null) return '';
+    if (days < 0) return t('Expired');
+    return `${days} ${t('Day')}`;
+  }
+
+  const expiryFormatter = new Intl.DateTimeFormat('fa-AF-u-ca-persian-nu-latn', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  function expiryLabel(product) {
+    const value = product?.expiry_date;
+    if (!value) return '';
+
+    const date = new Date(String(value).replace(' ', 'T'));
+    if (Number.isNaN(date.getTime())) return '—';
+
+    const parts = expiryFormatter.formatToParts(date);
+    const year = parts.find((part) => part.type === 'year')?.value || '';
+    const month = parts.find((part) => part.type === 'month')?.value || '';
+    const day = parts.find((part) => part.type === 'day')?.value || '';
+
+    return year && month && day ? `${year} ${month} ${day}` : '—';
+  }
+
+  /* The summary endpoint reports per-currency totals; the sheet reads in AFN. */
+  function afnTotal(map) {
+    if (!map) return 0;
+    return Object.entries(map).reduce(
+      (sum, [currency, amount]) =>
+        sum + toNumber(exchangeRate(toNumber(amount), currency, 'AFN')),
+      0,
+    );
   }
 
   function getProductGroupKey(product) {
@@ -450,10 +536,17 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   $: filteredProducts = (() => {
     let result = products;
 
+    /* Inventory value is a computed column, so it sorts on the product of the
+       purchase price and the on-hand quantity shown in the cell. */
+    const sortValue = (product) =>
+      sortColumn === 'stock_value'
+        ? toNumber(product.buy_price) * toNumber(product.quantity)
+        : product[sortColumn];
+
     // 4. Sort
     result = result.slice().sort((a, b) => {
-      let valA = a[sortColumn];
-      let valB = b[sortColumn];
+      let valA = sortValue(a);
+      let valB = sortValue(b);
 
       if (valA === undefined || valA === null) return 1;
       if (valB === undefined || valB === null) return -1;
@@ -480,6 +573,64 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     }
   }
 
+  /*
+   * `aria-sort` has to be a reactive value: a function call in the template
+   * would only be evaluated once, leaving the header state stale.
+   */
+  $: sortDirectionAria = sortDirection === 'asc' ? 'ascending' : 'descending';
+  $: sortAria = {
+    name: sortColumn === 'name' ? sortDirectionAria : 'none',
+    quantity: sortColumn === 'quantity' ? sortDirectionAria : 'none',
+    expiry_date: sortColumn === 'expiry_date' ? sortDirectionAria : 'none',
+    currency: sortColumn === 'currency' ? sortDirectionAria : 'none',
+    buy_price: sortColumn === 'buy_price' ? sortDirectionAria : 'none',
+    sell_price: sortColumn === 'sell_price' ? sortDirectionAria : 'none',
+    stock_value: sortColumn === 'stock_value' ? sortDirectionAria : 'none',
+  };
+
+  /*
+   * Reference row menu: details, edit, warehouses, stock history and the
+   * archive switch — every entry opens a screen this app already has.
+   */
+  function productActions(product) {
+    const active = product.product_status === 'active';
+    return [
+      {
+        icon: 'bi-eye',
+        label: t('Details'),
+        tone: 'view',
+        onClick: () => push(`/dashboard/product/${product.id}`),
+      },
+      ...(permissions?.some((p) => p.code === 'Products' && p.edit)
+        ? [
+            {
+              icon: 'bi-pencil',
+              label: t('Edit'),
+              tone: 'edit',
+              onClick: () => editExistingProduct(product),
+            },
+          ]
+        : []),
+      {
+        icon: 'bi-building',
+        label: t('Warehouses'),
+        onClick: () => push(`/dashboard/product/${product.id}/warehouses`),
+      },
+      {
+        icon: 'bi-clock-history',
+        label: t('Stock History'),
+        onClick: () => push(`/dashboard/product/${product.id}/report`),
+      },
+      {
+        icon: active ? 'bi-archive' : 'bi-box-arrow-in-up',
+        label: active ? t('Archive') : t('Unarchive'),
+        tone: 'muted',
+        onClick: () =>
+          changeProductStatus(product.id, active ? 'archived' : 'active'),
+      },
+    ];
+  }
+
   function getCategoryName(id) {
     return categories.find((c) => c.id === id)?.name || '-';
   }
@@ -504,36 +655,12 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     ).filter((part) => Number(part.quantity) !== 0);
   }
 
-  let expandedUnitKey = '';
-
-  function toggleUnitParts(product) {
-    const key = String(product?.id ?? '');
-    if (!key) return;
-    expandedUnitKey = expandedUnitKey === key ? '' : key;
-  }
-
-  function productStatusLabel(status) {
-    if (status === 'active') return t('Active');
-    if (status === 'archived') return t('Archived');
-    return t(status);
-  }
-
   $: productToolbarFilters = [
     {
       key: 'category',
       label: t('Category'),
       value: filterCategory,
       options: [{ value: 'all', label: t('All') }, ...categories.map((cat) => ({ value: cat.id, label: cat.name }))],
-    },
-    {
-      key: 'status',
-      label: t('Status'),
-      value: filterStatus,
-      options: [
-        { value: 'all', label: t('All') },
-        { value: 'active', label: t('Active') },
-        { value: 'archived', label: t('Archived') },
-      ],
     },
     {
       key: 'currency',
@@ -570,8 +697,171 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     if (key === 'currency') filterCurrency = value;
     if (key === 'generic') filterGeneric = value;
     if (key === 'brand') filterBrand = value;
-    if (key === 'status') filterStatus = value;
     if (currentPage !== 1) currentPage = 1;
+  }
+
+  /* ---------- head quick segments, KPI cards, chips, columns ---------- */
+  const STATUS_SEGMENTS = [
+    { key: 'all', label: 'All' },
+    { key: 'active', label: 'Active' },
+    { key: 'archived', label: 'Archived' },
+  ];
+
+  $: quickSegments = (($lang, STATUS_SEGMENTS.map((segment) => ({
+    ...segment,
+    label: t(segment.label),
+  }))));
+
+  function pickStatus(value) {
+    if (filterStatus === value) return;
+    filterStatus = value;
+    currentPage = 1;
+  }
+
+  /* A quick segment applies at once and closes the filter popup. */
+  function chooseStatus(value) {
+    filtersOpen = false;
+    pickStatus(value);
+  }
+
+  $: attention = (() => {
+    const low = products.filter((product) => stockState(product) === 'low').length;
+    const missing = products.filter((product) => {
+      const state = stockState(product);
+      return state === 'negative' || state === 'out';
+    }).length;
+    const expiring = products.filter((product) => {
+      const state = expiryState(product);
+      return state === 'expired' || state === 'warning';
+    }).length;
+    return { low, missing, expiring, total: low + missing + expiring };
+  })();
+
+  $: totalPurchaseAfn = afnTotal(totalPurchaseCostMap);
+  $: totalSaleAfn = afnTotal(totalSaleValueMap);
+  $: predictedAfn = totalSaleAfn - totalPurchaseAfn;
+  $: predictedMargin = totalSaleAfn ? (predictedAfn / totalSaleAfn) * 100 : 0;
+  /* Reference sale card: the uplift the sale value carries over the cost, and
+     the cost's share of it drawn as a bar. */
+  $: saleUplift = totalPurchaseAfn
+    ? Math.round(((totalSaleAfn - totalPurchaseAfn) / totalPurchaseAfn) * 100)
+    : 0;
+  $: costShare = totalSaleAfn
+    ? Math.round((totalPurchaseAfn / totalSaleAfn) * 100)
+    : 0;
+
+  $: kpiCards = (($lang, [
+    {
+      key: 'purchase',
+      label: t('Value at Purchase Rate'),
+      icon: 'inventory_2',
+      value: amountText(totalPurchaseAfn),
+      unit: currencySymbol('AFN'),
+      sub: `${totalItems} ${t('Product')}`,
+      title: t('Value at Purchase Rate'),
+    },
+    {
+      key: 'sale',
+      label: t('Value at Sale Rate'),
+      icon: 'sell',
+      value: amountText(totalSaleAfn),
+      unit: currencySymbol('AFN'),
+      sub: t('If all stock is sold'),
+      chip: `${saleUplift}%`,
+      chipTone: 'ok',
+      bar: costShare,
+      barTone: 'ok',
+      title: t('Value at Sale Rate'),
+    },
+    {
+      key: 'predicted',
+      label: t('Predicted Benefit'),
+      icon: 'auto_awesome',
+      hero: true,
+      value: amountText(predictedAfn),
+      unit: currencySymbol('AFN'),
+      sub: `${t('Margin')} ${predictedMargin.toFixed(1)}%`,
+      title: t('Predicted Benefit'),
+    },
+    {
+      key: 'attention',
+      label: t('Needs Attention'),
+      icon: 'notification_important',
+      value: String(attention.total),
+      unit: t('Product'),
+      valueTone: attention.total ? 'warn' : 'ink',
+      sub: `${attention.low} ${t('Low Stock')} · ${attention.missing} ${t('Out of Stock')} · ${attention.expiring} ${t('Expiring Soon')}`,
+      title: t('Products needing attention'),
+    },
+  ]));
+
+  $: activeChips = (() => {
+    const chips = [];
+
+    if (filterCategory !== 'all') {
+      chips.push({
+        key: 'category',
+        label: `${t('Category')}: ${getCategoryName(filterCategory)}`,
+        clear: () => {
+          filterCategory = 'all';
+          currentPage = 1;
+        },
+      });
+    }
+
+    if (filterBrand !== 'all') {
+      chips.push({
+        key: 'brand',
+        label: `${t('Brand')}: ${getBrandName(filterBrand)}`,
+        clear: () => {
+          filterBrand = 'all';
+          currentPage = 1;
+        },
+      });
+    }
+
+    if (filterGeneric !== 'all') {
+      chips.push({
+        key: 'generic',
+        label: `${t('Generic')}: ${getGenericName(filterGeneric)}`,
+        clear: () => {
+          filterGeneric = 'all';
+          currentPage = 1;
+        },
+      });
+    }
+
+    if (filterCurrency !== 'all') {
+      chips.push({
+        key: 'currency',
+        label: `${t('Currency')}: ${t(filterCurrency)}`,
+        clear: () => {
+          filterCurrency = 'all';
+          currentPage = 1;
+        },
+      });
+    }
+
+    return chips;
+  })();
+
+  $: tableColumnCount = 7 + (_translate_org_type === 'exchange' ? 1 : 0);
+  $: tableColumns = Array.from(
+    { length: tableColumnCount },
+    () => `${100 / tableColumnCount}%`,
+  );
+
+  $: rangeStart = totalItems ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  $: rangeEnd = Math.min(currentPage * itemsPerPage, totalItems);
+
+  function toggleStockBreakdown(productId) {
+    const next = new Set(expandedStockRows);
+    if (next.has(productId)) {
+      next.delete(productId);
+    } else {
+      next.add(productId);
+    }
+    expandedStockRows = next;
   }
 
   function resetFilters() {
@@ -634,14 +924,6 @@ import { saleItemApi } from '../../api/saleItemApi.js';
         }
       }
     })();
-  }
-
-  function formatValueObj(obj) {
-    if (!obj) return '-';
-    const totalAfn = Object.entries(obj).reduce((sum, [currency, amount]) => {
-      return sum + toNumber(exchangeRate(toNumber(amount), currency, 'AFN'));
-    }, 0);
-    return `${totalAfn.toLocaleString(undefined, { maximumFractionDigits: 3, minimumFractionDigits: 2 })} ${t('AFN')}`;
   }
 
   function exchangeRate(amount, fromCurrencyCode, toCurrencyCode) {
@@ -801,7 +1083,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
         }
       });
   }
-  let showProductStats = false;
+
 </script>
 
 {#if !permissions?.some((p) => p.code === 'Products' && p.view)}
@@ -810,127 +1092,147 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     {t('Permission denied')}
   </h3>
 {:else}
-  <IndexPageLayout
-    dir={t('dir')}
-    ariaLabel={t('Products')}
-    toolbarWidth="34rem"
-    showStats={showProductStats}
-    showExtra={(shiftPressed && ctrlPressed) || s}
-    showFooter={!loading && totalItems > 0}
-    dense={true}
-    contentClass="products-index-content"
-    tablePadding={true}>
-    <svelte:fragment slot="actions">
-      {#if permissions?.some((p) => p.code === 'Products' && p.create)}
-        <ActionButton
-          class="new-product-button"
-          icon="bi-plus-lg"
-          label={t('New Product')}
-          on:click={() => openNewProduct()} />
-      {/if}
-
-      <button
-        type="button"
-        class="index-settings-button"
-        class:is-active={showProductStats}
-        aria-label={t('Table settings')}
-        aria-expanded={showProductStats}
-        aria-controls="product-statistics-panel"
-        title={t('Statistics')}
-        on:click={() => {
-          showProductStats = !showProductStats;
-        }}>
-        <i class="bi {showProductStats ? 'bi-x-lg' : ' bi-box-seam'}" aria-hidden="true"></i>
-      </button>
-    </svelte:fragment>
+  <div class="products-page">
+    <IndexPageLayout
+      dir={t('dir')}
+      ariaLabel={t('Products')}
+      showStats={true}
+      showExtra={true}
+      showFooter={!loading && totalItems > 0}
+      dense={true}
+      contentClass="products-index-content"
+      tablePadding={true}>
 
     <svelte:fragment slot="toolbar">
       <FilterToolbar
+        bind:filtersOpen
         searchValue={searchTerm}
-        searchPlaceholder={t('stock_transactions.search')}
+        searchPlaceholder={t('Search name, code or category…')}
         filters={productToolbarFilters}
         filterLabel={t('Filter')}
         resetLabel={t('Clear Filters')}
+        applyLabel={t('Show')}
+        activeCount={activeChips.length}
         showReset={true}
         on:searchChange={(e) => {
           searchTerm = e.detail;
           scheduleSearchReload();
         }}
         on:filterChange={handleToolbarFilterChange}
-        on:reset={resetFilters} />
+        on:reset={resetFilters}>
+        <svelte:fragment slot="panelBeforeFields">
+          <div class="quick-status" role="group" aria-label={t('Status')}>
+            {#each quickSegments as segment (segment.key)}
+              <button
+                type="button"
+                class="quick-status__option"
+                class:is-active={filterStatus === segment.key}
+                aria-pressed={filterStatus === segment.key}
+                on:click={() => chooseStatus(segment.key)}>
+                {segment.label}
+              </button>
+            {/each}
+          </div>
+        </svelte:fragment>
+      </FilterToolbar>
     </svelte:fragment>
 
-    <svelte:fragment slot="stats">
-      <div id="product-statistics-panel" class="index-summary-grid">
-        <SummaryCard label={t('Total Purchase Rate')} icon="bi-bag-check" tone="cyan">
-          {@html formatValueObj(totalPurchaseCostMap)}
-        </SummaryCard>
-
-        <SummaryCard label={t('Total Sale Rate')} icon="bi-shop" tone="green">
-          {@html formatValueObj(totalSaleValueMap)}
-        </SummaryCard>
-
-        {#if permissions?.some((p) => p.code === 'Benefit' && p.view)}
-          <SummaryCard label={t('Current Benefit')} icon="bi-graph-up-arrow" tone="amber">
-            {@html formatValueObj(totalBenefit)}
-          </SummaryCard>
-
-          <SummaryCard label={t('Predicted Benefit')} icon="bi-stars" tone="purple">
-            {@html formatValueObj(totalPredictedBenefit)}
-          </SummaryCard>
-        {/if}
+    {#if activeChips.length}
+      <div class="active-filters">
+        {#each activeChips as chip (chip.key)}
+          <button type="button" class="active-chip" on:click={chip.clear}>
+            {chip.label}
+            <span class="ms" aria-hidden="true">close</span>
+          </button>
+        {/each}
+        <button type="button" class="active-filters__clear" on:click={resetFilters}>
+          {t('Clear Filters')}
+        </button>
       </div>
+    {/if}
+
+    <svelte:fragment slot="stats">
+      <section class="kpi" aria-label={t('Products')}>
+        {#each kpiCards as card (card.key)}
+          <article
+            class="kcard"
+            data-hero={card.hero ? 'true' : undefined}
+            title={card.title}>
+            <span class="ktile" aria-hidden="true">
+              <span class="ms f">{card.icon}</span>
+            </span>
+            <div class="kbody">
+              <span class="klabel">{card.label}</span>
+              <span class="kval-line">
+                <span class="kval kval--{card.valueTone || 'ink'}" dir="ltr">{card.value}</span>
+                {#if card.unit}<span class="kunit">{card.unit}</span>{/if}
+              </span>
+              <span class="ksub">{card.sub}</span>
+            </div>
+            {#if card.chip || card.bar != null}
+              <div class="kside">
+                {#if card.chip}
+                  <span class="kchip kchip--{card.chipTone || 'ok'}" dir="ltr">{card.chip}</span>
+                {/if}
+                {#if card.bar != null}
+                  <span class="kbar" aria-hidden="true">
+                    <span class="kbar__fill kbar__fill--{card.barTone || 'ok'}" style:width={`${card.bar}%`}></span>
+                  </span>
+                {/if}
+              </div>
+            {/if}
+          </article>
+        {/each}
+      </section>
     </svelte:fragment>
 
     <svelte:fragment slot="extra">
-      <ActionButton
-        variant="secondary"
-        icon="bi-calculator"
-        label={t('Calculate stock')}
-        loading={s}
-        disabled={s}
-        on:click={async () => {
-          if (confirm(t('Are you sure you want to recalculate stock for all products? This may take a while.'))) {
-            s = true;
+      <div class="products-head__actions">
+        {#if shiftPressed && ctrlPressed}
+          <ActionButton
+            variant="secondary"
+            icon="bi-calculator"
+            label={t('Calculate stock')}
+            loading={s}
+            disabled={s}
+            on:click={async () => {
+              if (confirm(t('Are you sure you want to recalculate stock for all products? This may take a while.'))) {
+                s = true;
 
-            try {
-              /*
-               * Resolve the method once, then use the same value for all
-               * products in this calculation run.
-               */
-              const inventoryMethod =
-                await resolveInventoryMethod();
+                try {
+                  /*
+                   * Resolve the method once, then use the same value for all
+                   * products in this calculation run.
+                   */
+                  const inventoryMethod = await resolveInventoryMethod();
 
-              await calculateAllStocks(
-                inventoryMethod,
-              );
+                  await calculateAllStocks(inventoryMethod);
 
-              await loadAll({ refreshSummary: true });
+                  await loadAll({ refreshSummary: true });
 
-              toast.success(
-                t('Success'),
-                t(
-                  'Stock recalculated successfully.',
-                ),
-              );
-            } catch (error) {
-              console.error(
-                'Stock recalculation failed:',
-                error,
-              );
+                  toast.success(t('Success'), t('Stock recalculated successfully.'));
+                } catch (error) {
+                  console.error('Stock recalculation failed:', error);
 
-              toast.error(
-                t('Error'),
-                error?.message ||
-                  t(
-                    'Stock recalculation failed.',
-                  ),
-              );
-            } finally {
-              s = false;
-            }
-          }
-        }} />
+                  toast.error(
+                    t('Error'),
+                    error?.message || t('Stock recalculation failed.'),
+                  );
+                } finally {
+                  s = false;
+                }
+              }
+            }} />
+        {/if}
+
+        {#if permissions?.some((p) => p.code === 'Products' && p.create)}
+          <ActionButton
+            icon="add"
+            label={t('New Product')}
+            extraClass="products-create"
+            on:click={() => openNewProduct()} />
+        {/if}
+      </div>
     </svelte:fragment>
 
         {#if loading}
@@ -939,240 +1241,254 @@ import { saleItemApi } from '../../api/saleItemApi.js';
           </div>
         {:else if filteredProducts.length === 0}
           <div class="index-table-state">
-            <EmptyState icon="bi-inbox" message={t('No products found.')} />
+            <EmptyState icon="bi-search" message={t('No products found.')}>
+              <button type="button" class="empty-clear" on:click={resetFilters}>
+                {t('Clear Filters')}
+              </button>
+            </EmptyState>
           </div>
         {:else}
           <DataTable
             ariaLabel={t('Products')}
-            minWidth="900px"
+            minWidth="100%"
             dense={true}
-            striped={true}
+            striped={false}
             hover={false}
             stickyHeader={true}
-            layout="fixed"
-            scrollbar="thin">
+            headerHeight="40px"
+            cellPaddingY="6px"
+            cellPaddingX="12px"
+            edgePaddingX="16px"
+            headPaddingX="12px"
+            headEdgePaddingX="16px"
+            headFontSize="11.5px"
+            headFontWeight="600"
+            headColor="var(--z-muted, #64748b)"
+            columns={tableColumns}
+            mobileCards={true}>
             <svelte:fragment slot="head">
               <tr>
-              <th class="col-start">#</th>
-                <th class="col-start cursor-pointer" on:click={() => setSort('name')}>
-                  <span class="sortable-heading">
+                <th aria-sort={sortAria.name}>
+                  <button type="button" class="th-sort" on:click={() => setSort('name')}>
                     {t('Product')}
-
-                    {#if sortColumn === 'name'}
-                      <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                    {/if}
-                  </span>
+                    <span
+                      class="ms sort-icon"
+                      class:sort-icon--idle={sortColumn !== 'name'}
+                      aria-hidden="true">
+                      {sortColumn === 'name'
+                        ? sortDirection === 'asc'
+                          ? 'arrow_upward'
+                          : 'arrow_downward'
+                        : 'swap_vert'}
+                    </span>
+                  </button>
                 </th>
 
-                <th>{t('Category')}</th>
+                <th class="col-warehouse">{t('Warehouse')}</th>
 
-                <th class="col-end cursor-pointer" on:click={() => setSort('quantity')}>
-                  <span class="sortable-heading">
+                <th class="col-start" aria-sort={sortAria.quantity}>
+                  <button type="button" class="th-sort" on:click={() => setSort('quantity')}>
                     {t('Stock')}
+                    <span
+                      class="ms sort-icon"
+                      class:sort-icon--idle={sortColumn !== 'quantity'}
+                      aria-hidden="true">
+                      {sortColumn === 'quantity'
+                        ? sortDirection === 'asc'
+                          ? 'arrow_upward'
+                          : 'arrow_downward'
+                        : 'swap_vert'}
+                    </span>
+                  </button>
+                </th>
 
-                    {#if sortColumn === 'quantity'}
-                      <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                    {/if}
-                  </span>
+                <th class="col-start" aria-sort={sortAria.buy_price}>
+                  <button
+                    type="button"
+                    class="th-sort th-sort--price"
+                    on:click={() => setSort('buy_price')}>
+                    {t('Purchase Price')}
+                    <span
+                      class="ms sort-icon"
+                      class:sort-icon--idle={sortColumn !== 'buy_price'}
+                      aria-hidden="true">
+                      {sortColumn === 'buy_price'
+                        ? sortDirection === 'asc'
+                          ? 'arrow_upward'
+                          : 'arrow_downward'
+                        : 'swap_vert'}
+                    </span>
+                  </button>
+                </th>
+
+                <th class="col-start" aria-sort={sortAria.sell_price}>
+                  <button
+                    type="button"
+                    class="th-sort th-sort--price"
+                    on:click={() => setSort('sell_price')}>
+                    {t('Selling Price')}
+                    <span
+                      class="ms sort-icon"
+                      class:sort-icon--idle={sortColumn !== 'sell_price'}
+                      aria-hidden="true">
+                      {sortColumn === 'sell_price'
+                        ? sortDirection === 'asc'
+                          ? 'arrow_upward'
+                          : 'arrow_downward'
+                        : 'swap_vert'}
+                    </span>
+                  </button>
                 </th>
 
                 {#if _translate_org_type === 'exchange'}
-                  <th class="cursor-pointer" on:click={() => setSort('currency')}>
-                    <span class="sortable-heading">
+                  <th aria-sort={sortAria.currency}>
+                    <button type="button" class="th-sort" on:click={() => setSort('currency')}>
                       {t('Currency')}
-
-                      {#if sortColumn === 'currency'}
-                        <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                      {/if}
-                    </span>
+                      <span
+                        class="ms sort-icon"
+                        class:sort-icon--idle={sortColumn !== 'currency'}
+                        aria-hidden="true">
+                        {sortColumn === 'currency'
+                          ? sortDirection === 'asc'
+                            ? 'arrow_upward'
+                            : 'arrow_downward'
+                          : 'swap_vert'}
+                      </span>
+                    </button>
                   </th>
                 {/if}
 
-                {#if enable_expiry_date}
-                  <th>{t('Expiry Date')}</th>
-                {/if}
-
-                <th class="col-end">{t('Purchase Price')}</th>
-                <th class="col-end">{t('Selling Price')}</th>
-                <th class="col-end">{t('Inventory Value')}</th>
-
-                {#if filterStatus === 'all' || filterStatus === 'archived'}
-                  <th>{t('Status')}</th>
-                {/if}
-
+                <th class="col-start" aria-sort={sortAria.stock_value}>
+                  <button type="button" class="th-sort" on:click={() => setSort('stock_value')}>
+                    {t('Inventory Value')}
+                    <span
+                      class="ms sort-icon"
+                      class:sort-icon--idle={sortColumn !== 'stock_value'}
+                      aria-hidden="true">
+                      {sortColumn === 'stock_value'
+                        ? sortDirection === 'asc'
+                          ? 'arrow_upward'
+                          : 'arrow_downward'
+                        : 'swap_vert'}
+                    </span>
+                  </button>
+                </th>
                 <th class="col-end">{t('Actions')}</th>
               </tr>
             </svelte:fragment>
 
-            {#each paginatedProducts as product, index (product.id)}
-              <tr class:service-row={product.type === 'service'}>
-              <td class="col-start cell-muted">{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                <!-- Product -->
-                <td class="product-column">
-                  <div class="product-info">
-                    <StatusBadge tone="neutral" ghost>
-                      <button
-                        type="button"
-                        class="product-name-btn"
-                        title={product.name}
-                        on:click={() => push(`/dashboard/product/${product.id}`)}>
-                        {product.name}
-                      </button>
-                    </StatusBadge>
-
-                    
-                  </div>
-                </td>
-
-                <!-- Category -->
+            {#each paginatedProducts as product (product.id)}
+              {@const category = getCategoryName(product.category_id)}
+              {@const brand = brandLabel(product)}
+              {@const unit = getUnitName(product.product_unit_id)}
+              {@const unitParts = getProductUnitParts(product)}
+              {@const stockExpanded = expandedStockRows.has(product.id)}
+              {@const warehouse = warehouseLabel(product)}
+              <tr
+                class="product-row"
+                class:is-archived={product.product_status === 'archived'}>
                 <td>
-                  <StatusBadge tone="neutral" ghost>
-                    {getCategoryName(product.category_id)}
-                  </StatusBadge>
-                </td>
-
-                <!-- Quantity -->
-                <td class="col-end">
                   <button
                     type="button"
-                    class="quantity-cell"
-                    title={t('Show unit details')}
-                    on:click|stopPropagation={() => toggleUnitParts(product)}>
-                    {#if expandedUnitKey === String(product.id) && getProductUnitParts(product).length}
-                      <span class="unit-parts">
-                        {#each getProductUnitParts(product) as part, partIndex}
-                          {#if partIndex > 0}
-                            <span class="unit-parts-plus">+</span>
-                          {/if}
-                          <StatusBadge tone={Number(part.quantity) > 0 ? 'positive' : 'negative'}>
-                            <span dir="ltr">{formatQty(Number(part.quantity))}</span>
-                            <span>{part.unit_name}</span>
-                          </StatusBadge>
-                        {/each}
-                      </span>
-                    {:else}
-                      <StatusBadge
-                        tone={getStockTone(Number(product.quantity || 0), Number(product.alarm_quantity || 0))}>
-                        <span dir="ltr">{formatQty(Number(product.quantity || 0))}</span>
-                        <span>{getUnitName(product.product_unit_id)}</span>
-                      </StatusBadge>
-                    {/if}
+                    class="product-cell"
+                    title={`${product.name}${category && category !== '-' ? ` · ${category}` : ''}`}
+                    on:click={() => push(`/dashboard/product/${product.id}`)}>
+                    <span class="product-cell__body">
+                      <span class="product-cell__name">{product.name}</span>
+                      {#if (category && category !== '-') || brand}
+                        <span class="product-cell__sub">
+                          {[category !== '-' ? category : '', brand]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      {/if}
+                    </span>
                   </button>
                 </td>
 
-                <!-- Currency -->
+                <td class="col-start">
+                  <span class="warehouse-cell" title={warehouse || t('Warehouse')}>
+                    {#if warehouse}
+                      <span class="ms warehouse-cell__icon" aria-hidden="true">warehouse</span>
+                    {/if}
+                    <span class="warehouse-cell__name">{warehouse || '-'}</span>
+                  </span>
+                </td>
+
+                <td class="col-start">
+                  <div class="stock-cell-wrap">
+                    <div class="stock-cell">
+                      <button
+                        type="button"
+                        class="stock-qty"
+                        class:stock-qty--available={toNumber(product.quantity) > 0}
+                        class:stock-qty--unavailable={toNumber(product.quantity) <= 0}
+                        class:is-expanded={stockExpanded}
+                        aria-expanded={stockExpanded}
+                        disabled={unitParts.length < 2}
+                        title={`${formatQty(product.quantity)} ${unit}`}
+                        on:click={() => toggleStockBreakdown(product.id)}>
+                        {#if stockExpanded}
+                          <span class="stock-qty__expand-mark" aria-hidden="true">+</span>
+                          <span class="stock-qty__parts">
+                            {#each unitParts as part}
+                              <span>{formatQty(part.quantity)} {part.unit_name}</span>
+                            {/each}
+                          </span>
+                        {:else}
+                          {formatQty(product.quantity)}{#if unit} {unit}{/if}
+                        {/if}
+                      </button>
+                    </div>
+                  </div>
+                </td>
+
+                <td class="col-start">
+                  <span
+                    class="amount amount--buy"
+                    dir="ltr"
+                    title={`${amountText(product.buy_price)} ${currencySymbol(product.buy_currency)}`}>
+                    <span class="amount__cur">{currencySymbol(product.buy_currency)}</span>{amountText(product.buy_price)}
+                  </span>
+                </td>
+
+                <td class="col-start">
+                  <span
+                    class="amount amount--sell"
+                    dir="ltr"
+                    title={`${amountText(product.sell_price)} ${currencySymbol(product.sell_currency)}`}>
+                    <span class="amount__cur">{currencySymbol(product.sell_currency)}</span>{amountText(product.sell_price)}
+                  </span>
+                </td>
+
                 {#if _translate_org_type === 'exchange'}
                   <td>
-                    <StatusBadge tone="info">
-                      {t(product.currency || '')}
-                    </StatusBadge>
+                    <span
+                      class="currency-pill"
+                      title={t(product.currency || '')}>
+                      {currencySymbol(product.currency) || '—'}
+                    </span>
                   </td>
                 {/if}
 
-                <!-- Expiry date -->
-                {#if enable_expiry_date}
-                  <td>
-                    <StatusBadge tone={getExpiryTone(product.expiry_date)} ltr={true} ghost>
-                      {product.expiry_date || '–'}
-                    </StatusBadge>
-                  </td>
-                {/if}
-
-                <!-- Purchase price -->
-                <td class="col-end">
-                  <StatusBadge tone="info">
-                    <span dir="ltr">
-                      {Number(product.buy_price || 0).toLocaleString(undefined, {
-                        maximumFractionDigits: 3,
-                      })}
+                <td class="col-start">
+                  {#if toNumber(product.quantity) > 0}
+                    <span
+                      class="amount amount--value"
+                      dir="ltr"
+                      title={`${amountText(toNumber(product.buy_price) * toNumber(product.quantity))} ${currencySymbol(product.buy_currency)}`}>
+                      <span class="amount__cur">{currencySymbol(product.buy_currency)}</span>{amountText(toNumber(product.buy_price) * toNumber(product.quantity))}
                     </span>
-                    <span>{t(product.buy_currency)}</span>
-                  </StatusBadge>
-                </td>
-
-                <!-- Selling price -->
-                <td class="col-end">
-                  <StatusBadge tone="positive">
-                    <span dir="ltr">
-                      {Number(product.sell_price || 0).toLocaleString(undefined, {
-                        maximumFractionDigits: 3,
-                      })}
-                    </span>
-                    <span>{t(product.sell_currency)}</span>
-                  </StatusBadge>
-                </td>
-
-                <!-- Inventory Value (purchase_price * quantity) -->
-                <td class="col-end">
-                  {#if product}
-                    {#if getProductQty(product) !== undefined}
-                      <StatusBadge tone={(toNumber(product.buy_price) * getProductQty(product)) < 0 ? 'negative' : 'positive'}>
-                        <span dir="ltr">
-                          {Number((toNumber(product.buy_price) * getProductQty(product)) || 0).toLocaleString(undefined, {
-                            maximumFractionDigits: 3,
-                            minimumFractionDigits: 2,
-                          })}
-                        </span>
-                        {#if product?.buy_currency}<span>{t(product.buy_currency)}</span>{/if}
-                      </StatusBadge>
-                    {:else}
-                      <span class="muted-dash">–</span>
-                    {/if}
                   {:else}
-                    <span class="muted-dash">–</span>
+                    <span class="amount-empty">-</span>
                   {/if}
                 </td>
 
-                <!-- Status -->
-                {#if filterStatus === 'all' || filterStatus === 'archived'}
-                  <td>
-                    <div class="status-control">
-                      <StatusBadge tone={product.product_status === 'active' ? 'positive' : 'negative'}>
-                        {productStatusLabel(product.product_status)}
-                      </StatusBadge>
-
-                      <ActionButton
-                        variant="icon"
-                        tone="muted"
-                        icon="bi-{product.product_status === 'active' ? 'archive' : 'box-arrow-in-up'}"
-                        title={t('Change status')}
-                        on:click={() =>
-                          changeProductStatus(
-                            product.id,
-                            product.product_status === 'active' ? 'archived' : 'active',
-                          )} />
-                    </div>
-                  </td>
-                {/if}
-
-                <!-- Actions -->
-                <td>
+                <td class="col-end">
                   <TableActions
-                    actions={[
-                      {
-                        icon: 'bi-eye',
-                        label: t('View'),
-                        tone: 'view',
-                        onClick: () => push(`/dashboard/product/${product.id}`),
-                      },
-                      ...(permissions?.some((p) => p.code === 'Products' && p.edit)
-                        ? [
-                            {
-                              icon: 'bi-pencil',
-                              label: t('Edit'),
-                              tone: 'edit',
-                              onClick: () => editExistingProduct(product),
-                            },
-                          ]
-                        : []),
-                      {
-                        icon: product.product_status === 'active' ? 'bi-archive' : 'bi-box-arrow-in-up',
-                        label: product.product_status === 'active' ? t('Archive') : t('Unarchive'),
-                        tone: 'muted',
-                        onClick: () =>
-                          changeProductStatus(product.id, product.product_status === 'active' ? 'archived' : 'active'),
-                      },
-                    ]} />
+                    material={true}
+                    menuTitle={product.name}
+                    actions={productActions(product)} />
                 </td>
               </tr>
             {/each}
@@ -1185,8 +1501,12 @@ import { saleItemApi } from '../../api/saleItemApi.js';
         {totalPages}
         {itemsPerPage}
         {totalItems}
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        perPageOptions={[15, 30, 50, 100]}
         ariaLabel={t('Products pagination')}
-        rowLabel={t('rows')}
+        rowLabel={t('Product')}
+        perPageRowLabel={t('rows')}
         on:perPageChange={(e) => {
           itemsPerPage = Number(e.detail);
           currentPage = 1;
@@ -1194,6 +1514,7 @@ import { saleItemApi } from '../../api/saleItemApi.js';
         {getPageNumbers} />
     </svelte:fragment>
   </IndexPageLayout>
+  </div>
 {/if}
 
 <!-- =====================================================================
@@ -1216,110 +1537,773 @@ import { saleItemApi } from '../../api/saleItemApi.js';
   .permission-denied {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin: 1rem;
-    color: #dc2626;
-    font-size: 1rem;
-  }
-
-  .cursor-pointer {
-    cursor: pointer;
-  }
-
-  .sortable-heading {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3125rem;
-  }
-
-  .sort-icon {
-    color: #0f6efd;
-    font-size: 0.75rem;
-  }
-
-  .product-column {
-    max-width: 16rem;
-  }
-
-  .product-info {
-    display: grid;
-    min-width: 0;
-    gap: 0.125rem;
-    text-align: start;
-  }
-
-  .product-name-btn {
-    display: block;
-    overflow: hidden;
-    width: 100%;
-    max-width: 100%;
-    padding: 0;
-    border: 0;
-    outline: none;
-    background: transparent;
-    color: #172033;
-    font-family: inherit;
-    font-size: 0.75rem;
+    gap: 8px;
+    margin: 16px;
+    color: var(--z-debit, #dc2626);
+    font-size: 14px;
     font-weight: 700;
+  }
+
+  .products-page {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /*
+   * The reference puts the sub-navigation/action row and the KPI row on the
+   * page surface and the toolbar, table and pager inside one 14px sheet, so the
+   * shared panel is unwrapped here and its children are re-ordered to that stack.
+   */
+  .products-page :global(.index-panel) {
+    gap: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .products-page :global(.index-statistics) {
+    order: -1;
+    flex: 0 0 auto;
+    padding: 0;
+    margin-bottom: 12px;
+    border: 0;
+    background: transparent;
+  }
+
+  .products-page :global(.index-toolbar) {
+    order: 0;
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    border-radius: var(--z-r-xl, 14px) var(--z-r-xl, 14px) 0 0;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+  .products-page :global(.index-toolbar-main) {
+    gap: 8px;
+  }
+
+  .products-page :global(.index-toolbar-main .filter-toolbar-row) {
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  /*
+   * Reference header/row hairlines: a surface-2 header over border-soft rows.
+   * The shared tokens already hold those two colours, so the page only wraps
+   * the table in the sheet's side borders.
+   */
+  .products-page :global(.index-content) {
+    order: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    border-inline: 1px solid var(--z-border, #e1e7f0);
+    background: var(--z-surface, #ffffff);
+  }
+
+
+  .products-page :global(.products-index-content .data-table-wrap) {
+    border: 0;
+  }
+
+  .products-page :global(.index-footer) {
+    order: 2;
+    flex: 0 0 auto;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-top: 1px solid var(--z-border-soft, #eef2f7);
+    border-radius: 0 0 var(--z-r-xl, 14px) var(--z-r-xl, 14px);
+    background: var(--z-surface-2, #f8fafc);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+  .products-page :global(.index-footer .pagination-shell) {
+    padding: 10px 16px;
+    border: 0;
+    background: var(--z-surface-2, #f8fafc);
+  }
+
+  /* ---------- sub-navigation + page actions ---------- */
+  .products-head__actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  /* ---------- KPI row (reference `.kcard`) ---------- */
+  .kpi {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .kcard {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    min-height: 72px;
+    padding: 9px 12px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: 12px;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+  .kcard[data-hero='true'] {
+    border-color: var(--z-border-strong, #dce6f8);
+    background: linear-gradient(135deg, var(--z-brand-soft, #e3ecff) 0%, var(--z-surface, #ffffff) 70%);
+  }
+
+  .kcard[data-hero='true']::before {
+    content: '';
+    position: absolute;
+    inset-block: 12px;
+    inset-inline-start: 4px;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--z-brand, #2f6fed);
+  }
+
+  .ktile {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    line-height: 1;
+  }
+
+  .ktile .ms {
+    font-size: 16px;
+  }
+
+  .kcard:nth-child(1) .ktile {
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .kcard:nth-child(2) .ktile {
+    background: var(--z-ok-soft, #dcfce7);
+    color: var(--z-ok, #15803d);
+  }
+
+  .kcard:nth-child(3) .ktile {
+    background: var(--z-brand, #2f6fed);
+    color: #ffffff;
+  }
+
+  .kcard:nth-child(4) .ktile {
+    background: var(--z-warn-soft, #fef3c7);
+    color: var(--z-warn, #92400e);
+  }
+
+  .kbody {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
     line-height: 1.3;
-    text-align: start;
+  }
+
+  .klabel {
+    overflow: hidden;
+    color: var(--z-muted, #64748b);
+    font-size: 11.5px;
+    font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .kval-line {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .kval {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--z-ink, #0b1530);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 17px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .kval--warn {
+    color: var(--z-warn, #92400e);
+  }
+
+  .kunit {
+    flex-shrink: 0;
+    overflow: hidden;
+    color: var(--z-muted, #64748b);
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ksub {
+    overflow: hidden;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Reference card side: the uplift chip and the cost-share bar. */
+  .kside {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: flex-end;
+    align-self: stretch;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .kchip {
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.45;
+    white-space: nowrap;
+  }
+
+  .kchip--ok {
+    background: var(--z-ok-soft, #dcfce7);
+    color: var(--z-ok, #15803d);
+  }
+
+  .kbar {
+    display: block;
+    width: 56px;
+    height: 5px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--z-surface-3, #f1f5f9);
+  }
+
+  .kbar__fill {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+  }
+
+  .kbar__fill--ok {
+    background: #16a34a;
+  }
+
+  /* ---------- status segments inside the filter popup ---------- */
+  .quick-status {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .quick-status__option {
+    width: 100%;
+    height: 28px;
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: var(--z-surface-2, #f8fafc);
+    color: var(--z-muted, #64748b);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      color 0.14s ease,
+      background 0.14s ease,
+      border-color 0.14s ease;
+  }
+
+  .quick-status__option:hover {
+    border-color: var(--z-border, #e1e7f0);
+    color: var(--z-ink, #0b1530);
+  }
+
+  .quick-status__option.is-active {
+    border-color: var(--z-brand-300, #93b7f7);
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+    box-shadow: none;
+  }
+
+  .quick-status__option:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
+  }
+
+  /* ---------- active filter chips ---------- */
+  .active-filters {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    background: var(--z-surface-2, #f8fafc);
+  }
+
+  .active-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding-inline-start: 10px;
+    padding-inline-end: 6px;
+    border: 1px solid var(--z-border-strong, #dce6f8);
+    border-radius: 999px;
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
     cursor: pointer;
   }
 
-  .product-name-btn:hover,
-  .product-name-btn:focus-visible {
-    color: #0f6efd;
+  .active-chip .ms {
+    font-size: 14px;
   }
 
-  .product-info small {
-    display: block;
-    overflow: hidden;
-    max-width: 100%;
-    color: #94a3b8;
-    font-size: 0.71875rem;
-    font-weight: 500;
-    line-height: 1.25;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .active-filters__clear {
+    height: 26px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--z-muted, #64748b);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
   }
 
-  .quantity-cell {
+  .active-filters__clear:hover {
+    color: var(--z-ink, #0b1530);
+  }
+
+  /* ---------- table header ---------- */
+  .th-sort {
     display: inline-flex;
     align-items: center;
-    max-width: 100%;
-    padding: 0;
+    gap: 3px;
+    height: 26px;
+    margin-inline-start: -6px;
+    padding: 0 6px;
     border: 0;
-    outline: none;
+    border-radius: 6px;
     background: transparent;
     color: inherit;
     font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 0.14s ease,
+      color 0.14s ease;
+  }
+
+  .th-sort:hover {
+    color: var(--z-ink, #0b1530);
+  }
+
+  .th-sort .sort-icon {
+    margin: 0;
+    font-size: 14px;
+    opacity: 1;
+  }
+
+  .th-sort .sort-icon--idle {
+    opacity: 0.55;
+  }
+
+  /* ---------- rows ---------- */
+  .product-row {
+    height: auto;
+  }
+
+  .product-row:hover {
+    background: var(--z-hover, #f5f9ff);
+  }
+
+  .product-row.is-archived {
+    opacity: 0.6;
+  }
+
+  .cell-empty {
+    color: var(--z-subtle, #94a3b8);
+    font-weight: 600;
+  }
+
+  /* ---------- warehouse column ---------- */
+  .warehouse-cell {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    color: var(--z-text, #475569);
+  }
+
+  .warehouse-cell__icon {
+    flex-shrink: 0;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 15px;
+  }
+
+  .warehouse-cell__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ---------- stock cell: status chip, quantity, level bar ---------- */
+  .stock-cell-wrap {
+    min-width: 0;
+  }
+
+  .stock-cell {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .stock-qty {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 12px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     cursor: pointer;
   }
 
-  .unit-parts {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.25rem;
+  .stock-qty:disabled {
+    cursor: default;
   }
 
-  .unit-parts-plus {
-    color: #64748b;
-    font-size: 0.72rem;
+  .stock-qty.is-expanded {
+    align-items: flex-start;
+    overflow: visible;
+    text-align: start;
+    white-space: normal;
+  }
+
+  .stock-qty__expand-mark {
+    flex: 0 0 auto;
+    color: var(--z-link, #2f6fed);
+    font-size: 15px;
+    line-height: 1.2;
+  }
+
+  .stock-qty__parts {
+    display: grid;
+    gap: 2px;
+    text-align: start;
+  }
+
+  .stock-qty--available {
+    color: rgb(22, 163, 74);
+  }
+
+  .stock-qty--unavailable {
+    color: rgb(220, 38, 38);
+  }
+
+  /* Reference secondary line under a price or an expiry. */
+  .cell-sub {
+    display: block;
+    margin-top: 2px;
+    overflow: hidden;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cell-sub--ink {
+    color: #475569;
+    font-weight: 400;
+  }
+
+  .cell-sub--warn {
+    color: #475569;
+    font-weight: 400;
+  }
+
+  .cell-sub--danger {
+    color: #475569;
+    font-weight: 400;
+  }
+
+  .cell-sub--has-date {
+    color: #b91c1c;
+    font-weight: 400;
+  }
+
+  .product-cell {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .product-cell__body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .product-cell .product-cell__name {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--z-link, #2f6fed);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 12.5px;
+    font-weight: 800;
+    text-align: start;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .product-cell:hover .product-cell__name {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .product-cell__sub {
+    overflow: hidden;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 11px;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .expiry {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    color: #475569;
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .expiry--has-date {
+    color: #b91c1c;
+  }
+
+  .currency-pill {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-text, #475569);
+    font-size: 11.5px;
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
   }
 
-  .status-control {
+  .amount {
     display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
+    align-items: baseline;
+    gap: 3px;
+    max-width: 100%;
+    overflow: hidden;
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .muted-dash {
-    color: #a8b4c2;
+  .amount__cur {
+    flex-shrink: 0;
+    font-size: 12.5px;
+    font-weight: inherit;
+  }
+
+  .amount--buy {
+    color: #fbbf24;
     font-weight: 800;
   }
 
+  .amount--sell {
+    color: #fbbf24;
+    font-weight: 800;
+  }
+
+  .amount--value {
+    color: var(--z-ink, #0b1530);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .amount-empty {
+    color: var(--z-subtle, #94a3b8);
+    font-weight: 600;
+  }
+
+  /* The reference row actions are 30px squares with an 8px radius. */
+  .products-page :global(.table-actions .action-btn) {
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border-radius: 8px;
+  }
+
+  .empty-clear {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--z-border-strong, #dce6f8);
+    border-radius: 9px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-link, #2f6fed);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .empty-clear:hover {
+    background: var(--z-brand-soft, #e3ecff);
+  }
+
+  /* Reference empty state: glyph in a 48px tile. */
+  .products-page :global(.index-table-state .empty-state i) {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-muted, #64748b);
+    font-size: 26px;
+  }
+
+  .products-page :global(.index-table-state .empty-state p) {
+    color: var(--z-ink, #0b1530);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  @media (max-width: 1100px) {
+    .kpi {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 900px) {
+    .products-page :global(.index-toolbar-main .filter-toolbar-row) {
+      flex-wrap: wrap;
+    }
+
+    .products-page :global(.filter-tools--grouped) {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    /* Reference mobile KPI: two compact cards, side figures dropped. */
+    .kpi {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .kcard {
+      min-height: 0;
+      padding: 8px 10px;
+      gap: 8px;
+    }
+
+    .ktile {
+      flex-basis: 28px;
+      width: 28px;
+      height: 28px;
+    }
+
+    .ktile .ms {
+      font-size: 14px;
+    }
+
+    .kval {
+      font-size: 15px;
+    }
+
+    .products-head__actions {
+      flex-wrap: wrap;
+      width: 100%;
+    }
+
+    .active-filters {
+      padding-inline: 10px;
+    }
+
+    .quick-status__option {
+      padding: 0 9px;
+    }
+  }
 </style>

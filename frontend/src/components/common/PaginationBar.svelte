@@ -19,6 +19,11 @@
   export let countLabel = null;
   /** Visible row label and accessible option unit; falls back to perPageSuffix. */
   export let rowLabel = '';
+  /**
+   * Word before the page-size options. The reference pager counts bills
+   * («… از 53 بل») but labels the size group «ردیف», so the two differ.
+   */
+  export let perPageRowLabel = null;
   /** Optional reference-style range: "Showing 1–15 of 53 rows". */
   export let rangeStart = null;
   export let rangeEnd = null;
@@ -32,7 +37,10 @@
   $: resolvedCountLabel = ($lang, countLabel ?? t('record') ?? 'تعداد');
   $: resolvedPerPageLabel = ($lang, perPageLabel ?? t('Showing') ?? 'نمایش');
   $: resolvedRowLabel = ($lang, rowLabel || t('rows') || perPageSuffix);
+  $: visibleRowLabel = ($lang, perPageRowLabel || resolvedRowLabel);
   $: optionUnit = resolvedRowLabel;
+  /* The page-size options count rows, which the reference names separately. */
+  $: sizeUnit = visibleRowLabel;
 </script>
 
 <div class="pagination-shell">
@@ -50,14 +58,14 @@
 
     {#if showPerPage}
       <div class="per-page-control" role="group" aria-label={resolvedPerPageLabel}>
-        <span class="row-label">{resolvedRowLabel}</span>
+        <span class="row-label">{visibleRowLabel}</span>
         <div class="per-page-options">
           {#each perPageOptions as option (option)}
             <button
               type="button"
               class="per-page-option"
               class:active={Number(itemsPerPage) === Number(option)}
-              aria-label={`${option} ${optionUnit}`}
+              aria-label={`${option} ${sizeUnit}`}
               aria-pressed={Number(itemsPerPage) === Number(option)}
               on:click={() => dispatch('perPageChange', String(option))}>
               {option}
@@ -117,7 +125,8 @@
     gap: 10px 16px;
     padding: 10px 16px;
     border-top: 1px solid var(--z-border-soft, #eef2f7);
-    background: #F8FAFC;
+    /* Token, not a fixed light grey: the pager has to follow dark mode. */
+    background: var(--z-surface-2, #f8fafc);
     min-width: 0;
     border-radius: 0 0 var(--z-r-xl, 14px) var(--z-r-xl, 14px);
   }
@@ -253,6 +262,16 @@
   .pagination-count b {
     color: var(--z-ink, #0b1530);
     font-weight: 800;
+  }
+
+  /*
+   * Dark mode: the global `html.dark [class*='label']` rule inherits the page
+   * text colour, which would paint these two quiet labels as bright as the
+   * figures. Beat it with the scoped selector so the pager keeps its hierarchy.
+   */
+  :global(html.dark) .pagination-count,
+  :global(html.dark) .row-label {
+    color: var(--z-muted, #8a96b8);
   }
 
   .per-page-control {

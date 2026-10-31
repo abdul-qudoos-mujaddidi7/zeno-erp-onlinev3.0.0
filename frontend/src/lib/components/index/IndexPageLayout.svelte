@@ -1,7 +1,7 @@
 <script>
   export let dir = 'ltr';
   export let ariaLabel = '';
-  export let toolbarWidth = '25rem';
+  export let toolbarWidth = '328px';
   export let showStats = false;
   export let showExtra = false;
   export let showFooter = true;
@@ -19,7 +19,13 @@
   dir={dir === 'rtl' ? 'rtl' : 'ltr'}
   aria-label={ariaLabel || undefined}>
   <section class={`index-panel ${panelClass}`.trim()}>
-    {#if $$slots.actions || $$slots.toolbar}
+    {#if $$slots.nav}
+      <div class="index-nav">
+        <slot name="nav" />
+      </div>
+    {/if}
+
+    {#if $$slots.actions || $$slots.toolbar || (showExtra && $$slots.extra)}
       <header class="index-toolbar" style={`--index-toolbar-width: ${toolbarWidth};`}>
         <div class="index-toolbar-main">
           <slot name="toolbar" />
@@ -27,6 +33,12 @@
 
         <div class="index-toolbar-actions">
           <slot name="actions" />
+
+          {#if showExtra && $$slots.extra}
+            <div class="index-extra-actions">
+              <slot name="extra" />
+            </div>
+          {/if}
         </div>
       </header>
     {/if}
@@ -34,12 +46,6 @@
     {#if showStats && $$slots.stats}
       <section class="index-statistics">
         <slot name="stats" />
-      </section>
-    {/if}
-
-    {#if showExtra && $$slots.extra}
-      <section class="index-extra-actions">
-        <slot name="extra" />
       </section>
     {/if}
 
@@ -146,6 +152,28 @@
     min-width: 0;
   }
 
+  /*
+   * Page actions share the search/filter row instead of taking a band of their
+   * own above it: `extra` is just another group at the end of that row.
+   */
+  .index-extra-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  /* Sub-navigation (tabs) that belongs above the whole sheet. */
+  .index-nav {
+    display: flex;
+    align-items: center;
+    order: -2;
+    flex: 0 0 auto;
+    gap: 8px;
+    min-width: 0;
+  }
+
   .index-toolbar-actions :global(.action-btn) {
     display: inline-flex;
     align-items: center;
@@ -217,17 +245,37 @@
     gap: 6px;
   }
 
+  /*
+   * One toolbar size on every index page, taken from the Accounts sheet: a 30px
+   * search box with an 8px radius and 16px icon at 328px, beside a
+   * 28px filter trigger. Pages position these controls, never resize them.
+   */
   .index-toolbar-main :global(.filter-search) {
-    flex: 0 1 auto;
-    max-width: var(--index-toolbar-width, 25rem);
+    flex: 0 1 328px;
+    width: 328px;
+    max-width: 100%;
     height: var(--index-toolbar-control-height);
     min-height: var(--index-toolbar-control-height);
     margin: 0;
+    padding: 0 8px;
+    border-radius: var(--z-r-sm, 8px);
+    background: var(--z-surface-2, #f8fafc);
+  }
+
+  .index-toolbar-main :global(.filter-search__icon) {
+    font-size: 16px;
   }
 
   .index-toolbar-main :global(.filter-search__input) {
     height: 100%;
     min-height: 0;
+    font-size: 12px;
+  }
+
+  .index-toolbar-main :global(.filter-toggle) {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 9px;
   }
 
   .index-statistics {
@@ -247,17 +295,6 @@
 
   .index-statistics :global(.summary-card) {
     min-height: 0;
-  }
-
-  .index-extra-actions {
-    position: relative;
-    z-index: 10;
-    display: flex;
-    flex: 0 0 auto;
-    justify-content: flex-end;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
-    background: var(--z-surface-2, #f8fafc);
   }
 
   .index-content {
@@ -365,13 +402,13 @@
     min-height: auto;
     padding: 10px 16px;
     border: 0;
-    background: #F8FAFC;
+    /* Token, not a fixed light grey: the pager has to follow dark mode. */
+    background: var(--z-surface-2, #f8fafc);
   }
 
   @media (max-width: 1199.98px) {
     .index-toolbar,
-    .index-statistics,
-    .index-extra-actions {
+    .index-statistics {
       padding-inline: 10px;
     }
 
@@ -382,8 +419,7 @@
       padding-inline: 8px;
     }
 
-    .index-statistics,
-    .index-extra-actions {
+    .index-statistics {
       padding-inline: 8px;
     }
 
@@ -419,8 +455,8 @@
     }
 
     .index-toolbar-main :global(.filter-search) {
-      width: 100%;
-      max-width: none;
+      width: 328px;
+      max-width: 100%;
       min-width: 0;
     }
 
@@ -432,6 +468,11 @@
 
     .index-toolbar-actions :global(.action-btn) {
       flex: 1 1 auto;
+    }
+
+    .index-extra-actions {
+      flex-wrap: wrap;
+      width: 100%;
     }
 
     .index-statistics {

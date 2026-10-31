@@ -255,7 +255,6 @@ import { userImageApi } from '../../api/userImageApi.js';
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('User Management')}
-  toolbarWidth="25rem"
   showStats={showSummaryCards}
   showFooter={!loading && totalItems > 0}
   dense={true}

@@ -275,7 +275,7 @@
   }
 
   .system-settings-content :global(.table > thead > tr > th) {
-    padding: 12px 14px;
+    padding: 12px 8px;
     border-bottom: 1px solid #dfe5ed;
     background: #f8fafc;
     color: #64748b;
@@ -307,7 +307,7 @@
 
   .system-settings-content :global(.settings-index-table > thead > tr > th) {
     height: 3rem;
-    padding: .625rem .875rem;
+    padding: .625rem .5rem;
     border-bottom: 1px solid #dfe5ed;
     background: #fff;
     color: #66758a;
@@ -376,7 +376,7 @@
   .system-settings-content :global(.data-table > thead > tr > th),
   .system-settings-content :global(.table:not(.settings-index-table) > thead > tr > th) {
     height: 3rem;
-    padding: .625rem .875rem;
+    padding: .625rem .5rem;
     border-bottom: 1px solid #dfe5ed;
     background: #fff;
     color: #66758a;

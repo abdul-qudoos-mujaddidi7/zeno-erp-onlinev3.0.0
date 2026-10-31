@@ -333,7 +333,7 @@
   onMount(async () => { try { await loadReferences(); await loadList(); } catch (cause) { error = cause.message; loading = false; } });
 </script>
 
-<IndexPageLayout ariaLabel={t('Stock adjustments')} toolbarWidth="36rem" showStats={view === 'history'} showFooter={false} dense={true} contained={view === 'history'} contentClass="stock-adjustments-content" tablePadding={true}>
+<IndexPageLayout ariaLabel={t('Stock adjustments')} showStats={view === 'history'} showFooter={false} dense={true} contained={view === 'history'} contentClass="stock-adjustments-content" tablePadding={true}>
   <svelte:fragment slot="actions">
     {#if view === 'history'}
       <ActionButton icon="bi-plus-lg" label={t('New adjustment')} on:click={openNewAdjustment} />

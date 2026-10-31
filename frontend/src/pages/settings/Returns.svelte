@@ -207,7 +207,6 @@
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('Returns')}
-  toolbarWidth="25rem"
   showStats={showReturnStats}
   showFooter={!loading && paginatedReturns.length > 0}
   dense={true}

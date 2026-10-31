@@ -225,7 +225,6 @@
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('Documents')}
-  toolbarWidth="25rem"
   showFooter={!loading && filteredDocuments.length > 0}
   dense={true}
   tablePadding={true}>

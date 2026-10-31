@@ -14,10 +14,18 @@
   export let showFilterText = false;
   /** Draw shared toolbar controls with the Journal Material Symbols icons. */
   export let material = true;
+  /**
+   * Badge count override. A page whose reference counts a date RANGE as one
+   * applied filter passes that number so the badge matches its chip row.
+   *
+   * @type {number | null}
+   */
+  export let activeCount = null;
 
   const dispatch = createEventDispatcher();
 
-  let filtersOpen = false;
+  /** Open state of the filter popup; bindable so a page can close it on choice. */
+  export let filtersOpen = false;
   let filterTriggerEl;
   let filterPanelEl;
   let filterPanelStyle = '';
@@ -32,6 +40,8 @@
       ? filter.value.length > 0
       : !['', 'all', null, undefined].includes(filter.value),
   ).length;
+
+  $: resolvedActiveCount = activeCount ?? activeFilterCount;
 
   function portal(node) {
     document.body.appendChild(node);
@@ -170,7 +180,7 @@
           type="button"
           class="filter-toggle"
           class:filter-toggle--action={showFilterText}
-          class:filter-toggle--active={filtersOpen || activeFilterCount > 0}
+          class:filter-toggle--active={filtersOpen || resolvedActiveCount > 0}
           aria-label={filterLabel}
           aria-expanded={filtersOpen}
           aria-controls={panelId}
@@ -184,8 +194,8 @@
             <i class="bi bi-sliders2" aria-hidden="true"></i>
           {/if}
 
-          {#if activeFilterCount > 0 && !showFilterText}
-            <span class="filter-toggle__count">{activeFilterCount}</span>
+          {#if resolvedActiveCount > 0 && !showFilterText}
+            <span class="filter-toggle__count">{resolvedActiveCount}</span>
           {/if}
         </button>
 
@@ -207,12 +217,18 @@
                 <button
                   type="button"
                   class="filter-panel__reset"
-                  disabled={activeFilterCount === 0}
+                  disabled={resolvedActiveCount === 0}
                   on:click={handleReset}>{resetLabel}</button>
               {/if}
             </header>
 
             <div class="filter-panel__body">
+              {#if $$slots.panelBeforeFields}
+                <div class="filter-panel__quick">
+                  <slot name="panelBeforeFields" />
+                </div>
+              {/if}
+
               <div class="filter-panel__fields">
                 {#each visibleFilters as filter (filter.key)}
                   <div class="filter-field">
@@ -287,8 +303,8 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    flex: 0 1 auto;
-    width: 220px;
+    flex: 0 1 328px;
+    width: 328px;
     max-width: 100%;
     height: var(--index-toolbar-control-height, 30px);
     min-height: var(--index-toolbar-control-height, 30px);
@@ -390,13 +406,7 @@
     background: var(--z-surface-3, #f1f5f9);
   }
 
-  .filter-tools--grouped .filter-toggle {
-    height: 28px;
-    min-height: 28px;
-    padding: 0 9px;
-  }
-
-  /* Filter trigger — its own 30px button with an active-count badge */
+  /* Filter trigger — 28px on every page, with an active-count badge */
 
   .filter-control {
     position: relative;
@@ -411,10 +421,10 @@
     justify-content: center;
     gap: 5px;
     width: auto;
-    height: var(--index-toolbar-control-height, 30px);
+    height: 28px;
     min-width: 32px;
-    min-height: var(--index-toolbar-control-height, 30px);
-    padding: 0 10px;
+    min-height: 28px;
+    padding: 0 9px;
     border: 1px solid #ccd6f0;
     border-radius: var(--z-r-sm, 8px);
     background: #e4e9f7;
@@ -612,6 +622,13 @@
     gap: 9px 8px;
   }
 
+  /* Quick choices a page offers above its filter fields, separated by a hairline */
+  .filter-panel__quick {
+    margin-bottom: 9px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+  }
+
   .filter-field {
     position: relative;
     min-width: 0;
@@ -700,12 +717,6 @@
   }
 
   @media (max-width: 767.98px) {
-    .filter-search {
-      flex: 1 1 160px;
-      width: auto;
-      min-width: 0;
-    }
-
     .filter-panel {
       width: min(300px, calc(100vw - 1.5rem));
       max-width: none;

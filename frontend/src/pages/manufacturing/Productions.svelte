@@ -303,7 +303,6 @@
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('Productions')}
-  toolbarWidth="25rem"
   showFooter={!loading && filteredProductions.length > 0}
   dense={true}
   contentClass="productions-index-content"

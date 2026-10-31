@@ -68,7 +68,6 @@
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('Product Brands')}
-  toolbarWidth="25rem"
   showFooter={false}
   dense={true}
   contained={true}

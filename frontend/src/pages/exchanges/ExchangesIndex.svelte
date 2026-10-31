@@ -438,7 +438,6 @@
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('Exchanges')}
-  toolbarWidth="25rem"
   showFooter={!loading && filteredExchanges.length > 0}
   dense={true}
   tablePadding={true}>

@@ -27,12 +27,16 @@
     'bi-box2': 'visibility',
     'bi-truck': 'visibility',
     'bi-currency-exchange': 'currency_exchange',
+    'bi-wallet2': 'payments',
     'bi-pencil': 'edit',
     'bi-trash': 'delete',
     'bi-printer': 'print',
     'bi-journal-text': 'menu_book',
+    'bi-wallet2': 'payments',
     'bi-archive': 'archive',
     'bi-box-arrow-in-up': 'unarchive',
+    'bi-building': 'warehouse',
+    'bi-clock-history': 'history',
   };
   /** @param {string} icon */
   const materialMenuIcon = (icon) => MATERIAL_MENU_ICONS[icon] || '';

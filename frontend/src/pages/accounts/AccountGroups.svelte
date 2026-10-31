@@ -46,7 +46,6 @@
 <IndexPageLayout
     dir={t("dir")}
     ariaLabel={t("Account Groups")}
-    toolbarWidth="25rem"
     showFooter={false}
     dense={true}
     contained={true}

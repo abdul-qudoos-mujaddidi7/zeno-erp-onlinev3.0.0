@@ -1,6 +1,8 @@
 <script>
   export let icon = 'bi-inbox';
   export let message = '';
+  /** Second, quieter line under the message (the reference empty card has one). */
+  export let description = '';
   export let loading = false;
 </script>
 
@@ -14,6 +16,9 @@
   {/if}
   {#if message}
     <p>{message}</p>
+  {/if}
+  {#if description}
+    <p class="empty-state-description">{description}</p>
   {/if}
   {#if $$slots.default}
     <div class="empty-state-action">
@@ -45,6 +50,14 @@
     max-width: 28rem;
     font-size: var(--z-fs-base, 12.5px);
     font-weight: 600;
+    line-height: 1.45;
+  }
+
+  .empty-state-description {
+    margin: 0;
+    max-width: 28rem;
+    font-size: 12px;
+    font-weight: 400;
     line-height: 1.45;
   }
 

@@ -826,7 +826,6 @@
 <IndexPageLayout
     dir={t("dir")}
     ariaLabel={t("Currencies")}
-    toolbarWidth="25rem"
     showFooter={!loading && filteredCurrencies.length > 0}
     dense={true}
     contained={true}

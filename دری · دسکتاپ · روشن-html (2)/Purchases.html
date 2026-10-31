@@ -2,14 +2,9 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>خریدها · Zeno</title>
-<script src="./vendor/react.js"></script>
-<script src="./vendor/react-dom.js"></script>
-<script src="./support.js"></script>
-</head>
-<body>
-<x-dc>
-<helmet>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
@@ -180,7 +175,12 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
 @media (max-width:900px){.np-g3{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 @media (max-width:767px){.np-grid{grid-template-columns:minmax(0,1fr)!important}.np-grid>*{grid-column:auto!important}.np-side{grid-template-columns:minmax(0,1fr)!important}.np-page{padding:10px 12px 0!important}.np-bar{margin:0 -12px!important;padding:8px 12px calc(8px + env(safe-area-inset-bottom))!important}.np-st,.np-cancel{display:none!important}.np-bar .btn,.np-bar .btnp{flex:1}.np-toast{bottom:70px!important}}
 </style>
-</helmet>
+
+<style>html,body{margin:0}</style>
+</head>
+<body>
+<div id="dc-root"></div>
+<script type="text/plain" id="dc-template">
 <div dir="rtl" data-lang="fa" class="{{rootClass}}" style="font-family: 'Vazirmatn', 'Noto Sans Arabic', system-ui, sans-serif; color: var(--text); background: var(--bg); height: 100vh; display: flex; overflow: hidden; font-size: 13px; line-height: 1.55">
 
 <!-- ============ SIDEBAR (fixed) ============ -->
@@ -205,17 +205,17 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
 
   <nav class="scroll" style="flex: 1; overflow-y: auto; padding: 2px 12px 10px; display: flex; flex-direction: column; gap: 1px">
     <div class="sec">اصلی</div>
-    <a href="Main.dc.html" class="nav" title="داشبورد"><span class="ms">space_dashboard</span><span class="lbl">داشبورد</span></a>
+    <a href="Main.html" class="nav" title="داشبورد"><span class="ms">space_dashboard</span><span class="lbl">داشبورد</span></a>
 
     <div class="sec">تجارت</div>
-    <a href="Sales.dc.html" class="nav" title="فروش‌ها"><span class="ms">shopping_cart</span><span class="lbl">فروش‌ها</span><span class="badge" title="پیش‌نویس‌ها">2</span></a>
-    <a href="Purchases.dc.html" class="nav on" aria-current="page" title="خریدها"><span class="ms">shopping_bag</span><span class="lbl">خریدها</span><span class="badge" title="پیش‌نویس‌ها">1</span></a>
-    <a href="Products.dc.html" class="nav" title="{{prodLabel}}"><span class="ms">{{prodIcon}}</span><span class="lbl">{{prodLabel}}</span></a>
+    <a href="Sales.html" class="nav" title="فروش‌ها"><span class="ms">shopping_cart</span><span class="lbl">فروش‌ها</span><span class="badge" title="پیش‌نویس‌ها">2</span></a>
+    <a href="Purchases.html" class="nav on" aria-current="page" title="خریدها"><span class="ms">shopping_bag</span><span class="lbl">خریدها</span><span class="badge" title="پیش‌نویس‌ها">1</span></a>
+    <a href="Products.html" class="nav" title="{{prodLabel}}"><span class="ms">{{prodIcon}}</span><span class="lbl">{{prodLabel}}</span></a>
 
     <div class="sec">مالی</div>
-    <a href="Accounts.dc.html" class="nav" title="حساب‌ها"><span class="ms">group</span><span class="lbl">حساب‌ها</span></a>
-    <a href="Journal.dc.html" class="nav" title="روزنامچه"><span class="ms">menu_book</span><span class="lbl">روزنامچه</span></a>
-    <a href="Exchange.dc.html" class="nav" title="صرافی"><span class="ms">currency_exchange</span><span class="lbl">صرافی</span></a>
+    <a href="Accounts.html" class="nav" title="حساب‌ها"><span class="ms">group</span><span class="lbl">حساب‌ها</span></a>
+    <a href="Journal.html" class="nav" title="روزنامچه"><span class="ms">menu_book</span><span class="lbl">روزنامچه</span></a>
+    <a href="Exchange.html" class="nav" title="صرافی"><span class="ms">currency_exchange</span><span class="lbl">صرافی</span></a>
 
     <div class="sec">مدیریت</div>
     <button class="nav" onClick="{{toggleReports}}" aria-expanded="{{reportsExpanded}}" title="گزارشات">
@@ -224,13 +224,13 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
     </button>
     <sc-if value="{{reportsOpen}}" hint-placeholder-val="{{ false }}">
       <div class="hide-c" style="display: flex; flex-direction: column; padding: 2px 0 4px">
-        <a href="SalesReport.dc.html" class="sub">گزارش فروش</a>
-        <a href="PurchaseReport.dc.html" class="sub">گزارش خرید</a>
-        <a href="ProfitLoss.dc.html" class="sub">مفاد و زیان</a>
-        <a href="StockReport.dc.html" class="sub">گزارش موجودی</a>
+        <a href="SalesReport.html" class="sub">گزارش فروش</a>
+        <a href="PurchaseReport.html" class="sub">گزارش خرید</a>
+        <a href="ProfitLoss.html" class="sub">مفاد و زیان</a>
+        <a href="StockReport.html" class="sub">گزارش موجودی</a>
       </div>
     </sc-if>
-    <a href="Settings.dc.html" class="nav" title="تنظیمات"><span class="ms">settings</span><span class="lbl">تنظیمات</span></a>
+    <a href="Settings.html" class="nav" title="تنظیمات"><span class="ms">settings</span><span class="lbl">تنظیمات</span></a>
   </nav>
 
   <div style="padding: 10px 12px 12px; border-top: 1px solid #1B2A52">
@@ -342,7 +342,7 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
   <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
     <nav aria-label="بخش‌های خرید" style="display: flex; gap: 2px; background: var(--surface-3); border-radius: 10px; padding: 3px; overflow-x: auto; max-width: 100%">
       <a href="#" aria-current="page" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 12.5px; font-weight: 700; box-shadow: 0 1px 3px rgba(11,21,48,.14); white-space: nowrap"><span class="ms" style="font-size: 16px">receipt_long</span>بل‌های خرید</a>
-      <a href="PurchaseReport.dc.html" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap"><span class="ms" style="font-size: 16px">bar_chart_4_bars</span>گزارش خرید</a>
+      <a href="PurchaseReport.html" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap"><span class="ms" style="font-size: 16px">bar_chart_4_bars</span>گزارش خرید</a>
     </nav>
     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
       <div style="position: relative">
@@ -358,7 +358,7 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
         </sc-if>
       </div>
       <a href="#" class="btn" style="display: flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-size: 12.5px; font-weight: 600; color: var(--ink)"><span class="ms" style="font-size: 18px; color: var(--muted)">note_add</span>بل خالی</a>
-      <a href="PurchaseNew.dc.html" class="btnp" style="display: flex; align-items: center; gap: 5px; height: 34px; padding: 0 14px; background: #2F6FED; border-radius: 10px; font-size: 12.5px; font-weight: 700; color: #FFFFFF; box-shadow: 0 8px 18px -8px rgba(47,111,237,.9)"><span class="ms" style="font-size: 18px">add</span>خرید جدید</a>
+      <a href="PurchaseNew.html" class="btnp" style="display: flex; align-items: center; gap: 5px; height: 34px; padding: 0 14px; background: #2F6FED; border-radius: 10px; font-size: 12.5px; font-weight: 700; color: #FFFFFF; box-shadow: 0 8px 18px -8px rgba(47,111,237,.9)"><span class="ms" style="font-size: 18px">add</span>خرید جدید</a>
     </div>
   </div>
 
@@ -666,15 +666,16 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
 
 <!-- Mobile bottom navigation -->
 <nav class="bnav" aria-label="ناوبری پایین">
-  <a href="Main.dc.html" class="bn"><span class="ms" style="font-size: 22px">space_dashboard</span>داشبورد</a>
-  <a href="Sales.dc.html" class="bn"><span class="ms" style="font-size: 22px">shopping_cart</span>فروش‌ها</a>
+  <a href="Main.html" class="bn"><span class="ms" style="font-size: 22px">space_dashboard</span>داشبورد</a>
+  <a href="Sales.html" class="bn"><span class="ms" style="font-size: 22px">shopping_cart</span>فروش‌ها</a>
   <a href="#" aria-label="POS" style="width: 52px; height: 52px; border-radius: 16px; background: #2F6FED; color: #FFFFFF; display: flex; align-items: center; justify-content: center; margin-top: -22px; box-shadow: 0 10px 20px -8px rgba(47,111,237,.8); border: 4px solid var(--surface)"><span class="ms f" style="font-size: 24px">point_of_sale</span></a>
   <a href="#" class="bn"><span class="ms" style="font-size: 22px">inventory_2</span>محصولات</a>
   <button onClick="{{openNav}}" class="bn"><span class="ms" style="font-size: 22px">menu</span>بیشتر</button>
 </nav>
 </div>
-</x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"pharmacy":{"editor":"boolean","default":true},"bigNumbers":{"editor":"boolean","default":false},"longText":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":900}}'>
+
+</script>
+<script type="text/plain" id="dc-logic">
 class Component extends DCLogic {
   constructor(props) {
     super(props);
@@ -1360,7 +1361,7 @@ class Component extends DCLogic {
       toggleTheme: () => this.setState({ dark: !s.dark }),
       themeIcon: s.dark ? 'light_mode' : 'dark_mode',
       themeLabel: s.dark ? 'حالت روشن' : 'حالت تاریک',
-      lnk: { fa: 'Purchases.dc.html', ps: '#', en: '#' },
+      lnk: { fa: 'Purchases.html', ps: '#', en: '#' },
       sbClass: 'sb' + (s.collapsed ? ' sbc' : '') + (s.mobileOpen ? ' open' : ''),
       sbIcon: s.mobileOpen ? 'close' : 'menu_open',
       toggleSb: () => {
@@ -1393,6 +1394,151 @@ class Component extends DCLogic {
       dt = p.weekday + '، ' + p.day + ' ' + p.month + ' ' + p.year; } catch (e) { t = d.toTimeString().slice(0, 5); dt = d.toLocaleDateString(); }
     return Object.assign(o, { clkTime: t, clkDate: dt, clkFull: dt + ' · ' + t }); };
 })();
+</script>
+<script type="application/json" id="dc-props">{"dark": false, "pharmacy": true, "bigNumbers": false, "longText": false}</script>
+<script>
+/* Zeno offline runtime — renders a .dc page (sc-for / sc-if / {{bindings}} + DCLogic component)
+   in a plain browser, with live state, events and DOM patching (keeps focus & scroll). */
+(function () {
+  'use strict';
+  var TPL = document.getElementById('dc-template').textContent;
+  var SRC = document.getElementById('dc-logic').textContent;
+  var PROPS = JSON.parse(document.getElementById('dc-props').textContent || '{}');
+  var root = document.getElementById('dc-root');
+
+  /* ---------- component ---------- */
+  var scheduled = false, comp;
+  function DCLogic(props) { this.props = props || {}; this.state = this.state || {}; }
+  DCLogic.prototype.setState = function (o, cb) {
+    if (typeof o === 'function') o = o(this.state, this.props);
+    if (o) this.state = Object.assign({}, this.state, o);
+    schedule(); if (cb) Promise.resolve().then(cb);
+  };
+  function schedule() { if (scheduled) return; scheduled = true; Promise.resolve().then(function () { scheduled = false; paint(); }); }
+  var Component = new Function('DCLogic', SRC + '\n;return Component;')(DCLogic);
+  comp = new Component(PROPS); if (!comp.props) comp.props = PROPS; if (!comp.state) comp.state = {};
+
+  /* ---------- template rendering ---------- */
+  var handlers = [], hid = 0;
+  function get(ctx, p) {
+    p = p.trim();
+    if (p === 'true') return true; if (p === 'false') return false;
+    if (/^-?\d+(\.\d+)?$/.test(p)) return +p;
+    if (/^'.*'$|^".*"$/.test(p)) return p.slice(1, -1);
+    var parts = p.split('.'), o = ctx;
+    for (var i = 0; i < parts.length; i++) { if (o == null) return undefined; o = o[parts[i]]; }
+    return o;
+  }
+  function esc(v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escA(v) { return esc(v).replace(/"/g, '&quot;'); }
+  var EV = { onClick: 'click', onInput: 'input', onChange: 'change', onKeyDown: 'keydown', onKeyUp: 'keyup', onSubmit: 'submit', onFocus: 'focusin', onBlur: 'focusout', onMouseEnter: 'mouseover', onMouseLeave: 'mouseout', onDblClick: 'dblclick' };
+  var BOOL = { disabled: 1, selected: 1, checked: 1, readonly: 1, hidden: 1, autofocus: 1, autoFocus: 1, multiple: 1, required: 1 };
+  function sub(t, ctx) {
+    return t
+      .replace(/(\s)([\w:-]+)="\{\{([^}]*)\}\}"/g, function (m, sp, a, p) {
+        var v = get(ctx, p);
+        if (EV[a]) {
+          if (typeof v !== 'function') return '';
+          var id = 'h' + (hid++); handlers[id] = v;
+          var ev = EV[a]; return sp + 'data-on-' + ev + '="' + id + '"';
+        }
+        if (a === 'defaultValue') a = 'value';
+        if (a === 'autoFocus') a = 'autofocus';
+        if (BOOL[a]) return v && v !== 'false' ? sp + a : '';
+        if (v == null || v === false && a.indexOf('aria-') !== 0) return a === 'value' ? sp + 'value=""' : '';
+        return sp + a + '="' + escA(v) + '"';
+      })
+      .replace(/\{\{([^}]*)\}\}/g, function (m, p) { var v = get(ctx, p); return v == null || v === false ? '' : esc(v); });
+  }
+  function render(t, ctx) {
+    var out = '', i = 0, re = /<sc-(for|if)\b([^>]*)>/g;
+    while (true) {
+      re.lastIndex = i; var r = re.exec(t);
+      if (!r) { out += sub(t.slice(i), ctx); break; }
+      out += sub(t.slice(i, r.index), ctx);
+      var tag = r[1], depth = 1, re2 = new RegExp('<(/?)sc-' + tag + '\\b[^>]*>', 'g'), e; re2.lastIndex = re.lastIndex;
+      while (depth && (e = re2.exec(t))) depth += e[1] ? -1 : 1;
+      var inner = t.slice(re.lastIndex, e.index); i = re2.lastIndex;
+      var attr = function (n) { var a = r[2].match(new RegExp(n + '="\\{\\{([^}]*)\\}\\}"')); return a ? a[1] : null; };
+      if (tag === 'if') { var cv = get(ctx, attr('value')); if (cv && cv !== 'false') out += render(inner, ctx); }
+      else {
+        var list = get(ctx, attr('list')) || [], as = (r[2].match(/as="(\w+)"/) || [])[1];
+        for (var k = 0; k < list.length; k++) { var c2 = Object.create(ctx); c2[as] = list[k]; out += render(inner, c2); }
+      }
+    }
+    return out;
+  }
+
+  /* ---------- DOM patching (minimal morph) ---------- */
+  function syncAttrs(a, b) {
+    var i, n;
+    for (i = a.attributes.length - 1; i >= 0; i--) { n = a.attributes[i].name; if (!b.hasAttribute(n)) a.removeAttribute(n); }
+    for (i = 0; i < b.attributes.length; i++) { n = b.attributes[i]; if (a.getAttribute(n.name) !== n.value) a.setAttribute(n.name, n.value); }
+    var tg = a.tagName;
+    if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT') {
+      var nv = b.getAttribute('value'); if (nv == null && tg === 'TEXTAREA') nv = b.textContent;
+      if (nv != null && a.value !== nv) a.value = nv;
+      if (tg === 'INPUT' && (a.type === 'checkbox' || a.type === 'radio')) a.checked = b.hasAttribute('checked');
+    }
+  }
+  function same(a, b) { return a.nodeType === b.nodeType && a.nodeName === b.nodeName; }
+  function morph(a, b) {
+    if (a.nodeType === 3 || a.nodeType === 8) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
+    syncAttrs(a, b);
+    if (a.tagName === 'TEXTAREA') return;
+    morphChildren(a, b);
+  }
+  function morphChildren(a, b) {
+    var ac = a.firstChild, bc = b.firstChild;
+    while (bc) {
+      var nb = bc.nextSibling;
+      if (!ac) { a.appendChild(bc); }
+      else if (same(ac, bc)) { morph(ac, bc); ac = ac.nextSibling; }
+      else { var na = ac.nextSibling; a.replaceChild(bc, ac); ac = na; }
+      bc = nb;
+    }
+    while (ac) { var x = ac.nextSibling; a.removeChild(ac); ac = x; }
+  }
+
+  /* ---------- events (delegated, React-like bubbling) ---------- */
+  ['click', 'input', 'change', 'keydown', 'keyup', 'submit', 'focusin', 'focusout', 'mouseover', 'mouseout', 'dblclick'].forEach(function (type) {
+    root.addEventListener(type, function (e) {
+      var el = e.target, stopped = false;
+      while (el && el !== root && !stopped) {
+        var id = el.getAttribute && el.getAttribute('data-on-' + type);
+        if (id && handlers[id]) {
+          if ((type === 'mouseover' || type === 'mouseout') && e.relatedTarget && el.contains(e.relatedTarget)) { el = el.parentElement; continue; }
+          var cur = el;
+          var px = new Proxy(e, { get: function (t, k) {
+            if (k === 'currentTarget') return cur;
+            if (k === 'stopPropagation') return function () { stopped = true; t.stopPropagation(); };
+            var v = t[k]; return typeof v === 'function' ? v.bind(t) : v;
+          } });
+          try { handlers[id](px); } catch (err) { console.error(err); }
+        }
+        el = el.parentElement;
+      }
+    });
+  });
+
+  /* ---------- paint ---------- */
+  var seenAF = new WeakSet();
+  function paint() {
+    handlers = {}; hid = 0;
+    var vals;
+    try { vals = comp.renderVals(); } catch (err) { console.error(err); return; }
+    var html = render(TPL, vals);
+    var tmp = document.createElement('div'); tmp.innerHTML = html;
+    var first = !root.firstChild;
+    morphChildren(root, tmp);
+    var afs = root.querySelectorAll('[autofocus]'), nf = null;
+    for (var i = 0; i < afs.length; i++) { if (!seenAF.has(afs[i])) { seenAF.add(afs[i]); nf = afs[i]; } }
+    if (nf) nf.focus();
+  }
+  paint();
+  window.__dc = { comp: comp, paint: paint };
+})();
+
 </script>
 </body>
 </html>

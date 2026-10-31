@@ -171,6 +171,8 @@ test('validator accepts a comma separated list and defaults to empty', () => {
     journalListQuerySchema.parse({ reference_ids: ' 7 ' }).reference_ids,
     '7',
   );
+  assert.equal(journalListQuerySchema.parse({}).summary_only, 0);
+  assert.equal(journalListQuerySchema.parse({ summary_only: '1' }).summary_only, 1);
 });
 
 test('service turns the CSV into numbers and passes them to the repository', async () => {
@@ -196,4 +198,13 @@ test('service forwards reference ids to the summary query too', async () => {
   await listJournalRows({ reference_ids: '11,22', include_summary: 1 });
 
   assert.deepEqual(state.summaryParams.referenceIds, [11, 22]);
+});
+
+test('summary-only requests skip fetching journal rows', async () => {
+  const result = await listJournalRows({ summary_only: 1 });
+
+  assert.equal(state.listParams, null);
+  assert.equal(state.summaryParams.orgId, ORG_ID);
+  assert.deepEqual(result.data, []);
+  assert.deepEqual(result.summary, {});
 });

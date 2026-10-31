@@ -7,6 +7,11 @@
   export let extraClass = '';
   /** Draw shared export controls with the Journal Material Symbols icons. */
   export let material = true;
+  /**
+   * Show the «دانلود» word beside the glyph. Index toolbars stay icon-only;
+   * a page whose reference labels the button (purchases) opts in.
+   */
+  export let showLabel = false;
 
   const dispatch = createEventDispatcher();
 
@@ -107,7 +112,10 @@
     {:else}
       <i class="bi bi-download"></i>
     {/if}
-    <!-- Icon-only trigger; the label lives in `title` / `aria-label`. -->
+    {#if showLabel}
+      <span class="export-menu__label">{t('Download')}</span>
+    {/if}
+    <!-- Without the label the trigger is icon-only; `title` still names it. -->
     {#if material}
       <span class="ms export-menu__caret" aria-hidden="true">expand_more</span>
     {:else}
@@ -201,6 +209,12 @@
   .action-btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+  }
+
+  .export-menu__label {
+    font-size: var(--z-fs-base, 12px);
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   .export-menu__chevron {

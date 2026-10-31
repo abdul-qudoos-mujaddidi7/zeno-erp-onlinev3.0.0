@@ -131,16 +131,22 @@ async function listJournals({
       Number(filters.exclude_system_accounts) === 1,
     excludeReportAccounts:
       Number(filters.exclude_report_accounts) === 1,
+    excludeControlAccounts:
+      Number(filters.exclude_control_accounts) === 1,
     skipCount: Number(filters.skip_count) === 1,
     includeOpeningBalance:
       Number(filters.include_opening_balance) === 1,
     pagination,
   };
 
-  const includeSummary = Number(filters.include_summary) === 1;
+  const summaryOnly = Number(filters.summary_only) === 1;
+  const includeSummary =
+    summaryOnly || Number(filters.include_summary) === 1;
 
   const [result, summary] = await Promise.all([
-    journalRepository.findAll(db, listParams),
+    summaryOnly
+      ? Promise.resolve({ data: [], meta: null })
+      : journalRepository.findAll(db, listParams),
     includeSummary
       ? journalRepository.findSummary(db, listParams)
       : Promise.resolve(null),

@@ -341,7 +341,6 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   <IndexPageLayout
     dir={t('dir')}
     ariaLabel={t('Warehouse Products')}
-    toolbarWidth="27rem"
     showStats={showWarehouseStats && selectedWarehouseId != null && !loading}
     showExtra={(shiftPressed && ctrlPressed) || calculatingStock}
     showFooter={selectedWarehouseId != null && !loading && filteredProducts.length > 0}

@@ -183,7 +183,6 @@
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('BOMs')}
-  toolbarWidth="25rem"
   showFooter={!loading && filteredBOMs.length > 0}
   dense={true}
   contentClass="boms-index-content"

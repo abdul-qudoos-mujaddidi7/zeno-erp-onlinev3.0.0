@@ -340,7 +340,6 @@
   <IndexPageLayout
     dir={t('dir')}
     ariaLabel={t('Visitor Report')}
-    toolbarWidth="25rem"
     showStats={true}
     showFooter={false}
     dense={true}

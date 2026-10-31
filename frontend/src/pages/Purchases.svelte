@@ -2,29 +2,25 @@
   import { onceAsync } from '../lib/onceAsync.js';
   import { warehouseApi } from '../api/warehouseApi.js';
   import { purchaseApi } from '../api/purchaseApi.js';
+  import { accountApi } from '../api/accountApi.js';
+  import { currencyApi } from '../api/currencyApi.js';
   import { applyCurrentFiscalYearRange } from '../utils/currentFiscalYear.js';
-  import { onMount, tick, onDestroy } from 'svelte';
-  import { showDate, setDatePickers } from '../calendar.js';
+  import { onMount, onDestroy } from 'svelte';
   import { push } from 'svelte-spa-router';
-  import { t, lang, translate_org_type, shortID, settings_all } from '../i18n/i18n';
+  import { t, lang, translate_org_type, settings_all } from '../i18n/i18n';
   import { auth } from '../auth/authStore';
-  import SummaryCard from '../components/common/SummaryCard.svelte';
-  import FilterSelect from '../components/common/FilterSelect.svelte';
   import FilterToolbar from '../components/common/FilterToolbar.svelte';
   import DataTable from '../components/common/DataTable.svelte';
   import ActionButton from '../components/common/ActionButton.svelte';
   import ExportMenu from '../components/common/ExportMenu.svelte';
-  import StatusBadge from '../components/common/StatusBadge.svelte';
   import PaginationBar from '../components/common/PaginationBar.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
   import TableActions from '../components/common/TableActions.svelte';
   import IndexPageLayout from '../lib/components/index/IndexPageLayout.svelte';
-import { accountApi } from '../api/accountApi.js';
-import { currencyApi } from '../api/currencyApi.js';
+  import PurchaseReceiptModal from './purchases/PurchaseReceiptModal.svelte';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../lib/pagination.js';
 
   $: bill_index_prefix = $settings_all.find((s) => s.key === 'bill_index_prefix')?.value || 'B-';
-  $: enable_purchase_bill_due_date = $settings_all.find((s) => s.key === 'enable_purchase_bill_due_date')?.value == 1;
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   $: permissions = $auth.permissions;
@@ -35,7 +31,6 @@ import { currencyApi } from '../api/currencyApi.js';
   let purchases = [];
   let loading = true;
   let exportingReport = false;
-  let showSummaryCards = false;
   let accounts = [];
   let warehouses = [];
   let currencies = [];
@@ -48,12 +43,14 @@ import { currencyApi } from '../api/currencyApi.js';
   let searchDebounceTimer = null;
   let loadRequestId = 0;
   let lookupsLoaded = false;
+  let printPurchase = null;
 
   function getPurchasesQueryKey() {
     return `${currentPage}|${itemsPerPage}|${account_id || ''}|${filterStatus}|${paymentStatus}|${selectedCurrency}|${fromDate}|${toDate}`;
   }
 
   let searchTerm = '';
+  let filtersOpen = false;
   let filterStatus = 'all';
   let paymentStatus = 'all';
   let selectedCurrency = 'all';
@@ -61,54 +58,129 @@ import { currencyApi } from '../api/currencyApi.js';
   let itemsPerPage = DEFAULT_PAGE_SIZE;
   let sortColumn = 'created_at';
   let sortDirection = 'desc';
+  let fromDate = '';
+  let toDate = '';
 
-  let showSupplierDropdown = false;
-  let filtersOpen = false;
-  let searchInputEl;
+  /* ------------------------------------------------------------------ *
+   * Reference formatting                                                *
+   * ------------------------------------------------------------------ */
 
-  function formatValueObj(obj) {
-    if (!obj || Object.keys(obj).length === 0) return '0';
-    return Object.keys(obj)
-      .map(
-        (k) =>
-          `${Number(obj[k]).toLocaleString(undefined, { maximumFractionDigits: 3, minimumFractionDigits: 2 })} ${t(k)}`,
-      )
-      .join('<br />');
+  /* Money reads in hundredths, like every bill the app prints. */
+  const amountFormatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+  const CURRENCY_SYMBOL_FALLBACKS = { AFN: '؋', USD: '$', EUR: '€', PKR: 'Rs', IRR: '﷼' };
+  /* A balance smaller than half a hundredth counts as settled. */
+  const AMOUNT_EPSILON = 0.005;
+  const persianDateFormatter = new Intl.DateTimeFormat('fa-AF-u-ca-persian-nu-latn', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+  const persianShortFormatter = new Intl.DateTimeFormat('fa-AF-u-ca-persian-nu-latn', {
+    day: 'numeric',
+    month: 'short',
+  });
+
+  function asDate(value) {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(String(value).replace(' ', 'T'));
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  function openNewPurchase() {
-    if (account_id) {
-      push(`/dashboard/account-purchase-form/${account_id}`);
-    } else {
-      push(`/dashboard/purchase-form/0`);
+  function amountText(value) {
+    const number = Number(value);
+    return amountFormatter.format(Number.isFinite(number) ? number : 0);
+  }
+
+  function moneyLabel(value, currency) {
+    return `${currencySymbol(currency)}\u200E ${amountText(value)}`;
+  }
+
+  function persianDate(value) {
+    const date = asDate(value);
+    return date ? persianDateFormatter.format(date) : '—';
+  }
+
+  function persianShortDate(value) {
+    const date = asDate(value);
+    return date ? persianShortFormatter.format(date) : '—';
+  }
+
+  function isoDate(value) {
+    return value ? String(value).slice(0, 10) : '';
+  }
+
+  function getLocalDate() {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().split('T')[0];
+  }
+
+  function shiftDate(days) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().split('T')[0];
+  }
+
+  /*
+   * The Persian month cannot be derived from the Gregorian one, so today's
+   * Persian day number is read from the calendar and stepped back to its 1st.
+   */
+  function startOfPersianMonth() {
+    const today = new Date();
+    const day = Number(
+      new Intl.DateTimeFormat('fa-AF-u-ca-persian-nu-latn', { day: 'numeric' })
+        .formatToParts(today)
+        .find((part) => part.type === 'day')?.value || 1,
+    );
+    const start = new Date(today);
+    start.setDate(start.getDate() - Math.max(0, day - 1));
+    start.setMinutes(start.getMinutes() - start.getTimezoneOffset());
+    return start.toISOString().split('T')[0];
+  }
+
+  function dayOffset(value) {
+    const date = asDate(value);
+    if (!date) return null;
+    const today = new Date();
+    const target = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+    const base = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    return Math.round((target - base) / 86400000);
+  }
+
+  function currencySymbol(code) {
+    const normalizedCode = String(code ?? '').toUpperCase();
+    if (!normalizedCode) return '';
+    const match = currencies.find(
+      (currency) => String(currency.code ?? '').toUpperCase() === normalizedCode,
+    );
+    return match?.symbol || CURRENCY_SYMBOL_FALLBACKS[normalizedCode] || t(normalizedCode);
+  }
+
+  function sumByCurrency(rows, pick) {
+    const totals = {};
+    for (const row of rows) {
+      const currency = row.currency || 'AFN';
+      totals[currency] = (totals[currency] || 0) + Number(pick(row) || 0);
     }
+    return totals;
   }
 
-  async function exportPurchases(format) {
-    if (exportingReport) return;
-
-    exportingReport = true;
-
-    try {
-      const exporter = format === 'excel'
-        ? (await import('./generateExcel.js')).generateExcel
-        : (await import('./generatePDF.js')).generatePDF;
-
-      await exporter(
-        'purchases',
-        filteredPurchases,
-        fromDate,
-        toDate,
-        filteredPurchases.length,
-        totalPurchasesAmount,
-        {},
-      );
-    } catch (error) {
-      console.error('Failed to generate purchases report:', error);
-    } finally {
-      exportingReport = false;
-    }
+  function moneyLines(totals) {
+    const entries = Object.entries(totals).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+    if (!entries.length) return [{ value: '0', unit: '' }];
+    return entries.map(([currency, value]) => ({
+      value: amountText(value),
+      unit: currencySymbol(currency),
+    }));
   }
+
+  /* ------------------------------------------------------------------ *
+   * Rows, balances and due dates                                        *
+   * ------------------------------------------------------------------ */
 
   function getAccountName(acc) {
     if (!acc) return lookupsLoaded ? 'Unknown' : '...';
@@ -119,60 +191,65 @@ import { currencyApi } from '../api/currencyApi.js';
     return out || 'Unknown';
   }
 
-  function getStatusTone(status) {
-    if (status === 'confirmed') return 'positive';
-    if (status === 'return') return 'negative';
-    return 'warning';
+  /*
+   * Name lookups are memoised into reactive maps: a template that calls a
+   * helper reading `accounts`/`warehouses` directly is not re-rendered when
+   * those lists arrive, which left every supplier as «…» on first paint.
+   */
+  $: accountNameById = new Map(
+    accounts.map((account) => [String(account.id), getAccountName(account)]),
+  );
+  $: warehouseNameById = new Map(
+    warehouses.map((warehouse) => [String(warehouse.id), warehouse.name]),
+  );
+
+  function unknownSupplierLabel() {
+    return lookupsLoaded ? t('Unknown') : '…';
   }
 
-  function purchaseMatchesTerm(purchase, term) {
-    return (
-      (purchase.bill_number && String(purchase.bill_number).toLowerCase().includes(term)) ||
-      (purchase.description && purchase.description.toLowerCase().includes(term)) ||
-      (purchase.id && String(purchase.id).includes(term))
-    );
+  function billLabel(purchase) {
+    return `${bill_index_prefix}${purchase.bill_number ?? ''}`;
   }
 
-  function getMatchingAccountIds(term) {
-    const q = term.trim().toLowerCase();
-    if (!q) return [];
-    return accounts.filter((acc) => getAccountName(acc).toLowerCase().includes(q)).map((acc) => acc.id);
+  function purchaseDate(purchase) {
+    return purchase.bill_date || purchase.created_at;
   }
 
-  function handleUnifiedSearchInput() {
-    if (!account_id) showSupplierDropdown = true;
+  function remainingOf(purchase) {
+    const computed = purchaseRemainingMap?.[purchase.id];
+    return Number(computed != null ? computed : purchase.total_amount || 0);
   }
 
-  function selectSupplier(acc) {
-    account_id = acc.id;
-    searchTerm = '';
-    showSupplierDropdown = false;
+  function paidOf(purchase) {
+    return (Number(purchase.total_amount) || 0) - remainingOf(purchase);
   }
 
-  function clearSupplierFilter() {
-    if (scopedAccountId) return;
-    account_id = null;
-    searchTerm = '';
-    showSupplierDropdown = false;
-    searchInputEl?.focus();
+  function paymentState(purchase) {
+    if (remainingOf(purchase) <= AMOUNT_EPSILON) return 'paid';
+    if (paidOf(purchase) > AMOUNT_EPSILON) return 'partial';
+    return 'credit';
   }
 
-  let addPaymentModal = null;
-  let addPaymentModalInstance = null;
-  let selectedPurchase = null;
-
-  function handleDateChange(inputName, value) {
-    if (inputName === 'fromDate') fromDate = value;
-    else if (inputName === 'toDate') toDate = value;
+  function paidPercent(purchase) {
+    const total = Number(purchase.total_amount) || 0;
+    if (total <= 0) return 0;
+    const percent = Math.round((paidOf(purchase) / total) * 100);
+    return Math.min(100, Math.max(0, percent));
   }
 
-  function openPaymentModal(purchase) {
-    selectedPurchase = purchase;
-    if (!addPaymentModalInstance && addPaymentModal) {
-      addPaymentModalInstance = new window.mdb.Modal(addPaymentModal);
-    }
-    addPaymentModalInstance?.show();
+  function statusTone(status) {
+    if (status === 'confirmed') return 'ok';
+    if (!status || status === 'draft') return 'neutral';
+    return 'danger';
   }
+
+  function statusLabel(status) {
+    return t(status || 'draft');
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Data loading                                                        *
+   * ------------------------------------------------------------------ */
 
   const loadLookups = onceAsync(async () => {
     if (lookupsLoaded) return;
@@ -242,10 +319,19 @@ import { currencyApi } from '../api/currencyApi.js';
         : Math.max(currentPage, Math.ceil(totalItems / itemsPerPage) || 0);
       purchase_payments = purchases.flatMap((p) => p.payments || []);
       purchase_returns = purchases.flatMap((p) => p.returns || []);
-
     } finally {
       if (requestId === loadRequestId) loading = false;
     }
+  }
+
+  function reload() {
+    // Changing the page is enough: the reactive block below reloads once.
+    if (currentPage !== 1) {
+      currentPage = 1;
+      return;
+    }
+    lastPageKey = getPurchasesQueryKey();
+    load();
   }
 
   function scheduleSearchReload() {
@@ -272,7 +358,6 @@ import { currencyApi } from '../api/currencyApi.js';
     lastPageKey = getPurchasesQueryKey();
     bootstrapped = true;
     await load();
-    tick().then(() => setDatePickers(handleDateChange));
   });
 
   onDestroy(() => {
@@ -296,28 +381,72 @@ import { currencyApi } from '../api/currencyApi.js';
     }
   }
 
-  function getPageNumbers(current, total) {
-    const delta = 2;
-    const range = [];
-    const rangeWithDots = [];
-    let l;
-    for (let i = 1; i <= total; i++) {
-      if (i === 1 || i === total || (i >= current - delta && i <= current + delta)) {
-        range.push(i);
-      }
+  /* ------------------------------------------------------------------ *
+   * Actions                                                             *
+   * ------------------------------------------------------------------ */
+
+  function openNewPurchase() {
+    if (account_id) {
+      push(`/dashboard/account-purchase-form/${account_id}`);
+    } else {
+      push(`/dashboard/purchase-form/0`);
     }
-    for (let i of range) {
-      if (l) {
-        if (i - l === 2) {
-          rangeWithDots.push(l + 1);
-        } else if (i - l !== 1) {
-          rangeWithDots.push('...');
-        }
-      }
-      rangeWithDots.push(i);
-      l = i;
+  }
+
+  async function exportPurchases(format) {
+    if (exportingReport) return;
+
+    exportingReport = true;
+
+    try {
+      const exporter = format === 'excel'
+        ? (await import('./generateExcel.js')).generateExcel
+        : (await import('./generatePDF.js')).generatePDF;
+
+      await exporter(
+        'purchases',
+        filteredPurchases,
+        fromDate,
+        toDate,
+        filteredPurchases.length,
+        totalPurchasesAmount,
+        {},
+      );
+    } catch (error) {
+      console.error('Failed to generate purchases report:', error);
+    } finally {
+      exportingReport = false;
     }
-    return rangeWithDots;
+  }
+
+  function purchaseActions(purchase) {
+    const remaining = remainingOf(purchase);
+    return [
+      {
+        icon: 'bi-printer',
+        label: t('Print'),
+        tone: 'muted',
+        onClick: () => (printPurchase = purchase),
+      },
+      {
+        icon: 'bi-eye',
+        label: t('View'),
+        tone: 'view',
+        onClick: () => push(`/dashboard/purchases/${purchase.id}`),
+      },
+      {
+        icon: 'bi-pencil',
+        label: t('Edit'),
+        tone: 'edit',
+        onClick: () => push(`/dashboard/purchase-form/${purchase.id}`),
+      },
+      {
+        icon: 'bi-wallet2',
+        label: t('Payments'),
+        disabled: remaining <= AMOUNT_EPSILON,
+        onClick: () => push(`/dashboard/purchases/${purchase.id}`),
+      },
+    ];
   }
 
   function setSort(column) {
@@ -325,7 +454,7 @@ import { currencyApi } from '../api/currencyApi.js';
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
       sortColumn = column;
-      sortDirection = ['created_at', 'bill_date', 'due_date', 'id', 'bill_number'].includes(column)
+      sortDirection = ['created_at', 'bill_date', 'id', 'bill_number'].includes(column)
         ? 'desc'
         : 'asc';
     }
@@ -333,24 +462,34 @@ import { currencyApi } from '../api/currencyApi.js';
     else load();
   }
 
-  function getLocalDate() {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().split('T')[0];
+  function sortAria(column) {
+    if (sortColumn !== column) return 'none';
+    return sortDirection === 'asc' ? 'ascending' : 'descending';
   }
 
-  let fromDate = '';
-  let toDate = '';
+  /* ------------------------------------------------------------------ *
+   * Filters                                                             *
+   * ------------------------------------------------------------------ */
 
-  function handleToolbarFilterChange(value) {
-    filterStatus = value;
+  function handlePurchaseToolbarFilter(event) {
+    const { key, value } = event.detail;
+    if (key === 'account') {
+      if (scopedAccountId) return;
+      account_id = value === 'all' ? null : Number(value);
+    }
+    if (key === 'status') filterStatus = value;
+    if (key === 'paymentStatus') paymentStatus = value;
+    if (key === 'currency') selectedCurrency = value;
+    if (key === 'fromDate') fromDate = value;
+    if (key === 'toDate') toDate = value;
+    reload();
   }
 
-  function showAllFilters() {
+  function clearAllFilters() {
     fromDate = '';
     toDate = '';
     if (!scopedAccountId) {
-      clearSupplierFilter();
+      account_id = null;
     } else {
       account_id = scopedAccountId;
     }
@@ -358,16 +497,56 @@ import { currencyApi } from '../api/currencyApi.js';
     paymentStatus = 'all';
     selectedCurrency = 'all';
     searchTerm = '';
-    if (currentPage !== 1) currentPage = 1;
-    else load();
+    reload();
   }
 
-  function toggleFilters() {
-    filtersOpen = !filtersOpen;
-    if (filtersOpen) {
-      tick().then(() => setDatePickers(handleDateChange));
-    }
+  /* A quick range applies at once and closes the filter popup. */
+  function chooseRange(range) {
+    filtersOpen = false;
+    pickRange(range);
   }
+
+  function pickRange(range) {
+    const today = getLocalDate();
+    if (range === 'today') {
+      fromDate = today;
+      toDate = today;
+    } else if (range === 'week') {
+      fromDate = shiftDate(-6);
+      toDate = today;
+    } else if (range === 'month') {
+      fromDate = startOfPersianMonth();
+      toDate = today;
+    }
+    reload();
+  }
+
+  function clearDateRange() {
+    fromDate = '';
+    toDate = '';
+    reload();
+  }
+
+  $: todayIso = ($lang, getLocalDate());
+  $: weekStartIso = ($lang, shiftDate(-6));
+  $: monthStartIso = ($lang, startOfPersianMonth());
+  $: activeRange =
+    fromDate && toDate
+      ? fromDate === toDate && fromDate === todayIso
+        ? 'today'
+        : fromDate === weekStartIso && toDate === todayIso
+          ? 'week'
+          : fromDate === monthStartIso && toDate === todayIso
+            ? 'month'
+            : ''
+      : '';
+  $: quickRanges = ($lang, [
+    { key: 'today', label: t('Today') },
+    { key: 'week', label: t('7 Days') },
+    { key: 'month', label: t('This Month') },
+  ]);
+
+  $: filteredPurchases = purchases;
 
   $: totalPurchasesAmount = filteredPurchases.reduce((totals, p) => {
     if (!p.bill_status || p.bill_status !== 'confirmed') return totals;
@@ -435,39 +614,181 @@ import { currencyApi } from '../api/currencyApi.js';
     return map;
   })();
 
-  // Remaining balance per currency = purchases - payments - returns
-  $: remainingBalance = (() => {
-    const rem = {};
-    const currencies = new Set([
-      ...Object.keys(totalPurchasesAmount || {}),
-      ...Object.keys(totalPaymentsAmount || {}),
-      ...Object.keys(totalReturnsAmount || {}),
-    ]);
-    for (const cur of currencies) {
-      const p = Number(totalPurchasesAmount?.[cur] || 0);
-      const paid = Number(totalPaymentsAmount?.[cur] || 0);
-      const ret = Number(totalReturnsAmount?.[cur] || 0);
-      rem[cur] = p - paid - ret;
+  /* ------------------------------------------------------------------ *
+   * KPI cards                                                           *
+   * ------------------------------------------------------------------ */
+
+  $: confirmedRows = filteredPurchases.filter((purchase) => purchase.bill_status === 'confirmed');
+  $: settledRows = confirmedRows.filter((purchase) => remainingOf(purchase) <= AMOUNT_EPSILON);
+  $: openRows = confirmedRows.filter((purchase) => remainingOf(purchase) > AMOUNT_EPSILON);
+  $: overdueRows = openRows.filter((purchase) => {
+    const offset = dayOffset(purchase.due_date);
+    return offset !== null && offset < 0;
+  });
+  $: soonRows = openRows.filter((purchase) => {
+    const offset = dayOffset(purchase.due_date);
+    return offset !== null && offset >= 0 && offset <= 3;
+  });
+
+  $: totalByCurrency = sumByCurrency(confirmedRows, (purchase) => purchase.total_amount);
+  $: paidByCurrency = sumByCurrency(confirmedRows, (purchase) => paidOf(purchase));
+  $: outstandingByCurrency = sumByCurrency(openRows, (purchase) => remainingOf(purchase));
+  $: overdueByCurrency = sumByCurrency(overdueRows, (purchase) => remainingOf(purchase));
+
+  $: headerCurrency =
+    selectedCurrency !== 'all'
+      ? selectedCurrency
+      : Object.entries(totalByCurrency).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] ||
+        confirmedRows[0]?.currency ||
+        'AFN';
+
+  $: dailySeries = (() => {
+    const days = new Map();
+    for (const purchase of confirmedRows) {
+      const key = isoDate(purchaseDate(purchase));
+      if (!key) continue;
+      const entry = days.get(key) || { total: 0, outstanding: 0 };
+      entry.total += Number(purchase.total_amount) || 0;
+      entry.outstanding += Math.max(remainingOf(purchase), 0);
+      days.set(key, entry);
     }
-    return rem;
+    return [...days.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([, value]) => value);
   })();
 
-  $: filteredPurchases = purchases;
+  function sparkPoints(field) {
+    const values = dailySeries.map((day) => day[field]);
+    if (values.length < 2) return '';
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    const range = max - min || 1;
+    return values
+      .map(
+        (value, index) =>
+          `${((index / (values.length - 1)) * 120).toFixed(1)},${(4 + 28 * (1 - (value - min) / range)).toFixed(1)}`,
+      )
+      .join(' ');
+  }
 
-  $: paginatedPurchases = filteredPurchases;
-  $: purchasesCountLabel = `${totalItems} ${totalItems < 2 ? t('Purchase') : t('Purchases')}`;
-  $: activeFilterCount =
-    (account_id ? 1 : 0) +
-    (filterStatus !== 'all' ? 1 : 0) +
-    (paymentStatus !== 'all' ? 1 : 0) +
-    (selectedCurrency !== 'all' ? 1 : 0) +
-    (fromDate || toDate ? 1 : 0);
-  $: supplierSuggestions =
-    account_id || !searchTerm.trim()
-      ? []
-      : accounts
-          .filter((acc) => getAccountName(acc).toLowerCase().includes(searchTerm.trim().toLowerCase()))
-          .slice(0, 8);
+  $: paidPercentTotal = totalByCurrency && Object.keys(totalByCurrency).length === 1
+    ? (() => {
+        const [currency] = Object.keys(totalByCurrency);
+        const total = Number(totalByCurrency[currency]) || 0;
+        if (total <= 0) return 0;
+        return Math.min(100, Math.max(0, Math.round(((total - Number(outstandingByCurrency[currency] || 0)) / total) * 100)));
+      })()
+    : 0;
+
+  $: kpiCards = (($lang, [
+    {
+      key: 'total',
+      label: t('Total Purchases Amount'),
+      icon: 'shopping_bag',
+      lines: moneyLines(totalByCurrency),
+      sub: `${filteredPurchases.length} ${t('Bill')}`,
+      title: t('Total Purchases Amount'),
+      spark: sparkPoints('total'),
+      sparkTone: 'brand',
+    },
+    {
+      key: 'paid',
+      label: t('Paid'),
+      icon: 'payments',
+      lines: moneyLines(paidByCurrency),
+      sub: `${settledRows.length} ${t('Settled')}`,
+      title: t('Paid'),
+      chip: `${paidPercentTotal}%`,
+      chipTone: 'ok',
+      bar: paidPercentTotal,
+      barTone: 'ok',
+    },
+    {
+      key: 'outstanding',
+      label: t('Payable'),
+      icon: 'pending_actions',
+      lines: moneyLines(outstandingByCurrency),
+      sub: `${openRows.length} ${t('Bill')}`,
+      title: t('Payable'),
+      spark: sparkPoints('outstanding'),
+      sparkTone: 'warn',
+      valueTone: 'warn',
+    },
+    {
+      key: 'overdue',
+      label: t('Overdue'),
+      icon: 'event_busy',
+      hero: true,
+      lines: moneyLines(overdueByCurrency),
+      sub: `${overdueRows.length} ${t('Bill')} · ${soonRows.length} ${t('Due Soon')}`,
+      title: t('Overdue'),
+      valueTone: overdueRows.length ? 'danger' : 'ink',
+    },
+  ]));
+
+  /* ------------------------------------------------------------------ *
+   * Filter chips, toolbar fields, footer                                 *
+   * ------------------------------------------------------------------ */
+
+  $: activeChips = (() => {
+    const chips = [];
+
+    if (fromDate || toDate) {
+      const label =
+        fromDate && toDate && fromDate !== toDate
+          ? `${persianShortDate(fromDate)} – ${persianShortDate(toDate)}`
+          : persianShortDate(fromDate || toDate);
+      chips.push({ key: 'date', label: `${t('Date')}: ${label}`, clear: clearDateRange });
+    }
+
+    if (!scopedAccountId && account_id) {
+      chips.push({
+        key: 'supplier',
+        label: `${t('Supplier')}: ${accountNameById.get(String(account_id)) || unknownSupplierLabel()}`,
+        
+        clear: () => {
+          account_id = null;
+          reload();
+        },
+      });
+    }
+
+    if (filterStatus !== 'all') {
+      chips.push({
+        key: 'status',
+        label: `${t('Status')}: ${t(filterStatus)}`,
+        clear: () => {
+          filterStatus = 'all';
+          reload();
+        },
+      });
+    }
+
+    if (paymentStatus !== 'all') {
+      chips.push({
+        key: 'payment',
+        label: `${t('Payment')}: ${t(paymentStatus)}`,
+        clear: () => {
+          paymentStatus = 'all';
+          reload();
+        },
+      });
+    }
+
+    if (selectedCurrency !== 'all') {
+      chips.push({
+        key: 'currency',
+        label: `${t('Currency')}: ${t(selectedCurrency)}`,
+        clear: () => {
+          selectedCurrency = 'all';
+          reload();
+        },
+      });
+    }
+
+    return chips;
+  })();
+
+  $: toolbarActiveCount = activeChips.length;
+
   $: statusFilterOptions = [
     { value: 'all', label: t('All Statuses') },
     { value: 'confirmed', label: t('Confirmed') },
@@ -477,7 +798,7 @@ import { currencyApi } from '../api/currencyApi.js';
 
   $: paymentStatusFilterOptions = [
     { value: 'all', label: t('All Payment Statuses') },
-    { value: 'paid', label: t('Paid') },
+    { value: 'paid', label: t('Settled') },
     { value: 'unpaid', label: t('Unpaid') },
   ];
 
@@ -488,1349 +809,1186 @@ import { currencyApi } from '../api/currencyApi.js';
       value: account_id || 'all',
       icon: 'bi-person',
       visible: !scopedAccountId,
-      options: [{ value: 'all', label: t('All') }, ...accounts.map((account) => ({ value: account.id, label: getAccountName(account) }))],
+      options: [
+        { value: 'all', label: t('All') },
+        ...accounts.map((account) => ({ value: account.id, label: getAccountName(account) })),
+      ],
     },
-    { key: 'status', label: t('Status'), value: filterStatus, icon: 'bi-activity', options: statusFilterOptions },
+    {
+      key: 'status',
+      label: t('Status'),
+      value: filterStatus,
+      icon: 'bi-activity',
+      options: statusFilterOptions,
+    },
     {
       key: 'paymentStatus',
-      label: t('Payment Status'),
+      label: t('Payment'),
       value: paymentStatus,
       icon: 'bi-credit-card',
       options: paymentStatusFilterOptions,
     },
-    { key: 'currency', label: t('Currency'), value: selectedCurrency, icon: 'bi-cash-stack', options: [{ value: 'all', label: t('All') }, ...currencies.map((currency) => ({ value: currency.code, label: t(currency.code) }))] },
+    {
+      key: 'currency',
+      label: t('Currency'),
+      value: selectedCurrency,
+      icon: 'bi-cash-stack',
+      options: [
+        { value: 'all', label: t('All') },
+        ...currencies.map((currency) => ({ value: currency.code, label: t(currency.code) })),
+      ],
+    },
     { key: 'fromDate', label: t('From Date'), value: fromDate, icon: 'bi-calendar3', type: 'date' },
     { key: 'toDate', label: t('To Date'), value: toDate, icon: 'bi-calendar3', type: 'date' },
   ];
 
-  function handlePurchaseToolbarFilter(event) {
-    const { key, value } = event.detail;
-    if (key === 'account') {
-      if (scopedAccountId) return;
-      account_id = value === 'all' ? null : Number(value);
+  $: purchasesCountLabel = `${totalItems} ${totalItems < 2 ? t('Purchase') : t('Purchases')}`;
+  $: rangeStart = totalItems ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  $: rangeEnd = Math.min(currentPage * itemsPerPage, totalItems);
+
+  function getPageNumbers(current, total) {
+    const delta = 2;
+    const range = [];
+    const rangeWithDots = [];
+    let l;
+    for (let i = 1; i <= total; i++) {
+      if (i === 1 || i === total || (i >= current - delta && i <= current + delta)) {
+        range.push(i);
+      }
     }
-    if (key === 'status') filterStatus = value;
-    if (key === 'paymentStatus') paymentStatus = value;
-    if (key === 'currency') selectedCurrency = value;
-    if (key === 'fromDate') fromDate = value;
-    if (key === 'toDate') toDate = value;
-    if (currentPage !== 1) currentPage = 1;
-    lastPageKey = getPurchasesQueryKey();
-    load();
+    for (let i of range) {
+      if (l) {
+        if (i - l === 2) {
+          rangeWithDots.push(l + 1);
+        } else if (i - l !== 1) {
+          rangeWithDots.push('...');
+        }
+      }
+      rangeWithDots.push(i);
+      l = i;
+    }
+    return rangeWithDots;
   }
 </script>
 
 {#if !permissions?.some((p) => p.code === 'Purchases' && p.view)}
-  <h3 class="permission-denied"><i class="bi bi-exclamation-triangle"></i>{t('No access allowed')}</h3>
+  <h3 class="permission-denied">
+    <span class="ms" aria-hidden="true">error</span>
+    {t('No access allowed')}
+  </h3>
 {:else}
-  <IndexPageLayout
-    dir={t('dir')}
-    ariaLabel={t('Purchases')}
-    toolbarWidth="25rem"
-    showStats={showSummaryCards}
-    showFooter={!loading && totalItems > 0}
-    dense={true}
-    contentClass="purchases-index-content"
-    tablePadding={true}>
-    <svelte:fragment slot="actions">
-      {#if permissions?.some((p) => p.code === 'Purchases' && p.create)}
-        <ActionButton icon="bi-plus-lg" label={t('New Purchase')} on:click={openNewPurchase} />
-      {/if}
-      <ExportMenu
-        extraClass="pdf-btn"
-        loading={exportingReport}
-        disabled={exportingReport || filteredPurchases.length === 0}
-        on:export={(event) => exportPurchases(event.detail)}
-      />
-      <button
-        type="button"
-        class="index-settings-button"
-        class:is-active={showSummaryCards}
-        aria-label={t('Summary')}
-        aria-expanded={showSummaryCards}
-        title={t('Summary')}
-        on:click={() => (showSummaryCards = !showSummaryCards)}>
-        <i class="bi {showSummaryCards ? 'bi-x-lg' : 'bi-bag-plus '}" aria-hidden="true"></i>
-        
-      </button>
-    </svelte:fragment>
-
-    <svelte:fragment slot="stats">
-      <div class="index-summary-grid purchases-summary-grid">
-        <SummaryCard label={t('Purchases Count')} icon="bi-box-seam" tone="green">
-          {purchasesCountLabel}
-        </SummaryCard>
-        <SummaryCard label={t('Total Purchases Amount')} icon="bi-cash-stack" tone="cyan">
-          {@html formatValueObj(totalPurchasesAmount)}
-        </SummaryCard>
-      </div>
-    </svelte:fragment>
-
-    <svelte:fragment slot="toolbar">
-      <FilterToolbar
-        searchValue={searchTerm}
-        searchPlaceholder={t('Search purchases...')}
-        filters={purchaseToolbarFilters}
-        filterLabel={t('Filter')}
-        resetLabel={t('Clear Filters')}
-        showReset={true}
-        on:searchChange={(event) => { searchTerm = event.detail; scheduleSearchReload(); }}
-        on:filterChange={handlePurchaseToolbarFilter}
-        on:reset={showAllFilters} />
-      {#if false}
-      <div class="filters-wrap" class:filters-open={filtersOpen || showSupplierDropdown}>
-        <div class="filter-toolbar">
-          <div class="filter-toolbar-row">
-            <div class="unified-search">
-              <i class="bi bi-search" aria-hidden="true"></i>
-              {#if account_id}
-                <span class="supplier-chip">
-                  <i class="bi bi-person-fill" aria-hidden="true"></i>
-                  <span>{getAccountName(accounts.find((a) => a.id === Number(account_id)))}</span>
-                  <button type="button" class="chip-clear" aria-label={t('Show All')} on:click={clearSupplierFilter}>
-                    <i class="bi bi-x-lg"></i>
-  </button>
-            </span>
-              {/if}
-              <input
-                type="search"
-                class="unified-search-input"
-                bind:this={searchInputEl}
-                bind:value={searchTerm}
-                placeholder={account_id ? t('Search purchases...') : `${t('Search purchases...')} · ${t('Select Supplier')}`}
-                on:input={handleUnifiedSearchInput}
-                on:focus={() => {
-                  if (!account_id && searchTerm.trim()) showSupplierDropdown = true;
-                }}
-                on:blur={() => setTimeout(() => (showSupplierDropdown = false), 150)}
-                autocomplete="off" />
-              {#if showSupplierDropdown && supplierSuggestions.length > 0}
-                <ul class="supplier-dropdown">
-                  {#each supplierSuggestions as acc}
-                    <li>
-                      <button type="button" on:mousedown={() => selectSupplier(acc)}>
-                        <i class="bi bi-person" aria-hidden="true"></i>
-                        {getAccountName(acc)}
-                      </button>
-              </li>
-            {/each}
-          </ul>
+  <div class="purchases-page">
+    <IndexPageLayout
+      dir={t('dir')}
+      ariaLabel={t('Purchases')}
+      showExtra={true}
+      showStats={true}
+      showFooter={!loading && totalItems > 0}
+      dense={true}
+      contentClass="purchases-index-content"
+      tablePadding={true}>
+      <svelte:fragment slot="extra">
+        <ExportMenu
+          showLabel={true}
+          loading={exportingReport}
+          disabled={exportingReport || filteredPurchases.length === 0}
+          on:export={(event) => exportPurchases(event.detail)} />
+        {#if permissions?.some((p) => p.code === 'Purchases' && p.create)}
+          <ActionButton
+            icon="add"
+            label={t('New Purchase')}
+            extraClass="purchases-create"
+            on:click={openNewPurchase} />
         {/if}
+      </svelte:fragment>
 
-              {#if searchTerm}
+      <svelte:fragment slot="stats">
+        <section class="kpi" aria-label={t('Purchases')}>
+          {#each kpiCards as card (card.key)}
+            <article
+              class="kcard"
+              class:kcard--multi={card.lines.length > 1}
+              data-hero={card.hero ? 'true' : undefined}
+              title={card.title}>
+              <span class="ktile" aria-hidden="true">
+                <span class="ms f">{card.icon}</span>
+              </span>
+              <div class="kbody">
+                <span class="klabel">{card.label}</span>
+                <span class="kvals">
+                  {#each card.lines as line, index (index)}
+                    <span class="kval-line">
+                      <span class="kval kval--{card.valueTone || 'ink'}" dir="ltr">{line.value}</span>
+                      {#if line.unit}<span class="kunit">{line.unit}</span>{/if}
+                    </span>
+                  {/each}
+                </span>
+                <span class="ksub">{card.sub}</span>
+              </div>
+              {#if card.chip || card.spark || card.bar != null}
+                <div class="kside">
+                  {#if card.chip}
+                    <span class="kchip kchip--{card.chipTone}" dir="ltr">{card.chip}</span>
+                  {/if}
+                  {#if card.spark}
+                    <svg
+                      class="kspark kspark--{card.sparkTone}"
+                      width="56"
+                      height="20"
+                      viewBox="0 0 120 36"
+                      preserveAspectRatio="none"
+                      aria-hidden="true">
+                      <polyline points={card.spark} fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  {/if}
+                  {#if card.bar != null}
+                    <span class="kbar" aria-hidden="true">
+                      <span class="kbar__fill kbar__fill--{card.barTone}" style:width={`${card.bar}%`}></span>
+                    </span>
+                  {/if}
+                </div>
+              {/if}
+            </article>
+          {/each}
+        </section>
+      </svelte:fragment>
+
+      <svelte:fragment slot="toolbar">
+        <FilterToolbar
+          bind:filtersOpen
+          searchValue={searchTerm}
+          searchPlaceholder={t('Search bill or supplier…')}
+          filters={purchaseToolbarFilters}
+          filterLabel={t('Filter')}
+          resetLabel={t('Clear Filters')}
+          applyLabel={t('Show')}
+          activeCount={toolbarActiveCount}
+          showReset={true}
+          on:searchChange={(event) => {
+            searchTerm = event.detail;
+            scheduleSearchReload();
+          }}
+          on:filterChange={handlePurchaseToolbarFilter}
+          on:reset={clearAllFilters}>
+          <svelte:fragment slot="panelBeforeFields">
+            <div class="date-range" role="group" aria-label={t('Date')}>
+              {#each quickRanges as range (range.key)}
                 <button
                   type="button"
-                  class="purchase-search-clear"
-                  aria-label={t('Clear Filters')}
-                  title={t('Clear Filters')}
-                  on:click={() => {
-                    searchTerm = '';
-                    showSupplierDropdown = false;
-                    searchInputEl?.focus();
-                  }}>
-                  <i class="bi bi-x-lg" aria-hidden="true"></i>
+                  class="date-range__option"
+                  class:is-active={activeRange === range.key}
+                  aria-pressed={activeRange === range.key}
+                  on:click={() => chooseRange(range.key)}>
+                  {range.label}
                 </button>
-              {/if}
-
-              <button
-                type="button"
-                class="purchase-filter-toggle {filtersOpen || activeFilterCount > 0 ? 'purchase-filter-toggle--active' : ''}"
-                aria-label={t('Filter')}
-                title={t('Filter')}
-                aria-expanded={filtersOpen}
-                aria-controls="purchase-filter-panel"
-                on:click={toggleFilters}>
-                <i class="bi bi-sliders2" aria-hidden="true"></i>
-              </button>
+              {/each}
             </div>
+          </svelte:fragment>
+        </FilterToolbar>
+      </svelte:fragment>
 
-          </div>
-
-          {#if filtersOpen}
-            <div class="filter-panel" id="purchase-filter-panel">
-            <FilterSelect
-              label={t('Status')}
-              icon="bi-activity"
-              value={filterStatus}
-              options={statusFilterOptions}
-              on:change={(e) => handleToolbarFilterChange(e.detail)} />
-
-            <div class="date-field">
-              <span class="date-field__label">
-                <i class="bi bi-calendar3"></i>
-                {t('From Date')}
-              </span>
-              <div class="input-group input-group-sm persianDatePicker">
-                <input type="date" class="form-control" data-bind="fromDate" bind:value={fromDate} aria-label={t('From Date')} />
-                <span class="input-group-text persian-date-text"></span>
-              </div>
-            </div>
-
-            <div class="date-field">
-              <span class="date-field__label">
-                <i class="bi bi-calendar3"></i>
-                {t('To Date')}
-              </span>
-              <div class="input-group input-group-sm persianDatePicker">
-                <input type="date" class="form-control" data-bind="toDate" bind:value={toDate} aria-label={t('To Date')} />
-                <span class="input-group-text persian-date-text"></span>
-              </div>
-            </div>
-
-            <div class="filter-panel__action">
-              <ActionButton
-                variant="secondary"
-                icon="bi-arrow-counterclockwise"
-                label={t('Show All')}
-                compact={true}
-                extraClass="show-all-btn"
-                on:click={showAllFilters} />
-            </div>
+      {#if activeChips.length}
+        <div class="active-filters">
+          {#each activeChips as chip (chip.key)}
+            <button type="button" class="active-chip" on:click={chip.clear}>
+              {chip.label}
+              <span class="ms" aria-hidden="true">close</span>
+            </button>
+          {/each}
+          <button type="button" class="active-filters__clear" on:click={clearAllFilters}>
+            {t('Clear Filters')}
+          </button>
         </div>
-          {/if}
-        </div>
-      </div>
       {/if}
-    </svelte:fragment>
 
-          {#if loading}
-            <div class="index-table-state">
-            <EmptyState loading message={t('Loading...')} />
-            </div>
-          {:else if filteredPurchases.length === 0}
-            <div class="index-table-state">
-            <EmptyState icon="bi-inbox" message={t('No purchases found.')} />
-            </div>
-          {:else}
-            <DataTable
-              ariaLabel={t('Purchases')}
-              minWidth="760px"
-              dense={true}
-              striped={false}
-              hover={false}
-              stickyHeader={true}
-              layout="fixed"
-              scrollbar="thin">
-              <svelte:fragment slot="head">
-                <tr>
-                  <th class="col-start cursor-pointer" on:click={() => setSort('id')}>
-                    {t('#')}
-                    {#if sortColumn === 'id'}
-                      <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                    {/if}
-                  </th>
-                  <th class="cursor-pointer" on:click={() => setSort('created_at')}>
-                    {t('Date')}
-                    {#if sortColumn === 'created_at'}
-                      <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                    {/if}
-                  </th>
-              {#if enable_purchase_bill_due_date}
-                    <th class="cursor-pointer" on:click={() => setSort('due_date')}>
-                  {t('Due Date')}
-                  {#if sortColumn === 'due_date'}
-                        <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                      {/if}
-                    </th>
-                  {/if}
-                  <th class="cursor-pointer" on:click={() => setSort('bill_number')}>
-                    {t('Bill #')}
-                    {#if sortColumn === 'bill_number'}
-                      <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                    {/if}
-                  </th>
-                  <th class="cursor-pointer {account_id ? 'd-none' : ''}" on:click={() => setSort('account_id')}>
-                    {t('Account')}
-                    {#if sortColumn === 'account_id'}
-                      <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                    {/if}
-                  </th>
-                  <th class="col-end cursor-pointer" on:click={() => setSort('total_amount')}>
-                    {t('Total')}
-                    {#if sortColumn === 'total_amount'}
-                      <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-                  {/if}
-                </th>
-                  <th class="col-end">
-                    {t('Remaining')}
-                  </th>
-                  <th class="cursor-pointer" on:click={() => setSort('warehouse_id')}>
-                    {t('Warehouse')}
-                    {#if sortColumn === 'warehouse_id'}
-                      <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
-              {/if}
-                  </th>
-                  <th>{t('Status')}</th>
-                  <th class="col-end">{t('Actions')}</th>
-            </tr>
-              </svelte:fragment>
-
-              {#each paginatedPurchases as p, index (p.id)}
-              <tr
-                class={enable_purchase_bill_due_date && p.due_date
-                  ? new Date(p.due_date) < new Date()
-                      ? 'row-overdue'
-                    : new Date(p.due_date) - new Date() < 3 * 24 * 60 * 60 * 1000
-                        ? 'row-due-soon'
-                      : ''
-                  : ''}>
-                <td class="col-start cell-muted">{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                  <td>
-                    <StatusBadge tone="neutral" ghost ltr={true} stacked>
-                      {@html showDate(p.created_at)}
-                    </StatusBadge>
-                  </td>
-                {#if enable_purchase_bill_due_date}
-                    <td>
-                      <StatusBadge tone="neutral" ghost ltr={true} stacked>
-                        {@html p.due_date ? showDate(p.due_date) : '—'}
-                      </StatusBadge>
-                    </td>
-                  {/if}
-                  <td>
-                    <button type="button" class="bill-link" on:click={() => push(`/dashboard/purchases/${p.id}`)}>
-                      {bill_index_prefix}{p.bill_number}
-                    </button>
-                  </td>
-                  <td class={account_id ? 'd-none' : ''}>
-                    <button type="button" class="account-badge" on:click={() => push(`/dashboard/account/${p.account_id}`)}>
-                      {getAccountName(accounts.find((a) => a.id == p.account_id))}
-                    </button>
-                  </td>
-                  <td class="col-end">
-                    <span class="amount-pill">
-                      <span dir="ltr">{Number(p.total_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}</span>
-                      {t(p.currency)}
+      {#if loading}
+        <div class="index-table-state">
+          <EmptyState loading={true} message={t('Loading...')} />
+        </div>
+      {:else if filteredPurchases.length === 0}
+        <div class="index-table-state">
+          <EmptyState
+            icon="bi-search"
+            message={t('No purchases found.')}
+            description={t('Change the range or filters')}>
+            <button type="button" class="empty-clear" on:click={clearAllFilters}>
+              {t('Clear Filters')}
+            </button>
+          </EmptyState>
+        </div>
+      {:else}
+        <DataTable
+          ariaLabel={t('Purchases')}
+          minWidth="980px"
+          dense={true}
+          striped={false}
+          hover={false}
+          stickyHeader={true}
+          headerHeight="40px"
+          cellPaddingY="6px"
+          cellPaddingX="12px"
+          edgePaddingX="16px"
+          mobileCards={true}>
+          <svelte:fragment slot="head">
+            <tr>
+              <th class="col-start" aria-sort={sortAria('bill_number')}>
+                <button type="button" class="th-sort" on:click={() => setSort('bill_number')}>
+                  {t('Bill #')}
+                  {#if sortColumn === 'bill_number'}
+                    <span class="ms sort-icon" aria-hidden="true">
+                      {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
                     </span>
-                  </td>
-                  <td class="col-end">
-                    <div class="remaining-cell">
-                      <button
-                        type="button"
-                        class="payment-add-btn"
-                        title={t('Add Payment')}
-                        aria-label={t('Add Payment')}
-                        on:click={() => openPaymentModal(p)}>
-                        {#if purchaseRemainingMap && purchaseRemainingMap[p.id] !== undefined}
-                          <span dir="ltr">
-                            {Number(purchaseRemainingMap[p.id] || 0).toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 3,
-                            })}
-                          </span>
-                          {t(p.currency)}
-                        {:else}
-                          <span class="cell-muted">—</span>
-                        {/if}
-                      </button>
-                    </div>
-                  </td>
-                  <td>
-                    {#if warehouses.find((w) => w.id == p.warehouse_id)}
-                      <button
-                        type="button"
-                        class="warehouse-link"
-                        title={t('Warehouse')}
-                        on:click={() => push(`/dashboard/warehouse/${p.warehouse_id}`)}>
-                        <i class="bi bi-building" aria-hidden="true"></i>
-                        <span>{warehouses.find((w) => w.id == p.warehouse_id)?.name}</span>
-                      </button>
-                    {:else}
-                      <span class="cell-muted">—</span>
-                    {/if}
-                  </td>
-                 
-                <td>
-                    <button type="button" class="bill-link" on:click={() => push(`/dashboard/purchases/${p.id}`)}>
-                       <StatusBadge tone={getStatusTone(p.bill_status)}>{t(p.bill_status)}</StatusBadge>
-                    </button>
-                  </td>
-                  <td>
-                    <TableActions
-                      actions={[
-                        {
-                          icon: 'bi-eye',
-                          label: t('View'),
-                          tone: 'view',
-                          onClick: () => push(`/dashboard/purchases/${p.id}`),
-                        },
-                        {
-                          icon: 'bi-pencil',
-                          label: t('Edit'),
-                          tone: 'edit',
-                          onClick: () => push(`/dashboard/purchase-form/` + p.id),
-                        },
-                      ]} />
-                </td>
-              </tr>
-            {/each}
-            </DataTable>
-            {/if}
+                  {:else}
+                    <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
+                  {/if}
+                </button>
+              </th>
+              <th class="col-center" aria-sort={sortAria('bill_date')}>
+                <button type="button" class="th-sort" on:click={() => setSort('created_at')}>
+                  {t('Date')}
+                  {#if sortColumn === 'created_at'}
+                    <span class="ms sort-icon" aria-hidden="true">
+                      {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                    </span>
+                  {:else}
+                    <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
+                  {/if}
+                </button>
+              </th>
+              <th>
+                <button type="button" class="th-sort" on:click={() => setSort('account_id')}>
+                  {t('Supplier')}
+                  {#if sortColumn === 'account_id'}
+                    <span class="ms sort-icon" aria-hidden="true">
+                      {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                    </span>
+                  {:else}
+                    <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
+                  {/if}
+                </button>
+              </th>
+              <th>
+                <button type="button" class="th-sort" on:click={() => setSort('warehouse_id')}>
+                  {t('Warehouse')}
+                  {#if sortColumn === 'warehouse_id'}
+                    <span class="ms sort-icon" aria-hidden="true">
+                      {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                    </span>
+                  {:else}
+                    <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
+                  {/if}
+                </button>
+              </th>
+              <th class="col-end" aria-sort={sortAria('total_amount')}>
+                <button type="button" class="th-sort" on:click={() => setSort('total_amount')}>
+                  {t('Total')}
+                  <span class="th-hint">({currencySymbol(headerCurrency)})</span>
+                  {#if sortColumn === 'total_amount'}
+                    <span class="ms sort-icon" aria-hidden="true">
+                      {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                    </span>
+                  {:else}
+                    <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
+                  {/if}
+                </button>
+              </th>
+              <th>
+                {t('Payment')}
+                <span class="th-hint">({t('Remaining')} {currencySymbol(headerCurrency)})</span>
+              </th>
+              <th>{t('Status')}</th>
+              <!-- The reference leaves this header blank; the label still names
+                   the column for assistive tech. -->
+              <th class="col-end actions-head">{t('Actions')}</th>
+            </tr>
+          </svelte:fragment>
 
-    <svelte:fragment slot="footer">
-      <PaginationBar
-        bind:currentPage
-        {totalPages}
-        {itemsPerPage}
-        {totalItems}
-        ariaLabel={t('Purchases pagination')}
-        rowLabel={t('rows')}
-        on:perPageChange={(e) => {
-          itemsPerPage = Number(e.detail);
-          currentPage = 1;
-        }}
-        {getPageNumbers} />
-    </svelte:fragment>
-  </IndexPageLayout>
+          {#each filteredPurchases as purchase (purchase.id)}
+            {@const remaining = remainingOf(purchase)}
+            {@const state = paymentState(purchase)}
+            {@const supplier = accountNameById.get(String(purchase.account_id)) || unknownSupplierLabel()}
+            {@const warehouse = warehouseNameById.get(String(purchase.warehouse_id)) || ''}
+            {@const purchaseCurrency = purchase.currency || 'AFN'}
+            {@const showUnit = String(purchaseCurrency) !== String(headerCurrency)}
+            <tr class="purchase-row">
+              <td class="col-start">
+                <button
+                  type="button"
+                  class="bill-no"
+                  dir="ltr"
+                  title={`${billLabel(purchase)} · ${supplier}`}
+                  on:click={() => push(`/dashboard/purchases/${purchase.id}`)}>
+                  {billLabel(purchase)}
+                </button>
+              </td>
+              <td class="col-center">
+                <div class="bill-date" title={isoDate(purchaseDate(purchase))}>
+                  <span class="bill-date__main">{persianDate(purchaseDate(purchase))}</span>
+                  <span class="bill-date__sub" dir="ltr">{isoDate(purchaseDate(purchase))}</span>
+                </div>
+              </td>
+              <td>
+                <span class="supplier">
+                  <span class="supplier__avatar" aria-hidden="true">{supplier.charAt(0)}</span>
+                  <span class="supplier__name" title={supplier}>{supplier}</span>
+                </span>
+              </td>
+              <td>
+                <span class="warehouse-cell" title={warehouse || t('Warehouse')}>
+                  <span class="ms warehouse-cell__icon" aria-hidden="true">warehouse</span>
+                  <span class="warehouse-cell__name">{warehouse || '—'}</span>
+                </span>
+              </td>
+              <td class="col-end">
+                <span class="amount" dir="ltr" title={`${amountText(purchase.total_amount)} ${t(purchaseCurrency)}`}>
+                  {moneyLabel(purchase.total_amount, purchaseCurrency)}
+                </span>
+              </td>
+              <td>
+                <div class="payment-cell">
+                  <span class="payment-cell__row">
+                    <span class="pay-chip pay-chip--{state}">{t(state === 'paid' ? 'Settled' : state === 'partial' ? 'Partial' : 'On Credit')}</span>
+                    <span
+                      class="payment-cell__remaining"
+                      class:is-open={remaining > AMOUNT_EPSILON}
+                      dir="ltr"
+                      title={`${t('Remaining')}: ${amountText(remaining)} ${t(purchaseCurrency)}`}>
+                      {amountText(remaining)}{#if showUnit}<span class="amount__unit">{currencySymbol(purchaseCurrency)}</span>{/if}
+                    </span>
+                  </span>
+                  <span class="payment-cell__bar" aria-hidden="true">
+                    <span
+                      class="payment-cell__fill payment-cell__fill--{state}"
+                      style:width={`${paidPercent(purchase)}%`}></span>
+                  </span>
+                </div>
+              </td>
+              <td>
+                <span class="status-chip status-chip--{statusTone(purchase.bill_status)}">
+                  <span class="status-chip__dot" aria-hidden="true"></span>
+                  {statusLabel(purchase.bill_status)}
+                </span>
+              </td>
+              <td class="col-end">
+                <TableActions material={true} actions={purchaseActions(purchase)} />
+              </td>
+            </tr>
+          {/each}
+        </DataTable>
+      {/if}
+
+      <svelte:fragment slot="footer">
+        <PaginationBar
+          bind:currentPage
+          {totalPages}
+          {itemsPerPage}
+          {totalItems}
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
+          perPageOptions={[15, 30, 50, 100]}
+          ariaLabel={t('Purchases pagination')}
+          rowLabel={t('Bill')}
+          perPageRowLabel={t('rows')}
+          on:perPageChange={(event) => {
+            itemsPerPage = Number(event.detail);
+            currentPage = 1;
+          }}
+          {getPageNumbers} />
+      </svelte:fragment>
+    </IndexPageLayout>
+  </div>
+
+  {#if printPurchase}
+    <PurchaseReceiptModal purchase={printPurchase} on:close={() => (printPurchase = null)} />
+  {/if}
 {/if}
+
 <style>
-  .cursor-pointer {
-    cursor: pointer;
+  .purchases-page {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
   }
 
   .permission-denied {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin: 1rem;
-    color: #dc2626;
-    font-size: 1rem;
-  }
-
-  .purchases-page {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    height: 100%;
-    padding: 0;
-    background: transparent;
-    color: #0f172a;
-    overflow: hidden;
-  }
-
-  .page-shell {
-    display: flex;
-    flex-direction: column;
-    gap: var(--section-gap, 0.85rem);
-    width: 100%;
-    max-width: none;
-    margin: 0;
-    min-width: 0;
-    min-height: 0;
-    flex: 1 1 auto;
-    overflow: hidden;
-  }
-
-  .purchases-page :global(.page-header) {
-    padding: var(--card-padding, 0.85rem) clamp(0.85rem, 1.1vw, 1.1rem);
-    border: 1px solid #e2e8f0;
-    border-radius: var(--card-radius, 0.875rem);
-    background: #ffffff;
-    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
-  }
-
-  .purchases-page :global(.header-icon) {
-    width: clamp(2.1rem, 2.5vw, 2.5rem);
-    height: clamp(2.1rem, 2.5vw, 2.5rem);
-    border-radius: 12px;
-    background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
-    color: #0f6efd;
-    font-size: 1rem;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  }
-
-  .purchases-page :global(.page-header h1) {
-    font-size: var(--app-heading-sm, 1.1rem);
-    font-weight: 850;
-    letter-spacing: -0.02em;
-  }
-
-  .purchases-page :global(.page-header p) {
-    margin-top: 0.2rem;
-    color: #64748b;
-    font-size: var(--app-font-sm, 0.84rem);
-  }
-
-  .purchases-page :global(.header-actions .action-btn.primary) {
-    min-height: var(--control-height, 2.35rem);
-    padding: 0.45rem 0.95rem;
-    border-radius: var(--control-radius, 0.625rem);
-    background: linear-gradient(180deg, #3b82f6 0%, #0f6efd 100%);
-    border-color: #0f6efd;
-    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.24);
-    font-size: var(--control-font, 0.84rem);
-    font-weight: 800;
-  }
-
-  .purchases-page :global(.header-actions .action-btn.primary:hover:not(:disabled)) {
-    background: linear-gradient(180deg, #0f6efd 0%, #1d4ed8 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.28);
-  }
-
-  .purchases-page :global(.header-actions .action-btn.pdf-btn) {
-    min-height: var(--control-height, 2.35rem);
-    padding: 0.45rem 0.85rem;
-    border-radius: var(--control-radius, 0.625rem);
-    border-color: #e2e8f0;
-    color: #64748b;
-    background: #ffffff;
-    box-shadow: none;
-    font-weight: 600;
-  }
-
-  .purchases-page :global(.header-actions .action-btn.pdf-btn:hover:not(:disabled)) {
-    background: #f8fafc;
-    border-color: #cbd5e1;
-    color: #0f172a;
-    transform: none;
-  }
-
-  .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
-    gap: var(--section-gap, 0.85rem);
-  }
-
-  .purchases-summary-grid {
-    width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-
-  .purchases-page :global(.summary-card) {
-    align-items: flex-start;
-    min-height: clamp(4rem, 6vw, 5.25rem);
-    padding: var(--card-padding, 0.85rem);
-    border: 1px solid #e2e8f0;
-    border-radius: var(--card-radius, 0.875rem);
-    background: #ffffff;
-    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-  }
-
-  .purchases-page :global(.summary-card:hover) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
-  }
-
-  .purchases-page :global(.summary-icon) {
-    width: clamp(1.85rem, 2.3vw, 2.25rem);
-    height: clamp(1.85rem, 2.3vw, 2.25rem);
-    flex-basis: auto;
-    border-radius: 12px;
-    font-size: 1rem;
-  }
-
-  .purchases-page :global(.summary-label) {
-    margin-bottom: 0.25rem;
-    color: #64748b;
-    font-size: var(--app-font-xs, 0.76rem);
+    gap: 8px;
+    margin: 16px;
+    color: var(--z-debit, #dc2626);
+    font-size: 14px;
     font-weight: 700;
+  }
+
+  /*
+   * The reference puts the action row and the KPI row on the page surface and
+   * the toolbar, table and pager inside one 14px sheet, so the shared panel is
+   * unwrapped here and its children are re-ordered to that stack.
+   */
+  .purchases-page :global(.index-panel) {
+    gap: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .purchases-page :global(.index-statistics) {
+    order: -1;
+    flex: 0 0 auto;
+    padding: 0;
+    margin-bottom: 12px;
+    border: 0;
+    background: transparent;
+  }
+
+  .purchases-page :global(.index-toolbar) {
+    order: 0;
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    border-radius: var(--z-r-xl, 14px) var(--z-r-xl, 14px) 0 0;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+  .purchases-page :global(.index-toolbar-main) {
+    gap: 8px;
+  }
+
+  .purchases-page :global(.index-toolbar-main .filter-toolbar-row) {
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .purchases-page :global(.index-content) {
+    order: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    --z-row-border: var(--z-border-soft, #eef2f7);
+    border-inline: 1px solid var(--z-border, #e1e7f0);
+    background: var(--z-surface, #ffffff);
+  }
+
+  .purchases-page :global(.purchases-index-content .data-table-wrap) {
+    border: 0;
+  }
+
+  .purchases-page :global(.index-footer) {
+    order: 2;
+    flex: 0 0 auto;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-top: 1px solid var(--z-border-soft, #eef2f7);
+    border-radius: 0 0 var(--z-r-xl, 14px) var(--z-r-xl, 14px);
+    background: var(--z-surface-2, #f8fafc);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+  .purchases-page :global(.index-footer .pagination-shell) {
+    padding: 10px 16px;
+    border: 0;
+    background: var(--z-surface-2, #f8fafc);
+  }
+
+  /* ---------- KPI row (reference `.kcard`) ---------- */
+  .kpi {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .kcard {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 9px 12px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: 12px;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+  .kcard[data-hero='true'] {
+    border-color: var(--z-border-strong, #dce6f8);
+    background: linear-gradient(135deg, var(--z-brand-soft, #e3ecff) 0%, var(--z-surface, #ffffff) 70%);
+  }
+
+  .kcard[data-hero='true']::before {
+    content: '';
+    position: absolute;
+    inset-block: 12px;
+    inset-inline-start: 4px;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--z-brand, #2f6fed);
+  }
+
+  .ktile {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    line-height: 1;
+  }
+
+  .ktile .ms {
+    font-size: 16px;
+  }
+
+  .kcard:nth-child(1) .ktile {
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .kcard:nth-child(2) .ktile {
+    background: var(--z-ok-soft, #dcfce7);
+    color: var(--z-ok, #15803d);
+  }
+
+  .kcard:nth-child(3) .ktile {
+    background: var(--z-warn-soft, #fef3c7);
+    color: var(--z-warn, #92400e);
+  }
+
+  .kcard:nth-child(4) .ktile {
+    background: var(--z-debit-soft, #fdecec);
+    color: var(--z-debit, #dc2626);
+  }
+
+  .kbody {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+  }
+
+  .klabel {
+    overflow: hidden;
+    color: var(--z-muted, #64748b);
+    font-size: 11.5px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .kvals {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .kval-line {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .kval {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--z-ink, #0b1530);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 17px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .kcard--multi .kval {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .kval--warn {
+    color: var(--z-warn, #92400e);
+  }
+
+  .kval--danger {
+    color: var(--z-debit, #dc2626);
+  }
+
+  .kunit {
+    flex-shrink: 0;
+    overflow: hidden;
+    color: var(--z-muted, #64748b);
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ksub {
+    overflow: hidden;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .kside {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-self: stretch;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .kchip {
+    border-radius: 999px;
+    padding: 0 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 18px;
+    white-space: nowrap;
+  }
+
+  .kchip--ok {
+    background: var(--z-ok-soft, #dcfce7);
+    color: var(--z-ok, #15803d);
+  }
+
+  .kspark {
+    display: block;
+  }
+
+  .kspark--brand polyline {
+    stroke: var(--z-brand, #2f6fed);
+  }
+
+  .kspark--warn polyline {
+    stroke: #d97706;
+  }
+
+  .kbar {
+    display: block;
+    width: 56px;
+    height: 5px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--z-surface-3, #f1f5f9);
+  }
+
+  .kbar__fill {
+    display: block;
+    height: 100%;
+  }
+
+  .kbar__fill--ok {
+    background: var(--z-ok, #16a34a);
+  }
+
+  /* ---------- quick ranges inside the filter popup ---------- */
+  .date-range {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .date-range__option {
+    width: 100%;
+    height: 28px;
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: var(--z-surface-2, #f8fafc);
+    color: var(--z-muted, #64748b);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      color 0.14s ease,
+      background 0.14s ease,
+      border-color 0.14s ease;
+  }
+
+  .date-range__option:hover {
+    border-color: var(--z-border, #e1e7f0);
+    color: var(--z-ink, #0b1530);
+  }
+
+  .date-range__option.is-active {
+    border-color: var(--z-brand-300, #93b7f7);
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+    box-shadow: none;
+  }
+
+  .date-range__option:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
+  }
+
+  /* ---------- active filter chips ---------- */
+  .active-filters {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    background: var(--z-surface-2, #f8fafc);
+  }
+
+  .active-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 6px 0 10px;
+    padding-inline-start: 10px;
+    padding-inline-end: 6px;
+    border: 1px solid var(--z-border-strong, #dce6f8);
+    border-radius: 999px;
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .active-chip .ms {
+    font-size: 14px;
+  }
+
+  .active-filters__clear {
+    height: 26px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--z-muted, #64748b);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .active-filters__clear:hover {
+    color: var(--z-ink, #0b1530);
+  }
+
+  /* ---------- table header ---------- */
+  .th-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 26px;
+    margin-inline-start: -6px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 0.14s ease,
+      color 0.14s ease;
+  }
+
+  .th-sort:hover {
+    color: var(--z-ink, #0b1530);
+  }
+
+  .th-sort .sort-icon {
+    font-size: 14px;
+    margin: 0;
+    opacity: 1;
+  }
+
+  .th-sort .sort-icon--idle {
+    opacity: 0.55;
+  }
+
+  .actions-head {
+    color: transparent;
+    font-size: 0;
+  }
+
+  .th-hint {
+    margin-inline-start: 2px;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 10.5px;
+    font-weight: 500;
+  }
+
+  /* ---------- rows ---------- */
+  .purchase-row {
+    height: auto;
+  }
+
+  .purchase-row:hover {
+    background: var(--z-hover, #f5f9ff);
+  }
+
+  .bill-no {
+    display: inline-block;
+    max-width: 100%;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    background: transparent;
+    color: var(--z-link, #2f6fed);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 12.5px;
+    font-weight: 800;
+    text-align: start;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .bill-no:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .bill-date {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
     line-height: 1.35;
   }
 
-  .purchases-page :global(.summary-value) {
-    color: #0f172a;
-    font-size: var(--app-heading-sm, 1.1rem);
-    font-weight: 850;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
+  .bill-date__main {
+    overflow: hidden;
+    color: var(--z-ink, #0b1530);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .filters-wrap {
-    overflow: visible;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    background: #ffffff;
-    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  .bill-date__sub {
+    overflow: hidden;
+    color: var(--z-subtle, #94a3b8);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 11px;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .filter-toolbar {
-    padding: 0.9rem 1rem;
-  }
-
-  .filter-toolbar-row {
+  .supplier {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 0.65rem;
+    gap: 10px;
+    min-width: 0;
   }
 
-  .filter-toggle {
-    min-height: var(--control-height);
+  .supplier__avatar {
     display: inline-flex;
+    flex: 0 0 28px;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
-    padding: 0.55rem 0.9rem;
-    border: 1px solid #dbe7f3;
-    border-radius: 12px;
-    background: #ffffff;
-    color: #334155;
-    font-size: 0.82rem;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+    font-size: 12.5px;
     font-weight: 800;
     line-height: 1;
-    transition:
-      background 0.16s ease,
-      border-color 0.16s ease,
-      color 0.16s ease,
-      box-shadow 0.16s ease,
-      transform 0.16s ease;
   }
 
-  .filter-toggle:hover {
-    transform: translateY(-1px);
-    border-color: #bfdbfe;
-    background: #f8fbff;
-    color: #0f6efd;
-  }
-
-  .filter-toggle--active {
-    border-color: #bfdbfe;
-    background: #eff6ff;
-    color: #0f6efd;
-    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
-  }
-
-  .filter-toggle em {
-    min-width: 18px;
-    height: 18px;
-    display: inline-grid;
-    place-items: center;
-    border-radius: 999px;
-    background: #0f6efd;
-    color: #ffffff;
-    font-size: 0.68rem;
-    font-style: normal;
-    font-weight: 900;
-  }
-
-  .filter-toggle__chevron {
-    font-size: 0.72rem;
-    transition: transform 0.16s ease;
-  }
-
-  .filter-toggle__chevron--open {
-    transform: rotate(180deg);
-  }
-
-  .toolbar-actions {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.5rem;
-  }
-
-  .toolbar-actions :global(.action-btn) {
-    min-height: var(--control-height);
-  }
-
-  .toolbar-actions :global(.pdf-btn) {
-    border-color: #e2e8f0;
-    background: #ffffff;
-    color: #64748b;
-    box-shadow: none;
-  }
-
-  .toolbar-actions :global(.pdf-btn:hover:not(:disabled)) {
-    background: #f8fafc;
-    border-color: #cbd5e1;
-    color: #0f172a;
-    transform: none;
-  }
-
-  .filter-panel {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr));
-    gap: 0.75rem;
-    margin-top: 0.85rem;
-    padding-top: 0.85rem;
-    border-top: 1px solid #eef2f7;
-    align-items: end;
-  }
-
-  .filter-panel :global(.filter-select),
-  .filter-panel .date-field,
-  .filter-panel__action {
-    width: 100%;
+  .supplier__name {
+    flex: 1 1 auto;
     min-width: 0;
-  }
-
-  .filter-panel :global(.filter-select) {
-    width: 100%;
-    max-width: none;
-  }
-
-  .filter-panel__action {
-    display: flex;
-    align-items: end;
-  }
-
-  .filter-panel__action :global(.action-btn) {
-    width: 100%;
-  }
-
-  .unified-search {
-    position: relative;
-    display: flex;
-    align-items: center;
-    flex: 1 1 260px;
-    min-width: 220px;
-    min-height: var(--control-height);
-    padding-inline: 0.85rem;
-    gap: 0.5rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    background: #ffffff;
-  }
-
-  .unified-search:focus-within {
-    border-color: #93c5fd;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
-  }
-
-  .unified-search > i {
-    flex-shrink: 0;
-    color: #94a3b8;
-    font-size: 0.9rem;
-  }
-
-  .unified-search-input {
-    flex: 1;
-    min-width: 0;
-    height: 38px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: #334155;
-    font-size: 0.84rem;
-    font-weight: 600;
-  }
-
-  .unified-search-input:focus {
-    outline: none;
-  }
-
-  .supplier-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    flex-shrink: 0;
-    max-width: 180px;
-    height: 28px;
-    padding-inline: 0.55rem;
-    border: 1px solid #bfdbfe;
-    border-radius: 999px;
-    background: #eff6ff;
-    color: #0f6efd;
-    font-size: 0.74rem;
-    font-weight: 700;
-  }
-
-  .supplier-chip > span {
     overflow: hidden;
+    color: var(--z-ink, #0b1530);
+    font-size: 12.5px;
+    font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .chip-clear {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    color: #0f6efd;
-    background: transparent;
-    font-size: 0.62rem;
-    cursor: pointer;
-  }
-
-  .chip-clear:hover {
-    background: rgba(37, 99, 235, 0.12);
-  }
-
-  .supplier-dropdown {
-    position: absolute;
-    inset-inline: 0;
-    top: calc(100% + 4px);
-    z-index: 20;
-    max-height: 220px;
-    margin: 0;
-    padding: 4px;
-    overflow: auto;
-    list-style: none;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    background: #ffffff;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
-  }
-
-  .supplier-dropdown button {
+  .warehouse-cell {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
-    width: 100%;
-    padding: 7px 8px;
-    border: 0;
-    border-radius: 8px;
-    color: #334155;
-    background: transparent;
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-align: start;
-    cursor: pointer;
-  }
-
-  .supplier-dropdown button i {
-    color: #64748b;
-    font-size: 0.82rem;
-  }
-
-  .supplier-dropdown button:hover {
-    background: #eff6ff;
-    color: #0f6efd;
-  }
-
-  .date-field {
-    display: grid;
-    gap: 0.18rem;
+    gap: 5px;
     min-width: 0;
+    color: var(--z-text, #475569);
   }
 
-  .date-field__label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.28rem;
-    color: #64748b;
-    font-size: var(--app-font-xs, 0.68rem);
-    font-weight: 800;
-    white-space: nowrap;
-  }
-
-  .date-field :global(.date-picker-control) {
-    width: 100%;
-  }
-
-  .purchases-page :global(.show-all-btn) {
-    min-height: var(--control-height-sm, 2.125rem);
-    padding-inline: 0.85rem;
-    border-radius: 8px;
-    border-color: #dbe7f3;
-    background: #ffffff;
-    color: #64748b;
-    box-shadow: none;
-    white-space: nowrap;
-  }
-
-  .purchases-page :global(.show-all-btn:hover:not(:disabled)) {
-    background: #f8fafc;
-    border-color: #cbd5e1;
-    color: #0f172a;
-    transform: none;
-  }
-
-  .purchases-table-card {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    background: #ffffff;
-    box-shadow: 0 6px 22px rgba(15, 23, 42, 0.05);
-  }
-
-  .table-card-body {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-    padding: 0.15rem 0.25rem 0;
-  }
-
-  /* Overdue / due-soon tint over the shared table row background. */
-  :global(.data-table tbody tr.row-overdue) {
-    background: #fef2f2 !important;
-  }
-
-  :global(.data-table tbody tr.row-due-soon) {
-    background: #fffbeb !important;
-  }
-
-  .cell-muted {
-    color: #94a3b8;
-    font-size: 0.78rem;
-  }
-
-  .bill-link {
-    padding: 0;
-    border: 0;
-    color: #0f6efd;
-    font-weight: 700;
-    background: transparent;
-    font-size: var(--table-font-size, 0.78rem);
-    text-decoration: underline;
-  }
-
-  .account-badge {
-    display: inline-flex;
-    align-items: center;
-    min-height: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    color: #1d4ed8;
-    background: transparent;
-    font-size: 0.74rem;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  .account-badge:hover {
-    background: transparent;
-    color: #1e40af;
-  }
-
-  .warehouse-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    max-width: 100%;
-    padding: 0;
-    border: 0;
-    border-radius: 0.25rem;
-    background: transparent;
-    color: #0f6efd;
-    font: inherit;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  .warehouse-link i {
+  .warehouse-cell__icon {
     flex: 0 0 auto;
-    font-size: 0.78rem;
-    opacity: 0.75;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 15px;
   }
 
-  .warehouse-link span {
+  .warehouse-cell__name {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
+    font-size: 12.5px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .warehouse-link:hover span {
-    text-decoration: underline;
-    text-underline-offset: 0.15rem;
-  }
-
-  .warehouse-link:focus-visible {
-    outline: 2px solid currentColor;
-    outline-offset: 2px;
-  }
-
-  .amount-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    min-height: 28px;
-    padding: 0.28rem 0.62rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 999px;
-    color: #334155;
-    background: #ffffff;
-    font-size: 0.78rem;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .remaining-cell {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
-    flex-wrap: wrap;
-  }
-
-  .payment-add-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.3rem;
-    min-height: 28px;
-    padding: 0.28rem 0.62rem;
-    border: 1px solid #dbeafe;
-    border-radius: 999px;
-    color: #1d4ed8;
-    background: #f8fbff;
-    font-size: 0.78rem;
-    font-weight: 700;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: all 0.16s ease;
-  }
-
-  .payment-add-btn:hover {
-    border-color: #93c5fd;
-    color: #0f6efd;
-    background: #eff6ff;
-    transform: translateY(-1px);
-  }
-
-  .purchases-page :global(.erp-badge.positive),
-  .purchases-page :global(.erp-badge.warning),
-  .purchases-page :global(.erp-badge.negative) {
-    min-height: 26px;
-    padding: 0.28rem 0.62rem;
-    font-size: 0.74rem;
+  .amount {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--z-ink, #0b1530);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 13px;
     font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.55;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .purchases-page :global(.table-actions .action-btn.tone-view),
-  .purchases-page :global(.table-actions .action-btn.tone-edit) {
-    color: #0f6efd;
-    background: #eff6ff;
-    border-color: #bfdbfe;
+  .amount__unit {
+    margin-inline-start: 4px;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 10px;
+    font-weight: 700;
   }
 
+  .payment-cell {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .payment-cell__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .pay-chip {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 4px;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.55;
+    white-space: nowrap;
+  }
+
+  .pay-chip--paid {
+    background: var(--z-ok-soft, #dcfce7);
+    color: var(--z-ok, #15803d);
+  }
+
+  .pay-chip--partial {
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .pay-chip--credit {
+    background: var(--z-warn-soft, #fef3c7);
+    color: var(--z-warn, #92400e);
+  }
+
+  .payment-cell__remaining {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--z-subtle, #94a3b8);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 12px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .payment-cell__remaining.is-open {
+    color: var(--z-warn, #92400e);
+  }
+
+  .payment-cell__bar {
+    display: block;
+    height: 4px;
+    margin-top: 5px;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--z-surface-3, #f1f5f9);
+  }
+
+  .payment-cell__fill {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+  }
+
+  .payment-cell__fill--paid {
+    background: #16a34a;
+  }
+
+  .payment-cell__fill--partial {
+    background: #2f6fed;
+  }
+
+  .payment-cell__fill--credit {
+    background: #d97706;
+  }
+
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 3px 10px 3px 9px;
+    padding-inline-start: 9px;
+    padding-inline-end: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.55;
+    white-space: nowrap;
+  }
+
+  .status-chip__dot {
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .status-chip--ok {
+    background: var(--z-ok-soft, #dcfce7);
+    color: var(--z-ok, #15803d);
+  }
+
+  .status-chip--neutral {
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-text, #475569);
+  }
+
+  .status-chip--danger {
+    background: var(--z-debit-soft, #fdecec);
+    color: var(--z-debit, #dc2626);
+  }
+
+  /* The reference row actions are 30px squares with an 8px radius. */
   .purchases-page :global(.table-actions .action-btn) {
-    width: 36px;
-    min-height: 36px;
-    border-radius: 10px;
-    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border-radius: 8px;
   }
 
-  .purchases-page :global(.pagination-shell) {
-    padding: 0.65rem 0.85rem;
-    border-top: 1px solid #eef2f7;
-    background: #F8FAFC;
-  }
-
-  /* Shared index-toolbar adaptation for the purchase-specific filters. */
-  .filters-wrap {
-    position: relative;
-    z-index: 50;
-    width: 100%;
-    min-width: 0;
-    overflow: visible;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .filters-wrap.filters-open {
-    z-index: 100;
-  }
-
-  .filter-toolbar {
-    width: 100%;
-    padding: 0;
-  }
-
-  .filter-toolbar-row {
-    width: 100%;
-    min-width: 0;
-    flex-wrap: nowrap;
-    gap: 0.5rem;
-  }
-
-  .unified-search {
-    flex: 1 1 auto;
-    width: 100%;
-    min-width: 0;
-    height: var(--index-toolbar-control-height, 2.625rem);
-    min-height: var(--index-toolbar-control-height, 2.625rem);
-    padding-inline: 0.75rem 0.375rem;
-    border-color: #d6e0ed;
-    border-radius: 0.625rem;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
-  }
-
-  .unified-search:hover {
-    border-color: #bfd0e4;
-  }
-
-  .unified-search:focus-within,
-  .filters-open .unified-search {
-    border-color: #79a8f8;
-    box-shadow:
-      0 0 0 3px rgba(37, 99, 235, 0.08),
-      0 4px 12px rgba(15, 23, 42, 0.04);
-  }
-
-  .unified-search-input {
-    height: 2.5rem;
-    min-height: 2.5rem;
-    color: #26364b;
-    font-size: 0.875rem;
-    font-weight: 550;
-  }
-
-  .purchase-search-clear,
-  .purchase-filter-toggle {
-    display: inline-grid;
-    place-items: center;
-    flex: 0 0 1.75rem;
-    width: 1.75rem;
-    min-width: 1.75rem;
-    height: 1.75rem;
-    min-height: 1.75rem;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0.4375rem;
+  .empty-clear {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--z-border-strong, #dce6f8);
+    border-radius: 9px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-link, #2f6fed);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
     cursor: pointer;
   }
 
-  .purchase-search-clear {
-    background: transparent;
-    color: #94a3b8;
-    font-size: 0.6875rem;
+  .empty-clear:hover {
+    background: var(--z-brand-soft, #e3ecff);
   }
 
-  .purchase-search-clear:hover {
-    background: #f1f5f9;
-    color: #475569;
+  /* Reference empty state: glyph in a 48px tile. */
+  .purchases-page :global(.index-table-state .empty-state i) {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-muted, #64748b);
+    font-size: 26px;
   }
 
-  .purchase-filter-toggle {
-    background: #0f6efd;
-    color: #ffffff;
-    font-size: 0.85rem;
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.18);
+  .purchases-page :global(.index-table-state .empty-state p) {
+    color: var(--z-ink, #0b1530);
+    font-size: 14px;
+    font-weight: 700;
   }
 
-  .purchase-filter-toggle:hover {
-    background: #0f6efd;
-    color: #ffffff;
+  @media (max-width: 1100px) {
+    .kpi {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
-  .purchase-filter-toggle--active {
-    background: #0f6efd;
-    color: #ffffff;
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.18);
-  }
+  @media (max-width: 900px) {
+    .purchases-page :global(.index-toolbar-main .filter-toolbar-row) {
+      flex-wrap: wrap;
+    }
 
-  .purchase-filter-toggle i {
-    color: inherit !important;
-  }
-
-  .purchase-filter-toggle:not(.purchase-filter-toggle--active) i {
-    color: #ffffff !important;
-  }
-
-  .purchase-filter-toggle--active i {
-    color: #ffffff !important;
-  }
-
-  .filter-panel {
-    position: absolute;
-    top: calc(100% + 0.75rem);
-    right: 0;
-    z-index: 1000;
-    width: min(44rem, calc(100vw - 3rem));
-    margin: 0;
-    padding: 1rem;
-    border: 1px solid rgba(15, 23, 42, 0.1);
-    border-radius: 1rem;
-    background: #ffffff;
-    box-shadow:
-      0 24px 60px rgba(15, 23, 42, 0.17),
-      0 8px 20px rgba(15, 23, 42, 0.07);
+    .purchases-page :global(.filter-tools--grouped) {
+      max-width: 100%;
+      overflow-x: auto;
+    }
   }
 
   @media (max-width: 767.98px) {
-    .purchases-summary-grid {
-      grid-template-columns: 1fr !important;
+    /* Reference mobile KPI: two compact cards, side figures dropped. */
+    .kpi {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .filter-toolbar-row {
-      flex-direction: column;
-      align-items: stretch;
+    .kcard {
+      padding: 8px 10px;
+      gap: 8px;
     }
 
-    .unified-search,
-    .filter-panel :global(.filter-select),
-    .date-field,
-    .filter-panel :global(.show-all-btn) {
-      width: 100%;
-      min-width: 0;
-      flex: 1 1 auto;
+    .ktile {
+      flex-basis: 28px;
+      width: 28px;
+      height: 28px;
     }
 
-    .filter-panel {
-      right: auto;
-      left: 0;
-      grid-template-columns: 1fr;
-      width: 100%;
-      max-height: min(70vh, 32rem);
-      overflow-y: auto;
+    .ktile .ms {
+      font-size: 14px;
     }
-  }
 
-  :global(html.dark .purchases-page .page-header),
-  :global(html.dark .purchases-page .summary-card) {
-    border-color: var(--erp-border);
-    background: var(--erp-surface);
-    color: var(--erp-text);
-    box-shadow: var(--erp-shadow-sm);
-  }
+    .kval {
+      font-size: 15px;
+    }
 
-  :global(html.dark) .filters-wrap,
-  :global(html.dark) .purchases-table-card {
-    border-color: var(--erp-border);
-    background: var(--erp-surface);
-    color: var(--erp-text);
-    box-shadow: var(--erp-shadow-sm);
-  }
+    .kside {
+      display: none;
+    }
 
-  :global(html.dark .purchases-page .page-header p),
-  :global(html.dark .purchases-page .summary-label) {
-    color: var(--erp-muted);
-  }
+    .active-filters {
+      padding-inline: 10px;
+    }
 
-  :global(html.dark) .cell-muted,
-  :global(html.dark) .date-field__label {
-    color: var(--erp-muted);
-  }
-
-  :global(html.dark .purchases-page .summary-value),
-  :global(html.dark) .purchases-page {
-    color: var(--erp-text);
-  }
-
-  :global(html.dark .purchases-page .header-icon) {
-    background: rgba(96, 165, 250, 0.14);
-    color: #93c5fd;
-    box-shadow: none;
-  }
-
-  :global(html.dark .purchases-page .header-actions .action-btn.pdf-btn),
-  :global(html.dark) .toolbar-actions :global(.pdf-btn),
-  :global(html.dark) .filter-toggle,
-  :global(html.dark .purchases-page .show-all-btn) {
-    border-color: var(--erp-border);
-    background: var(--erp-surface-soft);
-    color: var(--erp-text-soft);
-  }
-
-  :global(html.dark .purchases-page .header-actions .action-btn.pdf-btn:hover:not(:disabled)),
-  :global(html.dark) .toolbar-actions :global(.pdf-btn:hover:not(:disabled)),
-  :global(html.dark) .filter-toggle:hover,
-  :global(html.dark .purchases-page .show-all-btn:hover:not(:disabled)) {
-    border-color: rgba(96, 165, 250, 0.45);
-    background: rgba(96, 165, 250, 0.14);
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .filter-toggle--active {
-    border-color: rgba(96, 165, 250, 0.38);
-    background: rgba(96, 165, 250, 0.14);
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .supplier-chip {
-    border-color: rgba(96, 165, 250, 0.38);
-    background: rgba(96, 165, 250, 0.14);
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .unified-search {
-    border-color: var(--erp-border);
-    background: var(--erp-surface-soft);
-    color: var(--erp-text);
-    box-shadow: none;
-  }
-
-  :global(html.dark) .unified-search:hover,
-  :global(html.dark) .unified-search:focus-within,
-  :global(html.dark) .filters-open .unified-search {
-    border-color: #60a5fa;
-    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14);
-  }
-
-  :global(html.dark) .unified-search > i,
-  :global(html.dark) .purchase-search-clear {
-    color: var(--erp-muted);
-  }
-
-  :global(html.dark) .unified-search-input {
-    color: var(--erp-text);
-  }
-
-  :global(html.dark) .purchase-search-clear:hover,
-  :global(html.dark) .chip-clear:hover {
-    background: rgba(148, 163, 184, 0.12);
-    color: var(--erp-text);
-  }
-
-  :global(html.dark) .supplier-dropdown,
-  :global(html.dark) .filter-panel {
-    border-color: var(--erp-border);
-    background: var(--erp-surface);
-    box-shadow: 0 18px 38px rgba(0, 0, 0, 0.36);
-  }
-
-  :global(html.dark) .supplier-dropdown button {
-    color: var(--erp-text);
-  }
-
-  :global(html.dark) .supplier-dropdown button i {
-    color: var(--erp-muted);
-  }
-
-  :global(html.dark) .supplier-dropdown button:hover {
-    background: rgba(96, 165, 250, 0.12);
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .bill-link,
-  :global(html.dark) .account-badge,
-  :global(html.dark) .warehouse-link {
-    color: #60a5fa;
-  }
-
-  :global(html.dark) .bill-link:hover,
-  :global(html.dark) .account-badge:hover,
-  :global(html.dark) .warehouse-link:hover {
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .amount-pill {
-    border-color: var(--erp-border);
-    background: var(--erp-surface-soft);
-    color: var(--erp-text);
-  }
-
-  :global(html.dark) .payment-add-btn {
-    border-color: rgba(96, 165, 250, 0.38);
-    background: rgba(96, 165, 250, 0.12);
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .payment-add-btn:hover {
-    border-color: rgba(147, 197, 253, 0.65);
-    background: rgba(96, 165, 250, 0.2);
-  }
-
-  :global(html.dark) .purchases-page :global(.table-actions .action-btn) {
-    box-shadow: none;
-  }
-
-  :global(html.dark) .purchases-page :global(.table-actions .action-btn.tone-view),
-  :global(html.dark) .purchases-page :global(.table-actions .action-btn.tone-edit) {
-    border-color: rgba(96, 165, 250, 0.38);
-    background: rgba(96, 165, 250, 0.14);
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .purchases-page :global(.pagination-shell) {
-    border-top-color: var(--erp-border);
-    background: var(--erp-surface);
+    .date-range__option {
+      padding: 0 9px;
+    }
   }
 </style>

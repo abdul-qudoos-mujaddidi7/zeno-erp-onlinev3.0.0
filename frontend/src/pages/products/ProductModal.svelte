@@ -851,7 +851,7 @@ import { userApi } from '../../api/userApi.js';
       errored = true;
     }
 
-    if (!name.trim()) {
+    if (!String(name ?? '').trim()) {
       toast.error(t('Error'), t('Name is required.'));
       errored = true;
     }
@@ -902,6 +902,13 @@ import { userApi } from '../../api/userApi.js';
     try {
       let productId;
       const productCode = await resolveProductCodeForSave();
+      /*
+       * A product saved before its organization used a currency stores NULL
+       * there (the pharmacy sheet shows «AFN» from buy/sell currency only), so
+       * trimming it straight away threw "Cannot read properties of null".
+       */
+      const safeName = String(name ?? '').trim();
+      const safeCurrency = String(currency ?? '').trim();
       percentage = enablePercent ? Number(percentage) || 0 : 0;
       if (editingId) {
         let oldProduct = (await productApi.getById(editingId))?.data || null;
@@ -916,14 +923,14 @@ import { userApi } from '../../api/userApi.js';
             brand_id: parseInt(brand_id) || 0,
             generic_id: parseInt(generic_id) || 0,
             product_unit_id: parseInt(product_unit_id) || 0,
-            name: name.trim(),
+            name: safeName,
             code: productCode,
             product_status: product_status,
             percentage: Number(percentage) || 0,
             description,
             buy_price: parseFloat(buy_price) || 0,
             buy_currency: buy_currency,
-            currency: currency.trim(),
+            currency: safeCurrency,
             sell_price: parseFloat(sell_price) || 0,
             sell_currency: sell_currency,
             status: parseInt(status) || 1,
@@ -948,7 +955,7 @@ import { userApi } from '../../api/userApi.js';
             brand_id: parseInt(brand_id) || 0,
             generic_id: parseInt(generic_id) || 0,
             product_unit_id: parseInt(product_unit_id) || 0,
-            name: name.trim(),
+            name: safeName,
             code: productCode,
             product_status: product_status,
             percentage: Number(percentage) || 0,
@@ -960,7 +967,7 @@ import { userApi } from '../../api/userApi.js';
             alarm_expiry_days: Number(alarm_expiry_days),
             buy_price: parseFloat(buy_price) || 0,
             buy_currency: buy_currency,
-            currency: currency,
+            currency: safeCurrency,
             sell_price: parseFloat(sell_price) || 0,
             sell_currency: sell_currency,
             status: parseInt(status) || 1,
@@ -978,14 +985,14 @@ import { userApi } from '../../api/userApi.js';
           service_duration_unit: service_duration_unit,
           generic_id: parseInt(generic_id) || 0,
           product_unit_id: parseInt(product_unit_id) || 0,
-          name: name.trim(),
+          name: safeName,
           code: productCode,
           percentage: Number(percentage) || 0,
           description,
           product_status: product_status,
           buy_price: parseFloat(buy_price) || 0,
           buy_currency: buy_currency,
-          currency: currency,
+          currency: safeCurrency,
           sell_price: parseFloat(sell_price) || 0,
           sell_currency: sell_currency,
           alarm_quantity: Number(alarm_quantity),

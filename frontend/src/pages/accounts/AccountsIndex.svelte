@@ -48,6 +48,7 @@
   let filterType = new Set();
   let filterGroup = new Set();
   let searchTerm = '';
+  let filtersOpen = false;
   let filterStatus = new Set(['active']);
   let currentPage = 1;
   let itemsPerPage = DEFAULT_PAGE_SIZE;
@@ -285,20 +286,6 @@
     );
   }
 
-  /* The reference tints the avatar and the type pill by the account's
-     accounting class: customers/assets blue, suppliers orange-red, equity
-     purple, expenses orange. */
-  function typeTone(account) {
-    if (!account) return '#475569';
-    const type = accountTypeFor(account);
-    const label = `${type?.code || ''} ${type?.name || ''} ${type?.name_fa || ''}`.toLowerCase();
-    if (isSupplierAccount(account) && !isCustomerAccount(account)) return '#d64560';
-    if (/expense|مصرف|لګښت/.test(label)) return '#d9822b';
-    if (Number(account.account_type_id) === 7 || /equity|سهام|سهم|share/.test(label)) return '#7c5ce0';
-    if (isCustomerAccount(account)) return '#2f6fed';
-    return '#475569';
-  }
-
   function preferredTypeId(kind) {
     const matches = accountTypes.filter((type) =>
       kind === 'customer'
@@ -344,7 +331,7 @@
     {
       key: 'receivable',
       label: t('Receivable'),
-      icon: 'bi-arrow-down-left',
+      icon: 'call_received',
       value: formatAmount(receivableTotal),
       unit: t('AFN'),
       hero: true,
@@ -353,7 +340,7 @@
     {
       key: 'payable',
       label: t('Payable'),
-      icon: 'bi-arrow-up-right',
+      icon: 'call_made',
       value: formatAmount(payableTotal),
       unit: t('AFN'),
       sub: t('All Supplier Balances'),
@@ -361,7 +348,7 @@
     {
       key: 'debtors',
       label: t('Debtors'),
-      icon: 'bi-people',
+      icon: 'group',
       value: formatAmount(debtorAccounts.length),
       unit: t('Account'),
       sub: t('Customers'),
@@ -369,7 +356,7 @@
     {
       key: 'active',
       label: t('Active'),
-      icon: 'bi-person-check',
+      icon: 'contacts',
       value: formatAmount(summaryAccounts.length),
       unit: t('Account'),
       sub: t('Accounts'),
@@ -394,6 +381,12 @@
     { key: 'debt', label: t('Debit'), count: debtorAccounts.length },
     { key: 'arch', label: t('Archived'), count: null },
   ];
+
+  /* Choosing from the filter popup applies at once and closes it. */
+  function chooseQuickFilter(kind) {
+    filtersOpen = false;
+    void setQuickFilter(kind);
+  }
 
   async function setQuickFilter(kind) {
     if (kind === 'debt' || kind === 'cust' || kind === 'sup') {
@@ -750,8 +743,6 @@
   }
 
   $: canCreateAccount = permissions?.some((p) => p.code === 'Accounts' && p.create);
-  $: rangeStart = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
-  $: rangeEnd = Math.min(currentPage * itemsPerPage, totalItems);
   $: hasClearableFilters = Boolean(activeChips.length || searchTerm.trim());
 </script>
 
@@ -759,7 +750,6 @@
   <IndexPageLayout
     dir={t('dir')}
     ariaLabel={t('Accounts')}
-    toolbarWidth="440px"
     showStats={true}
     showExtra={true}
     showFooter={!loading && totalItems > 0}
@@ -777,7 +767,7 @@
         {#each kpiCards as card (card.key)}
           <article class="kcard kcard--{card.key}" data-hero={card.hero ? 'true' : undefined}>
             <span class="ktile" aria-hidden="true">
-              <i class="bi {card.icon}"></i>
+              <span class="ms">{card.icon}</span>
             </span>
             <div class="kbody">
               <span class="klabel">{card.label}</span>
@@ -794,6 +784,7 @@
 
     <svelte:fragment slot="toolbar">
       <FilterToolbar
+        bind:filtersOpen
         searchValue={searchTerm}
         searchPlaceholder={t('Search accounts...')}
         filters={accountToolbarFilters}
@@ -806,22 +797,24 @@
         }}
         on:filterChange={handleAccountToolbarFilter}
         on:reset={resetFilters}>
-        <div slot="beforeFilters" class="quick-filters" role="group" aria-label={t('Filter')}>
-          {#each quickOptions as option (option.key)}
-            <button
-              type="button"
-              class="quick-filter"
-              class:active={quickKind === option.key}
-              aria-pressed={quickKind === option.key}
-              disabled={option.disabled}
-              on:click={() => setQuickFilter(option.key)}>
-              <span>{option.label}</span>
-              {#if option.count != null && summaryLoaded}
-                <span class="quick-filter__count" dir="ltr">{option.count}</span>
-              {/if}
-            </button>
-          {/each}
-        </div>
+        <svelte:fragment slot="panelBeforeFields">
+          <div class="quick-filters" role="group" aria-label={t('Filter')}>
+            {#each quickOptions as option (option.key)}
+              <button
+                type="button"
+                class="quick-filter"
+                class:active={quickKind === option.key}
+                aria-pressed={quickKind === option.key}
+                disabled={option.disabled}
+                on:click={() => chooseQuickFilter(option.key)}>
+                <span class="quick-filter__label">{option.label}</span>
+                {#if option.count != null && summaryLoaded}
+                  <span class="quick-filter__count" dir="ltr">{option.count}</span>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        </svelte:fragment>
       </FilterToolbar>
     </svelte:fragment>
 
@@ -886,9 +879,11 @@
               <button type="button" on:click={() => setSort('name')}>
                 {t('Name')}
                 {#if sortColumn === 'name'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                  <span class="ms sort-icon" aria-hidden="true">
+                    {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                  </span>
                 {:else}
-                  <i class="bi bi-arrow-down-up sort-icon sort-icon--idle"></i>
+                  <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
                 {/if}
               </button>
             </th>
@@ -902,9 +897,11 @@
                 <button type="button" on:click={() => setSort('percentage')}>
                   {t('Percentage')}
                   {#if sortColumn === 'percentage'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                    <span class="ms sort-icon" aria-hidden="true">
+                      {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                    </span>
                   {:else}
-                    <i class="bi bi-arrow-down-up sort-icon sort-icon--idle"></i>
+                    <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
                   {/if}
                 </button>
               </th>
@@ -919,9 +916,11 @@
                 <button type="button" on:click={() => setSort('type')}>
                   {t('Type')}
                   {#if sortColumn === 'type'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                    <span class="ms sort-icon" aria-hidden="true">
+                      {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                    </span>
                   {:else}
-                    <i class="bi bi-arrow-down-up sort-icon sort-icon--idle"></i>
+                    <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
                   {/if}
                 </button>
               </th>
@@ -937,9 +936,11 @@
                 <button type="button" on:click={() => setSort('group')}>
                   {t('Group')}
                   {#if sortColumn === 'group'}
-                    <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                    <span class="ms sort-icon" aria-hidden="true">
+                      {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                    </span>
                   {:else}
-                    <i class="bi bi-arrow-down-up sort-icon sort-icon--idle"></i>
+                    <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
                   {/if}
                 </button>
               </th>
@@ -954,9 +955,11 @@
               <button type="button" on:click={() => setSort('created_at')}>
                 {t('Date')}
                 {#if sortColumn === 'created_at'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                  <span class="ms sort-icon" aria-hidden="true">
+                    {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                  </span>
                 {:else}
-                  <i class="bi bi-arrow-down-up sort-icon sort-icon--idle"></i>
+                  <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
                 {/if}
               </button>
             </th>
@@ -970,9 +973,11 @@
               <button type="button" on:click={() => setSort('balance')}>
                 {t('Balance')}
                 {#if sortColumn === 'balance'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} sort-icon"></i>
+                  <span class="ms sort-icon" aria-hidden="true">
+                    {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                  </span>
                 {:else}
-                  <i class="bi bi-arrow-down-up sort-icon sort-icon--idle"></i>
+                  <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
                 {/if}
               </button>
             </th>
@@ -980,7 +985,7 @@
           </tr>
         </svelte:fragment>
 
-        {#each paginatedAccounts as acc (acc.id)}
+        {#each paginatedAccounts as acc, index (acc.id)}
           {@const balanceLines = getVisibleBalanceLines(acc)}
           {@const allBalanceLines = getBalanceLines(acc)}
           <tr class="account-row" on:click={() => push(`/dashboard/account/${acc.id}`)}>
@@ -988,14 +993,13 @@
               <div class="account-info">
                 <span
                   class="account-avatar"
-                  style={`--type-tint: ${typeTone(acc)};`}
                   aria-hidden="true">
                   {accountInitial(acc)}
                 </span>
                 <span class="account-identity">
                   <span class="account-name">{getAccountDisplayName(acc)}</span>
                   <span class="account-meta" dir="rtl">
-                    <bdi dir="ltr">#{acc.id}</bdi>
+                    <bdi dir="ltr">#{(currentPage - 1) * itemsPerPage + index + 1}</bdi>
                     {#if acc.phone || acc.phone2}
                       <span aria-hidden="true">·</span>
                       <bdi dir="ltr">{acc.phone || acc.phone2}</bdi>
@@ -1020,9 +1024,7 @@
               </td>
             {:else}
               <td class="col-start">
-                <span
-                  class="account-type-badge"
-                  style={`--type-tint: ${typeTone(acc)};`}>
+                <span class="account-type-badge">
                   {getTypeName(acc.account_type_id) || '—'}
                 </span>
               </td>
@@ -1046,9 +1048,6 @@
                 <div class="balance-list" title={getBalanceTitle(acc)}>
                   {#each balanceLines as line}
                     <span class="balance-line">
-                      {#if line.label}
-                        <span class="balance-label" style:color={line.labelColor}>{line.label}</span>
-                      {/if}
                       <span
                         class="balance-amount"
                         class:balance-amount--single={balanceLines.length === 1}
@@ -1100,8 +1099,6 @@
         {totalItems}
         ariaLabel={t('Accounts pagination')}
         rowLabel={t('rows')}
-        rangeStart={rangeStart}
-        rangeEnd={rangeEnd}
         on:perPageChange={handlePerPageChange}
         {getPageNumbers} />
     </svelte:fragment>
@@ -1118,6 +1115,9 @@
     height: 100%;
     min-width: 0;
     min-height: 0;
+    --danger-text: var(--z-danger, #b91c1c);
+    --ok-text: var(--z-ok, #15803d);
+    --ink: var(--z-ink, #0b1530);
   }
 
   /* The reference puts the KPI row on the page surface and the toolbar, table
@@ -1130,25 +1130,6 @@
     background: transparent;
     box-shadow: none;
     overflow: visible;
-  }
-
-  .accounts-page :global(.index-extra-actions) {
-    order: -2;
-    flex: 0 0 auto;
-    justify-content: flex-end;
-    padding: 0;
-    margin-bottom: 8px;
-    border: 0;
-    background: transparent;
-  }
-
-  .accounts-page :global(.index-extra-actions .action-btn.primary) {
-    height: 34px;
-    min-height: 34px;
-    padding: 0 14px;
-    border-radius: 10px;
-    font-size: 12.5px;
-    box-shadow: 0 8px 18px -8px rgba(47, 111, 237, 0.9);
   }
 
   .accounts-page :global(.index-statistics) {
@@ -1223,14 +1204,38 @@
     background: linear-gradient(135deg, var(--z-brand-soft, #e3ecff) 0%, #ffffff 70%);
   }
 
-  .kcard[data-hero='true']::before {
-    content: '';
-    position: absolute;
-    inset-block: 8px;
-    inset-inline-start: 4px;
-    width: 3px;
-    border-radius: 3px;
-    background: var(--z-brand, #2f6fed);
+  :global(html.dark) .accounts-page .kcard,
+  :global([data-mdb-theme='dark']) .accounts-page .kcard {
+    border-color: var(--erp-border, #2b3a4f);
+    background: var(--erp-surface, #111827);
+    color: var(--erp-text, #e5edf7);
+    box-shadow: var(--erp-shadow-sm, 0 8px 22px rgba(0, 0, 0, 0.26));
+  }
+
+  :global(html.dark) .accounts-page .kcard[data-hero='true'],
+  :global([data-mdb-theme='dark']) .accounts-page .kcard[data-hero='true'] {
+    border-color: var(--erp-border-strong, #40516a);
+    background: linear-gradient(135deg, #1e3a8a 0%, #172033 78%);
+  }
+
+  :global(html.dark) .accounts-page .klabel,
+  :global([data-mdb-theme='dark']) .accounts-page .klabel {
+    color: var(--erp-muted, #94a3b8);
+  }
+
+  :global(html.dark) .accounts-page .kval,
+  :global([data-mdb-theme='dark']) .accounts-page .kval {
+    color: var(--erp-text, #e5edf7);
+  }
+
+  :global(html.dark) .accounts-page .kcard--debtors .kval,
+  :global([data-mdb-theme='dark']) .accounts-page .kcard--debtors .kval {
+    color: #fbbf24;
+  }
+
+  :global(html.dark) .accounts-page .kunit,
+  :global([data-mdb-theme='dark']) .accounts-page .kunit {
+    color: var(--erp-text-soft, #cbd5e1);
   }
 
   .ktile {
@@ -1239,14 +1244,17 @@
     flex: 0 0 24px;
     width: 24px;
     height: 24px;
-    border-radius: 7px;
-    font-size: 14px;
+    border-radius: 9px;
     line-height: 1;
   }
 
+  .ktile .ms {
+    font-size: 14px;
+  }
+
   .kcard--receivable .ktile {
-    background: var(--z-debit-soft, #fdecec);
-    color: var(--z-debit, #dc2626);
+    background: var(--z-brand, #2f6fed);
+    color: #ffffff;
   }
 
   .kcard--payable .ktile {
@@ -1329,31 +1337,27 @@
     gap: 8px;
   }
 
-  .accounts-page :global(.index-toolbar-main .filter-search) {
-    flex: 1 1 280px;
-    width: auto;
-    max-width: 440px;
-    margin-inline-end: auto;
-    border-radius: 8px;
-    background: var(--z-surface-2, #f8fafc);
-  }
-
+  /*
+   * Quick account filters read as a two-column grid of choice rows at the top
+   * of the filter popup, each carrying its count.
+   */
   .quick-filters {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 2px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
   }
 
   .quick-filter {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    height: 24px;
+    justify-content: space-between;
+    gap: 6px;
+    width: 100%;
+    height: 28px;
     padding: 0 9px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: var(--z-surface-2, #f8fafc);
     color: var(--z-muted, #64748b);
     font-family: inherit;
     font-size: 11.5px;
@@ -1364,17 +1368,19 @@
     transition:
       color 0.14s ease,
       background 0.14s ease,
-      box-shadow 0.14s ease;
+      border-color 0.14s ease;
   }
 
   .quick-filter:hover:not(:disabled) {
+    border-color: var(--z-border, #e1e7f0);
     color: var(--z-ink, #0b1530);
   }
 
   .quick-filter.active {
-    background: var(--z-surface, #ffffff);
-    color: var(--z-ink, #0b1530);
-    box-shadow: 0 1px 3px rgba(11, 21, 48, 0.14);
+    border-color: var(--z-brand-300, #93b7f7);
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+    box-shadow: none;
   }
 
   .quick-filter:disabled {
@@ -1382,7 +1388,14 @@
     cursor: not-allowed;
   }
 
+  .quick-filter__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .quick-filter__count {
+    flex: 0 0 auto;
     color: var(--z-subtle, #94a3b8);
     font-family: var(--z-font-num, 'Inter', sans-serif);
     font-size: 10.5px;
@@ -1455,6 +1468,15 @@
     opacity: 0.45;
   }
 
+  .accounts-page :global(.accounts-index-content .sort-icon) {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+    line-height: 14px;
+    flex: 0 0 14px;
+  }
+
   .accounts-page :global(.accounts-index-content .data-table) {
     --data-table-alt-row-bg: var(--z-surface-2, #f8fafc);
   }
@@ -1480,8 +1502,8 @@
     width: 26px;
     height: 26px;
     border-radius: 50%;
-    background: color-mix(in srgb, var(--type-tint, #2f6fed) 14%, transparent);
-    color: var(--type-tint, #2f6fed);
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
     font-size: 11px;
     font-weight: 800;
     line-height: 1;
@@ -1529,7 +1551,7 @@
     overflow: hidden;
     border-radius: 999px;
     background: var(--z-surface-3, #f1f5f9);
-    color: var(--type-tint, #475569);
+    color: #475569;
     font-size: 11.5px;
     font-weight: 600;
     line-height: 1.55;
@@ -1580,15 +1602,6 @@
     justify-content: flex-end;
     gap: 5px;
     min-width: 0;
-  }
-
-  .balance-label {
-    min-width: 38px;
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 1.4;
-    text-align: start;
-    white-space: nowrap;
   }
 
   .balance-amount {
@@ -1703,11 +1716,6 @@
   }
 
   @media (max-width: 900px) {
-    .accounts-page :global(.index-toolbar-main .filter-search) {
-      flex: 1 1 200px;
-      max-width: none;
-    }
-
     .accounts-page :global(.filter-tools--grouped) {
       max-width: 100%;
       overflow-x: auto;
@@ -1715,10 +1723,6 @@
   }
 
   @media (max-width: 767.98px) {
-    .accounts-page :global(.index-extra-actions) {
-      margin-bottom: 8px;
-    }
-
     .accounts-page :global(.index-toolbar) {
       border-radius: 14px 14px 0 0;
     }

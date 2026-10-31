@@ -196,7 +196,6 @@
   <IndexPageLayout
     dir={t('dir')}
     ariaLabel={`${t('Exchanges')} ${t('Report')}`}
-    toolbarWidth="25rem"
     showStats={!loading && !loadError}
     showFooter={!loading && filtered.length > 0}
     dense

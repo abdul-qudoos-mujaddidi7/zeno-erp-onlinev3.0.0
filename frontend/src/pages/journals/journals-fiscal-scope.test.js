@@ -22,7 +22,13 @@ const COMPONENT = readFileSync(join(HERE, 'JournalsIndex.svelte'), 'utf8');
 describe('journal list fiscal-year scope', () => {
   it('defaults to the working fiscal year', () => {
     expect(COMPONENT).toMatch(/applyCurrentFiscalYearRange\(/);
-    expect(COMPONENT).toMatch(/workingFiscalYear = await applyCurrentFiscalYearRange/);
+    expect(COMPONENT).toMatch(
+      /const fiscalYearScope = await applyCurrentFiscalYearRange\(/,
+    );
+    expect(COMPONENT).toMatch(/workingFiscalYear = fiscalYearScope;/);
+    expect(COMPONENT).toMatch(
+      /workingFiscalYear = fiscalYearScope;[\s\S]*?await loadJournals\(\);/,
+    );
   });
 
   it('sends the selected year as a date window to the API', () => {

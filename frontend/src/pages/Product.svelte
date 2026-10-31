@@ -1856,7 +1856,6 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
       <IndexPageLayout
         dir={t('dir')}
         ariaLabel={t('Report')}
-        toolbarWidth="25rem"
         showStats={showReportStats}
         showFooter={!reportLoading && filteredTransactions.length > 0}
         dense={true}
@@ -3101,6 +3100,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
     position: sticky;
     top: 0;
     z-index: 1;
+    padding-inline: var(--table-header-padding-x, 0.5rem);
     color: #64748b;
     font-weight: 700;
     background: #ffffff;

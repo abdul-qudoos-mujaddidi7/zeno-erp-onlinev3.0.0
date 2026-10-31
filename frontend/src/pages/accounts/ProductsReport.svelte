@@ -436,7 +436,6 @@
   <IndexPageLayout
     dir={t('dir')}
     ariaLabel={t('Products Report')}
-    toolbarWidth="25rem"
     showFooter={!loading && paginatedItems.length > 0}
     dense={true}
     tablePadding={true}>

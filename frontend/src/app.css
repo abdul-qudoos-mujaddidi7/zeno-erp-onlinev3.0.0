@@ -79,6 +79,7 @@
      --modal-overlay-padding: clamp(0.65rem, 1.5vw, 1.15rem);
      --table-cell-padding-y: 0.8125rem; /* 13px — journals density */
      --table-cell-padding-x: 0.875rem; /* 14px */
+     --table-header-padding-x: 0.5rem;
      --table-font-size: 0.78rem; /* journals tbody */
      --table-header-font-size: 0.72rem; /* journals thead */
    
@@ -577,7 +578,7 @@
      position: sticky;
      top: 0;
      z-index: 2;
-     padding: var(--table-cell-padding-y, 0.8125rem) var(--table-cell-padding-x, 0.875rem);
+     padding: var(--table-cell-padding-y, 0.8125rem) var(--table-header-padding-x, 0.5rem);
      border-bottom: 1px solid #dfe5ed;
      background: #fbfcfe;
      color: #64748b;
@@ -821,7 +822,7 @@
    }
    
    .content-wrapper main .table > thead > tr > th {
-     padding: var(--table-cell-padding-y) var(--table-cell-padding-x);
+     padding: var(--table-cell-padding-y) var(--table-header-padding-x, 0.5rem);
      border-bottom: 1px solid var(--erp-border);
      background: #fbfcfe;
      color: #64748b;
@@ -1848,4 +1849,9 @@ html.dark .table-responsive.table-cards > .table > tbody > tr > th,
 html[data-mdb-theme='dark'] .table-responsive.table-cards > .table > tbody > tr > td,
 html[data-mdb-theme='dark'] .table-responsive.table-cards > .table > tbody > tr > th {
   border-bottom-color: var(--erp-border) !important;
+}
+
+html:not(.dark):not([data-mdb-theme='dark']) .products-page .amount--buy,
+html:not(.dark):not([data-mdb-theme='dark']) .products-page .amount--sell {
+  color: #92400e !important;
 }

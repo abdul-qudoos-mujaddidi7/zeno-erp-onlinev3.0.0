@@ -334,7 +334,6 @@ import { settingsApi } from '../../api/settingsApi.js';
   <IndexPageLayout
     dir={t('dir')}
     ariaLabel={config.title}
-    toolbarWidth="34rem"
     showStats={showHistoryStats}
     showFooter={!loading && filteredRows.length > 0}
     dense={true}

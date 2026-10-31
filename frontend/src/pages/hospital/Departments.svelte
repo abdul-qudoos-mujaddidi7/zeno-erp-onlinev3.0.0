@@ -92,7 +92,6 @@ import { departmentApi } from '../../api/departmentApi.js';
 <IndexPageLayout
   dir={t('dir')}
   ariaLabel={t('Departments')}
-  toolbarWidth="25rem"
   showFooter={!loading && filteredDepartments.length > 0}
   dense={true}
   contained={true}

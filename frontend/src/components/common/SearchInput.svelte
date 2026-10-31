@@ -22,7 +22,9 @@
 <style>
   .search-input {
     position: relative;
-    flex: 1 1 min(13.75rem, 100%);
+    flex: 0 1 328px;
+    width: 328px;
+    max-width: 100%;
     min-width: 0;
   }
 

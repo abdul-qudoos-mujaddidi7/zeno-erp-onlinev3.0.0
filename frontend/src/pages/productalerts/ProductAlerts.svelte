@@ -237,7 +237,6 @@
       <IndexPageLayout
         dir={t('dir')}
         ariaLabel={activeTab === 'quantity' ? t('Low Stock') : t('Expiry')}
-        toolbarWidth="22rem"
         showStats={true}
         showFooter={!loading && matchingRows.length > 0}
         dense={true}
