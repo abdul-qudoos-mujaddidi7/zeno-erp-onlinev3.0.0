@@ -1,6 +1,6 @@
 <script>
   import { onceAsync } from '../../lib/onceAsync.js';
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import { toast } from '../../ToastUI/toast.js';
   import { accountApi } from '../../api/accountApi.js';
   import { accountImageApi } from '../../api/accountImageApi.js';
@@ -8,7 +8,6 @@
   import { t, lang, translate_org_type, settings_all } from '../../i18n/i18n';
   import { isSystemAccount } from '../../lib/systemAccounts.js';
   import AccountGroupModal from './AccountGroupModal.svelte';
-  import FilterSelect from '../../components/common/FilterSelect.svelte';
   import AppDatePicker from '../../components/common/AppDatePicker.svelte';
 
   import WhatsappModal from '../WhatsappModal.svelte';
@@ -20,14 +19,6 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
   $: _translate_org_type = $translate_org_type;
 
   export let accountTypes = [];
-  let accountTypeOptions = [];
-  $: {
-    _lang;
-    accountTypeOptions = accountTypes.map((type) => ({
-      value: type.id,
-      label: getTypeLabel(type),
-    }));
-  }
 
   let WhatsappModalRef = null;
 
@@ -161,6 +152,47 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
         }
       }, 100);
     }
+  }
+
+  function removeAdditionalInitialBalance(index) {
+    additionalInitialBalances.splice(index, 1);
+    additionalInitialBalances = [...additionalInitialBalances];
+    changedCurrency();
+  }
+
+  /* ---------- opening balance currency picker (reference popup list) ---------- */
+  /* -1 = closed, 0 = the main row, 1..n = the additional rows. */
+  let openCurrencyRow = -1;
+
+  function currencySymbol(code) {
+    return currencies.find((cur) => cur.code === code)?.symbol || code;
+  }
+
+  function currencyName(cur) {
+    return cur?.name || t(cur?.code);
+  }
+
+  function toggleCurrencyMenu(rowIndex) {
+    openCurrencyRow = openCurrencyRow === rowIndex ? -1 : rowIndex;
+  }
+
+  function closeCurrencyMenu() {
+    openCurrencyRow = -1;
+  }
+
+  function pickCurrency(rowIndex, code) {
+    if (rowIndex === 0) {
+      currency = code;
+      changedCurrency();
+    } else {
+      const row = additionalInitialBalances[rowIndex - 1];
+      if (row) {
+        row.currency = code;
+        additionalInitialBalances = [...additionalInitialBalances];
+        changedCurrency();
+      }
+    }
+    closeCurrencyMenu();
   }
 
   let initialBalanceType = 'Debit'; // or "credit"
@@ -401,6 +433,10 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
   $: isVisitorType = isVisitorAccountType(account_type_id, accountTypes);
   $: isShareholderType = Number(account_type_id) === 7;
 
+  /* Header preview: the reference sheet shows the typed name, its type and the code. */
+  $: headerTypeLabel = getTypeLabel(getSelectedAccountType(account_type_id)) || t('Account Type');
+  $: headerInitial = (name || '').trim().charAt(0) || '?';
+
   function getCreatedAccountWhatsappTemplate(typeId = account_type_id) {
     /*
      * Customer/general accounts use the existing Settings key:
@@ -632,22 +668,307 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
     return customer?.id ?? accountTypes[0]?.id ?? '';
   }
 
-  function getTypeIcon(typeId) {
+  /* Filled Material Symbols per account type (reference category artwork). */
+  function getTypeSymbol(typeId) {
     const id = Number(typeId);
-    const iconById = {
-      1: 'bi-bank',
-      2: 'bi-wallet2',
-      3: 'bi-truck',
-      4: 'bi-person',
-      5: 'bi-building',
-      6: 'bi-cash-stack',
-      7: 'bi-pie-chart',
-      8: 'bi-people',
-      9: 'bi-hospital',
-      10: 'bi-shop',
+    const symbolById = {
+      1: 'account_balance',
+      2: 'account_balance_wallet',
+      3: 'local_shipping',
+      4: 'person',
+      5: 'apartment',
+      6: 'payments',
+      7: 'pie_chart',
+      8: 'groups',
+      9: 'local_hospital',
+      10: 'storefront',
     };
-    return iconById[id] || 'bi-person-badge';
+    return symbolById[id] || 'badge';
   }
+
+  /* ---------- account type dropdown (reference popup picker) ---------- */
+  let typeMenuOpen = false;
+  let typeTriggerEl;
+  let typeMenuEl;
+  let typeMenuStyle = '';
+  let typeMenuDir = 'rtl';
+  let typeActiveIndex = -1;
+  let typeQuery = '';
+  let filteredTypes = [];
+
+  $: if (!showAccountModal && typeMenuOpen) typeMenuOpen = false;
+
+  function portal(node) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
+
+  function applyTypeFilter() {
+    const needle = typeQuery.trim().toLowerCase();
+    filteredTypes = !needle
+      ? accountTypes
+      : accountTypes.filter((option) =>
+          [getTypeLabel(option), option.description, option.code].some((value) =>
+            String(value || '')
+              .toLowerCase()
+              .includes(needle),
+          ),
+        );
+  }
+
+  function positionTypeMenu() {
+    if (!typeTriggerEl) return;
+
+    const rect = typeTriggerEl.getBoundingClientRect();
+    const maxHeight = Math.min(260, window.innerHeight * 0.5);
+    const estimatedHeight = filteredTypes.length * 29 + 40;
+    const openUp = window.innerHeight - rect.bottom < Math.min(maxHeight, estimatedHeight);
+
+    typeMenuDir = getComputedStyle(typeTriggerEl).direction;
+    typeMenuStyle = openUp
+      ? `left:${rect.left}px;width:${rect.width}px;bottom:${window.innerHeight - rect.top + 5}px;top:auto;max-height:${maxHeight}px;`
+      : `left:${rect.left}px;width:${rect.width}px;top:${rect.bottom + 5}px;max-height:${maxHeight}px;`;
+  }
+
+  function toggleTypeMenu() {
+    if (typeMenuOpen) {
+      closeTypeMenu();
+      return;
+    }
+
+    if (!typeTriggerEl) return;
+
+    typeQuery = '';
+    applyTypeFilter();
+    typeActiveIndex = filteredTypes.findIndex(
+      (type) => String(type.id) === String(account_type_id),
+    );
+    positionTypeMenu();
+    typeMenuOpen = true;
+    tick().then(() => typeMenuEl?.querySelector('input')?.focus());
+  }
+
+  function closeTypeMenu() {
+    typeMenuOpen = false;
+    typeQuery = '';
+    typeActiveIndex = -1;
+  }
+
+  function selectType(typeId) {
+    account_type_id = typeId;
+    closeTypeMenu();
+    typeTriggerEl?.focus();
+  }
+
+  function onTypeQueryInput() {
+    applyTypeFilter();
+    typeActiveIndex = filteredTypes.length ? 0 : -1;
+  }
+
+  function moveTypeSelection(step) {
+    if (!filteredTypes.length) return;
+    const next = typeActiveIndex + step;
+    typeActiveIndex = next < 0 ? filteredTypes.length - 1 : next >= filteredTypes.length ? 0 : next;
+    typeMenuEl?.querySelectorAll('.account-modal__picker-option')[typeActiveIndex]?.scrollIntoView({
+      block: 'nearest',
+    });
+  }
+
+  function handleTypeKeydown(event) {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!typeMenuOpen) {
+        toggleTypeMenu();
+        return;
+      }
+      moveTypeSelection(event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      /* A space belongs to the search box, not to the picker. */
+      if (event.key === ' ' && event.target?.tagName === 'INPUT') return;
+      event.preventDefault();
+      if (!typeMenuOpen) {
+        toggleTypeMenu();
+      } else if (filteredTypes[typeActiveIndex]) {
+        selectType(filteredTypes[typeActiveIndex].id);
+      }
+      return;
+    }
+
+    if (event.key === 'Escape' && typeMenuOpen) {
+      event.preventDefault();
+      closeTypeMenu();
+      typeTriggerEl?.focus();
+    }
+  }
+
+  function handleTypeOutsideClick(event) {
+    if (!typeMenuOpen) return;
+    if (!typeTriggerEl?.contains(event.target) && !typeMenuEl?.contains(event.target)) {
+      closeTypeMenu();
+    }
+  }
+
+  function handleTypeScroll(event) {
+    if (!typeMenuOpen) return;
+    if (typeMenuEl && (event.target === typeMenuEl || typeMenuEl.contains(event.target))) return;
+    positionTypeMenu();
+  }
+
+  /* ---------- account group dropdown (reference group picker) ---------- */
+  let groupMenuOpen = false;
+  let groupTriggerEl;
+  let groupMenuEl;
+  let groupMenuStyle = '';
+  let groupMenuDir = 'rtl';
+  let groupQuery = '';
+  let groupActiveIndex = -1;
+
+  $: selectedGroup =
+    account_groups.find((group) => String(group.id) === String(account_group_id)) || null;
+  $: groupSearch = groupQuery.trim();
+  $: filteredGroups = account_groups.filter((group) => {
+    if (!groupSearch) return true;
+    const needle = groupSearch.toLowerCase();
+    return [group.name, group.name_fa, group.name_ps].some((value) =>
+      String(value || '')
+        .toLowerCase()
+        .includes(needle),
+    );
+  });
+  $: canCreateGroup =
+    groupSearch.length > 0 &&
+    !account_groups.some(
+      (group) => String(group.name || '').trim().toLowerCase() === groupSearch.toLowerCase(),
+    );
+  $: if (!showAccountModal && groupMenuOpen) groupMenuOpen = false;
+
+  function positionGroupMenu() {
+    if (!groupTriggerEl) return;
+
+    const rect = groupTriggerEl.getBoundingClientRect();
+    const maxHeight = Math.min(260, window.innerHeight * 0.5);
+    const openUp = window.innerHeight - rect.bottom < 240;
+
+    groupMenuDir = getComputedStyle(groupTriggerEl).direction;
+    groupMenuStyle = openUp
+      ? `left:${rect.left}px;width:${rect.width}px;bottom:${window.innerHeight - rect.top + 5}px;top:auto;max-height:${maxHeight}px;`
+      : `left:${rect.left}px;width:${rect.width}px;top:${rect.bottom + 5}px;max-height:${maxHeight}px;`;
+  }
+
+  function toggleGroupMenu() {
+    if (groupMenuOpen) {
+      closeGroupMenu();
+      return;
+    }
+
+    if (!groupTriggerEl) return;
+
+    groupQuery = '';
+    groupActiveIndex = account_groups.findIndex(
+      (group) => String(group.id) === String(account_group_id),
+    );
+    positionGroupMenu();
+    groupMenuOpen = true;
+    tick().then(() => groupMenuEl?.querySelector('input')?.focus());
+  }
+
+  function closeGroupMenu() {
+    groupMenuOpen = false;
+    groupQuery = '';
+    groupActiveIndex = -1;
+  }
+
+  function selectGroup(groupId) {
+    account_group_id = groupId;
+    closeGroupMenu();
+    groupTriggerEl?.focus();
+  }
+
+  function createGroupFromQuery() {
+    const typed = groupQuery.trim();
+    closeGroupMenu();
+    catModalRef?.openAccountGroupModal(typed);
+  }
+
+  function moveGroupSelection(step) {
+    if (!filteredGroups.length) return;
+    const next = groupActiveIndex + step;
+    groupActiveIndex = next < 0 ? filteredGroups.length - 1 : next >= filteredGroups.length ? 0 : next;
+    groupMenuEl?.querySelectorAll('.account-modal__picker-option')[groupActiveIndex]?.scrollIntoView({
+      block: 'nearest',
+    });
+  }
+
+  function handleGroupKeydown(event) {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!groupMenuOpen) {
+        toggleGroupMenu();
+        return;
+      }
+      moveGroupSelection(event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (!groupMenuOpen) {
+        toggleGroupMenu();
+        return;
+      }
+      const active = filteredGroups[groupActiveIndex];
+      if (active) selectGroup(active.id);
+      else if (canCreateGroup) createGroupFromQuery();
+      return;
+    }
+
+    if (event.key === 'Escape' && groupMenuOpen) {
+      event.preventDefault();
+      closeGroupMenu();
+      groupTriggerEl?.focus();
+    }
+  }
+
+  function onGroupQueryInput() {
+    groupActiveIndex = filteredGroups.length ? 0 : -1;
+  }
+
+  function handleGroupOutsideClick(event) {
+    if (!groupMenuOpen) return;
+    if (!groupTriggerEl?.contains(event.target) && !groupMenuEl?.contains(event.target)) {
+      closeGroupMenu();
+    }
+  }
+
+  function handleGroupScroll(event) {
+    if (!groupMenuOpen) return;
+    if (groupMenuEl && (event.target === groupMenuEl || groupMenuEl.contains(event.target))) return;
+    positionGroupMenu();
+  }
+
+  onMount(() => {
+    window.addEventListener('click', handleTypeOutsideClick);
+    window.addEventListener('click', handleGroupOutsideClick);
+    window.addEventListener('resize', closeTypeMenu);
+    window.addEventListener('resize', closeGroupMenu);
+    window.addEventListener('scroll', handleTypeScroll, true);
+    window.addEventListener('scroll', handleGroupScroll, true);
+    return () => {
+      window.removeEventListener('click', handleTypeOutsideClick);
+      window.removeEventListener('click', handleGroupOutsideClick);
+      window.removeEventListener('resize', closeTypeMenu);
+      window.removeEventListener('resize', closeGroupMenu);
+      window.removeEventListener('scroll', handleTypeScroll, true);
+      window.removeEventListener('scroll', handleGroupScroll, true);
+    };
+  });
 
  
 </script>
@@ -668,287 +989,508 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
       aria-label={t('Close')}
       on:click={closeModal}
       on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && closeModal()}></div>
-    <div class="modal-dialog modal-dialog-centered account-modal__dialog">
-      <div class="modal-content account-modal__panel">
-        <button type="button" class="account-modal__close" on:click={closeModal} aria-label={t('Close')}>
-          <i class="bi bi-x-lg"></i>
-        </button>
 
+    <div class="modal-dialog modal-dialog-centered account-modal__dialog">
+      <form class="account-modal__panel" on:submit|preventDefault={saveAccount}>
         <header class="account-modal__header">
-          <label class="account-modal__avatar-wrap" aria-label={t('Upload Photo')}>
+          <label class="account-modal__avatar" aria-label={t('Upload Photo')} title={t('Upload Photo')}>
             {#if modalImageUrl}
-              <img src={modalImageUrl} alt="" class="account-modal__avatar account-modal__avatar--image" />
+              <img src={modalImageUrl} alt="" class="account-modal__avatar-img" />
             {:else}
-              <span class="account-modal__avatar account-modal__avatar--default" aria-hidden="true">
-                <svg class="account-modal__avatar-cartoon" viewBox="0 0 104 104" focusable="false">
-                  <circle cx="52" cy="52" r="52" fill="#e8f1ff" />
-                  <path d="M17 104c1.8-21.5 15.4-34.2 35-34.2S85.2 82.5 87 104H17Z" fill="#f4b740" />
-                  <path d="M42.5 62h19v17.5h-19z" fill="#efb68d" />
-                  <circle cx="52" cy="43" r="24.5" fill="#f7c9a6" />
-                  <path
-                    d="M27.2 43.2c0-18.8 10-30.5 26.3-30.5 15.2 0 25.3 9.7 25.3 25.2 0 5.3-1.2 9.2-3.5 13.6l-3.5-2.2c.8-3.3.8-7.1.2-10.4-8.2-1.2-15.5-5.8-20.4-12.4-4.2 7.2-12.2 12.2-21.1 13.1-.3 3.7.1 7.2 1.2 10.5l-3.3 2.1c-.8-2.8-1.2-5.8-1.2-9Z"
-                    fill="#26334d" />
-                  <path
-                    d="M31.2 29.8c2.7-10.5 10.7-17.1 22.5-17.1 12.8 0 21.9 8.1 24.4 19.4-6.8-7.2-14.7-10.8-24-10.8-9 0-16.4 2.8-22.9 8.5Z"
-                    fill="#34425d" />
-                  <circle cx="43.2" cy="45.5" r="2.4" fill="#26334d" />
-                  <circle cx="60.8" cy="45.5" r="2.4" fill="#26334d" />
-                  <path
-                    d="M44.2 57c4.7 3.8 10.9 3.8 15.6 0"
-                    fill="none"
-                    stroke="#a8604b"
-                    stroke-width="3"
-                    stroke-linecap="round" />
-                  <path d="M37.5 74.5 52 84l14.5-9.5L72 104H32l5.5-29.5Z" fill="#ffffff" />
-                  <path d="m46.7 80.5 5.3 3.7 5.3-3.7-1.8 23.5h-7l-1.8-23.5Z" fill="#0f6efd" />
-                  <path d="M32 104h-15c1.2-13.9 7.3-24.2 17.2-29.7L32 104Zm40 0h15c-1.2-13.9-7.3-24.2-17.2-29.7L72 104Z" fill="#f4b740" />
-                </svg>
-              </span>
+              <span class="account-modal__avatar-letter" aria-hidden="true">{headerInitial}</span>
             {/if}
             <span class="account-modal__avatar-badge" aria-hidden="true">
-              <i class="bi bi-camera-fill"></i>
+              <span class="ms f">photo_camera</span>
             </span>
             <input type="file" accept="image/*" on:change={handleImageUpload} hidden />
           </label>
+
           <div class="account-modal__header-copy">
-            <h2 id="accountModalTitle" class="account-modal__title">
-              {account?.id ? t('Edit Account') : t('New Account')}
-            </h2>
-    
+            <span id="accountModalTitle" class="account-modal__eyebrow">
+              {account?.id ? t('Edit') : t('Create')}
+            </span>
+            <span
+              class="account-modal__preview-name"
+              class:account-modal__preview-name--empty={!name.trim()}>
+              {name.trim() || t('New Account')}
+            </span>
+            <span class="account-modal__chips">
+              <span class="account-modal__chip">
+                <span class="ms f">{getTypeSymbol(account_type_id)}</span>
+                {headerTypeLabel}
+              </span>
+              {#if code}
+                <span class="account-modal__code" dir="ltr" title={code}>{code}</span>
+              {/if}
+            </span>
           </div>
+
+          <button type="button" class="account-modal__close" on:click={closeModal} aria-label={t('Close')}>
+            <span class="ms">close</span>
+          </button>
         </header>
 
-        <form class="account-modal__form" on:submit|preventDefault={saveAccount}>
-          <div class="account-modal__body">
-            <div class="account-modal__identity-grid">
-              <label class="account-modal__field account-modal__identity-name">
-                <span class="account-modal__label">{t('Name')}</span>
-                <div class="account-modal__input-wrap">
-                  <i class="bi bi-person account-modal__input-icon" aria-hidden="true"></i>
-                  <input class="account-modal__input" type="text" bind:value={name} autocomplete="off" />
-                </div>
-              </label>
+        <div class="account-modal__body">
+          <div class="account-modal__section">
+            <span class="ms">badge</span>
+            <span>{t('Details')}</span>
+            <span class="account-modal__rule" aria-hidden="true"></span>
+          </div>
 
-              <label class="account-modal__field account-modal__identity-type">
-                <span class="account-modal__label">{t('Account Type')}</span>
-                <div class="account-modal__type-select">
-                  <FilterSelect
-                    compact
-                    label={t('Select Account Type')}
-                    icon={getTypeIcon(account_type_id)}
-                    value={account_type_id}
-                    options={accountTypeOptions}
-                    on:change={(event) => (account_type_id = event.detail)} />
-                </div>
-              </label>
-            </div>
+          <label class="account-modal__field account-modal__field--full">
+            <span class="account-modal__label">
+              {t('Name')}<span class="account-modal__required" aria-hidden="true">*</span>
+            </span>
+            <span class="account-modal__box">
+              <span class="ms account-modal__icon">person</span>
+              <input class="account-modal__input" type="text" bind:value={name} autocomplete="off" />
+            </span>
+          </label>
 
-            {#if enable_account_groups}
-              <div class="account-modal__field account-modal__field--full">
-                <span class="account-modal__label">{t('Account Groups')}</span>
-                <div class="account-modal__select-wrap">
-                  <i class="bi bi-folder2 account-modal__select-icon" aria-hidden="true"></i>
-                  <select class="account-modal__select" bind:value={account_group_id}>
-                    {#each account_groups as group (group.id)}
-                      <option value={group.id}>{group.name}</option>
+          <div
+            class="account-modal__field"
+            class:account-modal__field--full={!enable_account_groups}>
+            <span id="accountModalTypeLabel" class="account-modal__label">{t('Account Type')}</span>
+            <div class="account-modal__picker-control">
+              <button
+                bind:this={typeTriggerEl}
+                type="button"
+                class="account-modal__picker-trigger"
+                class:is-open={typeMenuOpen}
+                aria-haspopup="listbox"
+                aria-expanded={typeMenuOpen}
+                aria-labelledby="accountModalTypeLabel"
+                on:click={toggleTypeMenu}
+                on:keydown={handleTypeKeydown}>
+                <span
+                  class="ms f account-modal__picker-icon account-modal__picker-icon--brand"
+                  aria-hidden="true">{getTypeSymbol(account_type_id)}</span>
+                <span class="account-modal__picker-value">{headerTypeLabel}</span>
+                <span class="ms account-modal__picker-caret" aria-hidden="true">expand_more</span>
+              </button>
+
+              {#if typeMenuOpen}
+                <div
+                  bind:this={typeMenuEl}
+                  use:portal
+                  class="account-modal__picker-menu"
+                  role="dialog"
+                  tabindex="-1"
+                  aria-labelledby="accountModalTypeLabel"
+                  dir={typeMenuDir}
+                  style={typeMenuStyle}
+                  on:keydown={handleTypeKeydown}>
+                  <label class="account-modal__picker-search">
+                    <span class="ms" aria-hidden="true">search</span>
+                    <input
+                      type="search"
+                      bind:value={typeQuery}
+                      placeholder={`${t('Search')}…`}
+                      aria-label={t('Search')}
+                      autocomplete="off"
+                      on:input={onTypeQueryInput} />
+                  </label>
+
+                  <div
+                    class="account-modal__picker-list"
+                    role="listbox"
+                    aria-labelledby="accountModalTypeLabel">
+                    {#each filteredTypes as option, index (option.id)}
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={String(option.id) === String(account_type_id)}
+                        class="account-modal__picker-option"
+                        class:is-selected={String(option.id) === String(account_type_id)}
+                        class:is-active={index === typeActiveIndex}
+                        on:mouseenter={() => (typeActiveIndex = index)}
+                        on:click={() => selectType(option.id)}>
+                        <span
+                          class="ms f account-modal__picker-option-icon"
+                          aria-hidden="true">{getTypeSymbol(option.id)}</span>
+                        <span class="account-modal__picker-option-label">{getTypeLabel(option)}</span>
+                      </button>
                     {/each}
-                  </select>
-                  <i class="bi bi-chevron-down account-modal__select-chevron" aria-hidden="true"></i>
+                    {#if !filteredTypes.length}
+                      <span class="account-modal__picker-empty">{t('No result')}</span>
+                    {/if}
+                  </div>
                 </div>
-                <button type="button" class="account-modal__link" on:click={() => catModalRef.openAccountGroupModal()}>
-                  <i class="bi bi-plus-lg" aria-hidden="true"></i>
-                  {t('Create Account Group')}
+              {/if}
+            </div>
+          </div>
+
+          {#if enable_account_groups}
+            <div class="account-modal__field">
+              <span id="accountModalGroupLabel" class="account-modal__label">{t('Account Groups')}</span>
+              <div class="account-modal__picker-control">
+                <button
+                  bind:this={groupTriggerEl}
+                  type="button"
+                  class="account-modal__picker-trigger"
+                  class:is-open={groupMenuOpen}
+                  aria-haspopup="listbox"
+                  aria-expanded={groupMenuOpen}
+                  aria-labelledby="accountModalGroupLabel"
+                  on:click={toggleGroupMenu}
+                  on:keydown={handleGroupKeydown}>
+                  <span class="ms account-modal__picker-icon" aria-hidden="true">folder</span>
+                  <span class="account-modal__picker-value">{selectedGroup?.name || t('Select account group')}</span>
+                  <span class="ms account-modal__picker-caret" aria-hidden="true">expand_more</span>
                 </button>
-              </div>
-            {/if}
 
-            {#if isShareholderType || isVisitorType}
-              <label class="account-modal__field account-modal__field--full">
-                <span class="account-modal__label">{t('Percentage')}</span>
-                <div class="account-modal__input-wrap">
-                  <i class="bi bi-percent account-modal__input-icon" aria-hidden="true"></i>
-                  <input
-                    class="account-modal__input"
-                    type="text"
-                    bind:value={percentage}
-                    inputmode="decimal"
-                    on:input={(e) => {
-                      let value = e.target.value;
-                      value = value.replace(/[^0-9.]/g, '');
-                      const parts = value.split('.');
-                      if (parts.length > 2) value = parts[0] + '.' + parts[1];
-                      if (value === '' || value === '.') {
-                        percentage = value;
-                        return;
-                      }
-                      let num = parseFloat(value);
-                      if (!isNaN(num)) {
-                        /* Only shareholders share a 100% total between them. */
-                        if (
-                          isShareholderType &&
-                          num > 100 - (account?.id ? totalPercentage : totalPercentage)
-                        )
-                          value =
-                            Number(100 - (account?.id ? totalPercentage : totalPercentage)).toLocaleString(undefined, {
-                              maximumFractionDigits: 3,
-                            }) + '';
-                        if (num > 100) value = '100';
-                        if (num < 0) value = '0';
-                      }
-                      percentage = value;
-                    }} />
-                </div>
-                {#if isShareholderType}
-                  <small class="account-modal__hint">
-                    {t('Total')}:
-                    <span dir="ltr"
-                      >{(account?.id
-                        ? Number(totalPercentage) + Number(percentage)
-                        : Number(totalPercentage) + Number(percentage)
-                      ).toLocaleString(undefined, { maximumFractionDigits: 3 })}%</span>
-                  </small>
-                {:else}
-                  <small class="account-modal__hint">
-                    {t('Share of the benefit of each sale this visitor brings')}
-                  </small>
+                {#if groupMenuOpen}
+                  <div
+                    bind:this={groupMenuEl}
+                    use:portal
+                    class="account-modal__picker-menu"
+                    role="dialog"
+                    tabindex="-1"
+                    aria-labelledby="accountModalGroupLabel"
+                    dir={groupMenuDir}
+                    style={groupMenuStyle}
+                    on:keydown={handleGroupKeydown}>
+                    <label class="account-modal__picker-search">
+                      <span class="ms" aria-hidden="true">search</span>
+                      <input
+                        type="search"
+                        bind:value={groupQuery}
+                        placeholder={`${t('Search')}…`}
+                        aria-label={t('Search')}
+                        autocomplete="off"
+                        on:input={onGroupQueryInput} />
+                    </label>
+
+                    <div
+                      class="account-modal__picker-list"
+                      role="listbox"
+                      aria-labelledby="accountModalGroupLabel">
+                      {#each filteredGroups as group, index (group.id)}
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={String(group.id) === String(account_group_id)}
+                          class="account-modal__picker-option"
+                          class:is-selected={String(group.id) === String(account_group_id)}
+                          class:is-active={index === groupActiveIndex}
+                          on:mouseenter={() => (groupActiveIndex = index)}
+                          on:click={() => selectGroup(group.id)}>
+                          {group.name}
+                        </button>
+                      {/each}
+                      {#if !filteredGroups.length && !canCreateGroup}
+                        <span class="account-modal__picker-empty">{t('No result')}</span>
+                      {/if}
+                    </div>
+
+                    {#if canCreateGroup}
+                      <button class="account-modal__picker-create" type="button" on:click={createGroupFromQuery}>
+                        <span class="ms" aria-hidden="true">add_circle</span>
+                        <span>{t('Create')} «{groupSearch}»</span>
+                      </button>
+                    {/if}
+                  </div>
                 {/if}
-              </label>
-            {/if}
+              </div>
+            </div>
+          {/if}
 
-            <div class="account-modal__fields-grid">
-              <label class="account-modal__field">
-                <span class="account-modal__label">{t('Whatsapp Number')}</span>
-                <div class="account-modal__input-wrap">
-                  <i class="bi bi-whatsapp account-modal__input-icon account-modal__input-icon--whatsapp" aria-hidden="true"></i>
-                  <input class="account-modal__input" type="text" bind:value={phone} autocomplete="off" />
-                </div>
-              </label>
+          {#if isShareholderType || isVisitorType}
+            <label class="account-modal__field account-modal__field--full">
+              <span class="account-modal__label">{t('Percentage')}</span>
+              <span class="account-modal__box">
+                <span class="ms account-modal__icon" aria-hidden="true">percent</span>
+                <input
+                  class="account-modal__input"
+                  type="text"
+                  bind:value={percentage}
+                  inputmode="decimal"
+                  on:input={(e) => {
+                    let value = e.target.value;
+                    value = value.replace(/[^0-9.]/g, '');
+                    const parts = value.split('.');
+                    if (parts.length > 2) value = parts[0] + '.' + parts[1];
+                    if (value === '' || value === '.') {
+                      percentage = value;
+                      return;
+                    }
+                    let num = parseFloat(value);
+                    if (!isNaN(num)) {
+                      /* Only shareholders share a 100% total between them. */
+                      if (
+                        isShareholderType &&
+                        num > 100 - (account?.id ? totalPercentage : totalPercentage)
+                      )
+                        value =
+                          Number(100 - (account?.id ? totalPercentage : totalPercentage)).toLocaleString(undefined, {
+                            maximumFractionDigits: 3,
+                          }) + '';
+                      if (num > 100) value = '100';
+                      if (num < 0) value = '0';
+                    }
+                    percentage = value;
+                  }} />
+              </span>
+              {#if isShareholderType}
+                <small class="account-modal__hint">
+                  {t('Total')}:
+                  <span dir="ltr"
+                    >{(account?.id
+                      ? Number(totalPercentage) + Number(percentage)
+                      : Number(totalPercentage) + Number(percentage)
+                    ).toLocaleString(undefined, { maximumFractionDigits: 3 })}%</span>
+                </small>
+              {:else}
+                <small class="account-modal__hint">
+                  {t('Share of the benefit of each sale this visitor brings')}
+                </small>
+              {/if}
+            </label>
+          {/if}
 
-              <label class="account-modal__field">
-                <span class="account-modal__label">{t('Phone 2')}</span>
-                <div class="account-modal__input-wrap">
-                  <i class="bi bi-telephone account-modal__input-icon" aria-hidden="true"></i>
-                  <input class="account-modal__input" type="text" bind:value={phone2} autocomplete="off" />
-                </div>
-              </label>
+          <div class="account-modal__section">
+            <span class="ms">contact_phone</span>
+            <span>{t('Contact')}</span>
+            <span class="account-modal__rule" aria-hidden="true"></span>
+          </div>
 
-              <label class="account-modal__field">
-                <span class="account-modal__label">{t('Email')}</span>
-                <div class="account-modal__input-wrap">
-                  <i class="bi bi-envelope account-modal__input-icon" aria-hidden="true"></i>
-                  <input class="account-modal__input" type="email" bind:value={email} autocomplete="off" />
-                </div>
-              </label>
+          <label class="account-modal__field">
+            <span class="account-modal__label">{t('Phone 2')}</span>
+            <span class="account-modal__box">
+              <span class="ms account-modal__icon" aria-hidden="true">call</span>
+              <input
+                class="account-modal__input account-modal__input--ltr"
+                type="tel"
+                inputmode="tel"
+                placeholder="07XX XXX XXX"
+                bind:value={phone2}
+                autocomplete="off" />
+            </span>
+          </label>
 
-              <label class="account-modal__field">
-                <span class="account-modal__label">{t('Address')}</span>
-                <div class="account-modal__input-wrap">
-                  <i class="bi bi-geo-alt account-modal__input-icon" aria-hidden="true"></i>
-                  <input class="account-modal__input" type="text" bind:value={address} autocomplete="off" />
-                </div>
-              </label>
+          <label class="account-modal__field">
+            <span class="account-modal__label">{t('Whatsapp Number')}</span>
+            <span class="account-modal__box">
+              <span
+                class="ms account-modal__icon account-modal__icon--whatsapp"
+                aria-hidden="true">chat</span>
+              <input
+                class="account-modal__input account-modal__input--ltr"
+                type="tel"
+                inputmode="tel"
+                placeholder="07XX XXX XXX"
+                bind:value={phone}
+                autocomplete="off" />
+            </span>
+          </label>
+
+          <label class="account-modal__field">
+            <span class="account-modal__label">{t('Address')}</span>
+            <span class="account-modal__box">
+              <span class="ms account-modal__icon" aria-hidden="true">location_on</span>
+              <input class="account-modal__input" type="text" bind:value={address} autocomplete="off" />
+            </span>
+          </label>
+
+          <label class="account-modal__field">
+            <span class="account-modal__label">{t('Email')}</span>
+            <span class="account-modal__box">
+              <span class="ms account-modal__icon" aria-hidden="true">mail</span>
+              <input
+                class="account-modal__input account-modal__input--ltr"
+                type="email"
+                bind:value={email}
+                autocomplete="off" />
+            </span>
+          </label>
+
+          {#if !account?.id}
+            <div class="account-modal__section">
+              <span class="ms">account_balance_wallet</span>
+              <span>{t('Finance')}</span>
+              <span class="account-modal__rule" aria-hidden="true"></span>
             </div>
 
-            <label class="account-modal__field account-modal__field--full">
-              <span class="account-modal__label">{t('Description')}</span>
-              <textarea class="account-modal__textarea" rows="3" bind:value={description}></textarea>
-            </label>
+            <fieldset class="account-modal__balance">
+              <legend class="account-modal__legend">{t('Initial Balance')}</legend>
 
-            {#if !account?.id}
-              <div class="account-modal__balance account-modal__field--full">
-                <div class="account-modal__balance-head">
-                  <span class="account-modal__balance-title">
-                    <i class="bi bi-wallet2" aria-hidden="true"></i>
-                    {t('Initial Balance')}
-                  </span>
-                </div>
-                <div class="account-modal__balance-strip">
+              <div class="account-modal__balance-row">
+                <div class="account-modal__segment" role="group" aria-label={t('Initial Balance')}>
                   <button
                     type="button"
-                    class="account-modal__balance-toggle account-modal__balance-toggle--{initialBalanceType === 'Debit' ? 'debit' : 'credit'}"
-                    on:click={() => (initialBalanceType = initialBalanceType === 'Debit' ? 'Credit' : 'Debit')}>
-                    <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
-                    {t(initialBalanceType)}
+                    class="account-modal__segment-btn"
+                    class:is-active={initialBalanceType === 'Debit'}
+                    on:click={() => (initialBalanceType = 'Debit')}>
+                    {t('Debit')}
                   </button>
-                  <input class="account-modal__balance-amount" type="number" bind:value={balance} />
-                  <div class="account-modal__select-wrap account-modal__select-wrap--compact">
-                    <select
-                      class="account-modal__select account-modal__select--compact"
-                      bind:value={currency}
-                      on:change={changedCurrency}>
+                  <button
+                    type="button"
+                    class="account-modal__segment-btn"
+                    class:is-active={initialBalanceType === 'Credit'}
+                    on:click={() => (initialBalanceType = 'Credit')}>
+                    {t('Credit')}
+                  </button>
+                </div>
+
+                <span class="account-modal__amount-box">
+                  <input
+                    class="account-modal__amount"
+                    type="text"
+                    inputmode="decimal"
+                    bind:value={balance}
+                    placeholder="0" />
+                </span>
+
+                <span class="account-modal__currency">
+                  <button
+                    type="button"
+                    class="account-modal__currency-btn"
+                    aria-haspopup="listbox"
+                    aria-expanded={openCurrencyRow === 0}
+                    aria-label={t('Currency')}
+                    on:click={() => toggleCurrencyMenu(0)}>
+                    <span dir="ltr">{currencySymbol(currency)}</span>
+                    <span class="ms" aria-hidden="true">expand_more</span>
+                  </button>
+                  {#if openCurrencyRow === 0}
+                    <button
+                      type="button"
+                      class="account-modal__currency-backdrop"
+                      aria-label={t('Close')}
+                      on:click={closeCurrencyMenu}></button>
+                    <div class="account-modal__currency-menu" role="listbox" aria-label={t('Currency')}>
                       {#each mainCurrencies as cur (cur.code)}
-                        <option value={cur.code}>{t(cur.code)}</option>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={cur.code === currency}
+                          class="account-modal__currency-option"
+                          class:is-selected={cur.code === currency}
+                          on:click={() => pickCurrency(0, cur.code)}>
+                          <span class="account-modal__currency-sym" dir="ltr">{cur.symbol || cur.code}</span>
+                          <span>{currencyName(cur)}</span>
+                        </button>
                       {/each}
-                    </select>
-                    <i class="bi bi-chevron-down account-modal__select-chevron" aria-hidden="true"></i>
-                  </div>
-                  <button
-                    type="button"
-                    class="account-modal__balance-add"
-                    disabled={additionalInitialBalances.length >= currencies.length - 1 ||
-                      !balance ||
-                      (additionalInitialBalances.length > 0 &&
-                        !additionalInitialBalances[additionalInitialBalances.length - 1].balance)}
-                    on:click={addAdditionalInitialBalance}
-                    title={t('Add')}
-                    aria-label={t('Add')}>
-                    <i class="bi bi-plus-lg"></i>
-                  </button>
-                </div>
-                <p class="account-modal__balance-hint">
-                  {t('Leave the date empty to use today.')}
-                </p>
-                <AppDatePicker
-                  label={t('Effective date')}
-                  value={initialBalanceDate}
-                  on:change={(event) => (initialBalanceDate = event.detail)}
-                />
+                    </div>
+                  {/if}
+                </span>
               </div>
 
               {#each additionalInitialBalances as additional, index (index)}
-                <div class="account-modal__balance account-modal__field--full">
-                  <div class="account-modal__balance-head">
-                    <span class="account-modal__balance-title">
-                      <i class="bi bi-wallet2" aria-hidden="true"></i>
-                      {t('Initial Balance')} {index + 2}
-                    </span>
-                  </div>
-                  <div class="account-modal__balance-strip account-modal__balance-strip--additional">
+                <div class="account-modal__balance-row">
+                  <div class="account-modal__segment" role="group" aria-label={t('Initial Balance')}>
                     <button
                       type="button"
-                      class="account-modal__balance-toggle account-modal__balance-toggle--{additional.type === 'Debit' ? 'debit' : 'credit'}"
-                      on:click={() => (additional.type = additional.type === 'Debit' ? 'Credit' : 'Debit')}>
-                      <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
-                      {t(additional.type)}
+                      class="account-modal__segment-btn"
+                      class:is-active={additional.type === 'Debit'}
+                      on:click={() => (additional.type = 'Debit')}>
+                      {t('Debit')}
                     </button>
-                    <input class="account-modal__balance-amount" type="number" bind:value={additional.balance} />
-                    <div class="account-modal__select-wrap account-modal__select-wrap--compact">
-                      <select
-                        class="account-modal__select account-modal__select--compact"
-                        bind:value={additional.currency}
-                        on:change={() => {
-                          changedCurrency();
-                        }}>
-                        {#each additional.remainingCurrencies as cur (cur.code)}
-                          <option value={cur.code}>{t(cur.code)}</option>
-                        {/each}
-                      </select>
-                      <i class="bi bi-chevron-down account-modal__select-chevron" aria-hidden="true"></i>
-                    </div>
+                    <button
+                      type="button"
+                      class="account-modal__segment-btn"
+                      class:is-active={additional.type === 'Credit'}
+                      on:click={() => (additional.type = 'Credit')}>
+                      {t('Credit')}
+                    </button>
                   </div>
+
+                  <span class="account-modal__amount-box">
+                    <input
+                      class="account-modal__amount"
+                      type="text"
+                      inputmode="decimal"
+                      bind:value={additional.balance}
+                      placeholder="0" />
+                  </span>
+
+                  <span class="account-modal__currency">
+                    <button
+                      type="button"
+                      class="account-modal__currency-btn"
+                      aria-haspopup="listbox"
+                      aria-expanded={openCurrencyRow === index + 1}
+                      aria-label={t('Currency')}
+                      on:click={() => toggleCurrencyMenu(index + 1)}>
+                      <span dir="ltr">{currencySymbol(additional.currency)}</span>
+                      <span class="ms" aria-hidden="true">expand_more</span>
+                    </button>
+                    {#if openCurrencyRow === index + 1}
+                      <button
+                        type="button"
+                        class="account-modal__currency-backdrop"
+                        aria-label={t('Close')}
+                        on:click={closeCurrencyMenu}></button>
+                      <div class="account-modal__currency-menu" role="listbox" aria-label={t('Currency')}>
+                        {#each additional.remainingCurrencies as cur (cur.code)}
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={cur.code === additional.currency}
+                            class="account-modal__currency-option"
+                            class:is-selected={cur.code === additional.currency}
+                            on:click={() => pickCurrency(index + 1, cur.code)}>
+                            <span class="account-modal__currency-sym" dir="ltr">{cur.symbol || cur.code}</span>
+                            <span>{currencyName(cur)}</span>
+                          </button>
+                        {/each}
+                      </div>
+                    {/if}
+                  </span>
+
+                  <button
+                    type="button"
+                    class="account-modal__row-del"
+                    aria-label={t('Delete')}
+                    on:click={() => removeAdditionalInitialBalance(index)}>
+                    <span class="ms" aria-hidden="true">close</span>
+                  </button>
                 </div>
               {/each}
-            {/if}
-          </div>
 
-          <footer class="account-modal__footer">
-            <button type="submit" class="account-modal__submit">
-              <i class="bi bi-check2-circle" aria-hidden="true"></i>
-              <span>{account?.id ? t('Update') : t('Save')}</span>
-            </button>
-          </footer>
-        </form>
-      </div>
+              <div class="account-modal__balance-foot">
+                <button
+                  type="button"
+                  class="account-modal__add-currency"
+                  title={t('Add')}
+                  disabled={additionalInitialBalances.length >= currencies.length - 1 ||
+                    !balance ||
+                    (additionalInitialBalances.length > 0 &&
+                      !additionalInitialBalances[additionalInitialBalances.length - 1].balance)}
+                  on:click={addAdditionalInitialBalance}>
+                  <span class="ms" aria-hidden="true">add</span>
+                  {t('Currency')}
+                </button>
+
+                <div class="account-modal__date" role="group" aria-label={t('Date')}>
+                  <span class="account-modal__date-label">{t('Date')}</span>
+                  <span class="account-modal__date-box">
+                    <AppDatePicker
+                      value={initialBalanceDate}
+                      on:change={(event) => (initialBalanceDate = event.detail)} />
+                    <span class="ms account-modal__date-icon" aria-hidden="true">calendar_month</span>
+                  </span>
+                </div>
+              </div>
+            </fieldset>
+          {/if}
+
+          <label class="account-modal__field account-modal__field--full">
+            <span class="account-modal__label">{t('Description')}</span>
+            <textarea class="account-modal__textarea" rows="2" bind:value={description}></textarea>
+          </label>
+        </div>
+
+        <footer class="account-modal__footer">
+          <button type="button" class="account-modal__cancel" on:click={closeModal}>
+            {t('Cancel')}
+          </button>
+          <button type="submit" class="account-modal__submit">
+            <span class="ms" aria-hidden="true">check</span>
+            <span>{account?.id ? t('Update') : t('Save')}</span>
+          </button>
+        </footer>
+      </form>
     </div>
   </div>
 {/if}
@@ -963,15 +1505,36 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
 <WhatsappModal bind:this={WhatsappModalRef} />
 
 <style>
+  /*
+   * Account dialog, redrawn from the reference sheet (`Accounts.html`):
+   * soft gradient header, two-column form grid, hairline section labels and a
+   * 34px control rhythm. The box copies the Add Journal popup
+   * (QuickEntryModal --journal, Journal.dc.html) at its 358.667px height, with
+   * the column widened from the popup's 520px to 560px.
+   */
   .account-modal.qa-modal :global(.modal-dialog.account-modal__dialog) {
-    width: min(94vw, 40rem);
-    max-width: min(94vw, 40rem);
+    width: 560px;
+    max-width: calc(100vw - 24px);
   }
 
   .account-modal {
-    --account-modal-primary: var(--bs-primary, #0f6efd);
-    --account-modal-border: #d8e1ee;
-    --account-modal-muted: #7183a3;
+    --am-brand: var(--z-brand, #2f6fed);
+    --am-brand-strong: #245ed0;
+    --am-brand-soft: var(--z-brand-soft, #e3ecff);
+    --am-border: var(--z-border, #e1e7f0);
+    --am-border-soft: var(--z-border-soft, #eef2f7);
+    --am-surface: var(--z-surface, #ffffff);
+    --am-surface-2: var(--z-surface-2, #f8fafc);
+    --am-surface-3: var(--z-surface-3, #f1f5f9);
+    --am-ink: var(--z-ink, #0b1530);
+    --am-text: var(--z-text, #475569);
+    --am-muted: var(--z-muted, #64748b);
+    --am-subtle: var(--z-subtle, #94a3b8);
+    --am-danger: var(--z-danger, #b91c1c);
+    --am-danger-soft: var(--z-danger-soft, #fee2e2);
+    --am-ok: var(--z-ok, #15803d);
+    --am-ok-soft: var(--z-ok-soft, #dcfce7);
+    --am-num: var(--z-font-num, 'Inter', 'Vazirmatn', sans-serif);
 
     z-index: 1055;
     overflow: hidden;
@@ -979,40 +1542,46 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
 
   .account-modal__backdrop {
     z-index: 1050;
-    background: rgba(15, 23, 42, 0.52);
+    background: rgba(11, 21, 48, 0.45);
+    backdrop-filter: blur(2px);
   }
 
   .account-modal__dialog {
     z-index: 1056;
+    /* MDB leaves every modal dialog click-through and only its own
+       `.modal-content` opts back in; this panel is a form, so it must opt in. */
+    pointer-events: auto;
     display: flex;
-    width: min(94vw, 40rem);
-    max-width: min(94vw, 40rem);
-    height: auto;
-    max-height: calc(100dvh - 2rem);
-    margin: 1rem auto;
+    /* Add Journal popup box: 560px wide (the popup's 520px nudged up); the
+       panel stays pinned to the 358.667px height measured on that popup. */
+    width: 560px;
+    max-width: calc(100vw - 24px);
+    height: 358.667px;
+    max-height: calc(100vh - 24px);
+    margin: 12px auto;
   }
 
   .account-modal__panel {
-    position: relative;
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
     width: 100%;
     min-width: 0;
     min-height: 0;
-    max-height: calc(100dvh - 2rem);
+    height: 100%;
+    max-height: calc(100vh - 24px);
     overflow: hidden;
-    border: 1px solid #dbe3ee;
-    border-radius: 0.75rem;
-    background: #ffffff;
-    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.2);
-    animation: account-modal-enter 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    border: 0;
+    border-radius: 16px;
+    background: var(--am-surface);
+    box-shadow: 0 30px 80px -20px rgba(11, 21, 48, 0.6);
+    animation: account-modal-enter 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   @keyframes account-modal-enter {
     from {
       opacity: 0;
-      transform: translateY(12px) scale(0.98);
+      transform: translateY(10px) scale(0.99);
     }
 
     to {
@@ -1021,908 +1590,1017 @@ import { accountGroupApi } from '../../api/accountGroupApi.js';
     }
   }
 
-  .account-modal__close {
-    position: absolute;
-    top: 0.75rem;
-    inset-inline-end: 0.85rem;
-    z-index: 10;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    padding: 0;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.14);
-    color: #ffffff;
-    cursor: pointer;
-    transition:
-      background 0.15s ease,
-      border-color 0.15s ease,
-      color 0.15s ease,
-      transform 0.12s ease;
-  }
-
-  .account-modal__close:hover {
-    border-color: #ffffff;
-    background: #ffffff;
-    color: var(--account-modal-primary);
-  }
-
-  .account-modal__close:active {
-    transform: scale(0.96);
-  }
-
-  .account-modal__close:focus-visible {
-    outline: 2px solid #ffffff;
-    outline-offset: 2px;
-  }
-
+  /* ---------- header ---------- */
   .account-modal__header {
     position: relative;
-    z-index: 2;
     display: flex;
     flex: 0 0 auto;
     align-items: center;
-    gap: 0.9rem;
-    min-height: 5.5rem;
-    padding: 0.5rem 1.15rem;
-    padding-inline-end: 3.5rem;
-    overflow: hidden;
-    border-bottom: 0;
-    background: var(--account-modal-primary);
-    text-align: start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--am-border-soft);
+    background: linear-gradient(135deg, var(--am-brand-soft), var(--am-surface) 70%);
   }
 
-  .account-modal__header-copy {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .account-modal__title {
+  /* Anchored to the dialog id because Svelte compiles the scope hash into a
+     zero-specificity `:where()`, which would lose the cascade to the page-wide
+     `.content-wrapper main label` rule (font-size / colour / line-height / margin). */
+  #accountModal .account-modal__header .account-modal__avatar {
     position: relative;
-    margin: 0;
-    color: #ffffff;
-    font-size: 1.25rem;
-    font-weight: 800;
-    line-height: 1.25;
-  }
-
-  .account-modal__form {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-    background: #ffffff;
-  }
-
-  .account-modal__body {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: 0.7rem;
-    min-width: 0;
-    min-height: 0;
-    padding: 0.75rem 1.1rem;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    scrollbar-width: thin;
-    scrollbar-color: #b9c6d8 transparent;
-  }
-
-  .account-modal__body::-webkit-scrollbar {
-    width: 0.42rem;
-  }
-
-  .account-modal__body::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .account-modal__body::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: #b9c6d8;
-  }
-
-  .account-modal__body::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-  }
-
-  .account-modal__footer {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    padding: 0.65rem 1.1rem 0.8rem;
-    border-top: 1px solid #eef2f7;
-    background: #ffffff;
-    box-shadow: 0 -4px 14px rgba(15, 23, 42, 0.035);
-  }
-
-  .account-modal__avatar-wrap {
-    position: relative;
-    display: inline-grid;
+    display: inline-flex;
     flex-shrink: 0;
-    place-items: center;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: transform 0.16s ease;
-  }
-
-  .account-modal__avatar-wrap:hover {
-    transform: scale(1.02);
-  }
-
-  .account-modal__avatar-wrap:active {
-    transform: scale(0.98);
-  }
-
-  .account-modal__avatar {
-    display: inline-grid;
-    width: 4.4rem;
-    height: 4.4rem;
-    place-items: center;
-    border: 3px solid #ffffff;
-    border-radius: 50%;
-    background: #e8f1ff;
-    box-shadow: 0 4px 12px rgba(8, 48, 118, 0.2);
-    transition:
-      border-color 0.2s ease,
-      box-shadow 0.2s ease;
-  }
-
-  .account-modal__avatar--image {
-    display: block;
-    object-fit: cover;
-    background: #ffffff;
-  }
-
-  .account-modal__avatar--default {
-    overflow: hidden;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin: 0;
     padding: 0;
+    line-height: 1;
+    overflow: visible;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--am-brand) 14%, transparent);
+    color: var(--am-brand);
+    font-size: 19px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
   }
 
-  .account-modal__avatar-cartoon {
-    display: block;
-    width: 100%;
-    height: 100%;
+  .account-modal__avatar:hover {
+    transform: scale(1.03);
   }
 
-  .account-modal__avatar-wrap:hover .account-modal__avatar {
-    border-color: #ffffff;
-    box-shadow: 0 5px 14px rgba(8, 48, 118, 0.24);
+  .account-modal__avatar:focus-within {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--am-brand) 22%, transparent);
   }
 
   .account-modal__avatar-badge {
     position: absolute;
-    inset-inline-start: -0.05rem;
-    bottom: 0;
+    inset-inline-end: -5px;
+    bottom: -5px;
     display: inline-grid;
-    width: 1.75rem;
-    height: 1.75rem;
     place-items: center;
-    border: 2px solid #ffffff;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--am-surface);
     border-radius: 999px;
-    background: #ffffff;
-    color: var(--account-modal-primary);
-    font-size: 0.78rem;
-    box-shadow: 0 2px 6px rgba(8, 48, 118, 0.22);
-    transition:
-      transform 0.2s ease,
-      box-shadow 0.2s ease;
+    background: var(--am-brand);
+    color: #ffffff;
+    font-size: 8px;
+    box-shadow: 0 2px 5px rgba(11, 21, 48, 0.18);
   }
 
-  .account-modal__avatar-wrap:hover .account-modal__avatar-badge {
-    transform: scale(1.08);
-    box-shadow: 0 3px 8px rgba(8, 48, 118, 0.26);
+  .account-modal__avatar-badge .ms {
+    font-size: 11px;
   }
 
-  .account-modal__identity-grid {
+  .account-modal__avatar-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 14px;
+    object-fit: cover;
+  }
+
+  .account-modal__header .account-modal__avatar-letter {
+    display: block;
+    color: inherit;
+    font-size: 19px;
+    font-weight: 800;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .account-modal__header-copy {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .account-modal__eyebrow {
+    color: var(--am-brand);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    line-height: 1.2;
+  }
+
+  .account-modal__preview-name {
+    overflow: hidden;
+    color: var(--am-ink);
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-modal__preview-name--empty {
+    color: var(--am-subtle);
+  }
+
+  .account-modal__chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .account-modal__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 20px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--am-brand) 12%, transparent);
+    color: var(--am-brand);
+    font-size: 10.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .account-modal__chip .ms {
+    font-size: 12px;
+  }
+
+  .account-modal__code {
+    display: inline-flex;
+    align-items: center;
+    max-width: 160px;
+    height: 20px;
+    padding: 0 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--am-surface-3);
+    color: var(--am-text);
+    font-family: var(--am-num);
+    font-size: 10.5px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-modal__close {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-self: center;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--am-muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .account-modal__close:hover {
+    background: var(--am-surface-3);
+    color: var(--am-ink);
+  }
+
+  .account-modal__close .ms {
+    font-size: 19px;
+  }
+
+  .account-modal__close:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
+  }
+
+  /* ---------- body ---------- */
+  .account-modal__body {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(11rem, 1fr);
-    gap: 0.75rem;
-    align-items: start;
-  }
-
-  .account-modal__fields-grid {
-    display: grid;
+    flex: 1 1 auto;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
+    gap: 10px 12px;
+    align-content: start;
+    min-width: 0;
+    min-height: 0;
+    padding: 12px 16px 14px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* The bar is hidden outright: this panel kept drawing the up/down arrow
+       buttons and the track line (standard `scrollbar-width: thin` hands the
+       bar to the native painter on Chromium/WebView2). Wheel, touch, keyboard
+       and drag still scroll the body. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .account-modal__body::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .account-modal__section {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+    color: var(--am-muted);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .account-modal__section .ms {
+    font-size: 15px;
+  }
+
+  .account-modal__rule {
+    flex: 1;
+    height: 1px;
+    background: var(--am-border-soft);
   }
 
   .account-modal__field {
-    display: grid;
-    gap: 0.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
     min-width: 0;
     margin: 0;
   }
 
   .account-modal__field--full {
-    width: 100%;
+    grid-column: 1 / -1;
   }
 
   .account-modal__label {
-    color: #344054;
-    font-size: 0.84rem;
-    font-weight: 600;
-    line-height: 1.3;
+    color: var(--am-text);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
     text-align: start;
   }
 
-  .account-modal__input-wrap {
+  .account-modal__required {
+    color: var(--am-danger);
+  }
+
+  .account-modal__box {
     position: relative;
     display: flex;
     align-items: center;
-  }
-
-  .account-modal__input-icon {
-    position: absolute;
-    inset-inline-start: 0.8rem;
-    color: var(--account-modal-muted);
-    font-size: 1rem;
-    pointer-events: none;
-    transition: color 0.15s ease;
-  }
-
-  .account-modal__input-wrap:focus-within .account-modal__input-icon {
-    color: var(--account-modal-primary);
-  }
-
-  .account-modal__input-icon--whatsapp {
-    color: #438466;
-  }
-
-  .account-modal__input,
-  .account-modal__textarea,
-  .account-modal__select {
-    width: 100%;
     min-width: 0;
-    min-height: 2.45rem;
-    padding-block: 0.35rem;
-    padding-inline: 0.75rem;
-    border: 1px solid var(--account-modal-border);
-    border-radius: 0.5rem;
-    outline: none;
-    background: #ffffff;
-    color: #0f172a;
-    font-size: 0.86rem;
-    text-align: start;
-    transition:
-      border-color 0.15s ease,
-      box-shadow 0.15s ease,
-      background 0.15s ease;
+    height: 34px;
+    border: 1px solid var(--am-border);
+    border-radius: 9px;
+    background: var(--am-surface);
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .account-modal__box:hover {
+    border-color: var(--z-border-strong, #dce6f8);
+  }
+
+  .account-modal__box:focus-within {
+    border-color: var(--am-brand);
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
+  }
+
+  .account-modal__icon {
+    flex-shrink: 0;
+    margin-inline-start: 9px;
+    color: var(--am-subtle);
+    font-size: 16px;
+    pointer-events: none;
+  }
+
+  .account-modal__icon--whatsapp {
+    color: #16a34a;
   }
 
   .account-modal__input {
-    padding-inline-start: 2.5rem;
-  }
-
-  .account-modal__input::placeholder,
-  .account-modal__textarea::placeholder {
-    color: #98a5b8;
-  }
-
-  .account-modal__input:hover,
-  .account-modal__textarea:hover,
-  .account-modal__select:hover {
-    border-color: #b8c6da;
-  }
-
-  .account-modal__input:focus,
-  .account-modal__textarea:focus,
-  .account-modal__select:focus {
-    border-color: var(--account-modal-primary);
-    background: #ffffff;
-    box-shadow: 0 0 0 3px rgba(15, 110, 253, 0.1);
-  }
-
-  .account-modal__textarea {
-    min-height: 3.6rem;
-    max-height: 7rem;
-    resize: vertical;
-    line-height: 1.5;
-  }
-
-  .account-modal__select-wrap {
-    position: relative;
-    display: flex;
-    align-items: center;
-    min-width: 0;
-  }
-
-  .account-modal__type-select {
+    flex: 1;
     width: 100%;
     min-width: 0;
+    height: 100%;
+    padding: 0 10px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--am-ink);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: start;
   }
 
-  .account-modal__type-select :global(.filter-select) {
-    width: 100%;
-  }
-
-  .account-modal__type-select :global(.filter-select__trigger) {
-    min-height: 2.45rem;
-    padding-block: 0.35rem;
-    padding-inline: 0.75rem;
-    border-color: var(--account-modal-border);
-    background: #ffffff;
-    color: #0f172a;
-    font-size: 0.86rem;
+  .account-modal__input::placeholder {
+    color: var(--am-subtle);
     font-weight: 500;
   }
 
-  .account-modal__type-select :global(.filter-select__trigger:hover) {
-    border-color: #b8c6da;
-    background: #ffffff;
-    color: #0f172a;
+  /* Phone / whatsapp / email mirror the reference contact inputs: Inter numerals,
+     bold, LTR but flush to the inline end. */
+  .account-modal__input--ltr {
+    font-family: var(--am-num);
+    font-weight: 700;
+    direction: ltr;
+    text-align: right;
   }
 
-  .account-modal__type-select :global(.filter-select__trigger:focus-visible) {
-    border-color: var(--account-modal-primary);
-    box-shadow: 0 0 0 3px rgba(15, 110, 253, 0.1);
+  /* ---------- dropdown picker shared by account type and account group ---------- */
+  .account-modal__picker-control {
+    position: relative;
+    min-width: 0;
   }
 
-  .account-modal__select-wrap .account-modal__select {
-    padding-inline-start: 2.15rem;
-    padding-inline-end: 2rem;
-    appearance: none;
-    cursor: pointer;
-  }
-
-  .account-modal__select-wrap--compact .account-modal__select {
-    min-height: 2.45rem;
-    padding-inline-start: 0.65rem;
-  }
-
-  .account-modal__select-icon {
-    position: absolute;
-    inset-inline-start: 0.65rem;
-    color: var(--account-modal-muted);
-    font-size: 0.95rem;
-    pointer-events: none;
-  }
-
-  .account-modal__select-chevron {
-    position: absolute;
-    inset-inline-end: 0.65rem;
-    color: var(--account-modal-muted);
-    font-size: 0.62rem;
-    pointer-events: none;
-  }
-
-  .account-modal__link {
-    display: inline-flex;
+  .account-modal__picker-trigger {
+    display: flex;
     align-items: center;
-    align-self: flex-start;
-    gap: 0.3rem;
-    margin-top: 0.15rem;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--account-modal-primary);
-    font-size: 0.8rem;
-    font-weight: 600;
+    gap: 6px;
+    width: 100%;
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--am-border);
+    border-radius: 8px;
+    background: var(--am-surface);
+    color: var(--am-ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: start;
     cursor: pointer;
-    transition: color 0.15s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
 
-  .account-modal__link:hover {
-    color: #1d4ed8;
+  .account-modal__picker-trigger:hover {
+    border-color: var(--z-border-strong, #dce6f8);
+  }
+
+  .account-modal__picker-trigger:focus-visible,
+  .account-modal__picker-trigger.is-open {
+    outline: 0;
+    border-color: var(--am-brand);
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
+  }
+
+  .account-modal__picker-icon {
+    flex: 0 0 auto;
+    color: var(--am-muted);
+    font-size: 16px;
+  }
+
+  .account-modal__picker-icon--brand {
+    color: var(--am-brand);
+  }
+
+  .account-modal__picker-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-modal__picker-caret {
+    flex: 0 0 auto;
+    color: var(--am-muted);
+    font-size: 17px;
+  }
+
+  .account-modal__picker-menu {
+    position: fixed;
+    z-index: 100000;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+    padding: 4px;
+    /* Portaled to <body>: the modal-scoped tokens no longer cascade here. */
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-radius: 10px;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 16px 40px -14px rgba(11, 21, 48, 0.35);
+  }
+
+  .account-modal__picker-search {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--z-border-soft, #eef2f9);
+    border-radius: 6px;
+    background: var(--z-surface-2, #f8fafc);
+    color: var(--z-subtle, #94a3b8);
+  }
+
+  .account-modal__picker-search .ms {
+    font-size: 15px;
+  }
+
+  .account-modal__picker-search input {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink, #0b1530);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+  }
+
+  .account-modal__picker-search input::placeholder {
+    color: var(--z-subtle, #94a3b8);
+  }
+
+  .account-modal__picker-list {
+    display: flex;
+    flex: 0 1 auto;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 180px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .account-modal__picker-list::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .account-modal__picker-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 28px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--z-ink, #0b1530);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .account-modal__picker-option:hover,
+  .account-modal__picker-option.is-active {
+    background: var(--z-surface-3, #f1f5f9);
+  }
+
+  .account-modal__picker-option.is-selected {
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+    font-weight: 700;
+  }
+
+  .account-modal__picker-option-icon {
+    flex: 0 0 auto;
+    color: var(--z-link, #2f6fed);
+    font-size: 16px;
+  }
+
+  .account-modal__picker-option-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-modal__picker-empty {
+    padding: 0 8px;
+    color: var(--z-muted, #64748b);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 28px;
+  }
+
+  .account-modal__picker-create {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 0 8px;
+    border: 0;
+    border-top: 1px solid var(--z-border-soft, #eef2f9);
+    background: transparent;
+    color: var(--z-link, #2f6fed);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .account-modal__picker-create .ms {
+    font-size: 16px;
+  }
+
+  .account-modal__picker-create span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .account-modal__hint {
-    color: #64748b;
-    font-size: 0.82rem;
+    color: var(--am-muted);
+    font-size: 10.5px;
     font-weight: 600;
+    line-height: 1.5;
   }
 
+  /* ---------- initial balance ---------- */
   .account-modal__balance {
-    display: grid;
-    gap: 0.5rem;
-    padding: 0.65rem 0.75rem;
-    border: 1px solid #dfe6ef;
-    border-radius: 0.65rem;
-    background: #f7f9fc;
-    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    grid-column: 1 / -1;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
   }
 
-  .account-modal__balance-head {
+  .account-modal__legend {
+    padding: 0 0 4px;
+    color: var(--am-text);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .account-modal__balance-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
   }
 
-  .account-modal__balance-title {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    color: #334155;
-    font-size: 0.92rem;
-    font-weight: 600;
+  .account-modal__segment {
+    display: flex;
+    flex-shrink: 0;
+    gap: 1px;
+    padding: 2px;
+    border-radius: 7px;
+    background: var(--am-surface-3);
   }
 
-  .account-modal__balance-title i {
-    color: var(--account-modal-primary);
-  }
-
-  .account-modal__balance-strip {
-    display: grid;
-    grid-template-columns: auto minmax(9rem, 1fr) 6.25rem 2.45rem;
-    gap: 0.5rem;
-    align-items: center;
-  }
-
-  .account-modal__balance-strip--additional {
-    grid-template-columns: auto minmax(9rem, 1fr) 6.5rem;
-  }
-
-  .account-modal__balance-hint {
-    margin: 0.35rem 0 0;
-    color: #64748b;
-    font-size: 0.68rem;
-  }
-
-  .account-modal__balance-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-    min-height: 2.45rem;
-    padding-inline: 0.75rem;
-    border: 1px solid #d8e1ee;
-    border-radius: 0.5rem;
-    background: #ffffff;
-    font-size: 0.86rem;
+  .account-modal__segment-btn {
+    height: 22px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--am-muted);
+    font: inherit;
+    font-size: 11px;
     font-weight: 600;
     white-space: nowrap;
     cursor: pointer;
-    transition:
-      border-color 0.15s ease,
-      background 0.15s ease,
-      transform 0.1s ease;
   }
 
-  .account-modal__balance-toggle:active {
-    transform: scale(0.97);
+  .account-modal__segment-btn.is-active {
+    background: var(--am-surface);
+    color: var(--am-ink);
+    font-weight: 800;
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.18);
   }
 
-  .account-modal__balance-toggle--debit {
-    border-color: #edcccc;
-    background: #fff8f7;
-    color: #b42318;
+  .account-modal__segment-btn:first-child.is-active {
+    color: var(--am-danger);
   }
 
-  .account-modal__balance-toggle--debit:hover {
-    border-color: #dda7a7;
-    background: #fff2f0;
+  .account-modal__segment-btn:last-child.is-active {
+    color: var(--am-ok);
   }
 
-  .account-modal__balance-toggle--credit {
-    border-color: #c5d9f6;
-    background: #f3f7fe;
-    color: #0b5ed7;
+  .account-modal__segment-btn:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
-  .account-modal__balance-toggle--credit:hover {
-    border-color: #9fbee9;
-    background: #ebf2fd;
+  .account-modal__amount-box {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    min-width: 0;
+    height: 30px;
+    border: 1px solid var(--am-border);
+    border-radius: 7px;
+    background: var(--am-surface);
   }
 
-  .account-modal__balance-toggle i {
-    font-size: 0.85rem;
-    opacity: 0.75;
+  .account-modal__amount-box:focus-within {
+    border-color: var(--am-brand);
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
-  .account-modal__balance-amount {
+  .account-modal__amount {
+    flex: 1;
     width: 100%;
     min-width: 0;
-    min-height: 2.45rem;
-    padding: 0.35rem 0.7rem;
-    border: 1px solid var(--account-modal-border);
-    border-radius: 0.5rem;
-    outline: none;
-    background: #ffffff;
-    font-size: 0.86rem;
-    text-align: start;
-    transition:
-      border-color 0.15s ease,
-      box-shadow 0.15s ease;
+    height: 100%;
+    padding: 0 9px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--am-ink);
+    font-family: var(--am-num);
+    font-size: 12.5px;
+    font-weight: 800;
+    direction: ltr;
+    text-align: right;
   }
 
-  .account-modal__balance-amount:hover {
-    border-color: #bfdbfe;
+  .account-modal__currency {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
   }
 
-  .account-modal__balance-amount:focus {
-    border-color: var(--account-modal-primary);
-    box-shadow: 0 0 0 3px rgba(15, 110, 253, 0.1);
-  }
-
-  .account-modal__balance-add {
-    display: inline-grid;
-    width: 2.45rem;
-    height: 2.45rem;
-    padding: 0;
-    place-items: center;
-    border: 1px solid #bfdbfe;
-    border-radius: 0.5rem;
-    background: #ffffff;
-    color: var(--account-modal-primary);
-    font-size: 0.85rem;
+  .account-modal__currency-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    height: 30px;
+    padding: 0 4px 0 6px;
+    border: 1px solid var(--am-border);
+    border-radius: 7px;
+    background: var(--am-surface);
+    color: var(--am-ink);
+    font-family: var(--am-num);
+    font-size: 13px;
+    font-weight: 800;
     cursor: pointer;
-    transition:
-      background 0.15s ease,
-      border-color 0.15s ease,
-      transform 0.1s ease;
   }
 
-  .account-modal__balance-add:hover:not(:disabled) {
-    border-color: #93c5fd;
-    background: #dbeafe;
+  .account-modal__currency-btn:focus-visible {
+    outline: 0;
+    border-color: var(--am-brand);
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
-  .account-modal__balance-add:active:not(:disabled) {
-    transform: scale(0.94);
+  .account-modal__currency-btn .ms {
+    color: var(--am-muted);
+    font-size: 15px;
   }
 
-  .account-modal__balance-add:disabled {
+  .account-modal__currency-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: default;
+  }
+
+  .account-modal__currency-menu {
+    position: absolute;
+    top: 34px;
+    inset-inline-end: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 150px;
+    padding: 4px;
+    border: 1px solid var(--am-border);
+    border-radius: 10px;
+    background: var(--am-surface);
+    box-shadow: 0 16px 40px -14px rgba(11, 21, 48, 0.35);
+  }
+
+  .account-modal__currency-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 30px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--am-ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .account-modal__currency-option:hover {
+    background: var(--am-surface-3);
+  }
+
+  .account-modal__currency-option.is-selected {
+    background: var(--am-brand-soft);
+    color: var(--am-brand);
+    font-weight: 800;
+  }
+
+  .account-modal__currency-sym {
+    width: 22px;
+    font-family: var(--am-num);
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .account-modal__row-del {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--am-danger);
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .account-modal__row-del:hover {
+    background: var(--am-danger-soft);
+  }
+
+  .account-modal__row-del .ms {
+    font-size: 16px;
+  }
+
+  .account-modal__balance-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .account-modal__add-currency {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 24px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--am-brand);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .account-modal__add-currency:hover:not(:disabled) {
+    background: var(--am-brand-soft);
+  }
+
+  .account-modal__add-currency:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+
+  .account-modal__add-currency .ms {
+    font-size: 15px;
+  }
+
+  .account-modal__date {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .account-modal__date-label {
+    color: var(--am-muted);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .account-modal__date-box {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    width: 118px;
+    height: 26px;
+    padding-inline-end: 6px;
+    border: 1px solid var(--am-border);
+    border-radius: 6px;
+    background: var(--am-surface);
+  }
+
+  .account-modal__date-box:focus-within {
+    border-color: var(--am-brand);
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
+  }
+
+  .account-modal__date-icon {
+    flex-shrink: 0;
+    color: var(--am-subtle);
+    font-size: 14px;
+    pointer-events: none;
+  }
+
+  .account-modal__date-box :global(.app-date-field) {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    width: auto;
+    min-width: 0;
+  }
+
+  .account-modal__date-box :global(.pdp) {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .account-modal__date-box :global(.app-date-field input) {
+    width: 100%;
+    height: 24px;
+    min-height: 24px;
+    padding-inline: 7px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--am-ink) !important;
+    font-family: var(--am-num);
+    font-size: 11.5px;
+    font-weight: 700;
+    text-align: end !important;
+    direction: ltr;
+  }
+
+  .account-modal__textarea {
+    width: 100%;
+    min-height: 52px;
+    padding: 7px 10px;
+    border: 1px solid var(--am-border);
+    border-radius: 8px;
+    outline: 0;
+    background: var(--am-surface);
+    color: var(--am-ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.6;
+    box-sizing: border-box;
+    resize: vertical;
+  }
+
+  .account-modal__textarea:focus {
+    border-color: var(--am-brand);
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
+  }
+
+  /* ---------- footer ---------- */
+  .account-modal__footer {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--am-border-soft);
+    background: var(--am-surface-2);
+  }
+
+  .account-modal__cancel {
+    height: 34px;
+    margin-inline-end: auto;
+    padding: 0 14px;
+    border: 1px solid var(--am-border);
+    border-radius: 9px;
+    background: var(--am-surface);
+    color: var(--am-text);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .account-modal__cancel:hover {
+    border-color: var(--z-border-strong, #dce6f8);
+    color: var(--am-ink);
   }
 
   .account-modal__submit {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    width: auto;
-    min-width: 7.5rem;
-    min-height: 2.5rem;
-    margin-inline-start: auto;
-    padding-inline: 1.25rem;
-    border: none;
-    border-radius: 0.5rem;
-    background: var(--account-modal-primary);
+    gap: 5px;
+    height: 34px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: 9px;
+    background: var(--am-brand);
     color: #ffffff;
-    font-size: 0.96rem;
+    font: inherit;
+    font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
-    box-shadow: none;
-    transition:
-      background 0.15s ease,
-      box-shadow 0.15s ease,
-      transform 0.1s ease;
+    box-shadow: 0 8px 18px -8px rgba(47, 111, 237, 0.9);
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
   }
 
   .account-modal__submit:hover:not(:disabled) {
-    background: #0b5ed7;
-    box-shadow: 0 2px 6px rgba(15, 110, 253, 0.18);
+    background: var(--am-brand-strong);
   }
 
   .account-modal__submit:active:not(:disabled) {
     transform: translateY(1px);
-    box-shadow: 0 2px 6px rgba(15, 110, 253, 0.2);
   }
 
   .account-modal__submit:disabled,
   .account-modal__submit[aria-busy='true'] {
     opacity: 0.65;
     cursor: not-allowed;
-    box-shadow: none;
   }
 
   .account-modal__submit:focus-visible,
-  .account-modal__balance-add:focus-visible,
-  .account-modal__balance-toggle:focus-visible {
-    outline: 2px solid var(--account-modal-primary);
-    outline-offset: 2px;
+  .account-modal__cancel:focus-visible,
+  .account-modal__add-currency:focus-visible,
+  .account-modal__row-del:focus-visible {
+    outline: 0;
+    box-shadow: var(--z-ring, 0 0 0 3px rgba(47, 111, 237, 0.14));
   }
 
-  .account-modal__submit i {
-    font-size: 1.15rem;
+  .account-modal__submit .ms {
+    font-size: 15px;
   }
 
   @media (max-height: 760px) {
-    .account-modal__dialog {
-      max-height: calc(100dvh - 1rem);
-      margin-block: 0.5rem;
-    }
-
+    .account-modal__dialog,
     .account-modal__panel {
-      max-height: calc(100dvh - 1rem);
+      max-height: calc(100dvh - 16px);
     }
 
-    .account-modal__header {
-      min-height: 4.75rem;
-    }
-
-    .account-modal__avatar {
-      width: 3.75rem;
-      height: 3.75rem;
-    }
-
-    .account-modal__body {
-      padding-block: 0.65rem;
+    .account-modal__dialog {
+      margin-block: 8px;
     }
   }
 
   @media (max-width: 640px) {
-    .account-modal.qa-modal :global(.modal-dialog.account-modal__dialog),
+    /* Width stays 520px, capped by calc(100vw - 24px) like the Add Journal popup. */
     .account-modal__dialog {
-      width: min(96vw, 40rem);
-      max-width: min(96vw, 40rem);
-      max-height: calc(100dvh - 1rem);
-      margin: 0.5rem auto;
-    }
-
-    .account-modal__panel {
-      max-height: calc(100dvh - 1rem);
-    }
-
-    .account-modal__header {
-      min-height: 5.75rem;
-      padding-inline-start: 1rem;
+      margin: 8px auto;
     }
 
     .account-modal__body {
-      gap: 0.7rem;
-      padding: 0.75rem 0.9rem;
-      overflow-x: hidden;
-      overflow-y: auto;
+      grid-template-columns: minmax(0, 1fr);
+      padding: 10px 12px 12px;
+    }
+
+    .account-modal__header {
+      padding: 12px 12px;
     }
 
     .account-modal__footer {
-      padding: 0.65rem 0.9rem 0.75rem;
+      padding: 10px 12px;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .account-modal__balance-row {
+      flex-wrap: wrap;
     }
 
-    .account-modal__identity-grid,
-    .account-modal__fields-grid {
-      grid-template-columns: 1fr;
-      gap: 0.7rem;
+    .account-modal__amount-box {
+      flex-basis: 100%;
+      order: 3;
     }
 
-    .account-modal__balance-strip,
-    .account-modal__balance-strip--additional {
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .account-modal__balance-add {
-      width: 100%;
+    .account-modal__row-del {
+      margin-inline-start: auto;
     }
   }
 
   @media (max-width: 400px) {
-    .account-modal__dialog {
-      width: calc(100vw - 0.75rem);
-      max-width: calc(100vw - 0.75rem);
-      margin: 0.375rem auto;
-    }
-
-    .account-modal__panel {
-      max-height: calc(100dvh - 0.75rem);
-    }
-
-    .account-modal__header {
-      gap: 0.7rem;
-      min-height: 5.4rem;
-      padding-inline-start: 0.8rem;
-      padding-inline-end: 3.2rem;
-    }
-
-    .account-modal__avatar {
-      width: 4rem;
-      height: 4rem;
-    }
-
-    .account-modal__title {
-      font-size: 1.08rem;
-    }
-
-    .account-modal__body {
-      padding-inline: 0.8rem;
-    }
-
-    .account-modal__footer {
-      padding-inline: 0.8rem;
-    }
-
-    .account-modal__balance {
-      padding: 0.65rem;
-    }
-
-    .account-modal__balance-strip,
-    .account-modal__balance-strip--additional {
-      grid-template-columns: 1fr;
-    }
-
-    .account-modal__balance-add {
-      width: 100%;
-    }
-
     .account-modal__submit {
-      width: 100%;
-      margin-inline-start: 0;
+      padding-inline: 12px;
     }
-  }
 
-  :global(html.dark) .account-modal {
-    --account-modal-border: var(--erp-border, #2b3a4f);
-    --account-modal-muted: var(--erp-muted, #94a3b8);
-    color-scheme: dark;
-  }
-
-  :global(html.dark) .account-modal__backdrop {
-    background: rgba(2, 6, 23, 0.78);
-  }
-
-  :global(html.dark) .account-modal__panel {
-    border-color: var(--account-modal-border);
-    background: var(--erp-surface, #111827);
-    color: var(--erp-text, #e5edf8);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.48);
-  }
-
-  :global(html.dark) .account-modal__form,
-  :global(html.dark) .account-modal__body,
-  :global(html.dark) .account-modal__footer {
-    background: var(--erp-surface, #111827);
-    color: var(--erp-text, #e5edf8);
-  }
-
-  :global(html.dark) .account-modal__footer {
-    border-top-color: var(--account-modal-border);
-    box-shadow: 0 -5px 16px rgba(0, 0, 0, 0.18);
-  }
-
-  :global(html.dark) .account-modal__body {
-    scrollbar-color: #526176 transparent;
-  }
-
-  :global(html.dark) .account-modal__body::-webkit-scrollbar-thumb {
-    background: #526176;
-  }
-
-  :global(html.dark) .account-modal__body::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
-  }
-
-  :global(html.dark) .account-modal__label,
-  :global(html.dark) .account-modal__balance-title {
-    color: var(--erp-text-soft, #cbd5e1);
-  }
-
-  :global(html.dark) .account-modal__hint {
-    color: var(--erp-muted, #94a3b8);
-  }
-
-  :global(html.dark) .account-modal__input,
-  :global(html.dark) .account-modal__textarea,
-  :global(html.dark) .account-modal__select,
-  :global(html.dark) .account-modal__balance-amount {
-    border-color: var(--account-modal-border);
-    background: var(--erp-surface-soft, #172033);
-    color: var(--erp-text, #e5edf8);
-  }
-
-  :global(html.dark) .account-modal__input::placeholder,
-  :global(html.dark) .account-modal__textarea::placeholder {
-    color: var(--erp-muted, #94a3b8);
-  }
-
-  :global(html.dark) .account-modal__input:hover,
-  :global(html.dark) .account-modal__textarea:hover,
-  :global(html.dark) .account-modal__select:hover,
-  :global(html.dark) .account-modal__balance-amount:hover {
-    border-color: #4b6280;
-  }
-
-  :global(html.dark) .account-modal__input:focus,
-  :global(html.dark) .account-modal__textarea:focus,
-  :global(html.dark) .account-modal__select:focus,
-  :global(html.dark) .account-modal__balance-amount:focus {
-    border-color: #60a5fa;
-    background: #0f172a;
-    color: var(--erp-text, #e5edf8);
-    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14);
-  }
-
-  :global(html.dark) .account-modal__input-icon,
-  :global(html.dark) .account-modal__select-icon,
-  :global(html.dark) .account-modal__select-chevron {
-    color: var(--erp-muted, #94a3b8);
-  }
-
-  :global(html.dark) .account-modal__type-select :global(.filter-select__trigger) {
-    border-color: var(--account-modal-border);
-    background: var(--erp-surface-soft, #172033);
-    color: var(--erp-text, #e5edf8);
-  }
-
-  :global(html.dark) .account-modal__type-select :global(.filter-select__trigger:hover) {
-    border-color: #4b6280;
-    background: #1e293b;
-    color: var(--erp-text, #e5edf8);
-  }
-
-  :global(html.dark) .account-modal__type-select :global(.filter-select__trigger:focus-visible) {
-    border-color: #60a5fa;
-    background: #0f172a;
-    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14);
-  }
-
-  :global(html.dark) .account-modal__input-wrap:focus-within .account-modal__input-icon {
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .account-modal__input-icon--whatsapp {
-    color: #6ee7b7;
-  }
-
-  :global(html.dark) .account-modal__balance {
-    border-color: var(--account-modal-border);
-    background: var(--erp-surface-soft, #172033);
-  }
-
-  :global(html.dark) .account-modal__balance-toggle {
-    border-color: var(--account-modal-border);
-    background: #1e293b;
-    color: var(--erp-text-soft, #cbd5e1);
-  }
-
-  :global(html.dark) .account-modal__balance-toggle--debit {
-    border-color: rgba(248, 113, 113, 0.4);
-    background: rgba(248, 113, 113, 0.13);
-    color: #fca5a5;
-  }
-
-  :global(html.dark) .account-modal__balance-toggle--debit:hover {
-    border-color: rgba(252, 165, 165, 0.62);
-    background: rgba(248, 113, 113, 0.2);
-  }
-
-  :global(html.dark) .account-modal__balance-toggle--credit {
-    border-color: rgba(96, 165, 250, 0.42);
-    background: rgba(96, 165, 250, 0.14);
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .account-modal__balance-toggle--credit:hover {
-    border-color: rgba(147, 197, 253, 0.64);
-    background: rgba(96, 165, 250, 0.22);
-  }
-
-  :global(html.dark) .account-modal__balance-add {
-    border-color: rgba(96, 165, 250, 0.4);
-    background: var(--erp-surface-soft, #172033);
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .account-modal__balance-add:hover:not(:disabled) {
-    border-color: rgba(147, 197, 253, 0.65);
-    background: rgba(96, 165, 250, 0.18);
-  }
-
-  :global(html.dark) .account-modal__avatar {
-    border-color: rgba(255, 255, 255, 0.42);
-    background: var(--erp-surface-soft, #172033);
-    box-shadow: 0 6px 18px rgba(2, 6, 23, 0.34);
-  }
-
-  :global(html.dark) .account-modal__avatar-badge {
-    border-color: var(--erp-surface-soft, #172033);
-    background: var(--erp-surface-soft, #172033);
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .account-modal__close:hover {
-    border-color: rgba(255, 255, 255, 0.68);
-    background: rgba(15, 23, 42, 0.34);
-    color: #ffffff;
+    .account-modal__date-box :global(.pdp) {
+      width: 112px;
+    }
   }
 </style>
+

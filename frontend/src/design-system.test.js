@@ -811,6 +811,9 @@ describe('icon set', () => {
          KPI tiles and the row menu are drawn with Material Symbols. */
       'pages/products/ProductsIndex.svelte',
       'pages/accounts/AccountsIndex.svelte',
+      /* The account dialog follows the reference accounts popup: type artwork,
+         section glyphs, field icons and the pickers are Material Symbols. */
+      'pages/accounts/AccountModal.svelte',
     ]);
 
     const offenders = FILES.filter(

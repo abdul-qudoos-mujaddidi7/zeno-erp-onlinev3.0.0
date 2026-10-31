@@ -397,7 +397,8 @@
     "Search name, code or category…": "Search name, code or category…",
     "Archive": "Archive",
     "Unarchive": "Unarchive",
-    "Stock History": "Stock history"
+    "Stock History": "Stock history",
+    "Select account group": "Select account group"
   },
   "fa": {
     "Good morning": "صبح بخیر",
@@ -2142,7 +2143,8 @@
     "Search name, code or category…": "جستجوی نام، کد یا کتگوری…",
     "Archive": "آرشیف کردن",
     "Unarchive": "از آرشیف بیرون آوردن",
-    "Stock History": "گردش موجودی"
+    "Stock History": "گردش موجودی",
+    "Select account group": "یک گروه حساب را انتخاب کنید"
   },
   "ps": {
     "Good morning": "سهار نیک",
@@ -3885,6 +3887,7 @@
     "Search name, code or category…": "نوم، کوډ یا کټګوري ولټوئ…",
     "Archive": "آرشیف کول",
     "Unarchive": "له آرشیف ویستل",
-    "Stock History": "د ذخیرې بهیر"
+    "Stock History": "د ذخیرې بهیر",
+    "Select account group": "د حساب کروپ وټاکئ"
   }
 }

@@ -30,10 +30,10 @@
         }
     });
 
-    export async function openAccountGroupModal() {
+    export async function openAccountGroupModal(initialName = "") {
         console.log("OK");
         editingId = null;
-        name = "";
+        name = initialName;
         code = "";
         description = "";
         status = 1;
