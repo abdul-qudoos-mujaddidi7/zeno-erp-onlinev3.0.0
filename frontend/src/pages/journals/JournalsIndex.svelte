@@ -6,6 +6,7 @@
   import { t, lang, translate_org_type, settings_all, shortID } from '../../i18n/i18n';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import ActionButton from '../../components/common/ActionButton.svelte';
@@ -1292,9 +1293,15 @@
     {/if}
 
     {#if loading && journals.length === 0}
-      <div class="index-table-state">
-        <EmptyState loading={true} message={t('Loading...')} />
-      </div>
+      <TableSkeleton
+        ariaLabel={t('Loading...')}
+        columns={['158px', 'auto', '162px', '162px', '87px']}
+        minWidth="820px"
+        headerHeight="40px"
+        cellPaddingY="6px"
+        edgePaddingX="16px"
+        headEdgePaddingX="16px"
+        headBorderColor="var(--z-border-soft, #eef2f7)" />
     {:else if filteredJournals.length === 0}
       <div class="index-table-state">
         <EmptyState icon="bi-journal-x" message={lbl('empty')} />

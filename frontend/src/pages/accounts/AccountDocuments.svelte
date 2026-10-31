@@ -13,6 +13,7 @@
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import AppModal from '../../components/common/AppModal.svelte';
   import { DEFAULT_PAGE_SIZE } from '../../lib/pagination.js';
@@ -244,7 +245,7 @@
   </svelte:fragment>
 
   {#if loading}
-    <div class="table-state"><EmptyState loading message={t('Loading...')} /></div>
+    <TableSkeleton ariaLabel={t('Loading...')} colCount={8} minWidth="900px" />
   {:else if filteredDocuments.length === 0}
     <div class="table-state"><EmptyState icon="bi-folder2-open" message={t('No documents found.')} /></div>
   {:else}

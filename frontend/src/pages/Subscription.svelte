@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
 
   import { t, lang, translate_org_type } from '../i18n/i18n.js';
+  import PanelSkeleton from '../components/common/PanelSkeleton.svelte';
 import { currencyApi } from '../api/currencyApi.js';
 import { warehouseApi } from '../api/warehouseApi.js';
   $: _lang = $lang;
@@ -253,7 +254,7 @@ import { saleApi } from '../api/saleApi.js';
     </div>
   </div>
 {:else}
-  <div class="subscription-loading"><div class="spinner-border text-primary" role="status"></div></div>
+  <div class="subscription-loading"><PanelSkeleton ariaLabel={t('Loading...')} lines={4} lineHeight="24px" /></div>
 {/if}
 
 <style>

@@ -15,6 +15,7 @@
   import ExportMenu from '../../components/common/ExportMenu.svelte';
   import SummaryCard from '../../components/common/SummaryCard.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import ViewJournalModal from './ViewJournalModal.svelte';
   import JournalReceiptModal from './JournalReceiptModal.svelte';
   import JournalA4ReceiptModal from './JournalA4ReceiptModal.svelte';
@@ -787,9 +788,7 @@
     </svelte:fragment>
 
     {#if loading}
-      <div class="index-table-state">
-        <EmptyState loading={true} message={t('Loading...')} />
-      </div>
+      <TableSkeleton ariaLabel={t('Loading...')} colCount={5} minWidth="880px" />
     {:else if loadError}
       <div class="index-table-state">
         <EmptyState icon="bi-exclamation-triangle" message={loadError} />

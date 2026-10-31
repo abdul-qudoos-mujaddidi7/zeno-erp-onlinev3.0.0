@@ -13,6 +13,7 @@
   import StatusBadge from '../components/common/StatusBadge.svelte';
   import PaginationBar from '../components/common/PaginationBar.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
+  import TableSkeleton from '../components/common/TableSkeleton.svelte';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../lib/pagination.js';
 
   let mode = 'list';
@@ -278,9 +279,7 @@
     </svelte:fragment>
 
     {#if loading}
-      <div class="index-table-state">
-        <EmptyState loading message={t('Loading...')} />
-      </div>
+      <TableSkeleton ariaLabel={t('Loading...')} colCount={6} minWidth="780px" />
     {:else if filtered.length === 0}
       <div class="index-table-state">
         <EmptyState icon="bi-trash3" message={t('No wastes found.')} />

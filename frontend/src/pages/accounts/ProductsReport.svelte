@@ -8,6 +8,7 @@
   import ExportMenu from '../../components/common/ExportMenu.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
 
   import { showDate, setDatePickers } from '../../calendar.js';
@@ -465,7 +466,7 @@
     </svelte:fragment>
 
     {#if loading}
-      <div class="index-table-state"><EmptyState loading message={t('Loading...')} /></div>
+      <TableSkeleton ariaLabel={t('Loading...')} colCount={7} minWidth="920px" />
     {:else if paginatedItems.length === 0}
       <div class="index-table-state"><EmptyState icon="bi-inbox" message={t('No products found.')} /></div>
     {:else}

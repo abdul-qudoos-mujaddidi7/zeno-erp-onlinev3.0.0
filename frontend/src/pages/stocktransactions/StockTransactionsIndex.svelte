@@ -15,6 +15,7 @@
   import TableActions from '../../components/common/TableActions.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
   let transactions = [];
@@ -345,9 +346,10 @@
   </svelte:fragment>
 
   {#if loading}
-    <div class="index-table-state">
-      <EmptyState loading message={t('stock_transactions.loading')} />
-    </div>
+    <TableSkeleton
+      ariaLabel={t('stock_transactions.loading')}
+      colCount={11}
+      minWidth="980px" />
   {:else if transactions.length === 0}
     <div class="index-table-state">
       <EmptyState icon="bi-box-arrow-in-down" message={t('No transactions found.')} />

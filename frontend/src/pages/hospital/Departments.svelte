@@ -10,6 +10,7 @@ import { departmentApi } from '../../api/departmentApi.js';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import { DEFAULT_PAGE_SIZE } from '../../lib/pagination.js';
 
   $: _lang = $lang;
@@ -105,9 +106,7 @@ import { departmentApi } from '../../api/departmentApi.js';
   </svelte:fragment>
 
   {#if loading}
-    <div class="index-table-state">
-      <EmptyState loading message={t('Loading...')} />
-    </div>
+    <TableSkeleton ariaLabel={t('Loading...')} colCount={6} minWidth="680px" />
   {:else if filteredDepartments.length === 0}
     <div class="index-table-state">
       <EmptyState icon="bi-diagram-3" message={t('No departments found.')} />

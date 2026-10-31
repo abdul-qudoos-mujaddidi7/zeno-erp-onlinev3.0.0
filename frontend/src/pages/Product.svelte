@@ -20,6 +20,7 @@ import { purchaseApi } from '../api/purchaseApi.js';
   import DataTable from '../components/common/DataTable.svelte';
   import StatusBadge from '../components/common/StatusBadge.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
+  import TableSkeleton from '../components/common/TableSkeleton.svelte';
   import PaginationBar from '../components/common/PaginationBar.svelte';
   import FilterToolbar from '../components/common/FilterToolbar.svelte';
   import SummaryCard from '../components/common/SummaryCard.svelte';
@@ -1948,9 +1949,7 @@ import { stockTransactionApi } from '../api/stockTransactionApi.js';
         </svelte:fragment>
 
         {#if reportLoading}
-          <div class="index-table-state">
-            <EmptyState loading message={t('Loading...')} />
-          </div>
+          <TableSkeleton ariaLabel={t('Loading...')} colCount={10} minWidth="100%" />
         {:else if filteredTransactions.length === 0}
           <div class="index-table-state">
             <EmptyState icon="bi-journal-text" message={t('No transactions found.')} />

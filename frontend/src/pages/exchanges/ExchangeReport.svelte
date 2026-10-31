@@ -9,6 +9,7 @@
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import ExportMenu from '../../components/common/ExportMenu.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
@@ -240,7 +241,7 @@
     </svelte:fragment>
 
     {#if loading}
-      <div class="index-table-state"><EmptyState loading message={t('Loading...')} /></div>
+      <TableSkeleton ariaLabel={t('Loading...')} colCount={7} minWidth="900px" />
     {:else if loadError}
       <div class="index-table-state"><EmptyState icon="bi-exclamation-triangle" message={loadError} /></div>
     {:else if filtered.length === 0}

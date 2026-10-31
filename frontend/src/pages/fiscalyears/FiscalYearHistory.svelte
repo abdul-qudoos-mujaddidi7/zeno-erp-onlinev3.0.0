@@ -21,6 +21,7 @@
   import AppModal from '../../components/common/AppModal.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import PanelSkeleton from '../../components/common/PanelSkeleton.svelte';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
   import SummaryCard from '../../components/common/SummaryCard.svelte';
   import ActionButton from '../../components/common/ActionButton.svelte';
@@ -293,7 +294,7 @@
     {/if}
 
     {#if loading}
-      <EmptyState loading={true} message={t('Loading')} />
+      <PanelSkeleton ariaLabel={t('Loading')} lines={2} lineHeight="64px" gap="12px" />
     {:else if activeTab === 'summary'}
       {#if summary}
         <div class="fy-history__cards">
@@ -601,7 +602,7 @@
       </div>
 
       {#if statementLoading}
-        <EmptyState loading={true} message={t('Loading')} />
+        <PanelSkeleton ariaLabel={t('Loading')} lines={2} lineHeight="64px" gap="12px" />
       {:else if statement}
         <div class="fy-history__cards">
           {#each statement.closing_by_currency as line (line.currency || 'none')}

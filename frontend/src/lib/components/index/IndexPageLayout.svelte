@@ -275,7 +275,7 @@
   .index-toolbar-main :global(.filter-toggle) {
     height: 28px;
     min-height: 28px;
-    padding: 0 9px;
+    padding: 0 6px;
   }
 
   .index-statistics {

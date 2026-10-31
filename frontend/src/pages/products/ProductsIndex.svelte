@@ -19,6 +19,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import ActionButton from '../../components/common/ActionButton.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import TableActions from '../../components/common/TableActions.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import { getCachedImage, cacheImage } from './imageCache.js';
@@ -1236,9 +1237,12 @@ import { saleItemApi } from '../../api/saleItemApi.js';
     </svelte:fragment>
 
         {#if loading}
-          <div class="index-table-state">
-            <EmptyState loading message={t('Loading...')} />
-          </div>
+          <TableSkeleton
+            ariaLabel={t('Loading...')}
+            colCount={8}
+            minWidth="100%"
+            headerHeight="40px"
+            cellPaddingY="6px" />
         {:else if filteredProducts.length === 0}
           <div class="index-table-state">
             <EmptyState icon="bi-search" message={t('No products found.')}>

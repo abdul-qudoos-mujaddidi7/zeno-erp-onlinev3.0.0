@@ -4,6 +4,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import { onMount } from 'svelte';
   import WorkCenterModal from './WorkCenterModal.svelte';
   import { t, lang, translate_org_type } from '../../i18n/i18n.js';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import { push } from 'svelte-spa-router';
   import { DEFAULT_PAGE_SIZE } from '../../lib/pagination.js';
   $: _lang = $lang;
@@ -137,12 +138,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   </div>
   <div class="card-body p-0">
     {#if loading}
-      <div class="text-center p-5">
-        <div class="spinner-border text-primary" role="status">
-          <span class="visually-hidden">{t('Loading...')}</span>
-        </div>
-        <p class="mt-2 text-muted">{t('Loading...')}</p>
-      </div>
+      <TableSkeleton ariaLabel={t('Loading...')} colCount={7} minWidth="900px" />
     {:else if filteredWorkCenters.length === 0}
       <div class="text-center p-5">
         <i class="bi bi-inbox fs-1 text-muted"></i>

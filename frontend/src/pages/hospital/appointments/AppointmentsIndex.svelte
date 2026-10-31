@@ -9,6 +9,7 @@ import { departmentApi } from '../../../api/departmentApi.js';
   let selectedAppointment = null;
 
   import { t, lang, translate_org_type, shortID } from '../../../i18n/i18n';
+  import TableSkeleton from '../../../components/common/TableSkeleton.svelte';
   import { DEFAULT_PAGE_SIZE, readListMeta } from '../../../lib/pagination.js';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -593,9 +594,7 @@ import { appointmentApi } from '../../../api/appointmentApi.js';
 
   <div class="card-body p-0">
     {#if loading}
-      <div class="text-center p-4">
-        <div class="spinner-border text-primary" role="status"></div>
-      </div>
+      <TableSkeleton ariaLabel={t('Loading...')} colCount={9} minWidth="1000px" />
     {:else}
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">

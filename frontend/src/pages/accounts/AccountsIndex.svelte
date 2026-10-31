@@ -14,6 +14,7 @@
   import ActionButton from '../../components/common/ActionButton.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import TableActions from '../../components/common/TableActions.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
@@ -833,9 +834,11 @@
     {/if}
 
     {#if loading}
-      <div class="index-table-state">
-        <EmptyState loading message={t('Loading...')} />
-      </div>
+      <TableSkeleton
+        ariaLabel={t('Loading...')}
+        columns={accountTableColumns}
+        minWidth="780px"
+        cellPaddingY="5px" />
     {:else if paginatedAccounts.length === 0}
       <div class="index-table-state">
         <EmptyState icon="bi-search" message={t('No accounts found.')}>

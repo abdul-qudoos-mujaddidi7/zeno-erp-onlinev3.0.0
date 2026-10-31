@@ -4,6 +4,7 @@
     import { patientTypeApi } from '../../../api/patientTypeApi.js';
 
     import { t, lang, translate_org_type } from '../../../i18n/i18n';
+    import TableSkeleton from '../../../components/common/TableSkeleton.svelte';
     $: _lang = $lang;
     $: _translate_org_type = $translate_org_type;
 
@@ -140,9 +141,7 @@
 <div class="card shadow-sm">
     <div class="card-body p-0">
         {#if loading}
-            <div class="text-center p-4">
-                <div class="spinner-border text-primary" role="status"></div>
-            </div>
+            <TableSkeleton ariaLabel={t('Loading...')} colCount={9} minWidth="900px" />
         {:else}
             <div class="table-responsive">
                 <table class="table table-hover mb-0">

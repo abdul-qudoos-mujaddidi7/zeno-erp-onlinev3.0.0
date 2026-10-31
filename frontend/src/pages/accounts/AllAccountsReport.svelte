@@ -12,6 +12,7 @@
     import ExportMenu from '../../components/common/ExportMenu.svelte';
     import DataTable from '../../components/common/DataTable.svelte';
     import EmptyState from '../../components/common/EmptyState.svelte';
+    import TableSkeleton from '../../components/common/TableSkeleton.svelte';
     import PaginationBar from '../../components/common/PaginationBar.svelte';
     import StatusBadge from '../../components/common/StatusBadge.svelte';
     import SummaryCard from '../../components/common/SummaryCard.svelte';
@@ -1313,9 +1314,7 @@
 
     <div class="report-card-body">
         {#if loading}
-            <div class="index-table-state">
-                <EmptyState loading message={t('Loading...')} />
-            </div>
+            <TableSkeleton ariaLabel={t('Loading...')} colCount={6} minWidth="760px" />
         {:else if filteredAccounts.length === 0}
             <div class="index-table-state">
                 <EmptyState icon="bi-inbox" message={t('No accounts found.')} />

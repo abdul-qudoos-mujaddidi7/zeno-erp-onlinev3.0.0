@@ -406,7 +406,7 @@
     background: var(--z-surface-3, #f1f5f9);
   }
 
-  /* Filter trigger — 28px on every page, with an active-count badge */
+  /* Filter trigger — 28px tall on every page, narrow, with an active-count badge */
 
   .filter-control {
     position: relative;
@@ -422,14 +422,14 @@
     gap: 5px;
     width: auto;
     height: 28px;
-    min-width: 32px;
+    min-width: 26px;
     min-height: 28px;
-    padding: 0 9px;
+    padding: 0 6px;
     border: 1px solid #ccd6f0;
-    border-radius: var(--z-r-sm, 8px);
+    border-radius: 7px;
     background: #e4e9f7;
     color: #3d5ac8;
-    font-size: 17px;
+    font-size: 15px;
     line-height: 1;
     cursor: pointer;
     transition:
@@ -457,7 +457,7 @@
   }
 
   .filter-toggle > .ms {
-    font-size: 17px;
+    font-size: 15px;
   }
 
   .filter-toggle__label {
@@ -490,20 +490,20 @@
 
   .filter-toggle__count {
     position: absolute;
-    top: -5px;
-    left: -5px;
+    top: -4px;
+    left: -4px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
     box-sizing: border-box;
     border: 2px solid var(--z-surface, #ffffff);
-    border-radius: 8px;
+    border-radius: 7px;
     background: var(--z-brand, #2f6fed);
     color: #ffffff;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 800;
     line-height: 1;
   }

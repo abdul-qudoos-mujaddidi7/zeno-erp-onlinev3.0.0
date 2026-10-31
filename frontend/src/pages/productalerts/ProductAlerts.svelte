@@ -21,6 +21,7 @@
   import DataTable from '../../components/common/DataTable.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
   import ActionButton from '../../components/common/ActionButton.svelte';
   import ProductsReport from '../accounts/ProductsReport.svelte';
@@ -293,7 +294,10 @@
         </svelte:fragment>
 
         {#if loading}
-          <div class="index-table-state"><EmptyState loading message={t('Loading...')} /></div>
+          <TableSkeleton
+            ariaLabel={t('Loading...')}
+            colCount={activeTab === 'quantity' ? 5 : 6}
+            minWidth={activeTab === 'quantity' ? '760px' : '820px'} />
         {:else if loadError}
           <div class="index-table-state">
             <EmptyState icon="bi-exclamation-triangle" message={loadError || t('Failed to load data.')}>

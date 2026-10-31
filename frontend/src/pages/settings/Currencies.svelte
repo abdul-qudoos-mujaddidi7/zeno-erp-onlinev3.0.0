@@ -11,6 +11,7 @@
     import StatusBadge from "../../components/common/StatusBadge.svelte";
     import TableActions from "../../components/common/TableActions.svelte";
     import EmptyState from "../../components/common/EmptyState.svelte";
+    import TableSkeleton from "../../components/common/TableSkeleton.svelte";
     import { DEFAULT_PAGE_SIZE } from "../../lib/pagination.js";
 
     $: _lang = $lang;
@@ -833,9 +834,7 @@
     tablePadding={true}
 >
     {#if loading}
-        <div class="index-table-state">
-            <EmptyState loading message={t("Loading...")} />
-        </div>
+        <TableSkeleton ariaLabel={t("Loading...")} colCount={6} minWidth="760px" />
     {:else if filteredCurrencies.length === 0}
         <div class="index-table-state">
             <EmptyState

@@ -8,6 +8,7 @@
 
   import SummaryCard from '../../components/common/SummaryCard.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
 
@@ -383,7 +384,7 @@
     </svelte:fragment>
 
     {#if loading}
-      <div class="index-table-state"><EmptyState loading message={t('Loading...')} /></div>
+      <TableSkeleton ariaLabel={t('Loading...')} colCount={7} minWidth="920px" />
     {:else if visibleRows.length === 0}
       <div class="index-table-state">
         <EmptyState icon="bi-person-badge" message={t('No visitors found.')} />

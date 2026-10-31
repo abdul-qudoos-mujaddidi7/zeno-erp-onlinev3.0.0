@@ -7,6 +7,7 @@
     import DataTable from "../../components/common/DataTable.svelte";
     import TableActions from "../../components/common/TableActions.svelte";
     import EmptyState from "../../components/common/EmptyState.svelte";
+    import TableSkeleton from "../../components/common/TableSkeleton.svelte";
 
     import { t, lang, translate_org_type,shortID } from "../../i18n/i18n.js";
     import { accountGroupApi } from "../../api/accountGroupApi.js";
@@ -56,9 +57,7 @@
     </svelte:fragment>
 
         {#if loading}
-            <div class="index-table-state">
-                <EmptyState loading message={t("Loading...")} />
-            </div>
+            <TableSkeleton ariaLabel={t("Loading...")} colCount={4} minWidth="640px" />
         {:else if accountGroups.length === 0}
             <div class="index-table-state">
                 <EmptyState icon="bi-folder2-open" message={t("No account groups found.")} />

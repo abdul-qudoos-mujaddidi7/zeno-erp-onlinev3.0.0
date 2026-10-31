@@ -13,6 +13,7 @@
   import ActionButton from '../components/common/ActionButton.svelte';
   import PaginationBar from '../components/common/PaginationBar.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
+  import TableSkeleton from '../components/common/TableSkeleton.svelte';
   import DataTable from '../components/common/DataTable.svelte';
   import StatusBadge from '../components/common/StatusBadge.svelte';
   import TableActions from '../components/common/TableActions.svelte';
@@ -274,9 +275,7 @@
   </svelte:fragment>
 
   {#if loading}
-    <div class="index-table-state">
-      <EmptyState loading message={t('Loading...')} />
-    </div>
+    <TableSkeleton ariaLabel={t('Loading...')} colCount={7} minWidth="820px" />
   {:else if filteredStockTransfers.length === 0}
     <div class="index-table-state">
       <EmptyState icon="bi-arrow-left-right" message={t('No stocktransfers found.')} />

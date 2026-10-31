@@ -536,6 +536,34 @@ describe('shared index page stack', () => {
     }
   });
 
+  it('paints a skeleton instead of a spinner while a sheet loads', () => {
+    /*
+     * A centred spinner hid the shape of the sheet until the rows arrived; the
+     * shared skeletons render the grid the data will land in, so the page does
+     * not jump when it loads.
+     */
+    const spinnerSheets = FILES.filter((file) => /<EmptyState\b[^>]*\sloading/.test(file.source)).map(
+      (file) => file.path,
+    );
+    expect(spinnerSheets).toEqual([]);
+
+    expect(FILES.some((file) => file.source.includes('<TableSkeleton'))).toBe(true);
+
+    /*
+     * The lazy route fallback painted its own spinning circle before the page
+     * chunk arrived, so one navigation showed a spinner and then the page's
+     * skeleton. The fallback now draws the same shell instead.
+     */
+    const spinningRoutes = FILES.filter((file) => file.source.includes('erp-route-spinner')).map(
+      (file) => file.path,
+    );
+    expect(spinningRoutes).toEqual([]);
+
+    for (const shell of ['components/AsyncPage.svelte', 'components/RouteLoading.svelte']) {
+      expect(read(shell)).toContain('<RouteSkeleton');
+    }
+  });
+
   it('uses Journal Material Symbols for shared search, filter, export, and print controls', () => {
     const filterToolbar = read('components/common/FilterToolbar.svelte');
     const exportMenu = read('components/common/ExportMenu.svelte');

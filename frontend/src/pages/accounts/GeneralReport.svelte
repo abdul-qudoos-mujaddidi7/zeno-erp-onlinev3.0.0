@@ -6,6 +6,7 @@
   import { showDate, setDatePickers } from '../../calendar.js';
 
   import { t, lang, translate_org_type } from '../../i18n/i18n.js';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import AddJournalModal from './AddJournalModal.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
 import { currencyApi } from '../../api/currencyApi.js';
@@ -533,9 +534,7 @@ import { dashboardApi } from '../../api/dashboardApi.js';
   <div class="general-report-table-body">
 
     {#if loading}
-        <div class="text-center p-4">
-            <div class="spinner-border text-primary" role="status"></div>
-        </div>
+        <TableSkeleton ariaLabel={t('Loading...')} colCount={4} minWidth="760px" />
     {:else}
     <div class="table-responsive">
       <table class="table table-hover general-report-table">

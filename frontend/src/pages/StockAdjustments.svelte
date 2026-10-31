@@ -10,6 +10,7 @@
   import DataTable from '../components/common/DataTable.svelte';
   import ActionButton from '../components/common/ActionButton.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
+  import TableSkeleton from '../components/common/TableSkeleton.svelte';
   import StatusBadge from '../components/common/StatusBadge.svelte';
   import IndexPageLayout from '../lib/components/index/IndexPageLayout.svelte';
   import ConfirmActionModal from '../components/common/ConfirmActionModal.svelte';
@@ -397,7 +398,7 @@
       </section>
     </div>
   {:else if loading}
-    <div class="index-table-state"><EmptyState loading={true} message={t('Loading stock adjustments')} /></div>
+    <TableSkeleton ariaLabel={t('Loading stock adjustments')} colCount={8} minWidth="900px" />
   {:else if !filteredAdjustments.length}
     <div class="index-table-state"><EmptyState icon="bi-clipboard2-x" message={adjustments.length ? t('No adjustments match your search.') : t('No stock adjustments have been recorded.')}><ActionButton icon="bi-plus-lg" label={t('Record adjustment')} on:click={openNewAdjustment} /></EmptyState></div>
   {:else}

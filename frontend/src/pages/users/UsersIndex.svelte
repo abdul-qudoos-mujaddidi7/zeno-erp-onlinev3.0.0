@@ -12,6 +12,7 @@ import { departmentApi } from '../../api/departmentApi.js';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
 import { userApi } from '../../api/userApi.js';
 import { userRoleApi } from '../../api/userRoleApi.js';
 import { userImageApi } from '../../api/userImageApi.js';
@@ -297,7 +298,7 @@ import { userImageApi } from '../../api/userImageApi.js';
   </svelte:fragment>
 
   {#if loading}
-    <div class="index-table-state"><EmptyState loading message={t('Loading...')} /></div>
+    <TableSkeleton ariaLabel={t('Loading...')} colCount={11} minWidth="1050px" />
   {:else if paginatedUsers.length === 0}
     <div class="index-table-state"><EmptyState icon="bi-people" message={t('No users found.')} /></div>
   {:else}

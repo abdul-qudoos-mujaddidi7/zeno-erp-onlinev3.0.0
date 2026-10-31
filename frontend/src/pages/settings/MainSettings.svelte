@@ -1,6 +1,7 @@
   <script>
     import { onMount, onDestroy } from 'svelte';
     import { t, lang, translate_org_type, settings_all, setSettingsAll } from '../../i18n/i18n';
+    import PanelSkeleton from '../../components/common/PanelSkeleton.svelte';
     import { toast } from '../../ToastUI/toast.js';
     $: _lang = $lang;
     $: _translate_org_type = $translate_org_type;
@@ -1115,7 +1116,7 @@ import { settingsApi } from '../../api/settingsApi.js';
 
     {#if loading}
       <div class="settings-loading">
-        <div class="spinner-border text-primary" role="status"></div>
+        <PanelSkeleton ariaLabel={t('Loading...')} lines={6} lineHeight="22px" />
       </div>
     {:else}
       <div class="settings-shell {shiftPressed && ctrlPressed ? 'settings-shell--full' : ''}">

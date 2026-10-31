@@ -20,6 +20,7 @@
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
   import TableActions from '../../components/common/TableActions.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
@@ -342,9 +343,7 @@
   </svelte:fragment>
 
   {#if loading}
-    <div class="index-table-state">
-      <EmptyState loading message={t('Loading...')} />
-    </div>
+    <TableSkeleton ariaLabel={t('Loading...')} colCount={9} minWidth="980px" />
   {:else if filteredProductions.length === 0}
     <div class="index-table-state">
       <EmptyState icon="bi-inbox" message={t('No productions found.')} />

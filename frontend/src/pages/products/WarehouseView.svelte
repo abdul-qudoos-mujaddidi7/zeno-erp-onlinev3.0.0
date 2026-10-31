@@ -13,6 +13,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import ActionButton from '../../components/common/ActionButton.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import FilterToolbar from '../../components/common/FilterToolbar.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
@@ -429,9 +430,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
         <EmptyState icon="bi-building" message={t('Select a warehouse to view its products.')} />
       </div>
     {:else if loading}
-      <div class="warehouse-table-state">
-        <EmptyState loading message={t('Loading...')} />
-      </div>
+      <TableSkeleton ariaLabel={t('Loading...')} colCount={5} minWidth="760px" />
     {:else if filteredProducts.length === 0}
       <div class="warehouse-table-state">
         <EmptyState icon="bi-inbox" message={t('No products found.')} />

@@ -5,6 +5,7 @@
     import { push } from "svelte-spa-router";
     import { resolveMediaUrl } from '../../../lib/mediaUrl.js';
     import { t, lang, translate_org_type, settings_all, shortID } from "../../../i18n/i18n.js";
+    import TableSkeleton from "../../../components/common/TableSkeleton.svelte";
     import { accountApi } from '../../../api/accountApi.js';
     import { accountImageApi } from '../../../api/accountImageApi.js';
     import { patientTypeApi } from '../../../api/patientTypeApi.js';
@@ -584,9 +585,7 @@
 
     <div class="card-body p-0">
         {#if loading}
-            <div class="text-center p-4">
-                <div class="spinner-border text-primary" role="status"></div>
-            </div>
+            <TableSkeleton ariaLabel={t('Loading...')} colCount={8} minWidth="980px" />
         {:else}
             <div class="table-responsive">
                 <table class="table table-sm table-hover mb-0">

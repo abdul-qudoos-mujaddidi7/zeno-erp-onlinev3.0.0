@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
 
   import { t, lang, translate_org_type, shortID } from '../../i18n/i18n';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import { localizeDescription } from '../../utils/localizedDescription.js';
 
   import { toast } from '../../ToastUI/toast.js';
@@ -250,9 +251,7 @@ import { currencyApi } from '../../api/currencyApi.js';
   </div>
   <div class="card-body p-0">
     {#if loading}
-      <div class="text-center p-4">
-        <div class="spinner-border text-primary" role="status"></div>
-      </div>
+      <TableSkeleton ariaLabel={t('Loading...')} colCount={8} minWidth="980px" />
     {:else}
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">

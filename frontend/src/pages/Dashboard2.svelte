@@ -6,6 +6,7 @@
   import Chart from 'chart.js/auto';
   import { link } from 'svelte-spa-router';
   import { t, lang, translate_org_type } from "../i18n/i18n.js";
+  import PanelSkeleton from "../components/common/PanelSkeleton.svelte";
 
   import {calculateBalancesOfAllAccounts} from "./accounts/AccountsHelper.js"
 
@@ -511,13 +512,8 @@ let npp = $derived(primaryAmt(activeSummary.purchasePayments));
 </svelte:head>
 
 {#if loading}
-  <div class="d-flex justify-content-center align-items-center" style="min-height:60vh">
-    <div class="text-center animate__animated animate__fadeIn">
-      <div class="spinner-border spinner-border-lg text-primary mb-3" role="status">
-        <span class="visually-hidden">{t('Loading...')}</span>
-      </div>
-      <p class="text-muted fw-medium">{t('Loading dashboard data…')}</p>
-    </div>
+  <div class="container-fluid px-3 px-md-4 py-4">
+    <PanelSkeleton ariaLabel={t('Loading...')} lines={3} lineHeight="88px" gap="16px" />
   </div>
 {:else if error}
   <div class="container-fluid py-5">

@@ -14,6 +14,7 @@ import { settingsApi } from '../../api/settingsApi.js';
   import StatusBadge from '../../components/common/StatusBadge.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import TableActions from '../../components/common/TableActions.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import { DEFAULT_PAGE_SIZE } from '../../lib/pagination.js';
@@ -390,9 +391,7 @@ import { settingsApi } from '../../api/settingsApi.js';
     </svelte:fragment>
 
     {#if loading}
-      <div class="index-table-state">
-        <EmptyState loading message={t('Loading...')} />
-      </div>
+      <TableSkeleton ariaLabel={t('Loading...')} colCount={10} minWidth="900px" />
     {:else if filteredRows.length === 0}
       <div class="index-table-state">
         <EmptyState icon={config.emptyIcon} message={t('No transactions found.')} />

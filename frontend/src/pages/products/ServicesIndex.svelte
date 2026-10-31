@@ -20,6 +20,7 @@
   import StatusBadge from '../../components/common/StatusBadge.svelte';
   import PaginationBar from '../../components/common/PaginationBar.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import TableActions from '../../components/common/TableActions.svelte';
   import ActionButton from '../../components/common/ActionButton.svelte';
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
@@ -604,9 +605,10 @@
   </svelte:fragment>
 
   {#if loading}
-    <div class="index-table-state">
-      <EmptyState loading message={t('Loading...')} />
-    </div>
+    <TableSkeleton
+      ariaLabel={t('Loading...')}
+      colCount={11}
+      minWidth="980px" />
   {:else if filteredProducts.length === 0}
     <div class="index-table-state">
       <EmptyState icon="bi-inbox" message={t('No services found.')} />

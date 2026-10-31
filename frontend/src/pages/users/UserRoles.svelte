@@ -7,6 +7,7 @@
     import DataTable from "../../components/common/DataTable.svelte";
     import TableActions from "../../components/common/TableActions.svelte";
     import EmptyState from "../../components/common/EmptyState.svelte";
+    import TableSkeleton from "../../components/common/TableSkeleton.svelte";
     import { userRoleApi } from "../../api/userRoleApi.js";
     $: _lang = $lang;
     $: _translate_org_type = $translate_org_type;
@@ -41,9 +42,7 @@
     </svelte:fragment>
 
         {#if loading}
-            <div class="index-table-state">
-                <EmptyState loading message={t("Loading...")} />
-            </div>
+            <TableSkeleton ariaLabel={t("Loading...")} colCount={4} minWidth="640px" />
         {:else if userRoles.length === 0}
             <div class="index-table-state">
                 <EmptyState icon="bi-person-gear" message={t("No user roles found.")} />

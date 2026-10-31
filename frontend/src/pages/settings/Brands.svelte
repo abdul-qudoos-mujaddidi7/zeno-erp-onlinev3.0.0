@@ -17,6 +17,9 @@
   import DataTable
     from '../../components/common/DataTable.svelte';
 
+  import TableSkeleton
+    from '../../components/common/TableSkeleton.svelte';
+
   import TableActions
     from '../../components/common/TableActions.svelte';
 
@@ -85,12 +88,7 @@
   </svelte:fragment>
 
   {#if loading}
-    <div class="index-table-state">
-      <EmptyState
-        loading
-        message={t('Loading...')}
-      />
-    </div>
+    <TableSkeleton ariaLabel={t('Loading...')} colCount={4} minWidth="640px" />
   {:else if productBrands.length === 0}
     <div class="index-table-state">
       <EmptyState

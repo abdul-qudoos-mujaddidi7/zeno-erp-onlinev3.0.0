@@ -4,6 +4,7 @@
   import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
   import ActionButton from '../../components/common/ActionButton.svelte';
   import DataTable from '../../components/common/DataTable.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
   import TableActions from '../../components/common/TableActions.svelte';
   import EmptyState from '../../components/common/EmptyState.svelte';
   import {t,lang,translate_org_type,shortID,} from '../../i18n/i18n';
@@ -62,12 +63,7 @@
   </svelte:fragment>
 
   {#if loading}
-    <div class="index-table-state">
-      <EmptyState
-        loading
-        message={t('Loading...')}
-      />
-    </div>
+    <TableSkeleton ariaLabel={t('Loading...')} colCount={4} minWidth="640px" />
   {:else if productCategories.length === 0}
     <div class="index-table-state">
       <EmptyState

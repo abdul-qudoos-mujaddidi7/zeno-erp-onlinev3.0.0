@@ -17,6 +17,7 @@
   import ExportMenu from '../components/common/ExportMenu.svelte';
   import PaginationBar from '../components/common/PaginationBar.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
+  import TableSkeleton from '../components/common/TableSkeleton.svelte';
   import TableActions from '../components/common/TableActions.svelte';
   import IndexPageLayout from '../lib/components/index/IndexPageLayout.svelte';
   import SalesTabs from './sales/SalesTabs.svelte';
@@ -1188,9 +1189,12 @@
       {/if}
 
       {#if loading}
-        <div class="index-table-state">
-          <EmptyState loading={true} message={t('Loading...')} />
-        </div>
+        <TableSkeleton
+          ariaLabel={t('Loading...')}
+          columns={tableColumns}
+          minWidth="100%"
+          headerHeight="40px"
+          cellPaddingY="6px" />
       {:else if filteredSales.length === 0}
         <div class="index-table-state">
           <EmptyState

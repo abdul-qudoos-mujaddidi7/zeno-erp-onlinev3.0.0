@@ -5,6 +5,8 @@
   import IndexPageLayout from '../lib/components/index/IndexPageLayout.svelte';
   import DataTable from '../components/common/DataTable.svelte';
   import EmptyState from '../components/common/EmptyState.svelte';
+  import TableSkeleton from '../components/common/TableSkeleton.svelte';
+  import PanelSkeleton from '../components/common/PanelSkeleton.svelte';
   import StatusBadge from '../components/common/StatusBadge.svelte';
   import SummaryCard from '../components/common/SummaryCard.svelte';
   import ActionButton from '../components/common/ActionButton.svelte';
@@ -502,7 +504,7 @@
     {/if}
 
     {#if loading}
-      <EmptyState loading={true} message={t('Loading')} />
+      <TableSkeleton ariaLabel={t('Loading')} colCount={5} minWidth="640px" layout="auto" />
     {:else if !years.length}
       <EmptyState
         icon="bi-calendar-range"
@@ -625,7 +627,7 @@
         </header>
 
         {#if summaryLoading}
-          <EmptyState loading={true} message={t('Loading')} />
+          <PanelSkeleton ariaLabel={t('Loading')} lines={2} lineHeight="72px" gap="12px" />
         {:else if summary}
           <div class="fiscal-cards">
             <SummaryCard label={t('Sales')} value={money(summary.categories.sales.by_currency)} icon="bi-receipt" />
@@ -717,7 +719,7 @@
       {/if}
 
       {#if closePreviewLoading}
-        <EmptyState loading={true} message={t('Loading')} />
+        <PanelSkeleton ariaLabel={t('Loading')} lines={3} />
       {:else if closePreview}
         <div class="fiscal-close-meta">
           <span>
@@ -906,7 +908,7 @@
       </div>
 
       {#if reopenPreviewLoading}
-        <EmptyState loading={true} message={t('Loading')} />
+        <PanelSkeleton ariaLabel={t('Loading')} lines={3} />
       {:else if reopenPreview}
         <ul class="fiscal-notes">
           <li>
