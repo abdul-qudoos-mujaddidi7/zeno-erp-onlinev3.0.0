@@ -26,53 +26,9 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
   let filteredProducts = [];
   let search = '';
   let showDropdown = false;
-  let isProductCellEditing = false;
   let searchInput;
-  let productDropdownStyle = '';
   let activePurchaseItemField = null;
   let activeProductIndex = -1;
-
-  function portal(node) {
-    document.body.appendChild(node);
-    return { destroy() { node.remove(); } };
-  }
-
-  function positionProductDropdown() {
-    if (!searchInput) return;
-
-    const anchor =
-      searchInput.closest('.purchase-item-search-cell') ||
-      searchInput;
-
-    const rect = anchor.getBoundingClientRect();
-
-    /*
-     * Always open the product dropdown below the search field.
-     * The available height is limited to the remaining viewport,
-     * and the dropdown becomes internally scrollable when needed.
-     */
-    const availableHeight = Math.max(
-      90,
-      window.innerHeight - rect.bottom - 12,
-    );
-
-    const maxHeight = Math.min(
-      250,
-      availableHeight,
-    );
-
-    productDropdownStyle =
-      `position:fixed;` +
-      `left:${rect.left}px;` +
-      `width:${rect.width}px;` +
-      `top:${rect.bottom + 5}px;` +
-      `bottom:auto;` +
-      `max-height:${maxHeight}px;` +
-      `overflow:auto;` +
-      `z-index:100000;`;
-  }
-
-  $: if (showDropdown) tick().then(positionProductDropdown);
 
   let quantity = 1;
   let unit_price = 0;
@@ -176,6 +132,30 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     loadWarehouseStock(warehouse_id);
   }
 
+  /*
+   * Warehouse is the one setting the items card owns — the parent keeps the
+   * value, the card shows it as a field in its header, like the sale card.
+   */
+  let warehouseOpen = false;
+
+  $: selectedWarehouseName =
+    warehouses.find((row) => String(row.id) === String(warehouse_id))?.name || '';
+
+  function pickWarehouse(row) {
+    warehouseOpen = false;
+
+    if (String(row.id) === String(warehouse_id)) return;
+
+    warehouse_id = row.id;
+  }
+
+  function handleDocumentMouseDown(event) {
+    if (!warehouseOpen) return;
+    if (event.target instanceof Element && event.target.closest('.sfi-wh')) return;
+
+    warehouseOpen = false;
+  }
+
   let productSearchTimer;
   async function searchProductsFromServer(term = '') {
     const rows = await lookupProducts({ search: term });
@@ -243,6 +223,8 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
       handleActivePurchaseItemEnter,
       true,
     );
+    window.addEventListener('keydown', handleShortcutKey);
+    document.addEventListener('mousedown', handleDocumentMouseDown);
 
     return () => {
       document.removeEventListener(
@@ -250,6 +232,8 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
         handleActivePurchaseItemEnter,
         true,
       );
+      window.removeEventListener('keydown', handleShortcutKey);
+      document.removeEventListener('mousedown', handleDocumentMouseDown);
     };
   });
 
@@ -457,10 +441,9 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
       filteredProducts.length;
 
     tick().then(() => {
-      const activeOption =
-        document.querySelector(
-          '.purchase-items-dropdown .list-group-item.is-active',
-        );
+      const activeOption = itemsTableRoot?.querySelector(
+        '.sfi-suggest__row.is-active',
+      );
 
       activeOption?.scrollIntoView({
         block: 'nearest',
@@ -544,35 +527,81 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
   }
 
   async function activateProductCellSearch() {
-    isProductCellEditing = true;
-    search = '';
-    selectedProduct = null;
     showDropdown = true;
+
     if (!products.length) {
       await searchProductsFromServer('');
     }
-    activeProductIndex =
-      filteredProducts.length > 0
-        ? 0
-        : -1;
+
+    activeProductIndex = filteredProducts.length > 0 ? 0 : -1;
 
     await tick();
 
-    searchInput?.scrollIntoView({
-      block: 'center',
-      inline: 'nearest',
-    });
-
+    searchInput?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     searchInput?.focus();
-    positionProductDropdown();
   }
 
   function closeProductCellSearch() {
     showDropdown = false;
-    isProductCellEditing = false;
     search = '';
     selectedProduct = null;
     activeProductIndex = -1;
+  }
+
+  /* F2 is advertised on the search bar, so it must actually focus it. */
+  function handleShortcutKey(event) {
+    if (event.key !== 'F2' || event.ctrlKey || event.altKey || event.metaKey) return;
+
+    event.preventDefault();
+    activateProductCellSearch();
+  }
+
+  function adjustItemQuantity(index, delta) {
+    const item = items[index];
+    if (!item) return;
+
+    item.quantity = Math.max(0, Number(item.quantity || 0) + delta);
+    items = [...items];
+    recalc(index);
+  }
+
+  function toggleSellPercent(item, index) {
+    item.enablePercent = !item.enablePercent;
+
+    if (!item.enablePercent) {
+      if (
+        Number(item.unit_price || 0) &&
+        Number(item.sell_price || 0) < Number(item.unit_price || 0)
+      ) {
+        item.sell_price = item.unit_price;
+      }
+
+      item.sell_price_currency = item.unit_price_currency;
+    }
+
+    recalc(index);
+  }
+
+  function toggleDiscountType(item, index) {
+    if (item.discount_type === 'percent') {
+      item.discount_amount = Number(
+        Number(item.total_amount || 0) *
+          (Number(item.discount_amount || 0) / 100),
+      ).toFixed(2);
+      item.discount_type = 'fixed';
+    } else {
+      item.discount_amount =
+        Number(item.total_amount || 0) > 0
+          ? Number(
+              (Number(item.discount_amount || 0) /
+                Number(item.total_amount || 0)) *
+                100,
+            ).toFixed(2)
+          : 0;
+      item.discount_type = 'percent';
+    }
+
+    recalc(index);
   }
 
   function getPurchaseItemFieldOrder(item) {
@@ -1041,7 +1070,6 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
       const affectedRowIndex = addItem();
 
       showDropdown = false;
-      isProductCellEditing = false;
 
       if (affectedRowIndex < 0) return;
 
@@ -1076,6 +1104,20 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     const toRate = toCurrency.exchangeRate || 1;
     return (amount / toRate) * fromRate;
   }
+
+  /*
+   * The item rows name their amounts with the currency symbol the operator
+   * configured (؋, $, €), the same way the sale items table and the header do —
+   * the translated word belongs on the printed bill, not beside a table figure.
+   */
+  function currencySymbol(code) {
+    const key = code && typeof code === 'object' ? code.code : code;
+    if (!key) return '';
+
+    const match = currencies.find((row) => row.code === key);
+    return match?.symbol || match?.code || key;
+  }
+
   function recalc(index) {
     if (enable_heaviness) {
       items[index].quantity = (items[index].preUnitQuantity / items[index].heaviness) * 1000;
@@ -1135,23 +1177,169 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
 
 <div class="card purchase-items-card" bind:this={itemsTableRoot}>
   <div class="card-body">
-    <header class="purchase-items-header">
-      <div class="purchase-items-heading">
-        <span class="purchase-items-heading__icon" aria-hidden="true">
-          <i class="bi bi-cart-plus"></i>
-        </span>
+    <div class="sfi-head">
+      <h3 class="sfi-head__title">
+        <i class="ms f" aria-hidden="true">shopping_cart</i>
+        <span>{t('Purchase Items')}</span>
+      </h3>
 
-        <div class="purchase-items-heading__copy">
-          <h5 class="purchase-items-title">{t('Purchase Items')}</h5>
-        </div>
+      <div class="sfi-wh">
+        <button
+          type="button"
+          class="sfi-wh__field"
+          class:is-open={warehouseOpen}
+          aria-haspopup="listbox"
+          aria-expanded={warehouseOpen}
+          title={t('Warehouse')}
+          aria-label={t('Warehouse')}
+          on:click={() => (warehouseOpen = !warehouseOpen)}>
+          <i class="ms" aria-hidden="true">warehouse</i>
+          <span class="sfi-wh__name">{selectedWarehouseName || t('Select Warehouse')}</span>
+          <i class="ms sfi-wh__chev" aria-hidden="true">expand_more</i>
+        </button>
+
+        {#if warehouseOpen}
+          <div class="sfi-wh__menu" role="listbox" aria-label={t('Warehouse')}>
+            {#each warehouses as wh (wh.id)}
+              {@const active = String(warehouse_id) === String(wh.id)}
+              <button
+                type="button"
+                role="option"
+                aria-selected={active}
+                class="sfi-wh__opt"
+                class:is-active={active}
+                title={wh.name}
+                on:click={() => pickWarehouse(wh)}>
+                <span class="sfi-wh__opt-name">{wh.name}</span>
+                <i class="ms sfi-wh__check" aria-hidden="true">check</i>
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
 
-      <div class="purchase-items-header__summary">
-      
+      <div class="sfi-sbar" class:is-open={showDropdown}>
+        <i class="ms sfi-sbar__icon" aria-hidden="true">search</i>
 
-      
+        <input
+          type="text"
+          id="purchase-product-search"
+          class="sfi-sbar__input"
+          bind:this={searchInput}
+          bind:value={search}
+          role="combobox"
+          aria-expanded={showDropdown}
+          aria-controls="purchase-product-suggestions"
+          aria-autocomplete="list"
+          aria-label={t('Select Product')}
+          placeholder={t('Search product by name, barcode, or SKU...')}
+          autocomplete="off"
+          on:input={handleProductSearchInput}
+          on:focus={() => {
+            showDropdown = true;
+
+            if (filteredProducts.length > 0 && activeProductIndex < 0) {
+              activeProductIndex = 0;
+            }
+          }}
+          on:keydown={handleProductSearchKeydown}
+          on:blur={() =>
+            setTimeout(() => {
+              if (!selectingProduct) {
+                closeProductCellSearch();
+              }
+            }, 180)} />
+
+        {#if showDropdown && filteredProducts.length > 0}
+          <div
+            id="purchase-product-suggestions"
+            role="listbox"
+            aria-label={t('Select Product')}
+            class="sfi-suggest">
+            <div class="sfi-suggest__scroll">
+              {#each filteredProducts as product, productIndex (product.id)}
+                {@const stock = Number(product.quantity || 0)}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={productIndex === activeProductIndex}
+                  class="sfi-suggest__row"
+                  class:is-active={productIndex === activeProductIndex}
+                  title={product.name}
+                  on:mouseenter={() => {
+                    activeProductIndex = productIndex;
+                  }}
+                  on:mousemove={() => {
+                    if (activeProductIndex !== productIndex) {
+                      activeProductIndex = productIndex;
+                    }
+                  }}
+                  on:mousedown|preventDefault={() =>
+                    selectAndAddPurchaseProduct(product)}>
+                  <span class="sfi-suggest__copy">
+                    <strong>{product.name}</strong>
+
+                    <small>
+                      {categories.find((category) => category.id === product.category_id)?.name || t('Category')}
+                    </small>
+                  </span>
+
+                  {#if product.type === 'service'}
+                    <span class="sfi-suggest__service">{t('Service')}</span>
+                  {:else}
+                    <span
+                      class="sfi-suggest__stock"
+                      class:is-low={stock > 0 && stock <= 5}
+                      class:is-negative={stock <= 0}
+                      title={t('Stock')}>
+                      <strong dir="ltr">
+                        {stock.toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                      </strong>
+
+                      <small>
+                        {units.find((unitItem) => unitItem.id === product.product_unit_id)?.name || t('Unit')}
+                        {#if enable_batch && product.batch_count > 1}
+                          / {product.batch_count} {t('Batch')}
+                        {/if}
+                      </small>
+                    </span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+
+            <div class="sfi-suggest__hint" aria-hidden="true">
+              <span>↑↓ {t('Select')} · Enter · Esc</span>
+              <span class="sfi-suggest__count" dir="ltr">{filteredProducts.length}</span>
+            </div>
+          </div>
+        {/if}
+
+        {#if showDropdown && search.trim() && filteredProducts.length === 0}
+          <div class="sfi-suggest sfi-suggest--empty">
+            <i class="ms" aria-hidden="true">search_off</i>
+            <span class="sfi-suggest__empty-text">«{search}» {t('No products available')}</span>
+            <button type="button" class="sfi-suggest__new" on:click={openCreateProductModal}>
+              <i class="ms" aria-hidden="true">add</i>
+              {t('New Product')}
+            </button>
+          </div>
+        {/if}
+
+        <kbd class="sfi-kbd" title={t('Press F2 to search')}>F2</kbd>
+        <span class="sfi-divider" aria-hidden="true"></span>
+
+        <button
+          type="button"
+          class="sfi-new"
+          title={t('New Product')}
+          aria-label={t('New Product')}
+          on:click={openCreateProductModal}>
+          <i class="ms" aria-hidden="true">add_circle</i>
+          <span class="sfi-new__label">{t('New Product')}</span>
+        </button>
       </div>
-    </header>
+    </div>
 
     <input
       type="text"
@@ -1161,503 +1349,498 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
       aria-hidden="true"
       tabindex="-1" />
 
-    <div class="purchase-items-table-scroll">
-      <table class="purchase-items-table">
-        <thead>
-          <tr>
-            <th class="purchase-item-col-product">{t('Product')}</th>
-
-            {#if enable_manufacturing_date}
-              <th class="purchase-item-col-date">{t('Manufacturing Date')}</th>
-            {/if}
-
-            {#if enable_expiry_date}
-              <th class="purchase-item-col-date">{t('Expiry Date')}</th>
-            {/if}
-
-            {#if enable_batch}
-              <th class="purchase-item-col-batch">{t('Batch No')}</th>
-            {/if}
-
-            {#if enable_heaviness}
-              <th class="purchase-item-col-heaviness">{t('Heaviness')}</th>
-            {/if}
-
-            <th class="purchase-item-col-quantity">{t('Quantity')}</th>
-            <th class="purchase-item-col-price">{t('Buy Price')}</th>
-            <th class="purchase-item-col-sell-price">{t('Sell Price')}</th>
-
-            {#if enable_purchase_items_discount}
-              <th class="purchase-item-col-discount">{t('Discount')}</th>
-            {/if}
-
-            <th class="purchase-item-col-subtotal">{t('Subtotal')}</th>
-            <th class="purchase-item-col-actions">{t('Actions')}</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {#each items as item, index (item.id || `${item.product_id}-${index}`)}
-            <tr
-              on:click|capture={(event) => rememberPurchaseItemField(event, index)}
-              on:focusin|capture={(event) => rememberPurchaseItemField(event, index)}
-              on:keydown|capture={(event) => handlePurchaseItemRowEnter(event, index)}>
-              <td class="purchase-item-product-cell">
-                <div class="purchase-item-product">
-                  <span class="purchase-item-number">{index + 1}</span>
-
-                  <span class="purchase-item-product-icon" aria-hidden="true">
-                    <i class="bi bi-box-seam"></i>
+    {#if items.length > 0}
+      <div class="sfi-table-wrap">
+        <table class="sfi-table">
+          <thead>
+            <tr>
+              <th class="sfi-col-idx">#</th>
+              <th class="sfi-col-name">{t('Product')}</th>
+  
+              {#if enable_manufacturing_date}
+                <th class="sfi-col-date">{t('Manufacturing Date')}</th>
+              {/if}
+  
+              {#if enable_expiry_date}
+                <th class="sfi-col-date">{t('Expiry Date')}</th>
+              {/if}
+  
+              {#if enable_batch}
+                <th class="sfi-col-batch">{t('Batch No')}</th>
+              {/if}
+  
+              {#if enable_heaviness}
+                <th class="sfi-col-heavy">{t('Heaviness')}</th>
+              {/if}
+  
+              <th class="sfi-col-qty">{t('Quantity')}</th>
+              <th class="sfi-col-price">{t('Buy Price')}</th>
+              <th class="sfi-col-sell">{t('Sell Price')}</th>
+  
+              {#if enable_purchase_items_discount}
+                <th class="sfi-col-disc">{t('Discount')}</th>
+              {/if}
+  
+              <th class="sfi-col-total">{t('Subtotal')}</th>
+              <th class="sfi-col-act">{t('Actions')}</th>
+            </tr>
+          </thead>
+  
+          <tbody>
+            {#each items as item, index (item.id || `${item.product_id}-${index}`)}
+              <tr
+                on:click|capture={(event) => rememberPurchaseItemField(event, index)}
+                on:focusin|capture={(event) => rememberPurchaseItemField(event, index)}
+                on:keydown|capture={(event) => handlePurchaseItemRowEnter(event, index)}>
+                <td class="sfi-col-idx"><span dir="ltr">{index + 1}</span></td>
+                <td class="sfi-col-name">
+                  <span class="sfi-name" title={item.product_name}>{item.product_name}</span>
+  
+                  <span class="sfi-meta">
+                    {#if item.batch}
+                      <span class="sfi-meta__code" dir="ltr">{item.batch}</span>
+                    {/if}
+  
+                    <span
+                      class="sfi-meta__stock"
+                      class:is-low={Number(item.stock || 0) <= 5}
+                      title={t('Stock')}>
+                      {Number(item.stock || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                      {units.find((u) => u.id === item.product_unit_id)?.name || t('Unit')}
+                    </span>
                   </span>
-
-                  <span class="purchase-item-product-copy">
-                    <strong class="purchase-item-product-name">
-                      {item.product_name}
-                    </strong>
-
-                    <small>
-                      {t('Stock')}:
-                      <span dir="ltr">
-                        {Number(item.stock || 0).toLocaleString(undefined, {
+                </td>
+  
+                {#if enable_manufacturing_date}
+                  <td class="sfi-col-date">
+                    <div
+                      class="purchase-item-datepicker"
+                      data-purchase-item-index={index}
+                      data-purchase-item-field="manufacturing_date"
+                      on:keydown|capture={(event) =>
+                        handlePurchaseDateInputEnter(
+                          event,
+                          index,
+                          'manufacturing_date',
+                        )}>
+                      <AppDatePicker
+                        bind:value={item.manufacturing_date}
+                        calendarLocale="fa,en"
+                        defaultCalendar="gregorian"
+                        inputCalendar="auto"
+                        format="YYYY-MM-DD"
+                        on:change={handleItemDateChange}
+                        on:select={() =>
+                          handlePurchaseDateSelected(
+                            index,
+                            'manufacturing_date',
+                          )}
+                      />
+                    </div>
+                  </td>
+                {/if}
+  
+                {#if enable_expiry_date}
+                  <td class="sfi-col-date">
+                    <div
+                      class="purchase-item-datepicker"
+                      data-purchase-item-index={index}
+                      data-purchase-item-field="expiry_date"
+                      on:keydown|capture={(event) =>
+                        handlePurchaseDateInputEnter(
+                          event,
+                          index,
+                          'expiry_date',
+                        )}>
+                      <AppDatePicker
+                        bind:value={item.expiry_date}
+                        calendarLocale="fa,en"
+                        defaultCalendar="gregorian"
+                        inputCalendar="auto"
+                        format="YYYY-MM-DD"
+                        on:change={handleItemDateChange}
+                        on:select={() =>
+                          handlePurchaseDateSelected(
+                            index,
+                            'expiry_date',
+                          )}
+                      />
+                    </div>
+                  </td>
+                {/if}
+  
+                {#if enable_batch}
+                  <td class="sfi-col-batch">
+                    <div class="purchase-item-field purchase-item-batch-field">
+                      {#if item.is_new_batch}
+                        <input
+                          type="text"
+                          list={`purchase-batch-options-${index}`}
+                          data-purchase-item-index={index}
+                          data-purchase-item-field="batch"
+                          bind:value={item.batch}
+                          placeholder={t('Batch No')}
+                          aria-label={t('Batch No')}
+                          on:focus={() => {
+                            item.batch_options = getProductBatchOptions(item);
+                            items = [...items];
+                          }}
+                          on:input={(event) =>
+                            handlePurchaseBatchInput(
+                              item,
+                              index,
+                              event.currentTarget.value,
+                            )}
+                          on:keydown={(event) =>
+                            handlePurchaseItemEnter(
+                              event,
+                              index,
+                              'batch',
+                            )} />
+                        <datalist id={`purchase-batch-options-${index}`}>
+                          {#each item.batch_options || [] as option}
+                            <option value={option.batch}>
+                              {option.expiry_date || '-'} / {Number(option.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                            </option>
+                          {/each}
+                        </datalist>
+                      {:else}
+                        <select
+                          data-purchase-item-index={index}
+                          data-purchase-item-field="batch"
+                          value={item.batch_option_id}
+                          aria-label={t('Batch No')}
+                          on:focus={() => {
+                            item.batch_options = getProductBatchOptions(item);
+                            items = [...items];
+                          }}
+                          on:change={(event) =>
+                            handlePurchaseBatchSelect(
+                              item,
+                              index,
+                              event.currentTarget.value,
+                            )}
+                          on:keydown={(event) =>
+                            handlePurchaseItemEnter(
+                              event,
+                              index,
+                              'batch',
+                            )}>
+                          {#if !(item.batch_options || []).length}
+                            <option value="">{t('No Batch')}</option>
+                          {/if}
+                          {#each item.batch_options || [] as option}
+                            <option value={option.id}>
+                              {option.batch} / {option.expiry_date || '-'}
+                            </option>
+                          {/each}
+                          <option value="__new_batch__">{t('New Batch')}</option>
+                        </select>
+                      {/if}
+                    </div>
+                  </td>
+                {/if}
+  
+                {#if enable_heaviness}
+                  <td class="sfi-col-heavy">
+                    <div class="purchase-item-heaviness">
+                      <label>
+                        <span>{t('USD')} {t('Price')}</span>
+                        <input
+                          type="number"
+                          step="any"
+                          data-purchase-item-index={index}
+                          data-purchase-item-field="preUnitPrice"
+                          bind:value={item.preUnitPrice}
+                          on:input={() => recalc(index)}
+                          on:keydown={(event) =>
+                            handlePurchaseItemEnter(
+                              event,
+                              index,
+                              'preUnitPrice',
+                            )} />
+                      </label>
+  
+                      <label>
+                        <span>{t('ton')}</span>
+                        <input
+                          type="number"
+                          step="any"
+                          data-purchase-item-index={index}
+                          data-purchase-item-field="preUnitQuantity"
+                          bind:value={item.preUnitQuantity}
+                          on:input={() => recalc(index)}
+                          on:keydown={(event) =>
+                            handlePurchaseItemEnter(
+                              event,
+                              index,
+                              'preUnitQuantity',
+                            )} />
+                      </label>
+  
+                      <label>
+                        <span>{t('Heaviness')}</span>
+                        <input
+                          type="number"
+                          step="any"
+                          data-purchase-item-index={index}
+                          data-purchase-item-field="heaviness"
+                          bind:value={item.heaviness}
+                          on:input={() => recalc(index)}
+                          on:keydown={(event) =>
+                            handlePurchaseItemEnter(
+                              event,
+                              index,
+                              'heaviness',
+                            )} />
+                      </label>
+                    </div>
+                  </td>
+                {/if}
+  
+                <td class="sfi-col-qty">
+                  <span class="sfi-qty">
+                    {#if enable_heaviness}
+                      <span class="sfi-qty__value" dir="ltr">
+                        {Number(item.quantity || 0).toLocaleString(undefined, {
                           maximumFractionDigits: 3,
                         })}
                       </span>
-                      {units.find((u) => u.id === item.product_unit_id)?.name ||
-                        t('Unit')}
-                    </small>
-                  </span>
-                </div>
-              </td>
-
-              {#if enable_manufacturing_date}
-                <td class="purchase-item-col-date">
-                  <div
-                    class="purchase-item-datepicker"
-                    data-purchase-item-index={index}
-                    data-purchase-item-field="manufacturing_date"
-                    on:keydown|capture={(event) =>
-                      handlePurchaseDateInputEnter(
-                        event,
-                        index,
-                        'manufacturing_date',
-                      )}>
-                    <AppDatePicker
-                      bind:value={item.manufacturing_date}
-                      calendarLocale="fa,en"
-                      defaultCalendar="gregorian"
-                      inputCalendar="auto"
-                      format="YYYY-MM-DD"
-                      on:change={handleItemDateChange}
-                      on:select={() =>
-                        handlePurchaseDateSelected(
-                          index,
-                          'manufacturing_date',
-                        )}
-                    />
-                  </div>
-                </td>
-              {/if}
-
-              {#if enable_expiry_date}
-                <td class="purchase-item-col-date">
-                  <div
-                    class="purchase-item-datepicker"
-                    data-purchase-item-index={index}
-                    data-purchase-item-field="expiry_date"
-                    on:keydown|capture={(event) =>
-                      handlePurchaseDateInputEnter(
-                        event,
-                        index,
-                        'expiry_date',
-                      )}>
-                    <AppDatePicker
-                      bind:value={item.expiry_date}
-                      calendarLocale="fa,en"
-                      defaultCalendar="gregorian"
-                      inputCalendar="auto"
-                      format="YYYY-MM-DD"
-                      on:change={handleItemDateChange}
-                      on:select={() =>
-                        handlePurchaseDateSelected(
-                          index,
-                          'expiry_date',
-                        )}
-                    />
-                  </div>
-                </td>
-              {/if}
-
-              {#if enable_batch}
-                <td class="purchase-item-col-batch">
-                  <div class="purchase-item-field purchase-item-batch-field">
-                    {#if item.is_new_batch}
-                      <input
-                        type="text"
-                        list={`purchase-batch-options-${index}`}
-                        data-purchase-item-index={index}
-                        data-purchase-item-field="batch"
-                        bind:value={item.batch}
-                        placeholder={t('Batch No')}
-                        aria-label={t('Batch No')}
-                        on:focus={() => {
-                          item.batch_options = getProductBatchOptions(item);
-                          items = [...items];
-                        }}
-                        on:input={(event) =>
-                          handlePurchaseBatchInput(
-                            item,
-                            index,
-                            event.currentTarget.value,
-                          )}
-                        on:keydown={(event) =>
-                          handlePurchaseItemEnter(
-                            event,
-                            index,
-                            'batch',
-                          )} />
-                      <datalist id={`purchase-batch-options-${index}`}>
-                        {#each item.batch_options || [] as option}
-                          <option value={option.batch}>
-                            {option.expiry_date || '-'} / {Number(option.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                          </option>
-                        {/each}
-                      </datalist>
                     {:else}
-                      <select
+                      <button
+                        type="button"
+                        class="sfi-qty__btn"
+                        aria-label={t('Decrease')}
+                        on:click={() => adjustItemQuantity(index, -1)}>
+                        <i class="ms" aria-hidden="true">remove</i>
+                      </button>
+  
+                      <input
+                        type="number"
+                        class="sfi-qty__input"
+                        min="0"
+                        step="any"
                         data-purchase-item-index={index}
-                        data-purchase-item-field="batch"
-                        value={item.batch_option_id}
-                        aria-label={t('Batch No')}
-                        on:focus={() => {
-                          item.batch_options = getProductBatchOptions(item);
-                          items = [...items];
-                        }}
-                        on:change={(event) =>
-                          handlePurchaseBatchSelect(
-                            item,
+                        data-purchase-item-field="quantity"
+                        bind:value={item.quantity}
+                        on:input={() => recalc(index)}
+                        on:keydown={(event) =>
+                          handlePurchaseItemEnter(
+                            event,
                             index,
-                            event.currentTarget.value,
+                            'quantity',
                           )}
-                        on:keydown={(event) =>
-                          handlePurchaseItemEnter(
-                            event,
-                            index,
-                            'batch',
-                          )}>
-                        {#if !(item.batch_options || []).length}
-                          <option value="">{t('No Batch')}</option>
-                        {/if}
-                        {#each item.batch_options || [] as option}
-                          <option value={option.id}>
-                            {option.batch} / {option.expiry_date || '-'}
-                          </option>
-                        {/each}
-                        <option value="__new_batch__">{t('New Batch')}</option>
-                      </select>
+                        aria-label={t('Quantity')} />
+  
+                      <button
+                        type="button"
+                        class="sfi-qty__btn"
+                        aria-label={t('Increase')}
+                        on:click={() => adjustItemQuantity(index, 1)}>
+                        <i class="ms" aria-hidden="true">add</i>
+                      </button>
                     {/if}
-                  </div>
+  
+                    <span class="sfi-qty__divider" aria-hidden="true"></span>
+  
+                    {#if item.availableUnits?.length > 1}
+                      <FilterSelect
+                        compact
+                        value={item.product_unit_id}
+                        label={t('Unit')}
+                        options={item.availableUnits.map((u) => ({ value: u.id, label: u.name }))}
+                        on:change={(event) => changeUnit(item, event.detail)} />
+                    {:else}
+                      <span class="sfi-qty__unit">
+                        {units.find((u) => u.id === item.product_unit_id)?.name ||
+                          t('Unit')}
+                      </span>
+                    {/if}
+                  </span>
                 </td>
-              {/if}
-
-              {#if enable_heaviness}
-                <td class="purchase-item-col-heaviness">
-                  <div class="purchase-item-heaviness">
-                    <label>
-                      <span>{t('USD')} {t('Price')}</span>
+  
+                <td class="sfi-col-price">
+                  <div class="purchase-item-field purchase-item-field--with-suffix">
+                    {#if enable_heaviness}
+                      <span class="purchase-item-readonly-value" dir="ltr">
+                        {Number(item.unit_price || 0).toLocaleString(undefined, {
+                          maximumFractionDigits: 3,
+                        })}
+                      </span>
+                    {:else}
                       <input
                         type="number"
+                        min="0"
                         step="any"
                         data-purchase-item-index={index}
-                        data-purchase-item-field="preUnitPrice"
-                        bind:value={item.preUnitPrice}
-                        on:input={() => recalc(index)}
+                        data-purchase-item-field="unit_price"
+                        bind:value={item.unit_price}
+                        on:input={() => {
+                          if (item.enablePercent) {
+                            item.sell_price = Number(
+                              Number(item.unit_price || 0) +
+                                (Number(item.unit_price || 0) *
+                                  Number(item.benefit_percent || 0)) /
+                                  100,
+                            ).toFixed(2);
+                          }
+  
+                          recalc(index);
+                        }}
                         on:keydown={(event) =>
                           handlePurchaseItemEnter(
                             event,
                             index,
-                            'preUnitPrice',
-                          )} />
-                    </label>
-
-                    <label>
-                      <span>{t('ton')}</span>
-                      <input
-                        type="number"
-                        step="any"
-                        data-purchase-item-index={index}
-                        data-purchase-item-field="preUnitQuantity"
-                        bind:value={item.preUnitQuantity}
-                        on:input={() => recalc(index)}
-                        on:keydown={(event) =>
-                          handlePurchaseItemEnter(
-                            event,
-                            index,
-                            'preUnitQuantity',
-                          )} />
-                    </label>
-
-                    <label>
-                      <span>{t('Heaviness')}</span>
-                      <input
-                        type="number"
-                        step="any"
-                        data-purchase-item-index={index}
-                        data-purchase-item-field="heaviness"
-                        bind:value={item.heaviness}
-                        on:input={() => recalc(index)}
-                        on:keydown={(event) =>
-                          handlePurchaseItemEnter(
-                            event,
-                            index,
-                            'heaviness',
-                          )} />
-                    </label>
-                  </div>
-                </td>
-              {/if}
-
-              <td class="purchase-item-col-quantity">
-                <div class="purchase-item-field purchase-item-field--with-suffix purchase-item-quantity-field">
-                  {#if enable_heaviness}
-                    <span class="purchase-item-readonly-value" dir="ltr">
-                      {Number(item.quantity || 0).toLocaleString(undefined, {
-                        maximumFractionDigits: 3,
-                      })}
-                    </span>
-                  {:else}
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      data-purchase-item-index={index}
-                      data-purchase-item-field="quantity"
-                      bind:value={item.quantity}
-                      on:input={() => recalc(index)}
-                      on:keydown={(event) =>
-                        handlePurchaseItemEnter(
-                          event,
-                          index,
-                          'quantity',
-                        )}
-                      aria-label={t('Quantity')} />
-                  {/if}
-
-                  {#if item.availableUnits?.length > 1}
-                    <FilterSelect
-                      compact
-                      value={item.product_unit_id}
-                      label={t('Unit')}
-                      options={item.availableUnits.map((u) => ({ value: u.id, label: u.name }))}
-                      on:change={(event) => changeUnit(item, event.detail)} />
-                  {:else}
+                            'unit_price',
+                          )}
+                        aria-label={t('Buy Price')} />
+                    {/if}
+  
                     <span class="purchase-item-suffix">
-                      {units.find((u) => u.id === item.product_unit_id)?.name ||
-                        t('Unit')}
+                      {currencySymbol(item.unit_price_currency || currency)}
                     </span>
-                  {/if}
-                </div>
-              </td>
-
-              <td class="purchase-item-col-price">
-                <div class="purchase-item-field purchase-item-field--with-suffix">
-                  {#if enable_heaviness}
-                    <span class="purchase-item-readonly-value" dir="ltr">
-                      {Number(item.unit_price || 0).toLocaleString(undefined, {
-                        maximumFractionDigits: 3,
-                      })}
-                    </span>
-                  {:else}
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      data-purchase-item-index={index}
-                      data-purchase-item-field="unit_price"
-                      bind:value={item.unit_price}
-                      on:input={() => {
-                        if (item.enablePercent) {
+                  </div>
+                </td>
+  
+                <td class="sfi-col-sell">
+                  <div class="sfi-price sfi-price--end">
+                    {#if enable_product_benefit_percentage}
+                      <button
+                        type="button"
+                        class="sfi-price__toggle"
+                        class:is-active={item.enablePercent}
+                        title={t('Percent')}
+                        aria-label={t('Percent')}
+                        on:click={() => toggleSellPercent(item, index)}>
+                        <i class="ms" aria-hidden="true">percent</i>
+                      </button>
+                    {/if}
+  
+                    {#if item.enablePercent}
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        class="sfi-price__input"
+                        id="percentage_markup_{index}"
+                        data-purchase-item-index={index}
+                        data-purchase-item-field="benefit_percent"
+                        bind:value={item.benefit_percent}
+                        on:input={() => {
                           item.sell_price = Number(
                             Number(item.unit_price || 0) +
                               (Number(item.unit_price || 0) *
                                 Number(item.benefit_percent || 0)) /
                                 100,
                           ).toFixed(2);
-                        }
-
-                        recalc(index);
-                      }}
-                      on:keydown={(event) =>
-                        handlePurchaseItemEnter(
-                          event,
-                          index,
-                          'unit_price',
-                        )}
-                      aria-label={t('Buy Price')} />
+  
+                          recalc(index);
+                        }}
+                        on:keydown={(event) =>
+                          handlePurchaseItemEnter(
+                            event,
+                            index,
+                            'benefit_percent',
+                          )}
+                        aria-label={t('Percent')} />
+  
+                      <span class="sfi-price__cur">%</span>
+                    {:else}
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        class="sfi-price__input"
+                        data-purchase-item-index={index}
+                        data-purchase-item-field="sell_price"
+                        bind:value={item.sell_price}
+                        on:input={() => recalc(index)}
+                        on:keydown={(event) =>
+                          handlePurchaseItemEnter(
+                            event,
+                            index,
+                            'sell_price',
+                          )}
+                        aria-label={t('Sell Price')} />
+  
+                      <span class="sfi-price__cur">
+                        {currencySymbol(item.sell_price_currency || currency)}
+                      </span>
+                    {/if}
+                  </div>
+  
+                  {#if enable_product_benefit_percentage && item.enablePercent}
+                    <span class="sfi-price__sub" dir="ltr">
+                      {Number(item.sell_price || 0).toLocaleString(undefined, {
+                        maximumFractionDigits: 3,
+                      })}
+                      {currencySymbol(item.sell_price_currency || currency)}
+                    </span>
                   {/if}
-
-                  <span class="purchase-item-suffix">
-                    {t(item.unit_price_currency || currency)}
-                  </span>
-                </div>
-              </td>
-
-              <td class="purchase-item-col-sell-price">
-                <div class="purchase-item-field purchase-item-sell-field">
-                  {#if enable_product_benefit_percentage}
-                    <button
-                      type="button"
-                      class="purchase-item-toggle"
-                      class:is-active={item.enablePercent}
-                      title={t('Percent')}
-                      aria-label={t('Percent')}
-                      on:click={() => {
-                        item.enablePercent = !item.enablePercent;
-
-                        if (!item.enablePercent) {
-                          if (
-                            Number(item.unit_price || 0) &&
-                            Number(item.sell_price || 0) < Number(item.unit_price || 0)
+                </td>
+  
+                {#if enable_purchase_items_discount}
+                  <td class="sfi-col-disc">
+                    <div class="sfi-price sfi-price--end">
+                      <button
+                        type="button"
+                        class="sfi-price__toggle"
+                        class:is-active={item.discount_type === 'percent'}
+                        title={t('Discount')}
+                        aria-label={t('Discount')}
+                        on:click={() => toggleDiscountType(item, index)}>
+                        <i class="ms" aria-hidden="true">
+                          {item.discount_type === 'percent' ? 'percent' : 'payments'}
+                        </i>
+                      </button>
+  
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        class="sfi-price__input"
+                        id="discountAmount_{index}"
+                        data-purchase-item-index={index}
+                        data-purchase-item-field="discount"
+                        bind:value={item.discount_amount}
+                        on:input={() => {
+                          if (item.discount_amount === '') {
+                            item.discount_amount = null;
+                          } else if (Number(item.discount_amount) < 0) {
+                            item.discount_amount = 0;
+                          } else if (
+                            item.discount_type !== 'percent' &&
+                            Number(item.discount_amount) > Number(item.total_amount || 0)
                           ) {
-                            item.sell_price = item.unit_price;
+                            item.discount_amount = Number(item.total_amount || 0);
+                          } else if (
+                            item.discount_type === 'percent' &&
+                            Number(item.discount_amount) > 100
+                          ) {
+                            item.discount_amount = 100;
+                          } else {
+                            item.discount_amount = Number(item.discount_amount);
                           }
-
-                          item.sell_price_currency = item.unit_price_currency;
-                        }
-
-                        recalc(index);
-                      }}>
-                      <i class="bi bi-percent" aria-hidden="true"></i>
-                    </button>
-                  {/if}
-
-                  {#if item.enablePercent}
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      class="purchase-item-percent-input"
-                      id="percentage_markup_{index}"
-                      data-purchase-item-index={index}
-                      data-purchase-item-field="benefit_percent"
-                      bind:value={item.benefit_percent}
-                      on:input={() => {
-                        item.sell_price = Number(
-                          Number(item.unit_price || 0) +
-                            (Number(item.unit_price || 0) *
-                              Number(item.benefit_percent || 0)) /
-                              100,
-                        ).toFixed(2);
-
-                        recalc(index);
-                      }}
-                      on:keydown={(event) =>
-                        handlePurchaseItemEnter(
-                          event,
-                          index,
-                          'benefit_percent',
-                        )}
-                      aria-label={t('Percent')} />
-                  {/if}
-
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    disabled={item.enablePercent}
-                    data-purchase-item-index={index}
-                    data-purchase-item-field="sell_price"
-                    bind:value={item.sell_price}
-                    on:input={() => recalc(index)}
-                    on:keydown={(event) =>
-                      handlePurchaseItemEnter(
-                        event,
-                        index,
-                        'sell_price',
-                      )}
-                    aria-label={t('Sell Price')} />
-
-                  <span class="purchase-item-suffix">
-                    {t(item.sell_price_currency || currency)}
-                  </span>
-                </div>
-              </td>
-
-              {#if enable_purchase_items_discount}
-                <td class="purchase-item-col-discount">
-                  <div class="purchase-item-field purchase-item-discount-field">
-                    <button
-                      type="button"
-                      class="purchase-item-toggle"
-                      class:is-active={item.discount_type === 'percent'}
-                      title={t('Discount')}
-                      aria-label={t('Discount')}
-                      on:click={() => {
-                        if (item.discount_type === 'percent') {
-                          item.discount_amount = Number(
-                            Number(item.total_amount || 0) *
-                              (Number(item.discount_amount || 0) / 100),
-                          ).toFixed(2);
-                          item.discount_type = 'fixed';
-                        } else {
-                          item.discount_amount =
-                            Number(item.total_amount || 0) > 0
-                              ? Number(
-                                  (Number(item.discount_amount || 0) /
-                                    Number(item.total_amount || 0)) *
-                                    100,
-                                ).toFixed(2)
-                              : 0;
-                          item.discount_type = 'percent';
-                        }
-
-                        recalc(index);
-                      }}>
-                      <i
-                        class="bi bi-{item.discount_type === 'fixed'
-                          ? 'cash-stack'
-                          : 'percent'}"
-                        aria-hidden="true"></i>
-                    </button>
-
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      id="discountAmount_{index}"
-                      data-purchase-item-index={index}
-                      data-purchase-item-field="discount"
-                      bind:value={item.discount_amount}
-                      on:input={() => {
-                        if (item.discount_amount === '') {
-                          item.discount_amount = null;
-                        } else if (Number(item.discount_amount) < 0) {
-                          item.discount_amount = 0;
-                        } else if (
-                          item.discount_type !== 'percent' &&
-                          Number(item.discount_amount) > Number(item.total_amount || 0)
-                        ) {
-                          item.discount_amount = Number(item.total_amount || 0);
-                        } else if (
-                          item.discount_type === 'percent' &&
-                          Number(item.discount_amount) > 100
-                        ) {
-                          item.discount_amount = 100;
-                        } else {
-                          item.discount_amount = Number(item.discount_amount);
-                        }
-
-                        recalc(index);
-                      }}
-                      on:keydown={(event) =>
-                        handlePurchaseItemEnter(
-                          event,
-                          index,
-                          'discount',
-                        )}
-                      aria-label={t('Discount')} />
-
-                    <span class="purchase-item-suffix purchase-item-discount-suffix">
-                      {#if item.discount_type === 'percent'}
+  
+                          recalc(index);
+                        }}
+                        on:keydown={(event) =>
+                          handlePurchaseItemEnter(
+                            event,
+                            index,
+                            'discount',
+                          )}
+                        aria-label={t('Discount')} />
+  
+                      <span class="sfi-price__cur">
+                        {item.discount_type === 'percent'
+                          ? '%'
+                          : currencySymbol(item.unit_price_currency || currency)}
+                      </span>
+                    </div>
+  
+                    {#if item.discount_type === 'percent'}
+                      <span class="sfi-price__sub" dir="ltr">
                         {Number(
                           (Number(item.total_amount || 0) *
                             Number(item.discount_amount || 0)) /
@@ -1665,269 +1848,90 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
                         ).toLocaleString(undefined, {
                           maximumFractionDigits: 2,
                         })}
+                        {currencySymbol(item.unit_price_currency || currency)}
+                      </span>
+                    {/if}
+                  </td>
+                {/if}
+  
+                <td class="sfi-col-total">
+                  <div class="purchase-item-money">
+                    <strong dir="ltr">
+                      {#if
+                        item.unit_price_currency &&
+                        currency &&
+                        item.unit_price_currency !== currency}
+                        {Number(
+                          exchangeRate(item.subtotal, item.unit_price_currency, currency),
+                        ).toLocaleString(undefined, {
+                          maximumFractionDigits: 3,
+                        })}
+                      {:else}
+                        {Number(item.subtotal || 0).toLocaleString(undefined, {
+                          maximumFractionDigits: 3,
+                        })}
                       {/if}
-                      {t(item.unit_price_currency || currency)}
-                    </span>
+                    </strong>
+  
+                    <small>
+                      {currencySymbol(
+                        item.unit_price_currency &&
+                          currency &&
+                          item.unit_price_currency !== currency
+                          ? currency
+                          : item.unit_price_currency || currency,
+                      )}
+                    </small>
                   </div>
                 </td>
-              {/if}
-
-              <td class="purchase-item-col-subtotal">
-                <div class="purchase-item-money">
-                  <strong dir="ltr">
-                    {#if
-                      item.unit_price_currency &&
-                      currency &&
-                      item.unit_price_currency !== currency}
-                      {Number(
-                        exchangeRate(item.subtotal, item.unit_price_currency, currency),
-                      ).toLocaleString(undefined, {
-                        maximumFractionDigits: 3,
-                      })}
-                    {:else}
-                      {Number(item.subtotal || 0).toLocaleString(undefined, {
-                        maximumFractionDigits: 3,
-                      })}
-                    {/if}
-                  </strong>
-
-                  <small>
-                    {t(
-                      item.unit_price_currency &&
-                        currency &&
-                        item.unit_price_currency !== currency
-                        ? currency
-                        : item.unit_price_currency || currency,
-                    )}
-                  </small>
-                </div>
-              </td>
-
-              <td class="purchase-item-actions purchase-item-col-actions">
-                <button
-                  type="button"
-                  class="purchase-item-delete"
-                  title={t('Delete')}
-                  aria-label={t('Delete')}
-                  on:click={() => removeItem(index)}>
-                  <i class="bi bi-trash3" aria-hidden="true"></i>
-                </button>
-              </td>
-            </tr>
-          {/each}
-
-          <!--
-            Permanent blank row:
-            selecting a product turns it into a normal purchase row,
-            then another blank searchable row remains below it.
-          -->
-          <tr class="purchase-item-search-row">
-            <td
-              class="purchase-item-product-cell purchase-item-search-cell"
-              class:purchase-item-search-cell--editing={isProductCellEditing}
-              role="button"
-              tabindex="0"
-              aria-label={t('Select Product')}
-              on:click={() => {
-                if (!isProductCellEditing) {
-                  activateProductCellSearch();
-                }
-              }}
-              on:keydown={(event) => {
-                if (
-                  !isProductCellEditing &&
-                  (event.key === 'Enter' ||
-                    event.key === ' ')
-                ) {
-                  event.preventDefault();
-                  activateProductCellSearch();
-                }
-              }}>
-              {#if isProductCellEditing}
-                <div class="purchase-item-inline-search">
-                  <span class="purchase-item-search-icon" aria-hidden="true">
-                    <i class="bi bi-search"></i>
-                  </span>
-
-                  <input
-                    id="purchase-product-search"
-                    class="purchase-item-search-input"
-                    bind:this={searchInput}
-                    type="text"
-                    bind:value={search}
-                    autocomplete="off"
-                    placeholder={t('Search product by name, barcode, or SKU...')}
-                    on:click|stopPropagation
-                    on:input={handleProductSearchInput}
-                    on:focus={() => {
-                      showDropdown = true;
-
-                      if (
-                        filteredProducts.length > 0 &&
-                        activeProductIndex < 0
-                      ) {
-                        activeProductIndex = 0;
-                      }
-                    }}
-                    on:keydown={handleProductSearchKeydown}
-                    on:blur={() =>
-                      setTimeout(() => {
-                        if (isProductCellEditing && !selectingProduct) {
-                          closeProductCellSearch();
-                        }
-                      }, 180)} />
-
-                  {#if
-                    showDropdown &&
-                    filteredProducts.length > 0}
-                    <div
-                      use:portal
-                      class="list-group shadow purchase-items-dropdown"
-                      style={productDropdownStyle}>
-                      {#each filteredProducts as product, productIndex (product.id)}
-                        <button
-                          type="button"
-                          class="list-group-item list-group-item-action"
-                          class:is-active={productIndex === activeProductIndex}
-                          aria-selected={productIndex === activeProductIndex}
-                          on:mouseenter={() => {
-                            activeProductIndex =
-                              productIndex;
-                          }}
-                          on:mousemove={() => {
-                            if (
-                              activeProductIndex !==
-                              productIndex
-                            ) {
-                              activeProductIndex =
-                                productIndex;
-                            }
-                          }}
-                          on:mousedown|preventDefault={() =>
-                            selectAndAddPurchaseProduct(
-                              product,
-                            )}>
-                          <div class="sale-product-option">
-                            <span class="sale-product-option__copy">
-                              <strong>{product.name}</strong>
-
-                              <small>
-                                {categories.find(
-                                  (category) =>
-                                    category.id ===
-                                    product.category_id,
-                                )?.name || t('Category')}
-                              </small>
-                            </span>
-
-                            {#if product.type === 'service'}
-                              <span class="sale-product-option__service">
-                                <i class="bi bi-tools" aria-hidden="true"></i>
-                                {t('Service')}
-                              </span>
-                            {:else}
-                              <span
-                                class="sale-product-option__stock"
-                                title={t('Stock')}>
-                                <i class="bi bi-box-seam" aria-hidden="true"></i>
-
-                                <strong dir="ltr">
-                                  {Number(
-                                    product.quantity || 0,
-                                  ).toLocaleString(undefined, {
-                                    maximumFractionDigits: 3,
-                                  })}
-                                </strong>
-
-                                <small>
-                                  {units.find(
-                                    (unitItem) =>
-                                      unitItem.id ===
-                                      product.product_unit_id,
-                                  )?.name || t('Unit')}
-                                  {#if enable_batch && product.batch_count > 1}
-                                    / {product.batch_count} {t('Batch')}
-                                  {/if}
-                                </small>
-                              </span>
-                            {/if}
-                          </div>
-                        </button>
-                      {/each}
-                    </div>
-                  {/if}
-                </div>
-              {:else}
-                <div class="purchase-item-empty-product">
+  
+                <td class="sfi-col-act">
                   <button
                     type="button"
-                    class="purchase-item-empty-product__icon"
-                    title={t('New Product')}
-                    aria-label={t('New Product')}
-                    on:click|stopPropagation={openCreateProductModal}>
-                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                    class="sfi-del"
+                    title={t('Delete')}
+                    aria-label={t('Delete')}
+                    on:click={() => removeItem(index)}>
+                    <i class="ms" aria-hidden="true">delete</i>
                   </button>
+                </td>
+              </tr>
+            {/each}
+  
+  
+  
+          </tbody>
+        </table>
+      </div>
 
-                  <span class="purchase-item-empty-product__copy">
-                    <strong>{t('Select Product')}</strong>
-                    <small>{t('Product')}</small>
-                  </span>
-                </div>
-              {/if}
-            </td>
+      <footer class="sfi-foot">
+        <span class="sfi-foot__stats">
+          <span>{t('Items')} <b dir="ltr">{items.length}</b></span>
+        </span>
 
-            {#if enable_manufacturing_date}
-              <td class="purchase-item-col-date"></td>
-            {/if}
-
-            {#if enable_expiry_date}
-              <td class="purchase-item-col-date"></td>
-            {/if}
-
-            {#if enable_batch}
-              <td class="purchase-item-col-batch"></td>
-            {/if}
-
-            {#if enable_heaviness}
-              <td class="purchase-item-col-heaviness"></td>
-            {/if}
-
-            <td class="purchase-item-col-quantity"></td>
-            <td class="purchase-item-col-price"></td>
-            <td class="purchase-item-col-sell-price"></td>
-
-            {#if enable_purchase_items_discount}
-              <td class="purchase-item-col-discount"></td>
-            {/if}
-
-            <td class="purchase-item-col-subtotal"></td>
-            <td class="purchase-item-col-actions"></td>
-          </tr>
-
-        </tbody>
-      </table>
-    </div>
-
-    {#if items.length > 0}
-      <footer class="purchase-items-total-row">
-        <button
-          type="button"
-          class="purchase-items-clear-btn"
-          on:click={clearItems}>
-          <i class="bi bi-trash3" aria-hidden="true"></i>
-          <span>{t('Clear All')}</span>
-        </button>
-
-        <div class="purchase-items-grand-total">
+        <span class="sfi-foot__total">
           <span>{t('Total')}</span>
           <strong dir="ltr">
             {Number(total || 0).toLocaleString(undefined, {
               maximumFractionDigits: 3,
             })}
           </strong>
-          <small>{t(currency)}</small>
-        </div>
+          <small>{currencySymbol(currency)}</small>
+        </span>
+
+        <button type="button" class="sfi-foot__clear" on:click={clearItems}>
+          <i class="ms" aria-hidden="true">delete_sweep</i>
+          <span>{t('Clear All')}</span>
+        </button>
       </footer>
+    {:else}
+      <div class="sfi-empty">
+        <span class="sfi-empty__icon" aria-hidden="true">
+          <i class="ms">barcode_scanner</i>
+        </span>
+        <strong>{t('No items yet. Search for a product above to add it.')}</strong>
+        <small>{t('Search product by name, barcode, or SKU...')}</small>
+      </div>
     {/if}
   </div>
 </div>
@@ -1991,6 +1995,986 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
  
 
 <style>
+  /* ===== Items section (SaleNew «ادویه‌ها» layout) ===== */
+  .sfi-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--z-border-soft, #edf1f6);
+  }
+
+  .sfi-head__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--z-ink, #172033);
+    font-size: 12.5px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .sfi-head__title .ms {
+    color: var(--z-link, #2f6fed);
+    font-size: 17px;
+  }
+
+  /* warehouse: a setting, drawn as a field with its label (SaleNew) */
+  .sfi-wh {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .sfi-wh__field {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 180px;
+    height: 34px;
+    padding: 0 6px 0 9px;
+    border: 1px solid var(--z-border-strong, #cfd9e6);
+    border-radius: 10px;
+    background: var(--z-brand-soft, #edf4ff);
+    color: var(--z-link, #2f6fed);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+
+  .sfi-wh__field .ms {
+    font-size: 17px;
+  }
+
+  .sfi-wh__field.is-open {
+    border-color: #2f6fed;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+  }
+
+  .sfi-wh__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-wh__chev {
+    font-size: 15px !important;
+  }
+
+  .sfi-wh__menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-start: 0;
+    z-index: 30;
+    width: max(100%, 180px);
+    padding: 3px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 10px;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 14px 32px -14px rgba(11, 21, 48, 0.35);
+    box-sizing: border-box;
+  }
+
+  .sfi-wh__opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 30px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .sfi-wh__opt:hover,
+  .sfi-wh__opt.is-active {
+    background: var(--z-brand-soft, #edf4ff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .sfi-wh__opt-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-wh__check {
+    flex-shrink: 0;
+    font-size: 16px;
+    color: var(--z-link, #2f6fed);
+    visibility: hidden;
+  }
+
+  .sfi-wh__opt.is-active .sfi-wh__check {
+    visibility: visible;
+  }
+
+  .sfi-sbar {
+    position: relative;
+    display: flex;
+    flex: 1 1 220px;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 11px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 10px;
+    background: var(--z-surface-2, #f5f8fc);
+    box-sizing: border-box;
+  }
+
+  .sfi-sbar.is-open {
+    border-color: #2f6fed;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.12);
+  }
+
+  .sfi-sbar__icon {
+    flex-shrink: 0;
+    color: var(--z-muted, #718096);
+    font-size: 18px;
+  }
+
+  .sfi-sbar__input {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .sfi-sbar__input::placeholder {
+    color: var(--z-subtle, #94a3b8);
+    font-weight: 500;
+  }
+
+  /* the shortcut chip and the add button live inside the search field */
+  .sfi-kbd {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 20px;
+    padding: 0 5px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-subtle, #94a3b8);
+    font: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    box-sizing: border-box;
+  }
+
+  .sfi-divider {
+    flex-shrink: 0;
+    width: 1px;
+    height: 16px;
+    background: var(--z-border, #dfe6ef);
+  }
+
+  .sfi-new {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 9px 0 6px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--z-brand-soft, #edf4ff);
+    color: var(--z-link, #2f6fed);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 800;
+    white-space: nowrap;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+
+  .sfi-new:hover {
+    background: #dbeafe;
+  }
+
+  .sfi-new .ms {
+    font-size: 17px;
+  }
+
+  /*
+   * Results panel — SaleNew draws it as a 360px card attached to the inline
+   * start of the search bar, with a scrolling list and a keyboard legend.
+   */
+  .sfi-suggest {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-start: 0;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    width: 380px;
+    max-width: calc(100vw - 48px);
+    padding: 4px;
+    overflow: hidden;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 12px;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 18px 42px -16px rgba(11, 21, 48, 0.32);
+    box-sizing: border-box;
+    text-align: start;
+  }
+
+  .sfi-suggest__scroll {
+    display: flex;
+    /* keep the scroll box from collapsing under the legend */
+    flex: 0 1 auto;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 232px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* no scrollbar track or arrow buttons, as on the customer dropdown */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .sfi-suggest__scroll::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .sfi-suggest__row {
+    display: flex;
+    /* the list is a capped column flexbox: rows must never compress */
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 4px 8px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12px;
+    text-align: start;
+    box-sizing: border-box;
+    cursor: pointer;
+  }
+
+  .sfi-suggest__row:hover {
+    background: var(--z-brand-soft, #edf4ff);
+  }
+
+  /* name over category, typed like the customer dropdown options */
+  .sfi-suggest__copy {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+    text-align: start;
+  }
+
+  .sfi-suggest__copy strong {
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-suggest__copy small {
+    overflow: hidden;
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-suggest__stock {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: baseline;
+    gap: 3px;
+    color: var(--z-ok, #15803d);
+    font-family: Inter, sans-serif;
+    font-size: 11px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .sfi-suggest__stock strong {
+    font-size: 11px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sfi-suggest__stock small {
+    font-size: 9.5px;
+    font-weight: 700;
+    opacity: 0.78;
+  }
+
+  .sfi-suggest__stock.is-low {
+    color: var(--z-warn, #92400e);
+  }
+
+  .sfi-suggest__stock.is-negative {
+    color: #b91c1c;
+  }
+
+  .sfi-suggest__service {
+    flex: 0 0 auto;
+    color: var(--z-link, #2f6fed);
+    font-size: 10.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .sfi-suggest__hint {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+    height: 20px;
+    padding: 0 7px;
+    border-top: 1px solid var(--z-border-soft, #edf1f6);
+    color: var(--z-subtle, #94a3b8);
+    font-size: 9.5px;
+  }
+
+  .sfi-suggest__count {
+    margin-inline-start: auto;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sfi-suggest--empty {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0;
+    padding-inline-start: 10px;
+    padding-inline-end: 6px;
+  }
+
+  .sfi-suggest--empty .ms {
+    color: var(--z-subtle, #94a3b8);
+    font-size: 16px;
+  }
+
+  .sfi-suggest__empty-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--z-muted, #718096);
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-suggest__new {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 3px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--z-border-strong, #cfd9e6);
+    border-radius: 7px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-link, #2f6fed);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .sfi-suggest__new .ms {
+    font-size: 14px;
+  }
+
+  /* table */
+  .sfi-table-wrap {
+    max-height: 284px;
+    overflow-x: auto;
+    overflow-y: auto;
+    /*
+     * Deliberately `auto`, not `contain`: the item list is a short window
+     * inside a scrolling page, so the wheel has to keep going down to the
+     * bill summary once the last row is reached.
+     */
+    overscroll-behavior: auto;
+  }
+
+  .sfi-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+    text-align: start;
+  }
+
+  .sfi-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: 30px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--z-border-soft, #edf1f6);
+    background: var(--z-surface-2, #f5f8fc);
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 700;
+    text-align: start;
+    white-space: nowrap;
+  }
+
+  .sfi-table tbody td {
+    height: 48px;
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--z-border-soft, #edf1f6);
+    vertical-align: top;
+  }
+
+  /*
+   * Cells are top-aligned so the 28px controls (quantity stepper, price box,
+   * dates) stay on one line even when the sell cell grows its sub-lines. The
+   * product cell stacks two lines, so it takes a little less block padding to
+   * keep the row at its 48px height.
+   */
+  .sfi-table tbody td.sfi-col-name {
+    padding-block: 6px;
+  }
+
+  .sfi-table tbody tr:hover td {
+    background: var(--z-surface-2, #f8fafc);
+  }
+
+  .sfi-col-idx {
+    width: 30px;
+    padding-inline-start: 8px !important;
+    text-align: start;
+  }
+
+  .sfi-col-idx span {
+    color: var(--z-subtle, #94a3b8);
+    font-size: 9.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sfi-col-name {
+    min-width: 0;
+  }
+
+  .sfi-col-batch {
+    width: 132px;
+  }
+
+  .sfi-col-exp {
+    width: 96px;
+  }
+
+  .sfi-col-qty {
+    width: 186px;
+  }
+
+  .sfi-table thead .sfi-col-price,
+  .sfi-table thead .sfi-col-total,
+  .sfi-table thead .sfi-col-act {
+    text-align: end;
+  }
+
+  .sfi-col-price {
+    width: 132px;
+    text-align: end;
+  }
+
+  .sfi-col-total {
+    width: 126px;
+    text-align: end;
+  }
+
+  .sfi-col-act {
+    width: 48px;
+    padding-inline-end: 12px !important;
+    text-align: end;
+  }
+
+  .sfi-name {
+    display: block;
+    overflow: hidden;
+    color: var(--z-ink, #172033);
+    font-size: 12.5px;
+    font-weight: 700;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 6px;
+    margin-top: 2px;
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+  }
+
+  .sfi-meta__code {
+    font-family: Inter, sans-serif;
+  }
+
+  .sfi-meta__stock {
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: var(--z-surface-3, #eef2f8);
+    color: var(--z-muted, #718096);
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .sfi-meta__stock.is-low {
+    background: var(--z-warn-soft, #fef3c7);
+    color: var(--z-warn, #92400e);
+  }
+
+  .sfi-readonly {
+    color: var(--z-muted, #718096);
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+
+  .sfi-batch-select {
+    width: 100%;
+    height: 28px;
+    padding: 0 4px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 7px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* quantity + unit */
+  .sfi-qty {
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+    height: 28px;
+    overflow: hidden;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 8px;
+    background: var(--z-surface, #ffffff);
+    box-sizing: border-box;
+  }
+
+  .sfi-qty:focus-within {
+    border-color: #2f6fed;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+  }
+
+  .sfi-qty__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--z-muted, #718096);
+    cursor: pointer;
+  }
+
+  .sfi-qty__btn:hover {
+    background: var(--z-surface-2, #f5f8fc);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .sfi-qty__btn .ms {
+    font-size: 14px;
+  }
+
+  .sfi-qty__input {
+    width: 44px;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 800;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .sfi-qty__input::-webkit-outer-spin-button,
+  .sfi-qty__input::-webkit-inner-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+  }
+
+  .sfi-qty__divider {
+    flex-shrink: 0;
+    width: 1px;
+    height: 16px;
+    background: var(--z-border, #dfe6ef);
+  }
+
+  .sfi-qty__unit {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 7px;
+    overflow: hidden;
+    color: var(--z-muted, #718096);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-qty :global(.filter-select) {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+  }
+
+  .sfi-qty :global(.filter-select__trigger) {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 0;
+    background: var(--z-surface-2, #f5f8fc);
+    color: var(--z-ink, #172033);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* price */
+  .sfi-price {
+    display: flex;
+    align-items: center;
+    max-width: 116px;
+    height: 28px;
+    margin-inline-start: auto;
+    padding: 0 7px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 7px;
+    background: var(--z-surface, #ffffff);
+    box-sizing: border-box;
+  }
+
+  .sfi-price:focus-within {
+    border-color: #2f6fed;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+  }
+
+  .sfi-price__input {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 800;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .sfi-price__input::-webkit-outer-spin-button,
+  .sfi-price__input::-webkit-inner-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+  }
+
+  .sfi-price__cur {
+    flex-shrink: 0;
+    margin-inline-start: 4px;
+    padding-inline-start: 4px;
+    border-inline-start: 1px solid var(--z-border-soft, #edf1f6);
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  .sfi-price__sub {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 2px;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 10px;
+    text-align: end;
+  }
+
+  .sfi-price__link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--z-link, #2f6fed);
+    font: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* total */
+  .sfi-total {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 3px;
+    max-width: 100%;
+  }
+
+  .sfi-total strong {
+    overflow: hidden;
+    color: var(--z-ink, #172033);
+    font-family: Inter, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+  }
+
+  .sfi-total small {
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  .sfi-total__conv {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    color: var(--z-muted, #718096);
+    font-size: 10px;
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* delete */
+  .sfi-del {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-inline-start: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: var(--z-danger-soft, #fee2e2);
+    color: var(--z-danger, #b91c1c);
+    cursor: pointer;
+  }
+
+  .sfi-del:hover {
+    background: #fecaca;
+  }
+
+  .sfi-del .ms {
+    font-size: 16px;
+  }
+
+  /* footer */
+  .sfi-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px 14px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--z-border-soft, #edf1f6);
+    background: var(--z-surface-2, #f5f8fc);
+    border-radius: 0 0 14px 14px;
+  }
+
+  .sfi-foot__stats {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-inline-end: auto;
+    color: var(--z-muted, #718096);
+    font-size: 11.5px;
+  }
+
+  .sfi-foot__stats b {
+    color: var(--z-ink, #172033);
+    font-size: 12.5px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sfi-foot__total {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    color: var(--z-muted, #718096);
+    font-size: 11.5px;
+  }
+
+  .sfi-foot__total strong {
+    color: var(--z-ink, #172033);
+    font-family: Inter, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sfi-foot__total small {
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  .sfi-foot__clear {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 7px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-danger, #b91c1c);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .sfi-foot__clear:hover {
+    background: var(--z-danger-soft, #fee2e2);
+  }
+
+  .sfi-foot__clear .ms {
+    font-size: 15px;
+  }
+
+  /* empty state */
+  .sfi-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 28px 16px;
+    text-align: center;
+  }
+
+  .sfi-empty__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    background: var(--z-brand-soft, #edf4ff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .sfi-empty__icon .ms {
+    font-size: 23px;
+  }
+
+  .sfi-empty strong {
+    color: var(--z-ink, #172033);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .sfi-empty small {
+    color: var(--z-muted, #718096);
+    font-size: 11.5px;
+  }
+
+  .sfi-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 767.98px) {
+    .sfi-table {
+      min-width: 720px;
+    }
+
+    .sfi-kbd,
+    .sfi-divider,
+    .sfi-new__label {
+      display: none;
+    }
+
+    .sfi-new {
+      justify-content: center;
+      width: 26px;
+      padding: 0;
+    }
+  }
+
   .purchase-items-card {
     --purchase-primary: var(--bs-primary, #2f6fed);
     --purchase-primary-dark: #1d4ed8;
@@ -3348,51 +4332,6 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     box-shadow: none;
   }
 
-  .purchase-item-datepicker :global(.date-picker-control) {
-    width: 100%;
-    min-width: 0;
-    height: 2.25rem !important;
-    min-height: 2.25rem !important;
-    border: 0 !important;
-    box-shadow: none !important;
-  }
-
-  .purchase-item-datepicker :global(.persian-date-text) {
-    display: none !important;
-  }
-
-  .purchase-item-datepicker :global(.gregorian-date-text) {
-    flex: 1 1 auto;
-    min-width: 0;
-    height: 2.25rem !important;
-    min-height: 2.25rem !important;
-    padding: 0 0.45rem !important;
-    border: 1px solid #dbe3ee !important;
-    border-radius: 0.5rem !important;
-    background: #ffffff !important;
-    color: #26364b !important;
-    font-size: 0.73rem !important;
-    font-weight: 700 !important;
-    line-height: 2.25rem !important;
-    text-align: center !important;
-    box-shadow: none !important;
-  }
-
-  .purchase-item-datepicker :global(.gregorian-date-text:focus) {
-    border-color: #78a4f5 !important;
-    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.08) !important;
-  }
-
-  .purchase-item-datepicker :global(.date-picker-icon) {
-    flex: 0 0 2rem;
-    width: 2rem;
-    min-width: 2rem;
-    height: 100%;
-    border: 0 !important;
-    border-inline-start: 1px solid #e3e8ef !important;
-    background: #f7f9fc !important;
-  }
-
   /* Subtotal and actions */
 
   .purchase-item-money {
@@ -4408,6 +5347,387 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
   :global(html.dark) .purchase-item-product-copy small,
   :global(body.dark) .purchase-item-product-copy small {
     color: #94a3b8 !important;
+  }
+
+  /* ===== Purchase adapters on top of the shared items section ===== */
+
+  /*
+   * A purchase row carries columns the sale row does not (manufacturing and
+   * expiry dates, batch, heaviness, buy price, sell price, discount), so the
+   * column track is restated here instead of reusing the sale widths.
+   */
+  .sfi-table {
+    min-width: 1260px;
+  }
+
+  /*
+   * Sale caps its list at 284px because it only holds a price and a stepper.
+   * Purchase rows also host date pickers and a batch menu, which must be able
+   * to overflow the row, so the purchase card lets the page scroll instead.
+   */
+  .sfi-table-wrap {
+    max-height: none;
+  }
+
+  .sfi-col-name {
+    min-width: 170px;
+  }
+
+  .sfi-col-date {
+    width: 104px;
+  }
+
+  .sfi-col-batch {
+    width: 112px;
+  }
+
+  .sfi-col-heavy {
+    width: 168px;
+  }
+
+  .sfi-col-qty {
+    width: 140px;
+  }
+
+  .sfi-col-price {
+    width: 112px;
+  }
+
+  .sfi-col-sell {
+    width: 128px;
+  }
+
+  .sfi-col-disc {
+    width: 118px;
+  }
+
+  .sfi-col-total {
+    width: 112px;
+  }
+
+  .sfi-table thead .sfi-col-price,
+  .sfi-table thead .sfi-col-sell,
+  .sfi-table thead .sfi-col-disc,
+  .sfi-table tbody .sfi-col-price,
+  .sfi-table tbody .sfi-col-sell,
+  .sfi-table tbody .sfi-col-disc,
+  .sfi-table tbody .sfi-col-act {
+    text-align: end;
+  }
+
+  /* percent / fixed switch that sits inside the price boxes */
+  .sfi-price__toggle {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-inline-end: 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: var(--z-surface-3, #eef2f8);
+    color: var(--z-muted, #718096);
+    cursor: pointer;
+  }
+
+  .sfi-price__toggle .ms {
+    font-size: 13px;
+  }
+
+  .sfi-price__toggle.is-active {
+    background: var(--z-brand-soft, #edf4ff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .sfi-table .sfi-price__sub {
+    align-items: flex-end;
+    max-width: 118px;
+    margin-inline-start: auto;
+  }
+
+  /*
+   * The sale price box is capped for a single value; the purchase boxes also
+   * hold a percent switch (and a second read-out line), so they take the cell.
+   */
+  .sfi-table .sfi-col-sell .sfi-price,
+  .sfi-table .sfi-col-disc .sfi-price,
+  .sfi-table .sfi-col-sell .sfi-price__sub,
+  .sfi-table .sfi-col-disc .sfi-price__sub {
+    max-width: none;
+  }
+
+  /* read-only quantity when the heaviness calculator drives the row */
+  .sfi-qty__value {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 6px;
+    overflow: hidden;
+    color: var(--z-ink, #172033);
+    font-size: 12.5px;
+    font-weight: 800;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* buy price box (the batch cell reuses the same field wrapper) */
+  .sfi-table .purchase-item-field {
+    display: flex;
+    align-items: center;
+    max-width: 118px;
+    height: 28px;
+    margin-inline-start: auto;
+    padding: 0 7px;
+    overflow: hidden;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 7px;
+    background: var(--z-surface, #ffffff);
+    box-sizing: border-box;
+  }
+
+  .sfi-table .purchase-item-field:focus-within {
+    border-color: #2f6fed;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+  }
+
+  .sfi-table .purchase-item-field input {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 800;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .sfi-table .purchase-item-field input::-webkit-outer-spin-button,
+  .sfi-table .purchase-item-field input::-webkit-inner-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+  }
+
+  /* the currency symbol hugs the amount, as in the sale items table */
+  .sfi-table .purchase-item-suffix {
+    flex-shrink: 0;
+    min-width: 0;
+    margin-inline-start: 4px;
+    padding-inline-start: 4px;
+    border-inline-start: 1px solid var(--z-border-soft, #edf1f6);
+    background: transparent;
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .sfi-table .purchase-item-readonly-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--z-ink, #172033);
+    font-size: 12.5px;
+    font-weight: 800;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* the batch cell hosts a bare select/input, not a price box */
+  .sfi-table .purchase-item-batch-field {
+    display: block;
+    max-width: none;
+    margin-inline-start: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .sfi-table .purchase-item-batch-field select,
+  .sfi-table .purchase-item-batch-field input {
+    width: 100%;
+    height: 28px;
+    padding: 0 4px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 7px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    box-sizing: border-box;
+    cursor: pointer;
+  }
+
+  /* heaviness: three small inputs kept inside the 48px row */
+  .sfi-table .purchase-item-heaviness {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3px;
+  }
+
+  .sfi-table .purchase-item-heaviness label {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .sfi-table .purchase-item-heaviness label span {
+    overflow: hidden;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 8.5px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-table .purchase-item-heaviness input {
+    width: 100%;
+    min-width: 0;
+    height: 24px;
+    padding: 0 4px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 6px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+    box-sizing: border-box;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  /*
+   * Date cell: the same 28px box as the price and quantity cells.
+   *
+   * AppDatePicker renders `div.app-date-field > div.pdp > div.pdp-group >
+   * input.pdp-input`, so the old `.date-picker-control` / `.gregorian-date-text`
+   * / `.date-picker-icon` hooks never matched anything and the field kept the
+   * wrapper's `min-height: 2.875rem`, overflowing the row.
+   */
+  .sfi-table .purchase-item-datepicker {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 28px;
+    min-height: 28px;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .sfi-table .purchase-item-datepicker :global(.app-date-field) {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    gap: 0;
+  }
+
+  .sfi-table .purchase-item-datepicker :global(.pdp),
+  .sfi-table .purchase-item-datepicker :global(.pdp-group) {
+    width: 100%;
+    min-width: 0;
+    height: 28px;
+  }
+
+  .sfi-table .purchase-item-datepicker :global(input) {
+    width: 100%;
+    height: 28px !important;
+    min-height: 28px !important;
+    padding: 0 4px !important;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 7px !important;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-ink, #172033);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 26px;
+    text-align: center !important;
+    font-variant-numeric: tabular-nums;
+    box-sizing: border-box;
+    outline: 0;
+  }
+
+  .sfi-table .purchase-item-datepicker :global(input:focus) {
+    border-color: #2f6fed;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+  }
+
+  .sfi-table .purchase-item-datepicker :global(.pdp-icon) {
+    display: none !important;
+  }
+
+  .sfi-table .purchase-item-money {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 3px;
+    max-width: 100%;
+  }
+
+  .sfi-table .purchase-item-money strong {
+    overflow: hidden;
+    color: var(--z-ink, #172033);
+    font-family: Inter, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+  }
+
+  .sfi-table .purchase-item-money small {
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  /* keyboard-highlighted product in the search results */
+  .sfi-suggest__row.is-active {
+    background: var(--z-brand-soft, #edf4ff);
+  }
+
+  /* ---- header: title · warehouse · search on one row ---- */
+  .sfi-head {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .sfi-head__title {
+    flex: 0 0 auto;
+  }
+
+  .sfi-wh {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .sfi-sbar {
+    flex: 1 1 auto;
+  }
+
+  /* only on very narrow screens does the search bar drop to its own line */
+  @media (max-width: 575px) {
+    .sfi-head {
+      flex-wrap: wrap;
+    }
   }
 
 </style>

@@ -1,0 +1,1445 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>ادویه جدید · Zeno</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&amp;display=block" rel="stylesheet">
+<style>/*zsearch*/:is(.dash-search,.hdr-search){display:flex!important;align-items:center!important;gap:8px!important;height:36px!important;padding:0 4px 0 12px!important;box-sizing:border-box!important;border-radius:12px!important;background:var(--surface,#fff)!important;border:1px solid color-mix(in srgb,var(--ink,#0f172a) 10%,transparent)!important;box-shadow:0 1px 2px rgba(15,23,42,.04),0 4px 12px -8px rgba(15,23,42,.12)!important;color:var(--subtle)!important;transition:border-color .18s,box-shadow .18s,background .18s;cursor:text}
+:is(.dash-search,.hdr-search):hover{border-color:color-mix(in srgb,#2F6FED 35%,transparent)!important}
+:is(.dash-search,.hdr-search):focus-within{border-color:#2F6FED!important;box-shadow:0 0 0 3px rgba(47,111,237,.14),0 6px 16px -10px rgba(47,111,237,.45)!important}
+:is(.dash-search,.hdr-search)>.ms:first-child{order:-1;flex:0 0 28px;width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px!important;background:rgba(47,111,237,.09);color:#2F6FED;transition:background .18s,color .18s}
+:is(.dash-search,.hdr-search):focus-within>.ms:first-child{background:#2F6FED;color:#fff}
+:is(.dash-search,.hdr-search) input{font-size:12.5px!important;font-weight:500;color:var(--ink)!important;height:100%}
+:is(.dash-search,.hdr-search) input::placeholder{color:color-mix(in srgb,var(--ink,#0f172a) 42%,transparent);font-weight:400}
+:is(.dash-search,.hdr-search) input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;cursor:pointer;background:color-mix(in srgb,var(--ink,#0f172a) 18%,transparent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5 5l6 6M11 5l-6 6' stroke='white' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") center/12px no-repeat}
+/*zclk*/.zclk{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0;border-radius:0;background:transparent;border:0;color:var(--ink);white-space:nowrap;flex-shrink:0;box-sizing:border-box;font-size:12px;line-height:1}.zclk-ic{font-size:16px!important;color:#2F6FED}.zclk-t{font-family:Inter,sans-serif;font-weight:800;font-size:13px;letter-spacing:.3px;font-variant-numeric:tabular-nums}.zclk>i{width:1px;height:14px;background:var(--border)}.zclk-d{color:var(--muted);font-weight:600}.zclk-push{margin-inline-start:auto}.zclk-sm{height:26px;padding:0 4px;gap:6px;font-size:11px}.zclk-sm .zclk-t{font-size:12px}@media (max-width:760px){.zclk-d,.zclk>i{display:none}}/*close-right*/[aria-label="بستن"]{order:-99!important}:has(> [aria-label="بستن"]){justify-content:flex-start!important}:has(> [aria-label="بستن"]) > [aria-label="بستن"] ~ span[style*="flex: 1"]{flex:1}
+body{margin:0;background:var(--bg)}
+:root,.z-root{--bg:#EEF2F8;--surface:#FFFFFF;--surface-2:#F8FAFC;--surface-3:#F1F5F9;--border:#E1E7F0;--border-soft:#EEF2F7;--border-strong:#DCE6F8;
+--ink:#0B1530;--text:#475569;--muted:#64748B;--subtle:#94A3B8;--disabled:#CBD5E1;--link:#2F6FED;--primary-soft:#E3ECFF;--primary-300:#93B7F7;--hover-bg:#F5F9FF;
+--ok-text:#15803D;--ok-soft:#DCFCE7;--warn-text:#92400E;--warn-soft:#FEF3C7;--danger-text:#B91C1C;--danger-soft:#FEE2E2;
+--header-bg:rgba(238,242,248,.9);--nav-bg:rgba(255,255,255,.96);color-scheme:light}
+.z-root.dark{--bg:#070D1F;--surface:#0F1A35;--surface-2:#132042;--surface-3:#1A2848;--border:#1E2C4F;--border-soft:#18254A;--border-strong:#2A3B66;
+--ink:#F1F5FB;--text:#B4C0DA;--muted:#8A96B8;--subtle:#6B79A0;--disabled:#3A4A70;--link:#7FA7F8;--primary-soft:#16295A;--primary-300:#3E64B8;--hover-bg:#15244A;
+--ok-text:#4ADE80;--ok-soft:#0F3324;--warn-text:#FBBF24;--warn-soft:#3A2A0A;--danger-text:#F87171;--danger-soft:#3B1219;
+--header-bg:rgba(7,13,31,.86);--nav-bg:rgba(15,26,53,.96);color-scheme:dark}
+.z-root.dark .sb{background:#050A18!important;border-color:#050A18!important}
+.z-root.dark input::placeholder{color:var(--subtle)}
+.lang a{display:flex;align-items:center;padding:0 9px;border-radius:7px;font-size:12px;font-weight:700;color:var(--muted)}
+.lang a:hover{color:var(--ink)}
+.z-root[data-lang=fa] .lang a[data-l=fa],.z-root[data-lang=ps] .lang a[data-l=ps],.z-root[data-lang=en] .lang a[data-l=en]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(11,21,48,.14)}
+.z-root[data-lang=en]{font-family:'Inter','Vazirmatn',system-ui,sans-serif!important}
+
+a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
+.ms{font-family:'Material Symbols Rounded';font-weight:normal;font-style:normal;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 20;flex-shrink:0;user-select:none;overflow:hidden}
+.ms.f{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 20}
+.sb{width:232px;flex-shrink:0;height:100vh;background:#0B1530;border-inline-end:1px solid #0B1530;display:flex;flex-direction:column;box-sizing:border-box;transition:width .2s ease}
+.sbc{width:72px}
+.nav{position:relative;display:flex;align-items:center;gap:10px;min-height:38px;padding:0 10px;border-radius:10px;color:#B7C1DB;font-weight:500;font-size:13px;border:0;background:transparent;font-family:inherit;width:100%;cursor:pointer;text-align:right;box-sizing:border-box}
+.nav:hover{background:#132042;color:#FFFFFF}
+[dir=ltr] .nav.on{background:linear-gradient(270deg,rgba(47,111,237,.10),rgba(47,111,237,.32))}
+.nav.on{background:linear-gradient(90deg,rgba(47,111,237,.10),rgba(47,111,237,.32));color:#FFFFFF;font-weight:700}
+.nav.on .ms{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 20}
+.nav.on::before{content:"";position:absolute;inset-inline-start:-12px;top:9px;bottom:9px;width:3px;border-radius:3px;background:#5B8DF6}
+.sub{display:flex;align-items:center;min-height:32px;padding:0 12px;margin-inline-start:19px;border-inline-start:1px solid #1B2A52;color:#8A96B8;font-size:12.5px;font-weight:500}
+.sub:hover{color:#FFFFFF}
+.sec{font-size:10.5px;color:#5E6B8E;font-weight:700;letter-spacing:.4px;padding:12px 10px 4px}
+.badge{margin-inline-start:auto;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#2F6FED;color:#FFFFFF;font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box}
+.sbc .lbl,.sbc .sec,.sbc .badge,.sbc .hide-c{display:none}
+.sbc .nav{justify-content:center;padding:0}
+.acc{position:relative;transition:background .18s ease}
+.acc:hover{background:var(--t)!important}
+.acc-ic{transition:transform .18s ease, box-shadow .18s ease}
+.acc:hover .acc-ic{transform:scale(1.08);box-shadow:0 6px 14px -6px var(--c)}
+.acc-go{color:var(--c);opacity:0;transform:translateX(6px);}
+[dir=ltr] .acc-go{transform:translateX(-6px)}
+.acc-go{transition:opacity .18s ease, transform .18s ease}
+.acc:hover .acc-go,.acc:focus-visible .acc-go{opacity:1;transform:none}
+.acc:focus-visible{outline:2px solid #2F6FED;outline-offset:-2px}
+@media (max-width:1100px){.acc-grid{grid-template-columns:repeat(5,minmax(0,1fr))!important}.acc{padding:10px!important;gap:8px!important}}
+.mob-only{display:none}
+.bnav{display:none}
+/* Tablet / iPad: icon rail */
+@media (min-width:768px) and (max-width:1100px){.sb{width:72px}.sb .lbl,.sb .sec,.sb .badge,.sb .hide-c{display:none}.sb .nav{justify-content:center;padding:0}}
+@media (max-width:1100px){.hide-md{display:none!important}}
+/* Mobile: drawer + bottom bar */
+@media (max-width:767px){
+.mob-only{display:flex}
+.hide-sm{display:none!important}
+.sb{position:fixed;top:0;bottom:0;inset-inline-start:0;z-index:40;width:264px!important;transform:translateX(105%);transition:transform .22s ease;box-shadow:none}
+[dir=ltr] .sb{transform:translateX(-105%)}
+.sb.open{transform:none!important;box-shadow:-20px 0 40px -10px rgba(15,23,42,.25)}
+.hdr{padding:8px 12px!important}
+.hdr-search{order:9;width:100%!important}
+.wrap{padding:12px 12px 92px!important;gap:12px!important}
+.kpi{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+.kpi .spark{display:none}
+.qa-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.qa{flex-direction:column!important;text-align:center;gap:6px!important;padding:10px 4px!important}
+.qa-sub{display:none!important}
+.acc-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.att-grid{display:flex!important;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:4px;margin:0 -2px}
+.att-tile{flex:0 0 136px;scroll-snap-align:start}
+.np{position:fixed!important;top:56px!important;left:8px!important;right:8px!important;width:auto!important;max-height:calc(100vh - 140px)!important}
+.bnav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:30;background:var(--nav-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--border);padding:6px 8px calc(6px + env(safe-area-inset-bottom));justify-content:space-around;align-items:flex-end}
+}
+.bn{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:56px;min-height:44px;justify-content:center;color:var(--muted);font-size:10.5px;font-weight:600;border:0;background:transparent;font-family:inherit;cursor:pointer}
+.bn.on{color:var(--link)}.bn.on .ms{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 20}
+.btn:hover{background:var(--surface-3)}
+.sb .btn:hover{background:#1B2A52!important;color:#FFFFFF!important}
+.btnp:hover{background:#245FCF}
+.qa{transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease}
+.qa:hover{transform:translateY(-2px);box-shadow:0 8px 20px -12px rgba(15,23,42,.2);border-color:var(--border-strong)}
+.row:hover{background:var(--surface-2)}
+.scroll::-webkit-scrollbar{width:8px}
+.sb .scroll::-webkit-scrollbar-thumb{background:#1B2A52;border-color:#0B1530}.scroll::-webkit-scrollbar-thumb{background:var(--disabled);border-radius:8px;border:2px solid var(--bg)}
+.kcard{position:relative;display:flex;align-items:center;gap:10px;min-width:0;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 1px 2px rgba(11,21,48,.04)}
+.kcard[data-hero=true]{border-color:var(--border-strong);background:linear-gradient(135deg,var(--primary-soft) 0%,var(--surface) 70%)}
+.kcard[data-hero=true]::before{content:"";position:absolute;inset-block:12px;inset-inline-start:4px;width:3px;border-radius:3px;background:#2F6FED}
+.kcard .ktile{width:32px!important;height:32px!important;border-radius:9px!important}
+.kcard[data-hero=true] .ktile{background:#2F6FED!important;color:#FFFFFF!important}
+.kcard .kbody{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.kcard .klabel{font-size:11.5px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kcard .krow{display:flex;align-items:baseline;gap:4px;min-width:0}
+.kcard .kval{font-size:17px!important;line-height:1.35}
+.kcard[data-hero=true] .kval{color:var(--ink)!important}
+.kcard .kunit{font-size:10.5px;color:var(--muted);flex-shrink:0}
+.kcard .ksub{font-size:10.5px;color:var(--subtle);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kcard .kside{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:6px;align-self:stretch}
+.kcard .kchip{font-size:10.5px!important;padding:0 6px!important;line-height:18px}
+.kcard[data-hero=true] polyline{stroke:#2F6FED!important}
+.kcard .kbar{display:block;width:56px;height:5px;border-radius:3px;background:var(--surface-3);overflow:hidden}
+.kcard .kbar>span{display:block;height:100%}
+@media (max-width:767px){.kcard{padding:8px 10px;gap:8px}.kcard .kside{display:none}.kcard .ktile{width:28px!important;height:28px!important}.kcard .kval{font-size:15px!important}}
+
+.srow{transition:background .12s ease}.srow:hover{background:var(--hover-bg)}.srow .ract{opacity:.55;transition:opacity .12s}.srow:hover .ract,.srow .ract:focus-visible{opacity:1}
+.stbl .c-no{width:136px}.stbl .c-date{width:104px}.stbl .c-wh{width:124px}.stbl .c-tot{width:128px}.stbl .c-pay{width:176px}.stbl .c-pro{width:112px}.stbl .c-st{width:104px}.stbl .c-act{width:72px}
+@media (max-width:1366px){.stbl .c-no{width:124px}.stbl .c-date{width:96px}.stbl .c-wh{width:110px}.stbl .c-tot{width:118px}.stbl .c-pay{width:160px}.stbl .c-pro{width:102px}.stbl .c-st{width:96px}.stbl .c-act{width:66px}}
+@media (max-width:1200px){.stbl .c-wh{width:96px}.stbl .c-pay{width:146px}.stbl .c-st{width:88px}.stbl{font-size:12px!important}}
+.itbl .i-n{width:12px}.itbl .t-exp{text-align:center!important}.itbl .c-name{padding-inline-start:4px!important}.itbl .i-b{width:100px}.itbl .i-e{width:88px}.itbl .i-q{width:156px}.itbl .i-buy{width:76px}.itbl .i-sell{width:112px}.itbl .i-tot{width:112px}.itbl .i-act{width:68px}.itbl.no-ph .i-b,.itbl.no-ph .i-e{width:0}
+@media (max-width:1280px){.itbl .i-b{width:96px}.itbl .i-e{width:84px}.itbl .i-q{width:148px}.itbl .i-buy{width:70px}.itbl .i-sell{width:104px}.itbl .i-tot{width:100px}.itbl .i-act{width:64px}}
+@media (max-width:1100px){.dr-t{display:none!important}.itbl .i-buy,.itbl .i-pro{width:0}.itbl .c-pro{padding:0!important;font-size:0!important;visibility:hidden;overflow:hidden}.itbl .c-buy{padding:0!important;font-size:0!important;visibility:hidden;overflow:hidden}.itbl .buy-sub{display:block!important}.itbl .below-wide{display:none}.itbl .i-b{width:98px}.itbl .i-e{width:78px}.itbl .i-q{width:140px}.itbl .i-sell{width:128px}.itbl .i-tot{width:98px}.itbl .i-act{width:62px}
+.sum-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media (max-width:767px){.fgrid.fgrid4{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.fgrid.fgrid4>.span-full{grid-column:1/-1!important}
+.sum-grid{grid-template-columns:minmax(0,1fr)!important}.sum-grid .sum-cell{border-inline-start:0!important}.sum-grid .sum-cell+.sum-cell{border-top:1px solid var(--border-soft)}
+.sugg-head{display:none!important}.sugg-row{grid-template-columns:28px minmax(0,1fr) auto!important}.sugg-row .sugg-ph,.sugg-row .sugg-st{display:none}.sugg-mb{display:inline!important}}
+
+@media (max-width:767px){.drow{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-flow:row dense}.drow .d-cust,.drow .d-desc,.drow .d-cur{grid-column:1/-1}.wh-name{max-width:64px!important}.ihead h3{flex-basis:100%}}
+@media print{.has-form *{visibility:hidden!important}.print-sheet,.print-sheet *{visibility:visible!important}.print-wrap{position:absolute!important;inset:0!important;padding:0!important;overflow:visible!important}.print-sheet{position:absolute;top:0;left:0;right:0;margin:auto;box-shadow:none!important;border-radius:0!important}.no-print{display:none!important}}
+.dstat+.dstat{border-inline-start:1px solid var(--border-soft)}
+.ptbl .pin:focus{width:auto!important;field-sizing:content;min-width:100%;max-width:220px;position:relative;z-index:6}.ptbl td{overflow:visible}
+
+.rtbl tbody tr:nth-child(even) td{background:var(--surface-2)}.rtbl tbody tr:hover td{background:var(--hover-bg)!important}
+@media (max-width:767px){.rep-page{padding:10px 12px 90px!important}}
+@media (max-width:1100px){.rep-ins{grid-template-columns:minmax(0,1fr)!important}.rep-page .kpi{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media print{.is-report aside,.is-report header,.is-report .no-print,.is-report .bnav{display:none!important}.is-report main{height:auto!important;overflow:visible!important}.is-report{height:auto!important}.is-report .print-only{display:flex!important}.is-report .tbl-wrap{max-height:none!important;overflow:visible!important}.is-report .rtbl th,.is-report .rtbl td{position:static!important}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (max-width:1100px){.sum-col{position:static!important;flex-basis:100%!important}.list-page .kpi{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media (max-width:767px){
+.tbl-wrap{display:none}.cards{display:flex!important}
+.fgrid{grid-template-columns:minmax(0,1fr)!important}.fgrid>*{grid-column:auto!important}
+.form-bar{display:flex!important}.has-form .bnav{display:none!important}.sum-actions{display:none!important}
+.drawer{width:100%!important}
+.fpop{position:fixed!important;top:auto!important;bottom:8px!important;left:8px!important;right:8px!important;width:auto!important;max-height:80vh!important;z-index:48!important}.fpop-arrow{display:none}
+.list-page{height:auto!important;min-height:0!important}.list-card,.list-scroll{overflow:visible!important}
+.stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}.stats>div:nth-child(3){border-inline-start:0!important}.stats>div:nth-child(n+3){border-top:1px solid var(--border-soft)}
+}
+
+.np-box:focus-within,textarea.np-box:focus{border-color:#2F6FED!important;box-shadow:0 0 0 3px rgba(47,111,237,.14)!important}
+.pname:hover{color:var(--link)!important;text-decoration:underline;text-underline-offset:3px}.pname:focus-visible{outline:2px solid #2F6FED;outline-offset:2px;border-radius:4px}
+.pl-dense .kcard{padding:6px 10px!important;gap:8px!important;border-radius:10px!important}.pl-dense .ktile{width:24px!important;height:24px!important;border-radius:7px!important}.pl-dense .ktile .ms{font-size:14px!important}.pl-dense .klabel{font-size:11px!important}.pl-dense .kval{font-size:15px!important;line-height:1.3!important}.pl-dense .ksub{display:none!important}.pl-dense .kcard[data-hero=true]::before{inset-block:8px}
+.np-page input::placeholder,.np-page textarea::placeholder{color:var(--subtle);opacity:.8;font-weight:500}
+@media (max-width:1100px){.np-g5{grid-template-columns:repeat(3,minmax(0,1fr))!important}.np-c4{grid-template-columns:repeat(2,minmax(0,1fr))!important}.np-c4>*{grid-column:auto!important}}
+@media (max-width:640px){.na-grid{grid-template-columns:minmax(0,1fr)!important}.na-ob{flex-wrap:wrap}}
+@media (max-width:1100px){.ap-ov{grid-template-columns:minmax(0,1fr)!important}.ap-stats,.ap-recent,.ap-contacts,.ap-curs{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media (max-width:640px){.ap-stats,.ap-recent,.ap-contacts,.ap-curs{grid-template-columns:minmax(0,1fr)!important}}
+@media print{.has-stmt *{visibility:hidden!important}.has-stmt .print-sheet,.has-stmt .print-sheet *{visibility:visible!important}.has-stmt .print-sheet{position:fixed!important;top:0!important;left:0!important;right:0!important;box-shadow:none!important;max-width:none!important}}@media (max-width:700px){.wa-grid{grid-template-columns:minmax(0,1fr)!important}}
+.stmt-tbl tbody tr:nth-child(even) td{background:#FAFBFD}.stmt-tbl tbody tr:first-child td{background:#F6F8FC;font-style:italic}@media (max-width:700px){.stmt-sum{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media (max-width:900px){.fx-row{grid-template-columns:1fr 1fr!important}}
+@media (max-width:640px){.na-cls{flex-wrap:wrap}.na-cls>button{flex:1 1 30%!important}}
+@media print{:has(.has-pp){height:auto!important;max-height:none!important;overflow:visible!important}body:has(.has-pp) aside,body:has(.has-pp) header,body:has(.has-pp) .bnav,.has-pp .no-print,.has-pp .pp-side{display:none!important}.has-pp .tb-grid{display:block!important;height:auto!important}.has-pp .pp-sheet{border:0!important;box-shadow:none!important}.has-pp .pp-scroll{max-height:none!important;overflow:visible!important}.has-pp .print-only{display:flex!important}.has-pp th{position:static!important}}
+@media (max-width:900px){.tb-grid{grid-template-columns:minmax(0,1fr)!important;height:auto!important}.tb-grid .pp-side{max-height:230px}.tb-grid .pp-scroll{overflow:visible!important}.rp-tw{overflow-x:auto!important}.rp-tw table{min-width:640px}.tb-grid .ap-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+.sub.on{color:#FFFFFF;font-weight:700;border-inline-start:2px solid #2F6FED;background:linear-gradient(90deg,transparent,rgba(47,111,237,.18))}
+.st-nav button:hover{background:var(--hover-bg)}
+@media (max-width:1100px){.st-4{grid-template-columns:repeat(2,minmax(0,1fr))!important}.st-msg{grid-template-columns:minmax(0,1fr)!important}.st-pv{position:static!important}}
+@media (max-width:860px){.st-grid{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto minmax(0,1fr)}.st-nav{flex-direction:row!important;overflow-x:auto!important}.st-nav button{width:auto!important;flex-shrink:0}.st-2{grid-template-columns:minmax(0,1fr)!important}.st-2>*{grid-column:auto!important}.st-page{height:auto!important}}
+/* filter-matte */button[aria-label="فیلتر"],button[title="فیلتر"]{background:#E4E9F7!important;color:#3D5AC8!important;border:1px solid #CCD6F0!important;border-radius:8px!important}button[aria-label="فیلتر"]:hover,button[title="فیلتر"]:hover{background:#D9E1F5!important}
+.np-kbd{font-family:Inter,sans-serif;font-size:10px;padding:1px 5px;border-radius:4px;border:1px solid var(--border);background:var(--surface-2);color:var(--text)}
+.np-drop:hover{border-color:#2F6FED!important;background:var(--primary-soft)!important}.np-drop:focus-within{outline:2px solid #2F6FED;outline-offset:2px}
+@media (max-width:1180px){.np-layout{grid-template-columns:minmax(0,1fr)!important}.np-side{position:static!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}}
+@media (max-width:1100px){.np-g4{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media (max-width:900px){.np-g3{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media (max-width:767px){.np-grid{grid-template-columns:minmax(0,1fr)!important}.np-grid>*{grid-column:auto!important}.np-side{grid-template-columns:minmax(0,1fr)!important}.np-page{padding:10px 12px 0!important}.np-bar{margin:0 -12px!important;padding:8px 12px calc(8px + env(safe-area-inset-bottom))!important}.np-st,.np-cancel{display:none!important}.np-bar .btn,.np-bar .btnp{flex:1}.np-toast{bottom:70px!important}}
+</style>
+</helmet>
+<div dir="rtl" data-lang="fa" class="{{rootClass}} has-form" style="font-family: 'Vazirmatn', 'Noto Sans Arabic', system-ui, sans-serif; color: var(--text); background: var(--bg); height: 100vh; display: flex; overflow: hidden; font-size: 13px; line-height: 1.55">
+
+<!-- ============ SIDEBAR (fixed) ============ -->
+<aside class="{{sbClass}}" aria-label="منوی اصلی">
+  <div style="display: flex; align-items: center; gap: 9px; padding: 14px 16px 10px; min-height: 56px; box-sizing: border-box">
+    <div style="width: 32px; height: 32px; border-radius: 9px; background: #2F6FED; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; flex-shrink: 0">Z</div>
+    <div class="lbl" style="flex: 1; line-height: 1.15">
+      <div style="font-weight: 800; font-size: 15px; color: #FFFFFF; letter-spacing: .6px">ZENO</div>
+      <div style="font-size: 10.5px; color: #8A96B8">ERP · v3.2.6</div>
+    </div>
+    <button onClick="{{toggleSb}}" aria-label="جمع کردن منو" title="جمع / باز کردن منو" class="btn hide-c" style="width: 30px; height: 30px; border: 1px solid #1B2A52; background: #132042; border-radius: 8px; color: #8A96B8; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0">
+      <span class="ms" style="font-size: 18px">{{sbIcon}}</span>
+    </button>
+  </div>
+
+  <div style="padding: 0 12px 4px">
+    <a href="#" class="btnp" title="POS" style="display: flex; align-items: center; justify-content: center; gap: 7px; background: #2F6FED; color: #FFFFFF; border-radius: 10px; min-height: 38px; font-weight: 700; font-size: 13px; box-shadow: 0 8px 18px -8px rgba(47,111,237,.9)">
+      <span class="ms f" style="font-size: 19px">point_of_sale</span>
+      <span class="lbl">POS</span>
+    </a>
+  </div>
+
+  <nav class="scroll" style="flex: 1; overflow-y: auto; padding: 2px 12px 10px; display: flex; flex-direction: column; gap: 1px">
+    <div class="sec">اصلی</div>
+    <a href="Main.dc.html" class="nav" title="داشبورد"><span class="ms">space_dashboard</span><span class="lbl">داشبورد</span></a>
+
+    <div class="sec">تجارت</div>
+    <a href="Sales.dc.html" class="nav" title="فروش‌ها"><span class="ms">shopping_cart</span><span class="lbl">فروش‌ها</span><span class="badge" title="پیش‌نویس‌ها">2</span></a>
+    <a href="Purchases.dc.html" class="nav" title="خریدها"><span class="ms">shopping_bag</span><span class="lbl">خریدها</span><span class="badge" title="پیش‌نویس‌ها">1</span></a>
+    <a href="Products.dc.html" class="nav on" aria-current="page" title="{{prodLabel}}"><span class="ms">{{prodIcon}}</span><span class="lbl">{{prodLabel}}</span></a>
+
+    <div class="sec">مالی</div>
+    <a href="Accounts.dc.html" class="nav" title="حساب‌ها"><span class="ms">group</span><span class="lbl">حساب‌ها</span></a>
+    <a href="Journal.dc.html" class="nav" title="روزنامچه"><span class="ms">menu_book</span><span class="lbl">روزنامچه</span></a>
+    <a href="Exchange.dc.html" class="nav" title="صرافی"><span class="ms">currency_exchange</span><span class="lbl">صرافی</span></a>
+
+    <div class="sec">مدیریت</div>
+    <button class="nav" onClick="{{toggleReports}}" aria-expanded="{{reportsExpanded}}" title="گزارشات">
+      <span class="ms">bar_chart_4_bars</span><span class="lbl" style="flex: 1">گزارشات</span>
+      <span class="ms hide-c" style="{{reportsChevron}}">expand_more</span>
+    </button>
+    <sc-if value="{{reportsOpen}}" hint-placeholder-val="{{ false }}">
+      <div class="hide-c" style="display: flex; flex-direction: column; padding: 2px 0 4px">
+        <a href="SalesReport.dc.html" class="sub">گزارش فروش</a>
+        <a href="PurchaseReport.dc.html" class="sub">گزارش خرید</a>
+        <a href="ProfitLoss.dc.html" class="sub">مفاد و زیان</a>
+        <a href="StockReport.dc.html" class="sub">گزارش موجودی</a>
+      </div>
+    </sc-if>
+    <a href="Settings.dc.html" class="nav" title="تنظیمات"><span class="ms">settings</span><span class="lbl">تنظیمات</span></a>
+  </nav>
+
+  <div style="padding: 10px 12px 12px; border-top: 1px solid #1B2A52">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 12px; background: #132042">
+      <div style="position: relative; width: 32px; height: 32px; border-radius: 50%; background: #2F6FED; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex-shrink: 0">H
+        <span style="position: absolute; bottom: 0; inset-inline-end: 0; width: 9px; height: 9px; border-radius: 50%; background: #16A34A; border: 2px solid #132042"></span></div>
+      <div class="lbl" style="flex: 1; line-height: 1.3; min-width: 0">
+        <div style="color: #FFFFFF; font-weight: 700; font-size: 13px">hewad</div>
+        <div style="font-size: 11px; color: #8A96B8">مدیر سیستم</div>
+      </div>
+      <button aria-label="خروج" title="خروج" class="btn hide-c" style="width: 30px; height: 30px; border: 0; background: transparent; border-radius: 8px; color: #8A96B8; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0">
+        <span class="ms" style="font-size: 18px">logout</span>
+      </button>
+    </div>
+  </div>
+</aside>
+
+<!-- ============ MAIN (scrolls on its own) ============ -->
+<main class="scroll" style="flex: 1; min-width: 0; height: 100vh; overflow-y: auto">
+
+  <!-- Compact sticky header -->
+  <header style="position: sticky; top: 0; z-index: 5; background: var(--header-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--border)">
+    <div class="hdr" style="max-width: 1400px; margin: 0 auto; padding: 8px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 52px; box-sizing: border-box">
+      <button onClick="{{openNav}}" aria-label="باز کردن منو" class="btn mob-only" style="width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; color: var(--text); cursor: pointer; align-items: center; justify-content: center; padding: 0">
+        <span class="ms" style="font-size: 20px">menu</span>
+      </button>
+      <div style="display: flex; align-items: center; gap: 10px; margin-inline-end: auto; min-width: 0; flex: 1 1 auto">
+        <span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 11px; background: var(--primary-soft); color: var(--link); display: flex; align-items: center; justify-content: center; flex-shrink: 0"><span class="ms f" style="font-size: 20px">medication</span></span>
+        <div style="display: flex; flex-direction: column; gap: 1px; line-height: 1.3; min-width: 0">
+          <h1 style="margin: 0; font-size: 14.5px; font-weight: 800; color: var(--ink)">ادویه جدید</h1>
+          <span class="hide-sm" style="font-size: 11.5px; color: var(--muted)">ادویه‌جات / ثبت جدید</span>
+        </div>
+      </div>
+      <div class="zclk" role="timer" aria-label="ساعت و تاریخ" title="{{clkFull}}"><span class="ms zclk-ic" aria-hidden="true">schedule</span><b dir="ltr" class="zclk-t">{{clkTime}}</b><i aria-hidden="true"></i><span class="zclk-d">{{clkDate}}</span></div>
+      <label class="hdr-search" style="display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0 10px; height: 34px; width: 240px; max-width: 100%; box-sizing: border-box; color: var(--subtle)">
+        <span class="ms" style="font-size: 18px">search</span>
+        <input type="search" placeholder="جستجو…" aria-label="جستجو" style="border: 0; outline: 0; background: transparent; font: inherit; font-size: 12.5px; color: var(--ink); flex: 1; min-width: 0">
+      </label>
+      <button aria-label="انتخاب شعبه" class="btn" style="display: flex; align-items: center; gap: 5px; height: 34px; padding: 0 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font: inherit; font-size: 12.5px; color: var(--ink); font-weight: 600; cursor: pointer">
+        <span class="ms" style="font-size: 17px; color: var(--muted)">storefront</span>
+        <span class="hide-sm">همه شعبه‌ها</span>
+        <span class="ms" style="font-size: 17px; color: var(--muted)">expand_more</span>
+      </button>
+      <div title="3 یوزر آنلاین" class="hide-sm" style="display: flex; align-items: center; padding: 0 4px">
+        <span style="width: 26px; height: 26px; border-radius: 50%; background: var(--primary-soft); color: var(--link); border: 2px solid var(--bg); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800">H</span>
+        <span style="width: 26px; height: 26px; border-radius: 50%; background: var(--surface-3); color: var(--text); border: 2px solid var(--bg); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-inline-start: -8px">ا</span>
+        <span style="width: 26px; height: 26px; border-radius: 50%; background: var(--surface-3); color: var(--text); border: 2px solid var(--bg); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; margin-inline-start: -8px">م</span>
+      </div>
+      <nav class="lang" aria-label="زبان" style="display: flex; gap: 2px; background: var(--surface-3); border-radius: 10px; padding: 3px; height: 34px; box-sizing: border-box">
+        <a href="{{lnk.fa}}" data-l="fa" lang="fa">دری</a>
+        <a href="{{lnk.ps}}" data-l="ps" lang="ps">پښتو</a>
+        <a href="{{lnk.en}}" data-l="en" lang="en">EN</a>
+      </nav>
+      <button onClick="{{toggleTheme}}" aria-label="{{themeLabel}}" title="{{themeLabel}}" class="btn" style="width: 34px; height: 34px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0">
+        <span class="ms" style="font-size: 19px">{{themeIcon}}</span>
+      </button>
+      <div style="position: relative">
+      <button onClick="{{toggleNotif}}" aria-label="{{bellLabel}}" aria-expanded="{{notifExpanded}}" aria-haspopup="dialog" class="btn" style="{{bellStyle}}">
+        <span class="ms" style="font-size: 19px">notifications</span>
+        <sc-if value="{{hasUnread}}" hint-placeholder-val="{{ true }}">
+          <span style="position: absolute; top: -5px; inset-inline-end: -5px; min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: #DC2626; color: #FFFFFF; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg)">{{unread}}</span>
+        </sc-if>
+      </button>
+      <sc-if value="{{notifOpen}}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{closeNotif}}" style="position: fixed; inset: 0; z-index: 44"></div>
+        <div role="dialog" aria-label="اعلان‌ها" class="np" style="position: absolute; top: 42px; inset-inline-end: 0; z-index: 45; width: 380px; max-height: min(560px, 75vh); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 24px 48px -16px rgba(11,21,48,.35); overflow: hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 8px">
+            <span style="font-size: 14px; font-weight: 800; color: var(--ink)">اعلان‌ها</span>
+            <button onClick="{{markAll}}" class="btn" style="display: flex; align-items: center; gap: 4px; height: 28px; padding: 0 8px; border: 0; background: transparent; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 700; color: var(--link); cursor: pointer">
+              <span class="ms" style="font-size: 16px">done_all</span>همه خوانده شد
+            </button>
+          </div>
+          <div role="tablist" aria-label="دسته اعلان‌ها" style="display: flex; gap: 4px; padding: 0 14px 10px; border-bottom: 1px solid var(--border-soft); overflow-x: auto">
+            <sc-for list="{{nTabs}}" as="t" hint-placeholder-count="4">
+              <button role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}<span style="{{t.countStyle}}">{{t.count}}</span></button>
+            </sc-for>
+          </div>
+          <div class="scroll" style="flex: 1; overflow-y: auto; padding: 6px">
+            <sc-for list="{{nItems}}" as="n" hint-placeholder-count="5">
+              <a href="#" class="row" style="display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px; border-radius: 10px; color: var(--text); position: relative">
+                <span style="{{n.tile}}"><span class="ms f" style="font-size: 17px">{{n.icon}}</span></span>
+                <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.4">
+                  <span style="display: flex; align-items: center; gap: 6px">
+                    <span style="{{n.srcStyle}}">{{n.src}}</span>
+                    <span style="font-size: 11px; color: var(--subtle)">{{n.time}}</span>
+                  </span>
+                  <span style="{{n.titleStyle}}">{{n.title}}</span>
+                  <span style="font-size: 11.5px; color: var(--muted)">{{n.meta}}</span>
+                  <sc-if value="{{n.action}}" hint-placeholder-val="{{ false }}">
+                    <span style="align-self: flex-start; margin-top: 4px; font-size: 11.5px; font-weight: 700; color: var(--link); border: 1px solid var(--border-strong); border-radius: 7px; padding: 2px 8px">{{n.action}}</span>
+                  </sc-if>
+                </span>
+                <sc-if value="{{n.unread}}" hint-placeholder-val="{{ false }}">
+                  <span aria-label="خوانده نشده" style="width: 8px; height: 8px; border-radius: 50%; background: #2F6FED; margin-top: 6px; flex-shrink: 0"></span>
+                </sc-if>
+              </a>
+            </sc-for>
+          </div>
+          <a href="#" style="display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 42px; border-top: 1px solid var(--border-soft); font-size: 12.5px; font-weight: 700">همه اعلان‌ها</a>
+        </div>
+      </sc-if>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap np-page" onKeyDown="{{onFormKey}}" style="max-width: 1200px; margin: 0 auto; padding: 10px 16px 16px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box">
+
+  <sc-if value="{{anyPop}}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{closePop}}" style="position: fixed; inset: 0; z-index: 24"></div>
+  </sc-if>
+  <div class="np-layout" style="display: grid; grid-template-columns: minmax(0, 1fr) 248px; gap: 10px; align-items: start">
+  <div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+
+    <section aria-labelledby="np-a" style="background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(11,21,48,.04)">
+      <h3 id="np-a" style="display: flex; align-items: center; gap: 6px; margin: 0; padding: 6px 12px; border-bottom: 1px solid var(--border-soft); font-size: 12px; font-weight: 800; color: var(--ink)"><span class="ms f" aria-hidden="true" style="font-size: 15px; color: var(--link)">badge</span>اطلاعات اصلی</h3>
+      <div class="np-grid np-g4" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; padding: 8px 12px 10px">
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative; grid-column: span 2">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-name">نام {{W1}}<span aria-hidden="true" style="color: var(--danger-text); margin-inline-start: 2px">*</span></label></div>
+          <div class="np-box" style="{{f.name.box}}">
+            <input id="np-name" data-nav="name" type="text" autocomplete="off" value="{{f.name.val}}" placeholder="{{f.name.ph}}" aria-invalid="{{f.name.inv}}" onInput="{{f.name.onInput}}" onBlur="{{f.name.onBlur}}" onKeyDown="{{f.name.onKey}}" style="{{f.name.inp}}">
+          </div>
+          <span role="alert" style="{{f.name.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.name.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-code">کد {{W1}}</label><button type="button" onClick="{{genCode}}" title="ایجاد خودکار کد" style="display: inline-flex; align-items: center; gap: 2px; height: 18px; min-width: 18px; justify-content: center; padding: 0 3px; border: 0; border-radius: 5px; background: var(--primary-soft); color: var(--link); font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer"><span class="ms" style="font-size: 13px">auto_awesome</span>خودکار</button></div>
+          <div class="np-box" style="{{f.code.box}}">
+            <input id="np-code" data-nav="code" type="text" autocomplete="off" value="{{f.code.val}}" placeholder="{{f.code.ph}}" aria-invalid="{{f.code.inv}}" onInput="{{f.code.onInput}}" onBlur="{{f.code.onBlur}}" onKeyDown="{{f.code.onKey}}" style="{{f.code.inp}}">
+          </div>
+          <span role="alert" style="{{f.code.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.code.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><span id="np-l-cat">کتگوری<span aria-hidden="true" style="color: var(--danger-text); margin-inline-start: 2px">*</span></span><button type="button" onClick="{{d.cat.toggle}}" title="{{d.cat.plusTitle}}" style="display: inline-flex; align-items: center; gap: 2px; height: 18px; min-width: 18px; justify-content: center; padding: 0 3px; border: 0; border-radius: 5px; background: var(--primary-soft); color: var(--link); font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer"><span class="ms" style="font-size: 15px">add</span></button></div>
+          <div style="position: relative">
+            <button type="button" data-nav="cat" aria-labelledby="np-l-cat" aria-haspopup="listbox" aria-expanded="{{d.cat.expanded}}" aria-invalid="{{d.cat.inv}}" onClick="{{d.cat.toggle}}" style="{{d.cat.box}}">
+              <sc-if value="{{d.cat.hasIcon}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px; color: var(--muted)">{{d.cat.icon}}</span></sc-if>
+              <span style="{{d.cat.textS}}">{{d.cat.text}}</span>
+              <span class="ms" style="font-size: 17px; color: var(--muted)">expand_more</span>
+            </button>
+            <sc-if value="{{d.cat.open}}" hint-placeholder-val="{{ false }}">
+              <div role="listbox" aria-labelledby="np-l-cat" style="position: absolute; top: calc(100% + 4px); inset-inline: 0; z-index: 26; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; box-shadow: 0 16px 40px -14px rgba(11,21,48,.35); padding: 4px; display: flex; flex-direction: column; gap: 2px">
+                <sc-if value="{{d.cat.searchable}}" hint-placeholder-val="{{ false }}">
+                  <label style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; margin-bottom: 2px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--subtle)">
+                    <span class="ms" style="font-size: 16px">search</span>
+                    <input type="search" autofocus="" value="{{d.cat.q}}" placeholder="جستجو یا ایجاد…" aria-label="جستجو در کتگوری" onInput="{{d.cat.onSearch}}" onKeyDown="{{d.cat.onSearchKey}}" style="flex: 1; width: 0; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 12px; color: var(--ink)">
+                  </label>
+                </sc-if>
+                <div style="max-height: 216px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px">
+                  <sc-for list="{{d.cat.opts}}" as="o" hint-placeholder-count="4">
+                    <button type="button" role="option" aria-selected="{{o.on}}" onClick="{{o.pick}}" style="{{o.style}}">
+                      <sc-if value="{{o.hasIcon}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px; color: var(--muted)">{{o.icon}}</span></sc-if>
+                      <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{o.t}}</span>
+                      <span style="font-size: 10.5px; color: var(--subtle); font-weight: 500">{{o.sub}}</span>
+                      <sc-if value="{{o.on}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px">check</span></sc-if>
+                    </button>
+                  </sc-for>
+                  <sc-if value="{{d.cat.empty}}" hint-placeholder-val="{{ false }}"><span style="padding: 10px 8px; font-size: 11.5px; color: var(--subtle); text-align: center">موردی پیدا نشد</span></sc-if>
+                </div>
+                <sc-if value="{{d.cat.canCreate}}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{d.cat.onCreate}}" style="display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px; border: 0; border-top: 1px solid var(--border-soft); border-radius: 0 0 7px 7px; background: transparent; color: var(--link); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-align: start"><span class="ms" style="font-size: 17px">add_circle</span>{{d.cat.createText}}</button>
+                </sc-if>
+                <sc-if value="{{d.cat.hint}}" hint-placeholder-val="{{ false }}"><span style="padding: 6px 8px 4px; border-top: 1px solid var(--border-soft); font-size: 10.5px; color: var(--subtle)">{{d.cat.hintText}}</span></sc-if>
+                <sc-if value="{{d.cat.canClear}}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{d.cat.clear}}" style="display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 8px; border: 0; border-top: 1px solid var(--border-soft); background: transparent; color: var(--muted); font: inherit; font-size: 11.5px; cursor: pointer; text-align: start"><span class="ms" style="font-size: 16px">backspace</span>پاک کردن انتخاب</button>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+          <span role="alert" style="{{d.cat.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{d.cat.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><span id="np-l-brand">برند</span><button type="button" onClick="{{d.brand.toggle}}" title="{{d.brand.plusTitle}}" style="display: inline-flex; align-items: center; gap: 2px; height: 18px; min-width: 18px; justify-content: center; padding: 0 3px; border: 0; border-radius: 5px; background: var(--primary-soft); color: var(--link); font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer"><span class="ms" style="font-size: 15px">add</span></button></div>
+          <div style="position: relative">
+            <button type="button" data-nav="brand" aria-labelledby="np-l-brand" aria-haspopup="listbox" aria-expanded="{{d.brand.expanded}}" aria-invalid="{{d.brand.inv}}" onClick="{{d.brand.toggle}}" style="{{d.brand.box}}">
+              <sc-if value="{{d.brand.hasIcon}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px; color: var(--muted)">{{d.brand.icon}}</span></sc-if>
+              <span style="{{d.brand.textS}}">{{d.brand.text}}</span>
+              <span class="ms" style="font-size: 17px; color: var(--muted)">expand_more</span>
+            </button>
+            <sc-if value="{{d.brand.open}}" hint-placeholder-val="{{ false }}">
+              <div role="listbox" aria-labelledby="np-l-brand" style="position: absolute; top: calc(100% + 4px); inset-inline: 0; z-index: 26; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; box-shadow: 0 16px 40px -14px rgba(11,21,48,.35); padding: 4px; display: flex; flex-direction: column; gap: 2px">
+                <sc-if value="{{d.brand.searchable}}" hint-placeholder-val="{{ false }}">
+                  <label style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; margin-bottom: 2px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--subtle)">
+                    <span class="ms" style="font-size: 16px">search</span>
+                    <input type="search" autofocus="" value="{{d.brand.q}}" placeholder="جستجو یا ایجاد…" aria-label="جستجو در برند" onInput="{{d.brand.onSearch}}" onKeyDown="{{d.brand.onSearchKey}}" style="flex: 1; width: 0; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 12px; color: var(--ink)">
+                  </label>
+                </sc-if>
+                <div style="max-height: 216px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px">
+                  <sc-for list="{{d.brand.opts}}" as="o" hint-placeholder-count="4">
+                    <button type="button" role="option" aria-selected="{{o.on}}" onClick="{{o.pick}}" style="{{o.style}}">
+                      <sc-if value="{{o.hasIcon}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px; color: var(--muted)">{{o.icon}}</span></sc-if>
+                      <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{o.t}}</span>
+                      <span style="font-size: 10.5px; color: var(--subtle); font-weight: 500">{{o.sub}}</span>
+                      <sc-if value="{{o.on}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px">check</span></sc-if>
+                    </button>
+                  </sc-for>
+                  <sc-if value="{{d.brand.empty}}" hint-placeholder-val="{{ false }}"><span style="padding: 10px 8px; font-size: 11.5px; color: var(--subtle); text-align: center">موردی پیدا نشد</span></sc-if>
+                </div>
+                <sc-if value="{{d.brand.canCreate}}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{d.brand.onCreate}}" style="display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px; border: 0; border-top: 1px solid var(--border-soft); border-radius: 0 0 7px 7px; background: transparent; color: var(--link); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-align: start"><span class="ms" style="font-size: 17px">add_circle</span>{{d.brand.createText}}</button>
+                </sc-if>
+                <sc-if value="{{d.brand.hint}}" hint-placeholder-val="{{ false }}"><span style="padding: 6px 8px 4px; border-top: 1px solid var(--border-soft); font-size: 10.5px; color: var(--subtle)">{{d.brand.hintText}}</span></sc-if>
+                <sc-if value="{{d.brand.canClear}}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{d.brand.clear}}" style="display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 8px; border: 0; border-top: 1px solid var(--border-soft); background: transparent; color: var(--muted); font: inherit; font-size: 11.5px; cursor: pointer; text-align: start"><span class="ms" style="font-size: 16px">backspace</span>پاک کردن انتخاب</button>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+          <span role="alert" style="{{d.brand.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{d.brand.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><span id="np-l-gen">جنریک</span><button type="button" onClick="{{d.gen.toggle}}" title="{{d.gen.plusTitle}}" style="display: inline-flex; align-items: center; gap: 2px; height: 18px; min-width: 18px; justify-content: center; padding: 0 3px; border: 0; border-radius: 5px; background: var(--primary-soft); color: var(--link); font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer"><span class="ms" style="font-size: 15px">add</span></button></div>
+          <div style="position: relative">
+            <button type="button" data-nav="gen" aria-labelledby="np-l-gen" aria-haspopup="listbox" aria-expanded="{{d.gen.expanded}}" aria-invalid="{{d.gen.inv}}" onClick="{{d.gen.toggle}}" style="{{d.gen.box}}">
+              <sc-if value="{{d.gen.hasIcon}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px; color: var(--muted)">{{d.gen.icon}}</span></sc-if>
+              <span style="{{d.gen.textS}}">{{d.gen.text}}</span>
+              <span class="ms" style="font-size: 17px; color: var(--muted)">expand_more</span>
+            </button>
+            <sc-if value="{{d.gen.open}}" hint-placeholder-val="{{ false }}">
+              <div role="listbox" aria-labelledby="np-l-gen" style="position: absolute; top: calc(100% + 4px); inset-inline: 0; z-index: 26; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; box-shadow: 0 16px 40px -14px rgba(11,21,48,.35); padding: 4px; display: flex; flex-direction: column; gap: 2px">
+                <sc-if value="{{d.gen.searchable}}" hint-placeholder-val="{{ false }}">
+                  <label style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; margin-bottom: 2px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--subtle)">
+                    <span class="ms" style="font-size: 16px">search</span>
+                    <input type="search" autofocus="" value="{{d.gen.q}}" placeholder="جستجو یا ایجاد…" aria-label="جستجو در جنریک" onInput="{{d.gen.onSearch}}" onKeyDown="{{d.gen.onSearchKey}}" style="flex: 1; width: 0; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 12px; color: var(--ink)">
+                  </label>
+                </sc-if>
+                <div style="max-height: 216px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px">
+                  <sc-for list="{{d.gen.opts}}" as="o" hint-placeholder-count="4">
+                    <button type="button" role="option" aria-selected="{{o.on}}" onClick="{{o.pick}}" style="{{o.style}}">
+                      <sc-if value="{{o.hasIcon}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px; color: var(--muted)">{{o.icon}}</span></sc-if>
+                      <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{o.t}}</span>
+                      <span style="font-size: 10.5px; color: var(--subtle); font-weight: 500">{{o.sub}}</span>
+                      <sc-if value="{{o.on}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px">check</span></sc-if>
+                    </button>
+                  </sc-for>
+                  <sc-if value="{{d.gen.empty}}" hint-placeholder-val="{{ false }}"><span style="padding: 10px 8px; font-size: 11.5px; color: var(--subtle); text-align: center">موردی پیدا نشد</span></sc-if>
+                </div>
+                <sc-if value="{{d.gen.canCreate}}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{d.gen.onCreate}}" style="display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px; border: 0; border-top: 1px solid var(--border-soft); border-radius: 0 0 7px 7px; background: transparent; color: var(--link); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-align: start"><span class="ms" style="font-size: 17px">add_circle</span>{{d.gen.createText}}</button>
+                </sc-if>
+                <sc-if value="{{d.gen.hint}}" hint-placeholder-val="{{ false }}"><span style="padding: 6px 8px 4px; border-top: 1px solid var(--border-soft); font-size: 10.5px; color: var(--subtle)">{{d.gen.hintText}}</span></sc-if>
+                <sc-if value="{{d.gen.canClear}}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{d.gen.clear}}" style="display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 8px; border: 0; border-top: 1px solid var(--border-soft); background: transparent; color: var(--muted); font: inherit; font-size: 11.5px; cursor: pointer; text-align: start"><span class="ms" style="font-size: 16px">backspace</span>پاک کردن انتخاب</button>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+          <span role="alert" style="{{d.gen.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{d.gen.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><span id="np-l-unit">واحد<span aria-hidden="true" style="color: var(--danger-text); margin-inline-start: 2px">*</span></span><button type="button" onClick="{{d.unit.toggle}}" title="{{d.unit.plusTitle}}" style="display: inline-flex; align-items: center; gap: 2px; height: 18px; min-width: 18px; justify-content: center; padding: 0 3px; border: 0; border-radius: 5px; background: var(--primary-soft); color: var(--link); font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer"><span class="ms" style="font-size: 15px">add</span></button></div>
+          <div style="position: relative">
+            <button type="button" data-nav="unit" aria-labelledby="np-l-unit" aria-haspopup="listbox" aria-expanded="{{d.unit.expanded}}" aria-invalid="{{d.unit.inv}}" onClick="{{d.unit.toggle}}" style="{{d.unit.box}}">
+              <sc-if value="{{d.unit.hasIcon}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px; color: var(--muted)">{{d.unit.icon}}</span></sc-if>
+              <span style="{{d.unit.textS}}">{{d.unit.text}}</span>
+              <span class="ms" style="font-size: 17px; color: var(--muted)">expand_more</span>
+            </button>
+            <sc-if value="{{d.unit.open}}" hint-placeholder-val="{{ false }}">
+              <div role="listbox" aria-labelledby="np-l-unit" style="position: absolute; top: calc(100% + 4px); inset-inline: 0; z-index: 26; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; box-shadow: 0 16px 40px -14px rgba(11,21,48,.35); padding: 4px; display: flex; flex-direction: column; gap: 2px">
+                <sc-if value="{{d.unit.searchable}}" hint-placeholder-val="{{ false }}">
+                  <label style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; margin-bottom: 2px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--subtle)">
+                    <span class="ms" style="font-size: 16px">search</span>
+                    <input type="search" autofocus="" value="{{d.unit.q}}" placeholder="جستجو یا ایجاد…" aria-label="جستجو در واحد" onInput="{{d.unit.onSearch}}" onKeyDown="{{d.unit.onSearchKey}}" style="flex: 1; width: 0; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 12px; color: var(--ink)">
+                  </label>
+                </sc-if>
+                <div style="max-height: 216px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px">
+                  <sc-for list="{{d.unit.opts}}" as="o" hint-placeholder-count="4">
+                    <button type="button" role="option" aria-selected="{{o.on}}" onClick="{{o.pick}}" style="{{o.style}}">
+                      <sc-if value="{{o.hasIcon}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px; color: var(--muted)">{{o.icon}}</span></sc-if>
+                      <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{o.t}}</span>
+                      <span style="font-size: 10.5px; color: var(--subtle); font-weight: 500">{{o.sub}}</span>
+                      <sc-if value="{{o.on}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px">check</span></sc-if>
+                    </button>
+                  </sc-for>
+                  <sc-if value="{{d.unit.empty}}" hint-placeholder-val="{{ false }}"><span style="padding: 10px 8px; font-size: 11.5px; color: var(--subtle); text-align: center">موردی پیدا نشد</span></sc-if>
+                </div>
+                <sc-if value="{{d.unit.canCreate}}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{d.unit.onCreate}}" style="display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px; border: 0; border-top: 1px solid var(--border-soft); border-radius: 0 0 7px 7px; background: transparent; color: var(--link); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-align: start"><span class="ms" style="font-size: 17px">add_circle</span>{{d.unit.createText}}</button>
+                </sc-if>
+                <sc-if value="{{d.unit.hint}}" hint-placeholder-val="{{ false }}"><span style="padding: 6px 8px 4px; border-top: 1px solid var(--border-soft); font-size: 10.5px; color: var(--subtle)">{{d.unit.hintText}}</span></sc-if>
+                <sc-if value="{{d.unit.canClear}}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{d.unit.clear}}" style="display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 8px; border: 0; border-top: 1px solid var(--border-soft); background: transparent; color: var(--muted); font: inherit; font-size: 11.5px; cursor: pointer; text-align: start"><span class="ms" style="font-size: 16px">backspace</span>پاک کردن انتخاب</button>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+          <span role="alert" style="{{d.unit.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{d.unit.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-per">تعداد در {{packWord}}<span aria-hidden="true" style="color: var(--danger-text); margin-inline-start: 2px">*</span></label></div>
+          <div class="np-box" style="{{f.per.box}}">
+            <input id="np-per" data-nav="per" type="text" inputmode="numeric" autocomplete="off" value="{{f.per.val}}" placeholder="{{f.per.ph}}" aria-invalid="{{f.per.inv}}" onInput="{{f.per.onInput}}" onBlur="{{f.per.onBlur}}" onKeyDown="{{f.per.onKey}}" style="{{f.per.inp}}"><span style="flex-shrink: 0; margin-inline-end: 8px; font-size: 11px; font-weight: 700; color: var(--muted)">{{unitWord}}</span>
+          </div>
+          <span role="alert" style="{{f.per.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.per.msg}}</span>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="np-b" style="background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(11,21,48,.04)">
+      <h3 id="np-b" style="display: flex; align-items: center; gap: 6px; margin: 0; padding: 6px 12px; border-bottom: 1px solid var(--border-soft); font-size: 12px; font-weight: 800; color: var(--ink)"><span class="ms f" aria-hidden="true" style="font-size: 15px; color: var(--link)">payments</span>قیمت و موجودی</h3>
+      <div class="np-grid np-g4" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; padding: 8px 12px 10px">
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-buy">نرخ خرید {{packWord}}<span aria-hidden="true" style="color: var(--danger-text); margin-inline-start: 2px">*</span></label></div>
+          <div class="np-box" style="{{f.buy.box}}">
+            <input id="np-buy" data-nav="buy" type="text" inputmode="decimal" autocomplete="off" value="{{f.buy.val}}" placeholder="{{f.buy.ph}}" aria-invalid="{{f.buy.inv}}" onInput="{{f.buy.onInput}}" onBlur="{{f.buy.onBlur}}" onKeyDown="{{f.buy.onKey}}" style="{{f.buy.inp}}">
+            <div style="position: relative; display: flex">
+              <button type="button" onClick="{{bcurM.toggle}}" aria-haspopup="listbox" aria-label="ارز" title="{{bcurM.name}}" style="{{sufS}}"><span style="font-family: Inter, sans-serif">{{bcurM.sym}}</span><span class="ms" style="font-size: 14px; color: var(--muted)">expand_more</span></button>
+              <sc-if value="{{bcurM.open}}" hint-placeholder-val="{{ false }}">
+                <div role="listbox" aria-label="ارز" style="position: absolute; top: 32px; inset-inline-end: 0; z-index: 26; width: 196px; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; box-shadow: 0 16px 40px -14px rgba(11,21,48,.35); padding: 4px; display: flex; flex-direction: column; gap: 1px">
+                  <sc-for list="{{bcurM.opts}}" as="o" hint-placeholder-count="3">
+                    <button type="button" role="option" aria-selected="{{o.on}}" onClick="{{o.pick}}" style="{{o.style}}"><span style="width: 26px; font-family: Inter, sans-serif; font-weight: 800; text-align: center">{{o.sym}}</span><span style="flex: 1">{{o.t}}</span><span dir="ltr" style="font-size: 10px; color: var(--subtle)">{{o.sub}}</span></button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+          <span role="alert" style="{{f.buy.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.buy.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-sell">نرخ فروش {{packWord}}<span aria-hidden="true" style="color: var(--danger-text); margin-inline-start: 2px">*</span></label></div>
+          <div class="np-box" style="{{f.sell.box}}">
+            <input id="np-sell" data-nav="sell" type="text" inputmode="decimal" autocomplete="off" value="{{f.sell.val}}" placeholder="{{f.sell.ph}}" aria-invalid="{{f.sell.inv}}" onInput="{{f.sell.onInput}}" onBlur="{{f.sell.onBlur}}" onKeyDown="{{f.sell.onKey}}" style="{{f.sell.inp}}"><span dir="ltr" style="flex-shrink: 0; font-family: Inter, sans-serif; font-size: 11px; font-weight: 700; color: var(--ok-text); margin-inline-end: 6px; white-space: nowrap">{{sellHint}}</span><span role="group" aria-label="نوع نرخ فروش" style="flex-shrink: 0; display: flex; gap: 1px; padding: 2px; margin-inline-end: 4px; border-radius: 6px; background: var(--surface-3)"><sc-for list="{{smodeOpts}}" as="o" hint-placeholder-count="2"><button type="button" onClick="{{o.pick}}" style="{{o.style}}">{{o.t}}</button></sc-for></span>
+          </div>
+          <span role="alert" style="{{f.sell.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.sell.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><span id="np-l-wh">گدام</span></div>
+          <div style="position: relative">
+            <button type="button" data-nav="wh" aria-labelledby="np-l-wh" aria-haspopup="listbox" aria-expanded="{{d.wh.expanded}}" aria-invalid="{{d.wh.inv}}" onClick="{{d.wh.toggle}}" style="{{d.wh.box}}">
+              <sc-if value="{{d.wh.hasIcon}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px; color: var(--muted)">{{d.wh.icon}}</span></sc-if>
+              <span style="{{d.wh.textS}}">{{d.wh.text}}</span>
+              <span class="ms" style="font-size: 17px; color: var(--muted)">expand_more</span>
+            </button>
+            <sc-if value="{{d.wh.open}}" hint-placeholder-val="{{ false }}">
+              <div role="listbox" aria-labelledby="np-l-wh" style="position: absolute; top: calc(100% + 4px); inset-inline: 0; z-index: 26; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; box-shadow: 0 16px 40px -14px rgba(11,21,48,.35); padding: 4px; display: flex; flex-direction: column; gap: 2px">
+                <sc-if value="{{d.wh.searchable}}" hint-placeholder-val="{{ false }}">
+                  <label style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; margin-bottom: 2px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border-soft); color: var(--subtle)">
+                    <span class="ms" style="font-size: 16px">search</span>
+                    <input type="search" autofocus="" value="{{d.wh.q}}" placeholder="جستجو یا ایجاد…" aria-label="جستجو در گدام" onInput="{{d.wh.onSearch}}" onKeyDown="{{d.wh.onSearchKey}}" style="flex: 1; width: 0; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 12px; color: var(--ink)">
+                  </label>
+                </sc-if>
+                <div style="max-height: 216px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px">
+                  <sc-for list="{{d.wh.opts}}" as="o" hint-placeholder-count="4">
+                    <button type="button" role="option" aria-selected="{{o.on}}" onClick="{{o.pick}}" style="{{o.style}}">
+                      <sc-if value="{{o.hasIcon}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px; color: var(--muted)">{{o.icon}}</span></sc-if>
+                      <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{o.t}}</span>
+                      <span style="font-size: 10.5px; color: var(--subtle); font-weight: 500">{{o.sub}}</span>
+                      <sc-if value="{{o.on}}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size: 16px">check</span></sc-if>
+                    </button>
+                  </sc-for>
+                  <sc-if value="{{d.wh.empty}}" hint-placeholder-val="{{ false }}"><span style="padding: 10px 8px; font-size: 11.5px; color: var(--subtle); text-align: center">موردی پیدا نشد</span></sc-if>
+                </div>
+                <sc-if value="{{d.wh.canCreate}}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{d.wh.onCreate}}" style="display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px; border: 0; border-top: 1px solid var(--border-soft); border-radius: 0 0 7px 7px; background: transparent; color: var(--link); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-align: start"><span class="ms" style="font-size: 17px">add_circle</span>{{d.wh.createText}}</button>
+                </sc-if>
+                <sc-if value="{{d.wh.hint}}" hint-placeholder-val="{{ false }}"><span style="padding: 6px 8px 4px; border-top: 1px solid var(--border-soft); font-size: 10.5px; color: var(--subtle)">{{d.wh.hintText}}</span></sc-if>
+                <sc-if value="{{d.wh.canClear}}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{d.wh.clear}}" style="display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 8px; border: 0; border-top: 1px solid var(--border-soft); background: transparent; color: var(--muted); font: inherit; font-size: 11.5px; cursor: pointer; text-align: start"><span class="ms" style="font-size: 16px">backspace</span>پاک کردن انتخاب</button>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+          <span role="alert" style="{{d.wh.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{d.wh.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-qty">تعداد در گدام</label></div>
+          <div class="np-box" style="{{f.qty.box}}">
+            <input id="np-qty" data-nav="qty" type="text" inputmode="decimal" autocomplete="off" value="{{f.qty.val}}" placeholder="{{f.qty.ph}}" aria-invalid="{{f.qty.inv}}" onInput="{{f.qty.onInput}}" onBlur="{{f.qty.onBlur}}" onKeyDown="{{f.qty.onKey}}" style="{{f.qty.inp}}"><span style="flex-shrink: 0; margin-inline-end: 8px; font-size: 11px; font-weight: 700; color: var(--muted)">{{unitWord}}</span>
+          </div>
+          <span role="alert" style="{{f.qty.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.qty.msg}}</span>
+        </div>
+        <sc-if value="{{pharm}}" hint-placeholder-val="{{ true }}">
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-batch">بیچ</label></div>
+          <div class="np-box" style="{{f.batch.box}}">
+            <input id="np-batch" data-nav="batch" type="text" autocomplete="off" value="{{f.batch.val}}" placeholder="{{f.batch.ph}}" aria-invalid="{{f.batch.inv}}" onInput="{{f.batch.onInput}}" onBlur="{{f.batch.onBlur}}" onKeyDown="{{f.batch.onKey}}" style="{{f.batch.inp}}">
+          </div>
+          <span role="alert" style="{{f.batch.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.batch.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-mfg">تاریخ تولید</label></div>
+          <div class="np-box" style="{{f.mfg.box}}">
+            <input id="np-mfg" data-nav="mfg" type="text" autocomplete="off" value="{{f.mfg.val}}" placeholder="{{f.mfg.ph}}" aria-invalid="{{f.mfg.inv}}" onInput="{{f.mfg.onInput}}" onBlur="{{f.mfg.onBlur}}" onKeyDown="{{f.mfg.onKey}}" style="{{f.mfg.inp}}">
+          </div>
+          <span role="alert" style="{{f.mfg.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.mfg.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-exp">تاریخ انقضاء</label></div>
+          <div class="np-box" style="{{f.exp.box}}">
+            <input id="np-exp" data-nav="exp" type="text" autocomplete="off" value="{{f.exp.val}}" placeholder="{{f.exp.ph}}" aria-invalid="{{f.exp.inv}}" onInput="{{f.exp.onInput}}" onBlur="{{f.exp.onBlur}}" onKeyDown="{{f.exp.onKey}}" style="{{f.exp.inp}}">
+          </div>
+          <span role="alert" style="{{f.exp.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.exp.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-edays">هشدار انقضاء</label></div>
+          <div class="np-box" style="{{f.edays.box}}">
+            <input id="np-edays" data-nav="edays" type="text" inputmode="numeric" autocomplete="off" value="{{f.edays.val}}" placeholder="{{f.edays.ph}}" aria-invalid="{{f.edays.inv}}" onInput="{{f.edays.onInput}}" onBlur="{{f.edays.onBlur}}" onKeyDown="{{f.edays.onKey}}" style="{{f.edays.inp}}"><span style="flex-shrink: 0; margin-inline-end: 8px; font-size: 11px; font-weight: 700; color: var(--muted)">روز</span>
+          </div>
+          <span role="alert" style="{{f.edays.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.edays.msg}}</span>
+        </div>
+        </sc-if>
+      </div>
+    </section>
+
+    <section aria-labelledby="np-c" style="background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(11,21,48,.04)">
+      <h3 id="np-c" style="display: flex; align-items: center; gap: 6px; margin: 0; padding: 6px 12px; border-bottom: 1px solid var(--border-soft); font-size: 12px; font-weight: 800; color: var(--ink)"><span class="ms f" aria-hidden="true" style="font-size: 15px; color: var(--link)">notes</span>هشدار و اطلاعات اضافی</h3>
+      <div class="np-grid np-g4 np-c4" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; padding: 8px 12px 10px">
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)"><label for="np-minq">هشدار مقدار</label></div>
+          <div class="np-box" style="{{f.minq.box}}">
+            <input id="np-minq" data-nav="minq" type="text" inputmode="numeric" autocomplete="off" value="{{f.minq.val}}" placeholder="{{f.minq.ph}}" aria-invalid="{{f.minq.inv}}" onInput="{{f.minq.onInput}}" onBlur="{{f.minq.onBlur}}" onKeyDown="{{f.minq.onKey}}" style="{{f.minq.inp}}"><span style="flex-shrink: 0; margin-inline-end: 8px; font-size: 11px; font-weight: 700; color: var(--muted)">{{unitWord}}</span>
+          </div>
+          <span role="alert" style="{{f.minq.msgS}}"><span class="ms" style="font-size: 13px">error</span>{{f.minq.msg}}</span>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative; grid-column: span 2">
+          <label for="np-desc" style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)">توضیحات</label>
+          <textarea id="np-desc" class="np-box" rows="1" value="{{fDesc}}" onInput="{{onDesc}}" style="width: 100%; min-height: 30px; height: 30px; resize: vertical; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); font: inherit; font-size: 12px; line-height: 1.6; color: var(--ink); box-sizing: border-box; outline: 0"></textarea>
+        </div>
+        <div class="np-f" style="display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative">
+          <span style="display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; font-size: 11px; font-weight: 700; color: var(--text)">تصویر</span>
+          <sc-if value="{{noImg}}" hint-placeholder-val="{{ true }}">
+            <label class="np-drop" style="height: 30px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1.5px dashed var(--border-strong); border-radius: 8px; background: var(--surface-2); cursor: pointer; font-size: 12px; font-weight: 700; color: var(--link)">
+              <input type="file" accept="image/*" onChange="{{onImg}}" class="sr"><span class="ms" style="font-size: 18px">add_photo_alternate</span>انتخاب تصویر
+            </label>
+          </sc-if>
+          <sc-if value="{{hasImg}}" hint-placeholder-val="{{ false }}">
+            <div style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 8px; box-sizing: border-box">
+              <img src="{{img}}" alt="تصویر انتخاب‌شده" style="width: 24px; height: 24px; object-fit: cover; border-radius: 4px; background: var(--surface-3)">
+              <span dir="ltr" style="flex: 1; min-width: 0; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right">{{imgName}}</span>
+              <button type="button" onClick="{{removeImg}}" aria-label="حذف تصویر" style="width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--danger-text); cursor: pointer; display: flex; align-items: center; justify-content: center"><span class="ms" style="font-size: 17px">delete</span></button>
+            </div>
+          </sc-if>
+          <sc-if value="{{hasImgErr}}" hint-placeholder-val="{{ false }}"><span role="alert" style="font-size: 10.5px; color: var(--danger-text)">{{imgErr}}</span></sc-if>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <aside class="np-side" aria-label="خلاصه ثبت" style="position: sticky; top: 10px; align-self: start; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(11,21,48,.04), 0 10px 28px -18px rgba(11,21,48,.35); overflow: hidden">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 7px 12px">
+      <h3 style="margin: 0; font-size: 11.5px; font-weight: 800; color: var(--muted)">خلاصه ثبت</h3>
+      <span style="{{smStateS}}"><span class="ms f" style="font-size: 13px">{{smIcon}}</span>{{smState}}</span>
+    </div>
+    <span aria-hidden="true" style="display: block; height: 3px; background: var(--surface-3)"><span style="{{doneBar}}"></span></span>
+
+    <div style="display: flex; gap: 10px; align-items: center; padding: 12px">
+      <span aria-hidden="true" style="{{smTile}}"><span class="ms f" style="font-size: 20px">{{pvIcon}}</span></span>
+      <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1">
+        <span dir="ltr" style="{{smNameS}}">{{smName}}</span>
+        <span style="display: flex; flex-wrap: wrap; gap: 4px">
+          <span dir="ltr" style="height: 18px; display: inline-flex; align-items: center; padding: 0 6px; border-radius: 5px; background: var(--primary-soft); color: var(--link); font-family: Inter, sans-serif; font-size: 10.5px; font-weight: 700">{{pvCode}}</span>
+          <span style="height: 18px; display: inline-flex; align-items: center; padding: 0 6px; border-radius: 5px; background: var(--surface-3); color: var(--text); font-size: 10.5px; font-weight: 700">{{smCat}}</span>
+        </span>
+      </div>
+    </div>
+
+    <div style="margin: 0 12px; padding: 10px; border-radius: 11px; background: linear-gradient(135deg, var(--primary-soft), var(--surface-2) 75%); border: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 8px">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+        <div style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 10.5px; color: var(--muted)">خرید هر {{pvPU}}</span><span dir="ltr" style="font-family: Inter, sans-serif; font-size: 15px; font-weight: 800; color: var(--ink); text-align: right">{{smBuyBig}}</span></div>
+        <div style="display: flex; flex-direction: column; gap: 1px"><span style="font-size: 10.5px; color: var(--muted)">فروش هر {{pvPU}}</span><span dir="ltr" style="font-family: Inter, sans-serif; font-size: 15px; font-weight: 800; color: var(--link); text-align: right">{{smSellBig}}</span></div>
+      </div>
+      <span aria-hidden="true" style="display: block; height: 5px; border-radius: 999px; background: var(--surface-3); overflow: hidden"><span style="{{pvBar}}"></span></span>
+      <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: var(--muted)"><span>مفاد <b dir="ltr" style="font-family: Inter, sans-serif; color: var(--ink)">{{smProfit}}</b></span><span style="{{pvMarginS}}">{{pvMargin}}</span></div>
+    </div>
+
+    <dl style="margin: 0; padding: 10px 12px 4px; display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; font-size: 11.5px; align-items: baseline">
+      <dt style="color: var(--muted)">واحد</dt><dd style="margin: 0; font-weight: 700; color: var(--ink); text-align: left">{{smUnit}}</dd>
+      <dt style="color: var(--muted)">برند</dt><dd style="margin: 0; font-weight: 700; color: var(--ink); text-align: left">{{smBrand}}</dd>
+      <dt style="color: var(--muted)">جنریک</dt><dd dir="auto" style="margin: 0; font-weight: 700; color: var(--ink); text-align: left">{{smGen}}</dd>
+    </dl>
+
+    <div style="margin: 6px 12px 12px; padding: 9px 10px; border-radius: 11px; border: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 6px">
+      <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted)"><span class="ms" style="font-size: 15px">warehouse</span><span style="flex: 1">{{smWh}}</span></div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px"><span style="font-size: 13px; font-weight: 800; color: var(--ink)">{{smStock}}</span><span dir="ltr" style="font-family: Inter, sans-serif; font-size: 11px; font-weight: 700; color: var(--muted)">{{smVal}}</span></div>
+      <sc-if value="{{pharm}}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; color: var(--muted)"><span>بیچ <b dir="ltr" style="font-family: Inter, sans-serif; color: var(--ink)">{{smBatch}}</b></span><span style="{{smExpChip}}"><span class="ms" style="font-size: 12px">event</span>{{smExp}}</span></div>
+      </sc-if>
+      <div style="display: flex; gap: 10px; font-size: 10.5px; color: var(--subtle); border-top: 1px dashed var(--border-soft); padding-top: 6px"><span style="display: inline-flex; align-items: center; gap: 3px"><span class="ms" style="font-size: 13px">notifications</span>{{smMin}}</span><sc-if value="{{pharm}}" hint-placeholder-val="{{ true }}"><span>· {{smEd}}</span></sc-if></div>
+    </div>
+  </aside>
+  </div>
+
+  <div class="np-bar" style="display: flex; align-items: center; gap: 8px; padding-top: 2px">
+    <a href="Products.dc.html" class="btn np-cancel" style="display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; padding: 0 12px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; border: 1px solid var(--border); background: var(--surface); color: var(--text); margin-inline-end: auto">لغو</a>
+    <button type="button" onClick="{{saveNew}}" title="Ctrl+Enter" class="btn" style="display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; padding: 0 12px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; border: 1px solid #2F6FED; background: var(--surface); color: var(--link)">ذخیره و ایجاد دیگر</button>
+    <button type="button" onClick="{{saveOne}}" title="Ctrl+S" class="btnp" style="display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; padding: 0 12px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; border: 0; background: #2F6FED; color: #FFFFFF; box-shadow: 0 8px 18px -8px rgba(47,111,237,.9)"><span class="ms" style="font-size: 17px">check</span>ذخیره</button>
+  </div>
+
+  <sc-if value="{{hasToast}}" hint-placeholder-val="{{ false }}">
+    <div role="status" class="np-toast" style="position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 8px 8px 8px 12px; padding-inline-start: 12px; padding-inline-end: 8px; border-radius: 12px; background: #0B1530; color: #FFFFFF; box-shadow: 0 18px 40px -14px rgba(11,21,48,.6); font-size: 12px; box-sizing: border-box">
+      <span class="ms f" style="font-size: 18px; color: #4ADE80">check_circle</span>
+      <span style="flex: 1; min-width: 0; font-weight: 600; line-height: 1.5">{{toast}}</span>
+      <sc-if value="{{toastNew}}" hint-placeholder-val="{{ true }}">
+        <a href="Products.dc.html" style="flex-shrink: 0; height: 28px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 7px; background: rgba(255,255,255,.12); color: #FFFFFF; font-size: 11.5px; font-weight: 700; white-space: nowrap">مشاهده لیست</a>
+        <button type="button" onClick="{{newAfter}}" style="flex-shrink: 0; height: 28px; padding: 0 10px; border: 0; border-radius: 7px; background: #2F6FED; color: #FFFFFF; font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; white-space: nowrap">ثبت بعدی</button>
+      </sc-if>
+      <button type="button" onClick="{{closeToast}}" aria-label="بستن" style="flex-shrink: 0; width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: rgba(255,255,255,.7); cursor: pointer; display: flex; align-items: center; justify-content: center"><span class="ms" style="font-size: 17px">close</span></button>
+    </div>
+  </sc-if>
+  </div>
+
+</main>
+
+<!-- Mobile drawer backdrop -->
+<sc-if value="{{mobileOpen}}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{closeNav}}" class="mob-only" style="position: fixed; inset: 0; z-index: 35; background: rgba(15,23,42,.4)"></div>
+</sc-if>
+
+<!-- Mobile bottom navigation -->
+<nav class="bnav" aria-label="ناوبری پایین">
+  <a href="Main.dc.html" class="bn"><span class="ms" style="font-size: 22px">space_dashboard</span>داشبورد</a>
+  <a href="Sales.dc.html" class="bn"><span class="ms" style="font-size: 22px">shopping_cart</span>فروش‌ها</a>
+  <a href="#" aria-label="POS" style="width: 52px; height: 52px; border-radius: 16px; background: #2F6FED; color: #FFFFFF; display: flex; align-items: center; justify-content: center; margin-top: -22px; box-shadow: 0 10px 20px -8px rgba(47,111,237,.8); border: 4px solid var(--surface)"><span class="ms f" style="font-size: 24px">point_of_sale</span></a>
+  <a href="#" class="bn"><span class="ms" style="font-size: 22px">inventory_2</span>محصولات</a>
+  <button onClick="{{openNav}}" class="bn"><span class="ms" style="font-size: 22px">menu</span>بیشتر</button>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"pharmacy":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { notifOpen: false, nTab: 'all', allRead: false, dark: !!this.props.dark, rwRange: 'today', whRange: 'week', whHidden: {}, mobileOpen: false, collapsed: false, reportsOpen: false, att: 'stock', range: 'week', hidden: {}, editRates: false, tx: 'all' };
+  }
+  renderVals() {
+    const s = this.state;
+    const fmt = (n) => Math.round(n).toLocaleString('en-US');
+
+    const pts = (a, w, h, pad) => {
+      const max = Math.max(...a), min = Math.min(...a), r = (max - min) || 1;
+      return a.map((v, i) => (i / (a.length - 1) * w).toFixed(1) + ',' + (pad + (h - 2 * pad) * (1 - (v - min) / r)).toFixed(1)).join(' ');
+    };
+    const W = {
+      sales: [6200, 3100, 7400, 8100, 6900, 9050, 7940],
+      buy: [4800, 0, 5200, 3900, 6100, 4300, 5060],
+      exp: [350, 0, 420, 180, 600, 250, 0],
+      profit: [980, 410, 1150, 1320, 1010, 1460, 1249]
+    };
+    const spark = { sales: pts(W.sales, 120, 36, 4), buy: pts(W.buy, 120, 36, 4), exp: pts(W.exp, 120, 36, 4), profit: pts(W.profit, 120, 36, 4) };
+
+    const M = {
+      sales: [41200, 45800, 39900, 48600],
+      buy: [30100, 33500, 28700, 34900],
+      exp: [2100, 1900, 2600, 2300],
+      profit: [6800, 7400, 6100, 8200]
+    };
+    const D = s.range === 'week' ? W : M;
+    const xlabels = s.range === 'week'
+      ? ['پنج‌شنبه', 'جمعه', 'شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'امروز']
+      : ['هفته 1', 'هفته 2', 'هفته 3', 'هفته 4'];
+    const keys = ['sales', 'buy', 'profit', 'exp'];
+    const visible = keys.filter((k) => !s.hidden[k]);
+    const rawMax = Math.max(1, ...visible.flatMap((k) => D[k]));
+    const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
+    const nice = Math.ceil(rawMax / mag) * mag;
+    const CH = 250, CW = 700, TOP = 10;
+    const line = (a) => a.map((v, i) => (i / (a.length - 1) * CW).toFixed(1) + ',' + (TOP + (CH - TOP) * (1 - v / nice)).toFixed(1)).join(' ');
+    const lines = { sales: line(D.sales), buy: line(D.buy), profit: line(D.profit), exp: line(D.exp) };
+    const area = '0,' + CH + ' ' + lines.sales + ' ' + CW + ',' + CH;
+    const short = (n) => n >= 1000 ? (n / 1000) + 'k' : String(n);
+    const ticks = [1, 0.75, 0.5, 0.25, 0].map((f) => ({
+      label: short(nice * f),
+      style: 'position: absolute; left: 0; right: 0; height: 0; display: flex; align-items: center; gap: 6px; top: ' + ((TOP + (CH - TOP) * (1 - f)) / CH * 100).toFixed(2) + '%'
+    }));
+    const svgBase = 'position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; ';
+    const vis = {};
+    keys.forEach((k) => { vis[k] = svgBase + (s.hidden[k] ? 'display: none' : ''); });
+    const COL = { sales: 'var(--link)', buy: '#64748B', profit: '#16A34A', exp: '#D97706' };
+    const NAME = { sales: 'فروش', buy: 'خرید', profit: 'مفاد', exp: 'مصرف' };
+    const legend = keys.map((k) => {
+      const off = !!s.hidden[k];
+      return {
+        label: NAME[k], pressed: off ? 'false' : 'true',
+        toggle: () => this.setState({ hidden: Object.assign({}, s.hidden, { [k]: !off }) }),
+        dot: 'width: 8px; height: 8px; border-radius: 50%; background: ' + (off ? 'var(--disabled)' : COL[k]),
+        style: 'display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid ' + (off ? 'var(--border)' : 'var(--border-strong)') + '; background: ' + (off ? 'var(--surface)' : 'var(--hover-bg)') + '; color: ' + (off ? '#94A3B8' : '#0B1530')
+      };
+    });
+    const totals = keys.map((k) => ({
+      label: NAME[k] + (s.range === 'week' ? ' (7 روز)' : s.range === 'month' ? ' (ماه)' : ' (بازه)'),
+      value: fmt(D[k].reduce((a, b) => a + b, 0)),
+      dot: 'width: 7px; height: 7px; border-radius: 50%; background: ' + COL[k]
+    }));
+    const seg = (on) => 'height: 28px; padding: 0 11px; border: 0; border-radius: 7px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; ' + (on ? 'background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(15,23,42,.12)' : 'background: transparent; color: var(--muted)');
+    // ---- custom date range (one per chart) ----
+    const CP = s.cp || {};
+    const setCP = (k, patch, extra) => this.setState(Object.assign({ cp: Object.assign({}, CP, { [k]: Object.assign({}, CP[k] || {}, patch) }) }, extra || {}));
+    const PRESETS = [['yday', 'دیروز'], ['d30', '30 روز'], ['m3', '3 ماه'], ['year', 'امسال']];
+    const mkCP = (k, rangeKey, fallback) => {
+      const c = CP[k] || {};
+      return {
+        open: !!c.open, from: c.from || '', to: c.to || '', label: c.label || '',
+        showChip: !c.open && s[rangeKey] === 'custom' && !!c.label,
+        presets: PRESETS.map(([id, label]) => ({
+          label, pick: () => setCP(k, { open: false, preset: id, label }),
+          style: 'height: 28px; padding: 0 10px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; ' + (c.preset === id ? 'background: var(--primary-soft); color: var(--link); border: 1px solid var(--border-strong)' : 'background: var(--surface); color: var(--text); border: 1px solid var(--border)')
+        })),
+        setFrom: (e) => setCP(k, { from: e.target.value }),
+        setTo: (e) => setCP(k, { to: e.target.value }),
+        apply: () => setCP(k, { open: false, preset: '', label: (c.from || '…') + ' – ' + (c.to || '…') }),
+        cancel: () => c.label ? setCP(k, { open: false }) : setCP(k, { open: false }, { [rangeKey]: fallback }),
+        reopen: () => setCP(k, { open: true })
+      };
+    };
+    const cp = { trend: mkCP('trend', 'range', 'week'), rw: mkCP('rw', 'rwRange', 'today'), wh: mkCP('wh', 'whRange', 'week') };
+    const mkRanges = (opts, rangeKey, k) => opts.map(([id, label]) => ({
+      label: id === 'custom' ? 'دلخواه' : label,
+      pressed: s[rangeKey] === id ? 'true' : 'false', style: seg(s[rangeKey] === id),
+      pick: () => id === 'custom' ? setCP(k, { open: true }, { [rangeKey]: 'custom' }) : setCP(k, { open: false }, { [rangeKey]: id })
+    }));
+    const ranges = mkRanges([['week', '7 روز'], ['month', 'این ماه'], ['custom', '']], 'range', 'trend');
+
+
+    // ---- returns & waste donut (sample) ----
+    const RW = {
+      today: { s: [640, 2], p: [1150, 1], w: [210, 3] },
+      month: { s: [4820, 14], p: [7300, 6], w: [1960, 22] }
+    }[s.rwRange === 'today' ? 'today' : 'month'];
+    const C = 2 * Math.PI * 40;
+    const tot = RW.s[0] + RW.p[0] + RW.w[0];
+    let acc = 0;
+    const seg2 = (v) => { const len = tot ? v / tot * C : 0; const gap = len > 2 ? 1.5 : 0; const o = { dash: Math.max(0, len - gap).toFixed(2) + ' ' + C.toFixed(2), off: (-acc).toFixed(2) }; acc += len; return o; };
+    const pct = (v) => tot ? Math.round(v / tot * 100) + '%' : '0%';
+    const dot = (c) => 'width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; background: ' + c;
+    const unit = s.rwRange === 'today' ? ' مورد امروز' : s.rwRange === 'month' ? ' مورد این ماه' : ' مورد';
+    const donut = {
+      s: seg2(RW.s[0]), p: seg2(RW.p[0]), w: seg2(RW.w[0]),
+      total: fmt(tot), empty: tot === 0,
+      legend: [
+        { label: 'برگشت فروش', value: fmt(RW.s[0]), pct: pct(RW.s[0]), count: RW.s[1] + unit, dot: dot('#D97706') },
+        { label: 'برگشت خرید', value: fmt(RW.p[0]), pct: pct(RW.p[0]), count: RW.p[1] + unit, dot: dot('#64748B') },
+        { label: 'ضایعات', value: fmt(RW.w[0]), pct: pct(RW.w[0]), count: RW.w[1] + unit, dot: dot('#DC2626') }
+      ]
+    };
+    const rwRanges = mkRanges([['today', 'امروز'], ['month', 'این ماه'], ['custom', '']], 'rwRange', 'rw');
+
+    // ---- warehouse stock line (sample, thousand AFN) ----
+    const WH = s.whRange === 'week'
+      ? { a: [412, 405, 398, 420, 415, 409, 402], b: [188, 192, 185, 180, 196, 201, 198], c: [64, 61, 58, 66, 63, 60, 57] }
+      : { a: [430, 421, 410, 402], b: [176, 182, 190, 198], c: [70, 67, 62, 57] };
+    const whX = s.whRange === 'week' ? xlabels.length === 7 ? xlabels : ['پنج‌شنبه', 'جمعه', 'شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'امروز'] : ['هفته 1', 'هفته 2', 'هفته 3', 'هفته 4'];
+    const WHM = { a: ['مرکزی', 'var(--link)'], b: ['شعبه دوم', 'var(--primary-300)'], c: ['دکان', '#94A3B8'] };
+    const whKeys = ['a', 'b', 'c'];
+    const whVisible = whKeys.filter((k) => !s.whHidden[k]);
+    const whRaw = Math.max(1, ...(whVisible.length ? whVisible : whKeys).flatMap((k) => WH[k]));
+    const whMag = Math.pow(10, Math.floor(Math.log10(whRaw)));
+    const whNice = Math.ceil(whRaw / whMag) * whMag;
+    const whLine = (a) => a.map((v, i) => (i / (a.length - 1) * CW).toFixed(1) + ',' + (TOP + (CH - TOP) * (1 - v / whNice)).toFixed(1)).join(' ');
+    const whLines = { a: whLine(WH.a), b: whLine(WH.b), c: whLine(WH.c) };
+    const whArea = '0,' + CH + ' ' + whLines.a + ' ' + CW + ',' + CH;
+    const whTicks = [1, 0.75, 0.5, 0.25, 0].map((f) => ({
+      label: String(Math.round(whNice * f)),
+      style: 'position: absolute; left: 0; right: 0; height: 0; display: flex; align-items: center; gap: 6px; top: ' + ((TOP + (CH - TOP) * (1 - f)) / CH * 100).toFixed(2) + '%'
+    }));
+    const whVis = {};
+    whKeys.forEach((k) => { whVis[k] = svgBase + (s.whHidden[k] ? 'display: none' : ''); });
+    const whCards = whKeys.map((k) => {
+      const a = WH[k], last = a[a.length - 1], first = a[0], off = !!s.whHidden[k];
+      const ch = ((last - first) / first * 100);
+      const up = ch >= 0;
+      return {
+        name: WHM[k][0], value: last, pressed: off ? 'false' : 'true',
+        chg: (up ? '↑ ' : '↓ ') + Math.abs(ch).toFixed(1) + '%',
+        chgStyle: 'font-size: 10.5px; font-weight: 700; color: ' + (up ? 'var(--ok-text)' : 'var(--warn-text)'),
+        dot: 'width: 8px; height: 8px; border-radius: 50%; background: ' + (off ? 'var(--disabled)' : WHM[k][1]),
+        toggle: () => this.setState({ whHidden: Object.assign({}, s.whHidden, { [k]: !off }) }),
+        style: 'display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 7px 10px; border-radius: 10px; font: inherit; text-align: right; cursor: pointer; opacity: ' + (off ? '.55' : '1') + '; background: ' + (off ? 'var(--surface)' : '#F8FAFC') + '; border: 1px solid ' + (off ? 'var(--border)' : 'var(--border)')
+      };
+    });
+    const whRanges = mkRanges([['week', '7 روز'], ['month', 'این ماه'], ['custom', '']], 'whRange', 'wh');
+
+
+    // ---- account types (sample counts) ----
+    const ACC = [
+      ['customers', 'مشتریان', 'groups', 148, 'var(--primary-soft)', 'var(--link)'],
+      ['suppliers', 'تأمین‌کنندگان', 'local_shipping', 36, 'var(--primary-soft)', 'var(--link)'],
+      ['employees', 'کارمندان', 'badge', 12, 'var(--primary-soft)', 'var(--link)'],
+      ['cash', 'صندوق‌ها', 'point_of_sale', 4, 'var(--primary-soft)', 'var(--link)'],
+      ['banks', 'بانک‌ها', 'account_balance', 3, 'var(--primary-soft)', 'var(--link)'],
+      ['exchangers', 'صرافان', 'currency_exchange', 5, 'var(--primary-soft)', 'var(--link)'],
+      ['partners', 'شرکا', 'handshake', 2, 'var(--primary-soft)', 'var(--link)'],
+      ['expense', 'مصارف', 'receipt_long', 18, 'var(--primary-soft)', 'var(--link)'],
+      ['income', 'عواید', 'savings', 6, 'var(--primary-soft)', 'var(--link)'],
+      ['other', 'سایر', 'more_horiz', 9, 'var(--primary-soft)', 'var(--link)']
+    ];
+    const NEW = { customers: 6, suppliers: 1, employees: 0, cash: 0, banks: 0, exchangers: 1, partners: 0, expense: 2, income: 0, other: 0 };
+    const accMax = Math.max(...ACC.map((a) => a[3]));
+    const accounts = ACC.map(([id, label, icon, count, bg, fg]) => ({
+      label, icon, count: fmt(count), href: '#accounts/' + id,
+      hasNew: NEW[id] > 0, newCount: NEW[id],
+      tip: 'رفتن به ' + label + (NEW[id] ? ' · ' + NEW[id] + ' حساب جدید این ماه' : ''),
+      aria: label + '، ' + count + ' حساب — رفتن به فهرست',
+      cellStyle: '--t: var(--hover-bg); --c: ' + fg + '; display: flex; flex-direction: column; gap: 8px; padding: 11px 14px 10px; background: var(--surface); color: var(--ink); min-width: 0; box-sizing: border-box',
+      iconStyle: 'width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: ' + bg + '; color: ' + fg,
+      bar: 'display: block; height: 100%; border-radius: 3px; background: #2F6FED; opacity: .55; width: ' + Math.max(4, Math.round(Math.sqrt(count / accMax) * 100)) + '%'
+    }));
+    const accTotal = fmt(ACC.reduce((t, a) => t + a[3], 0));
+
+
+    // ---- notifications (sample) ----
+    const TONE = {
+      danger: ['var(--danger-soft)', 'var(--danger-text)'], warn: ['var(--warn-soft)', 'var(--warn-text)'],
+      ok: ['var(--ok-soft)', 'var(--ok-text)'], info: ['var(--primary-soft)', 'var(--link)'], neutral: ['var(--surface-3)', 'var(--text)']
+    };
+    const SRC = { att: 'هشدارها', wa: 'واتساپ', sys: 'سیستم' };
+    const N = [
+      ['att', 'danger', 'inventory', '5 کالا منفی شد', 'کیکوانیل کوکو و 4 کالای دیگر', '5 دقیقه پیش', 1, 'سفارش'],
+      ['wa', 'ok', 'chat', 'پیام از شاهد صافی', '«لطفاً بل امروز را برایم بفرستید»', '12 دقیقه پیش', 1, 'پاسخ'],
+      ['att', 'warn', 'pending_actions', '3 بل تاخیری', 'غفور، نقیب ترانسپورت، آشپز تانگ · 3,590 ؋', '1 ساعت پیش', 1, 'یادآوری'],
+      ['wa', 'ok', 'done_all', 'بل #1042 ارسال شد', 'عبدالصبور حسین خیل · خوانده شد', '1 ساعت پیش', 1, ''],
+      ['wa', 'danger', 'error', 'یادآوری غفور ارسال نشد', 'شماره واتساپ ثبت نیست', '2 ساعت پیش', 1, 'افزودن شماره'],
+      ['att', 'warn', 'hourglass_bottom', 'بسکیت کوکو منقضی شد', '18 عدد · گدام مرکزی', 'امروز', 0, ''],
+      ['sys', 'info', 'currency_exchange', 'نرخ امروز تعیین شد', 'hewad · USD 64.64 · EUR 72.73', '08:15', 0, ''],
+      ['sys', 'warn', 'backup', 'پشتیبان: 3 روز پیش', 'روزانه پشتیبان بگیرید', 'دیروز', 0, 'پشتیبان'],
+      ['sys', 'neutral', 'login', 'ورود مریم · دستگاه جدید', 'Chrome · ویندوز · کابل', 'دیروز', 0, '']
+    ];
+    const allRead = !!s.allRead;
+    const unreadOf = (c) => allRead ? 0 : N.filter((n) => (c === 'all' || n[0] === c) && n[6]).length;
+    const unread = unreadOf('all');
+    const nTab = s.nTab || 'all';
+    const nTabs = [['all', 'همه'], ['att', 'هشدارها'], ['wa', 'واتساپ'], ['sys', 'سیستم']].map(([id, label]) => {
+      const on = nTab === id, c = unreadOf(id);
+      return {
+        label, count: c ? String(c) : '', sel: on ? 'true' : 'false', pick: () => this.setState({ nTab: id }),
+        style: 'display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border-radius: 8px; border: 0; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; ' + (on ? 'background: var(--primary-soft); color: var(--link)' : 'background: transparent; color: var(--muted)'),
+        countStyle: c ? 'min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; font-size: 10px; display: inline-flex; align-items: center; justify-content: center; ' + (on ? 'background: #2F6FED; color: #FFFFFF' : 'background: var(--surface-3); color: var(--muted)') : 'display: none'
+      };
+    });
+    const nItems = N.filter((n) => nTab === 'all' || n[0] === nTab).map(([cat, tone, icon, title, meta, time, u, action]) => {
+      const un = !allRead && !!u;
+      return {
+        icon, title, meta, time, action, unread: un, src: SRC[cat],
+        tile: 'width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: ' + TONE[tone][0] + '; color: ' + TONE[tone][1],
+        srcStyle: 'font-size: 10.5px; font-weight: 700; border-radius: 6px; padding: 0 6px; ' + (cat === 'wa' ? 'background: var(--ok-soft); color: var(--ok-text)' : cat === 'att' ? 'background: var(--warn-soft); color: var(--warn-text)' : 'background: var(--surface-3); color: var(--muted)'),
+        titleStyle: 'font-size: 12.5px; color: var(--ink); font-weight: ' + (un ? '700' : '500')
+      };
+    });
+
+    const ATT = {
+      exp: { c: '#D97706', ring: 'rgba(217,119,6,.15)' }, stock: { c: '#DC2626', ring: 'rgba(220,38,38,.12)' },
+      late: { c: '#D97706', ring: 'rgba(217,119,6,.15)' }, draft: { c: '#64748B', ring: 'rgba(100,116,139,.15)' },
+      users: { c: '#16A34A', ring: 'rgba(22,163,74,.14)' }, other: { c: 'var(--link)', ring: 'rgba(47,111,237,.15)' }
+    };
+    const att = {};
+    Object.keys(ATT).forEach((k) => {
+      const on = s.att === k;
+      att[k] = {
+        sel: on ? 'true' : 'false', pick: () => this.setState({ att: k }),
+        style: 'display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 8px 10px; border-radius: 12px; font: inherit; text-align: right; cursor: pointer; transition: box-shadow .15s; background: var(--surface); border: 1px solid ' + (on ? ATT[k].c : 'var(--border)') + (on ? '; box-shadow: 0 0 0 3px ' + ATT[k].ring : '')
+      };
+    });
+    const chip = (bg, fg) => 'display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; background: ' + bg + '; color: ' + fg;
+    const lead = (bg, fg) => 'width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; flex-shrink: 0; background: ' + bg + '; color: ' + fg;
+    const R = (l, lb, lf, title, meta, value, vb, vf, action) => ({ lead: l, leadStyle: lead(lb, lf), title, meta, value, valueStyle: chip(vb, vf), action });
+    const PANELS = {
+      exp: { title: 'کالاهای رو به انقضاء', link: 'همه کالاها', note: 'فقط وقتی ثبت بچ/انقضاء فعال است.', rows: [
+        R('!', 'var(--danger-soft)', '#DC2626', 'بسکیت کوکو', '2 روز پیش · 18 عدد', 'منقضی', 'var(--danger-soft)', 'var(--danger-text)', 'بررسی'),
+        R('3', 'var(--warn-soft)', 'var(--warn-text)', 'ماست چکیده', 'انقضاء 18 میزان · 12 عدد', '3 روز', 'var(--warn-soft)', 'var(--warn-text)', 'تخفیف'),
+        R('5', 'var(--warn-soft)', 'var(--warn-text)', 'شیر پاکتی 1 لیتر', 'انقضاء 20 میزان · 30 عدد', '5 روز', 'var(--warn-soft)', 'var(--warn-text)', 'تخفیف'),
+        R('12', 'var(--surface-3)', 'var(--text)', 'آب میوه انبه', 'انقضاء 27 میزان · 24 عدد', '12 روز', 'var(--surface-3)', 'var(--text)', 'مشاهده')
+      ]},
+      stock: { title: 'کالاهای کم', link: 'همه 83 کالا', note: '', rows: [
+        R('−', 'var(--danger-soft)', '#DC2626', 'کیکوانیل کوکو', 'موجودی منفی', '-13', 'var(--danger-soft)', 'var(--danger-text)', 'سفارش'),
+        R('−', 'var(--danger-soft)', '#DC2626', 'عسلی 75 گرام', 'موجودی منفی', '-4', 'var(--danger-soft)', 'var(--danger-text)', 'سفارش'),
+        R('−', 'var(--danger-soft)', '#DC2626', 'خسته بریان بی نم…', 'موجودی منفی', '-2', 'var(--danger-soft)', 'var(--danger-text)', 'سفارش'),
+        R('−', 'var(--danger-soft)', '#DC2626', 'ترشک زامبی', 'موجودی منفی', '-2', 'var(--danger-soft)', 'var(--danger-text)', 'سفارش'),
+        R('−', 'var(--danger-soft)', '#DC2626', 'کیک چارمغزی', 'موجودی منفی', '-2', 'var(--danger-soft)', 'var(--danger-text)', 'سفارش')
+      ]},
+      late: { title: 'بل‌های تاخیری', link: 'همه بل‌ها', note: '', rows: [
+        R('غ', 'var(--warn-soft)', 'var(--warn-text)', 'بل #1032 · غفور', 'سررسید 3 میزان', '1,790 ؋ · 12 روز', 'var(--warn-soft)', 'var(--warn-text)', 'یادآوری'),
+        R('ن', 'var(--warn-soft)', 'var(--warn-text)', 'بل #1018 · نقیب ترانسپورت', 'سررسید 25 سنبله', '1,220 ؋ · 20 روز', 'var(--warn-soft)', 'var(--warn-text)', 'یادآوری'),
+        R('آ', 'var(--warn-soft)', 'var(--warn-text)', 'بل #1009 · آشپز تانگ', 'سررسید 14 سنبله', '580 ؋ · 31 روز', 'var(--danger-soft)', 'var(--danger-text)', 'یادآوری')
+      ]},
+      draft: { title: 'پیش‌نویس‌ها', link: 'همه پیش‌نویس‌ها', note: '', rows: [
+        R('ف', 'var(--primary-soft)', 'var(--link)', 'فروش #1043 · موترشویی اندیوال ها', 'hewad · 35 دقیقه پیش', '310 ؋', 'var(--surface-3)', 'var(--text)', 'تکمیل'),
+        R('خ', 'var(--surface-3)', 'var(--text)', 'خرید #P-208', 'hewad · دیروز', '2,400 ؋', 'var(--surface-3)', 'var(--text)', 'تکمیل'),
+        R('ف', 'var(--primary-soft)', 'var(--link)', 'فروش #1039 · مشتری نقدی', 'احمد · 2 روز پیش', '95 ؋', 'var(--surface-3)', 'var(--text)', 'تکمیل')
+      ]},
+      users: { title: 'یوزرهای آنلاین', link: 'مدیریت یوزرها', note: '', rows: [
+        R('H', 'var(--primary-soft)', 'var(--link)', 'hewad (شما)', 'مدیر سیستم · داشبورد · شعبه مرکزی', '● آنلاین', 'var(--ok-soft)', 'var(--ok-text)', 'جزئیات'),
+        R('ا', 'var(--surface-3)', 'var(--text)', 'احمد', 'فروشنده · POS · شعبه مرکزی', '● آنلاین', 'var(--ok-soft)', 'var(--ok-text)', 'جزئیات'),
+        R('م', 'var(--surface-3)', 'var(--text)', 'مریم', 'حسابدار · روزنامچه · 14 دقیقه بی‌فعالیت', '● غیرفعال', 'var(--warn-soft)', 'var(--warn-text)', 'جزئیات')
+      ]},
+      other: { title: 'سایر', link: '', note: '', rows: [
+        R('؋', 'var(--danger-soft)', '#DC2626', 'صندوق افغانی منفی است', 'دریافت یا پرداختی جا مانده؟', '-326,734', 'var(--danger-soft)', 'var(--danger-text)', 'بررسی'),
+        R('↻', 'var(--warn-soft)', 'var(--warn-text)', 'پشتیبان: 3 روز پیش', 'روزانه پشتیبان بگیرید', '3 روز', 'var(--warn-soft)', 'var(--warn-text)', 'پشتیبان'),
+        R('$', 'var(--primary-soft)', 'var(--link)', 'نرخ امروز تعیین شد', 'USD 64.64 · EUR 72.73', 'انجام شد', 'var(--ok-soft)', 'var(--ok-text)', 'ویرایش')
+      ]}
+    };
+    const panel = PANELS[s.att];
+
+    const badge = (bg, fg) => 'width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; flex-shrink: 0; background: ' + bg + '; color: ' + fg;
+    const rates = [
+      { sym: '$', code: 'USD', name: 'دالر', rate: '64.64', chg: '▲ 0.12', chgStyle: 'font-size: 10.5px; font-weight: 700; color: var(--ok-text)', badge: badge('var(--primary-soft)', 'var(--link)') },
+      { sym: '€', code: 'EUR', name: 'یورو', rate: '72.73', chg: '▼ 0.08', chgStyle: 'font-size: 10.5px; font-weight: 700; color: var(--danger-text)', badge: badge('var(--primary-soft)', 'var(--link)') },
+      { sym: 'Rs', code: 'PKR', name: 'کلدار', rate: '0.23', chg: '— 0.00', chgStyle: 'font-size: 10.5px; font-weight: 700; color: var(--muted)', badge: badge('var(--surface-3)', 'var(--text)') }
+    ];
+
+    const prod = [['الکوزی', 100, '64 عدد'], ['سوپر النوید 5 لیتر', 58, '37 عدد'], ['برنج ساحل', 53, '34 بوری'], ['گوریلا ام', 50, '32 عدد'], ['پمپرس نیکری بسته 50 عددی', 46, '29 بسته'], ['پودر الکوزی 2.5 کیلو', 31, '20 عدد']];
+    const products = prod.map(([name, w, qty], i) => ({
+      rank: i + 1, name, qty,
+      rankStyle: 'width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 800; flex-shrink: 0; ' + (i === 0 ? 'background: var(--primary-soft); color: var(--link)' : i < 3 ? 'background: var(--primary-soft); color: var(--link)' : 'background: var(--surface-3); color: var(--muted)'),
+      bar: 'height: 4px; border-radius: 2px; width: ' + w + '%; background: ' + (i === 0 ? 'var(--link)' : 'var(--primary-300)')
+    }));
+
+    const tints = [['var(--primary-soft)', 'var(--link)'], ['var(--surface-3)', 'var(--text)'], ['var(--primary-soft)', 'var(--link)'], ['var(--surface-3)', 'var(--text)']];
+    const deb = [['عبدالصبور حسین خیل', 2910], ['شاهد صافی', 2560], ['غفور', 1790], ['نقیب ترانسپورت', 1220], ['آشپز تانگ', 580], ['معشوق الله', 370], ['موترشویی اندیوال ها', 310]];
+    const debtors = deb.map(([name, v], i) => ({
+      name, amount: fmt(v), initial: name.charAt(0),
+      avatarStyle: 'width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; flex-shrink: 0; background: ' + tints[i % 4][0] + '; color: ' + tints[i % 4][1],
+      bar: 'display: block; height: 3px; border-radius: 2px; background: #2F6FED; width: ' + Math.round(v / 2910 * 100) + '%'
+    }));
+
+    const KIND = { sale: ['فروش', 'var(--primary-soft)', 'var(--link)'], buy: ['خرید', 'var(--surface-3)', 'var(--text)'], recv: ['دریافت', 'var(--ok-soft)', 'var(--ok-text)'], exp: ['مصرف', 'var(--warn-soft)', 'var(--warn-text)'], ret: ['برگشت فروش', 'var(--surface-3)', 'var(--text)'] };
+    const ST = { paid: ['تسویه', 'var(--ok-soft)', 'var(--ok-text)'], credit: ['قرض', 'var(--warn-soft)', 'var(--warn-text)'], draft: ['پیش‌نویس', 'var(--surface-3)', 'var(--text)'], ret: ['برگشت', 'var(--danger-soft)', 'var(--danger-text)'] };
+    const TX = [
+      ['sale', '#1042', 'عبدالصبور حسین خیل', '17:48', 'credit', '2,910'],
+      ['recv', '#R-318', 'شاهد صافی', '17:20', 'paid', '1,000'],
+      ['sale', '#1041', 'مشتری نقدی', '16:55', 'paid', '640'],
+      ['buy', '#P-207', '[نام تأمین‌کننده]', '15:10', 'paid', '5,060'],
+      ['sale', '#1043', 'موترشویی اندیوال ها', '14:50', 'draft', '310'],
+      ['exp', '#E-091', 'کرایه دکان', 'دیروز', 'paid', '250'],
+      ['ret', '#SR-12', 'غفور', 'دیروز', 'ret', '120']
+    ];
+    const txRows = TX.filter((t) => s.tx === 'all' || t[0] === s.tx).map(([k, no, party, time, st, amount]) => ({
+      type: KIND[k][0], typeStyle: chip(KIND[k][1], KIND[k][2]),
+      dot: 'width: 5px; height: 5px; border-radius: 50%; background: ' + KIND[k][2],
+      no, party, time, amount, status: ST[st][0], statusStyle: chip(ST[st][1], ST[st][2])
+    }));
+    const txTabs = [['all', 'همه'], ['sale', 'فروش'], ['buy', 'خرید'], ['recv', 'دریافت'], ['exp', 'مصرف']].map(([id, label]) => ({
+      label, pressed: s.tx === id ? 'true' : 'false', style: seg(s.tx === id), pick: () => this.setState({ tx: id })
+    }));
+
+    const pnewVals = (() => {
+    const HP = (() => { try { const h = decodeURIComponent((window.location.hash || '').slice(1)); const P = {}; if (h) h.split('&').forEach((x) => { const i = x.indexOf('='); if (x) P[i < 0 ? x : x.slice(0, i)] = i < 0 ? '1' : x.slice(i + 1); }); return P; } catch (e) { return {}; } })();
+
+    // ---------- product catalog (deterministic sample) ----------
+    const CATS = { syr: ['Syrup', 'شربت', 'water_drop'], oint: ['Ointment', 'پماد', 'healing'], tab: ['Tablet', 'تابلیت', 'pill'], cap: ['Capsule', 'کپسول', 'medication'], inj: ['Injection', 'پیچکاری', 'vaccines'], drop: ['Drops', 'قطره', 'colorize'] };
+    const SMALL = { syr: 'بوتل', oint: 'تیوب', tab: 'ورق', cap: 'ورق', inj: 'امپول', drop: 'بوتل' };
+    const BRANDS = ['ایتوک فارما', 'کابل فارما', 'هلال فارما', 'نوید فارما'];
+    const WHS = ['ایتوک فارما', 'گدام مرکزی', 'شعبه شهر نو'];
+    const NAMES = [
+      ['DRAMIN COMPOUND', 'syr', 48, 1200, 1824], ['ETO ZINC', 'oint', 120, 3000, 4800], ['ETOCID PLUS 240ML', 'syr', 24, 1320, 2112], ['CAL-VITOOK 150ML', 'syr', 30, 1800, 2700],
+      ['ETOCID PLUS 120', 'syr', 40, 1400, 2400], ['EBUTOOK', 'syr', 40, 1400, 2200], ['COTRITOOK', 'syr', 40, 1800, 3080], ['E-CLION NN', 'oint', 240, 6000, 9600],
+      ['E-SONE-N', 'oint', 240, 4800, 7920], ['E-TRIMAZOLE', 'oint', 120, 4200, 6600], ['AMOXITOOK 250', 'cap', 50, 2600, 3500], ['PARATOOK SYRUP', 'syr', 48, 960, 1440],
+      ['ZINCTOOK DROPS', 'drop', 60, 1500, 2250], ['CEFTRI-T 1G', 'inj', 50, 4500, 6500], ['OMEPRA-T 20', 'cap', 30, 1650, 2400], ['METRO-T 400', 'tab', 100, 1900, 2700],
+      ['IBU-T 400', 'tab', 100, 1700, 2500], ['VITA-C 500', 'tab', 60, 1100, 1700], ['CLAVITOOK 625', 'tab', 20, 3200, 4400], ['AZITHRO-T 500', 'tab', 30, 2100, 3000],
+      ['DICLO-T GEL', 'oint', 100, 2600, 3900], ['HYDRO-T CREAM', 'oint', 100, 2300, 3400], ['FERRO-T SYRUP', 'syr', 40, 1500, 2300], ['COUGH-T SYRUP', 'syr', 48, 1250, 1950],
+      ['CETRI-T 10', 'tab', 100, 900, 1450], ['LORA-T 10', 'tab', 100, 950, 1500], ['PREDNI-T 5', 'tab', 100, 800, 1250], ['DEXA-T INJ', 'inj', 100, 2800, 4100],
+      ['GENTA-T DROPS', 'drop', 50, 1350, 2000], ['CIPRO-T 500', 'tab', 50, 2200, 3200], ['LEVO-T 500', 'tab', 50, 2700, 3900], ['MULTI-T DROPS', 'drop', 40, 1600, 2400],
+      ['CALCI-T 600', 'tab', 60, 1400, 2100], ['ORS-T', 'tab', 100, 700, 1100], ['SALBU-T SYRUP', 'syr', 48, 1150, 1800], ['ZINC-T TAB', 'tab', 100, 850, 1300], ['FOLI-T 5', 'tab', 100, 600, 950]
+    ];
+    let pseed = 5;
+    const prnd = (n) => { pseed = (pseed * 9301 + 49297) % 233280; return Math.floor(pseed / 233280 * n); };
+    const NOWM = 1405 * 12 + 7;
+    const PRODS = NAMES.map(([n, cat, per, buy, sell], i) => {
+      const nb = 1 + prnd(3), batches = [];
+      for (let k = 0; k < nb; k++) { const y = 1405 + prnd(3), m = 1 + prnd(12); batches.push({ v: n.replace(/[^A-Z]/g, '').slice(0, 2) + '-' + (2400 + prnd(600)), exp: y + '/' + String(m).padStart(2, '0'), qty: prnd(per * 14) }); }
+      let stock = batches.reduce((a, b) => a + b.qty, 0);
+      if (i === 1 || i === 7 || i === 8 || i === 9) stock = -Math.round(per * (0.3 + prnd(60) / 10));
+      if (i === 6 || i === 3) stock = Math.round(per * (2 + prnd(8)) / 10);
+      if (i === 20) stock = 0;
+      batches.sort((a, b) => a.exp.localeCompare(b.exp));
+      const near = batches.find((b) => b.qty > 0) || batches[0];
+      const em = near ? (+near.exp.slice(0, 4)) * 12 + (+near.exp.slice(5)) - NOWM : 99;
+      return { id: i, n, cat, per, buy, sell, stock, batches, exp: stock > 0 && near ? near.exp : '', em: stock > 0 ? em : 99, brand: BRANDS[i % 4 === 3 ? 1 + prnd(3) : 0], wh: WHS[i % 5 === 4 ? 1 : 0],
+        code: 'P-' + (1001 + i), alert: per * 2, sold30: prnd(per * 6), bought30: prnd(per * 5) };
+    });
+    const ctnOf = (p, s) => { const neg = s < 0, a = Math.abs(s), c = Math.floor(a / p.per), r = a % p.per; return (neg ? '−' : '') + (c ? c + ' کارتن' : '') + (c && r ? ' و ' : '') + (r || !c ? r + ' ' + SMALL[p.cat] : ''); };
+    const stState = (p) => p.stock < 0 ? 'neg' : p.stock === 0 ? 'out' : p.stock < p.alert ? 'low' : 'ok';
+    const ST = { neg: ['منفی', 'var(--danger-soft)', 'var(--danger-text)'], out: ['تمام شده', 'var(--danger-soft)', 'var(--danger-text)'], low: ['کم‌موجود', 'var(--warn-soft)', 'var(--warn-text)'], ok: ['موجود', 'var(--ok-soft)', 'var(--ok-text)'] };
+    const expState = (p) => !p.exp ? 'none' : p.em < 0 ? 'bad' : p.em <= 6 ? 'warn' : 'ok';
+    const pval = (p, k) => Math.max(0, p.stock) / p.per * p[k];
+    // readable product name: Title Case + separate strength (240ML -> 240 ml)
+    const CATC = { syr: '#2F6FED', oint: '#0E9F8E', tab: '#7C5CE0', cap: '#D9822B', inj: '#D64560', drop: '#0891B2' };
+    const KEEPUP = ['ORS', 'NN'];
+    const tcase = (w) => w.split('-').map((x) => x.length <= 2 || KEEPUP.includes(x) || /\d/.test(x) ? x : x.charAt(0) + x.slice(1).toLowerCase()).join('-');
+    const pname = (n) => { const ws = n.trim().split(/\s+/); let i = ws.length; while (i > 1 && /\d/.test(ws[i - 1])) i--;
+      const str = ws.slice(i).map((w) => w.replace(/^(\d+(?:\.\d+)?)(ML|MG|MCG|G|L|IU)$/i, (m, a, u) => a + ' ' + (u.toUpperCase() === 'IU' ? 'IU' : u.toLowerCase()))).join(' ');
+      return { name: ws.slice(0, i).map(tcase).join(' '), str, full: ws.slice(0, i).map(tcase).join(' ') + (str ? ' ' + str : '') }; };
+    const prOpts = (p, o) => { const nm = pname(p.n), c = CATC[p.cat] || '#2F6FED';
+      return Object.assign({ pr: true, prName: nm.name, prStr: nm.str, prFull: nm.full + ' — ' + p.n, prIcon: CATS[p.cat][2], prHref: 'ProductNew.dc.html',
+        prTile: 'width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, ' + c + ' 13%, transparent); color: ' + c,
+        prSub: CATS[p.cat][1] + ' · ' + p.code + ' · ' + p.brand }, o || {}); };
+
+    // ================= NEW PRODUCT =================
+    const N = s.np || {};
+    const setN = (patch) => this.setState((st) => ({ np: Object.assign({}, st.np || {}, patch) }));
+    const pharm = this.props.pharmacy !== false;
+    const W1 = pharm ? 'ادویه' : 'محصول';
+    const g = (k, d) => N[k] == null ? d : N[k];
+    const num = (v) => { const t = String(v == null ? '' : v).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[٬,\s]/g, '').replace('٫', '.'); return t === '' || isNaN(+t) ? 0 : +t; };
+    const fm = (n, d) => (Math.round(n * Math.pow(10, d || 0)) / Math.pow(10, d || 0)).toLocaleString('en-US', { maximumFractionDigits: d || 0 });
+
+    // ---- reference lists (sample; real lists come from settings) ----
+    const CURS = { AFN: ['؋', 'افغانی', 1], USD: ['$', 'دالر', 70.5], PKR: ['Rs', 'کلدار', 0.25] };
+    const UCAT = { count: 'شمارشی', weight: 'وزنی', vol: 'حجمی' };
+    const UNITS = { count: ['بوتل', 'ورق', 'تیوب', 'امپول', 'ویال', 'عدد', 'قطی', 'ساشه'], weight: ['گرام', 'ملی‌گرام', 'کیلوگرام'], vol: ['ملی‌لیتر', 'لیتر'] };
+    const PACKS = ['کارتن', 'بسته', 'جعبه', 'درجن'];
+    const GENS = ['Paracetamol', 'Amoxicillin', 'Ibuprofen', 'Metronidazole', 'Omeprazole', 'Cetirizine', 'Zinc Oxide', 'Ceftriaxone', 'Azithromycin', 'Ciprofloxacin', 'Diclofenac', 'Dexamethasone', 'Salbutamol', 'Folic Acid', 'Calcium + Vit D'];
+    const X = N.x || {}; // items created on the fly
+    const xs = (k) => X[k] || [];
+
+    // ---- values ----
+    const V = {
+      name: g('name', ''), cat: g('cat', ''), ucat: g('ucat', 'count'), unit: g('unit', ''), pack: g('pack', 'کارتن'), per: g('per', ''),
+      brand: g('brand', ''), gen: g('gen', ''), code: g('code', ''), bar: g('bar', ''),
+      buy: g('buy', ''), bcur: g('bcur', 'AFN'), smode: g('smode', 'pct'), spct: g('spct', ''), sell: g('sell', ''), scur: g('scur', 'AFN'), basis: g('basis', 'pack'),
+      has: g('has', true), wh: g('wh', WHS[0]), qty: g('qty', ''), qunit: g('qunit', 'unit'), batch: g('batch', ''), mfg: g('mfg', ''), exp: g('exp', ''),
+      edays: g('edays', '90'), minq: g('minq', ''), desc: g('desc', ''), img: g('img', ''), imgName: g('imgName', '')
+    };
+    const catId = Object.keys(CATS).find((k) => CATS[k][1] === V.cat) || '';
+    const hasPack = !!V.pack;
+    const per = hasPack ? Math.max(0, Math.floor(num(V.per))) : 1;
+    const perOk = !hasPack || per >= 2;
+    const PU = hasPack ? V.pack : (V.unit || 'واحد');  // price unit name when basis = pack
+    const SU = V.unit || 'واحد';
+    const basisPack = hasPack && V.basis === 'pack';
+    const bUnit = basisPack ? PU : SU;
+
+    // ---- prices (all compared in AFN) ----
+    const rate = (c) => CURS[c][2];
+    const buyN = num(V.buy), buyAFN = buyN * rate(V.bcur);
+    const sellAFN = V.smode === 'pct' ? buyAFN * (1 + num(V.spct) / 100) : num(V.sell) * rate(V.bcur);
+    const toPack = (a) => basisPack ? a : a * (perOk ? per : 1);
+    const toUnit = (a) => basisPack ? a / (perOk ? per : 1) : a;
+    const margin = sellAFN ? (sellAFN - buyAFN) / sellAFN * 100 : 0;
+    const markup = buyAFN ? (sellAFN - buyAFN) / buyAFN * 100 : 0;
+    const sellInBuyCur = sellAFN / rate(V.bcur);
+
+    // ---- dates (Shamsi yyyy/mm or yyyy/mm/dd) ----
+    const NOW = { y: 1405, m: 7, d: 16 };
+    const pd = (t) => { const m = String(t || '').replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).match(/^(\d{4})\/(\d{1,2})(?:\/(\d{1,2}))?$/); if (!m) return null; const y = +m[1], mo = +m[2], d = m[3] ? +m[3] : 0; if (mo < 1 || mo > 12 || d > 31 || y < 1380 || y > 1420) return null; return { y, m: mo, d, s: y * 12 + mo + (d ? d / 31 : 0) }; };
+    const nowS = NOW.y * 12 + NOW.m + NOW.d / 31;
+    const mfgD = pd(V.mfg), expD = pd(V.exp);
+    const expDays = expD ? Math.round((expD.s - nowS) * 30.4) : null;
+    const maskDate = (t) => { let v = String(t).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[^\d/]/g, ''); if (/^\d{5,}$/.test(v)) v = v.slice(0, 4) + '/' + v.slice(4); if (/^\d{4}\/\d{3,}$/.test(v)) v = v.slice(0, 7) + '/' + v.slice(7); return v.slice(0, 10); };
+    const stepDate = (t, dir, fb) => { const p = pd(t) || pd(fb); if (!p) return t; const tt = p.y * 12 + p.m - 1 + dir, y = Math.floor(tt / 12), m = tt % 12 + 1; return y + '/' + String(m).padStart(2, '0') + (p.d ? '/' + String(p.d).padStart(2, '0') : ''); };
+
+    // ---- stock ----
+    const qtyN = num(V.qty);
+    const qtyUnits = V.qunit === 'pack' && hasPack ? qtyN * (perOk ? per : 1) : qtyN;
+    const stockVal = toUnit(buyAFN) * qtyUnits;
+    const ctnTxt = (u) => { if (!hasPack || !perOk) return fm(u) + ' ' + SU; const c = Math.floor(u / per), r = Math.round(u % per); return (c ? fm(c) + ' ' + PU : '') + (c && r ? ' و ' : '') + (r || !c ? r + ' ' + SU : ''); };
+
+    // ---- duplicates ----
+    const nameKey = V.name.trim().toLowerCase();
+    const dupe = nameKey.length > 2 ? PRODS.find((p) => p.n.toLowerCase() === nameKey) || (xs('saved').find((p) => p.toLowerCase() === nameKey) ? { n: V.name.trim(), code: '' } : null) : null;
+    const similar = !dupe && nameKey.length > 2 ? PRODS.filter((p) => p.n.toLowerCase().includes(nameKey) || nameKey.includes(p.n.toLowerCase().split(' ')[0])).slice(0, 3) : [];
+    const codeTaken = V.code.trim() && PRODS.some((p) => p.code.toLowerCase() === V.code.trim().toLowerCase());
+
+    // ---- validation ----
+    const tried = !!N.tried, T = N.touched || {};
+    const show = (k) => tried || T[k];
+    const errs = {};
+    if (!V.name.trim()) errs.name = 'نام ' + W1 + ' ضروری است';
+    else if (dupe) errs.name = 'این نام قبلاً ثبت شده است';
+    if (!V.cat) errs.cat = 'کتگوری را انتخاب کنید';
+    if (!V.unit) errs.unit = 'واحد را انتخاب کنید';
+    if (hasPack && !perOk) errs.per = 'حداقل ۲ ' + SU + ' در هر ' + V.pack;
+    if (codeTaken) errs.code = 'این کد برای ' + W1 + ' دیگری است';
+    if (!(buyN > 0)) errs.buy = 'نرخ خرید را وارد کنید';
+    if (V.smode === 'pct' ? !(V.spct !== '' && num(V.spct) >= 0) : !(num(V.sell) > 0)) errs.sell = V.smode === 'pct' ? 'فیصدی مفاد را وارد کنید' : 'نرخ فروش را وارد کنید';
+    if (V.has) {
+      if (pharm) {
+        if (V.mfg && !mfgD) errs.mfg = 'فارمت: 1405/02';
+        if (!V.exp) { if (qtyN > 0) errs.exp = 'تاریخ انقضاء ضروری است'; }
+        else if (!expD) errs.exp = 'فارمت: 1407/08';
+        else if (mfgD && expD.s <= mfgD.s) errs.exp = 'باید بعد از تاریخ تولید باشد';
+        else if (expD.s < nowS) errs.exp = 'این بیچ منقضی شده است';
+      }
+    }
+    const warns = {};
+    if (!errs.sell && buyN > 0 && sellAFN < buyAFN) warns.sell = 'نرخ فروش کمتر از خرید است';
+    if (!errs.exp && expDays != null && expDays < num(V.edays)) warns.exp = 'فقط ' + expDays + ' روز تا انقضاء';
+    const errKeys = Object.keys(errs);
+
+    // ---- styles ----
+    const lblS = 'display: flex; align-items: center; gap: 6px; min-height: 18px; font-size: 11.5px; font-weight: 700; color: var(--text)';
+    const boxS = (bad, warn) => 'display: flex; align-items: center; height: 28px; border-radius: 7px; background: var(--surface); box-sizing: border-box; min-width: 0; transition: border-color .12s, box-shadow .12s; border: 1px solid ' + (bad ? 'var(--danger-text)' : warn ? 'var(--warn-text)' : 'var(--border)') + (bad ? '; box-shadow: 0 0 0 3px var(--danger-soft)' : '');
+    const inS = (ltr, w) => 'flex: 1; width: 0; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; padding: 0 9px; font: inherit; font-size: 12px; color: var(--ink); ' + (ltr ? 'font-family: Inter, sans-serif; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; direction: ltr' : 'font-weight: 600');
+    const msgS = (k) => { const e = errs[k] && show(k), w = !e && warns[k] && (show(k) || V[k]); return 'display: ' + (e || w ? 'flex' : 'none') + '; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; color: ' + (e ? 'var(--danger-text)' : 'var(--warn-text)'); };
+    const msgT = (k) => errs[k] && show(k) ? errs[k] : (warns[k] || '');
+    const segS = (on) => 'height: 18px; padding: 0 6px; border: 0; border-radius: 5px; font: inherit; font-size: 10.5px; cursor: pointer; white-space: nowrap; ' + (on ? 'background: var(--surface); color: var(--ink); font-weight: 800; box-shadow: 0 1px 2px rgba(11,21,48,.18)' : 'background: transparent; color: var(--muted); font-weight: 600');
+    const optS = (on) => 'width: 100%; display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 8px; border: 0; border-radius: 6px; font: inherit; font-size: 11.5px; cursor: pointer; text-align: start; ' + (on ? 'background: var(--primary-soft); color: var(--link); font-weight: 700' : 'background: transparent; color: var(--ink); font-weight: 500');
+    const sufS = 'flex-shrink: 0; display: flex; align-items: center; gap: 2px; height: 20px; margin-inline-end: 4px; padding: 0 7px; border: 0; border-radius: 6px; background: var(--surface-3); color: var(--text); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap';
+
+    // ---- handlers ----
+    const touch = (k) => () => { if (!T[k]) setN({ touched: Object.assign({}, T, { [k]: true }) }); };
+    const pop = N.pop || '';
+    const openPop = (k) => (e) => { if (e && e.stopPropagation) e.stopPropagation(); setN({ pop: pop === k ? '' : k, q: '' }); };
+    const closePop = () => setN({ pop: '', q: '' });
+    const navNext = (el) => { const els = Array.prototype.slice.call(document.querySelectorAll('[data-nav]')).filter((x) => x.offsetParent !== null); const i = els.indexOf(el); if (i >= 0 && els[i + 1]) els[i + 1].focus(); };
+    const tf = (k, o) => {
+      o = o || {};
+      return {
+        val: V[k], ph: o.date ? (o.ph || '') : '', box: boxS(errs[k] && show(k), !errs[k] && warns[k] && (show(k) || V[k])), inp: inS(o.ltr), msg: msgT(k), msgS: msgS(k), inv: errs[k] && show(k) ? 'true' : 'false',
+        onInput: (e) => { let v = e.target.value; if (o.date) v = maskDate(v); if (o.num) v = v.replace(/[^\d.,۰-۹٫]/g, ''); const p = { [k]: v }; if (o.also) Object.assign(p, o.also(v)); setN(p); },
+        onBlur: touch(k),
+        onKey: (e) => {
+          if (o.date && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); setN({ [k]: stepDate(V[k], e.key === 'ArrowUp' ? 1 : -1, o.fb ? o.fb() : NOW.y + '/' + String(NOW.m).padStart(2, '0')) }); return; }
+          if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); touch(k)(); navNext(e.target); }
+        }
+      };
+    };
+    const dd = (k, opts, o) => {
+      o = o || {};
+      const open = pop === k, cur = V[k], q = (N.q || '').trim(), ql = q.toLowerCase();
+      const all = opts.map((x) => typeof x === 'string' ? { t: x } : x);
+      const list = all.filter((x) => !ql || (x.t + ' ' + (x.sub || '')).toLowerCase().includes(ql));
+      const exact = all.some((x) => x.t.toLowerCase() === ql);
+      const pick = (t) => { const p = { [k]: t, pop: '', q: '', touched: Object.assign({}, T, { [k]: true }) }; if (o.also) Object.assign(p, o.also(t)); setN(p); };
+      return {
+        open, expanded: open ? 'true' : 'false', toggle: openPop(k), text: cur || '', box: boxS(errs[k] && show(k)) + '; width: 100%; padding: 0 9px; gap: 6px; font: inherit; cursor: pointer; text-align: start' + (open ? '; border-color: #2F6FED; box-shadow: 0 0 0 3px rgba(47,111,237,.14)' : ''),
+        textS: 'flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; ' + (cur ? 'color: var(--ink); font-weight: 700' : 'color: var(--subtle); font-weight: 500'),
+        icon: o.icon ? (all.find((x) => x.t === cur) || {}).icon || o.icon : '', hasIcon: !!o.icon,
+        searchable: all.length > 10 || !!o.create, q: N.q || '', onSearch: (e) => setN({ q: e.target.value }),
+        onSearchKey: (e) => { if (e.key === 'Enter') { e.preventDefault(); if (list[0] && (exact || !o.create || !q)) pick((all.find((x) => x.t.toLowerCase() === ql) || list[0]).t); else if (o.create && q) { setN({ x: Object.assign({}, X, { [k]: xs(k).concat([q]) }) }); pick(q); } } if (e.key === 'Escape') closePop(); },
+        opts: list.map((x) => ({ t: x.t, sub: x.sub || '', icon: x.icon || '', hasIcon: !!x.icon, on: x.t === cur, style: optS(x.t === cur), pick: () => pick(x.t) })),
+        empty: !list.length && !(o.create && q), canCreate: !!o.create && !!q && !exact, createText: 'ایجاد «' + q + '»' + (o.create ? ' به‌عنوان ' + o.create : ''),
+        onCreate: () => { setN({ x: Object.assign({}, X, { [k]: xs(k).concat([q]) }) }); pick(q); },
+        hint: !!o.create && !q, hintText: 'نام ' + (o.create || '') + ' جدید را بنویسید تا ایجاد شود',
+        inv: errs[k] && show(k) ? 'true' : 'false',
+        clear: () => setN({ [k]: '', pop: '', q: '' }), canClear: !!cur && !!o.clearable,
+        msg: msgT(k), msgS: msgS(k), plusTitle: o.create ? 'ایجاد ' + o.create + ' جدید' : ''
+      };
+    };
+
+    // ---- field views ----
+    const catOpts = Object.keys(CATS).map((c) => ({ t: CATS[c][1], sub: CATS[c][0], icon: CATS[c][2] })).concat(xs('cat').map((t) => ({ t, sub: 'جدید', icon: 'category' })));
+    const nextCode = 'P-' + (1001 + PRODS.length + xs('saved').length);
+    const f = {
+      name: tf('name', { ph: 'مثلاً AMOXITOOK 500' }),
+      per: tf('per', { ph: 'مثلاً 48', ltr: true, num: true }),
+      code: tf('code', { ph: nextCode, ltr: true }),
+      bar: tf('bar', { ph: 'اسکن یا تایپ', ltr: true }),
+      buy: tf('buy', { ph: '', ltr: true, num: true }),
+      qty: tf('qty', { ph: '', ltr: true, num: true }),
+      batch: tf('batch', { ph: 'مثلاً AM-2410', ltr: true }),
+      mfg: tf('mfg', { ph: '1405/02', ltr: true, date: true }),
+      exp: tf('exp', { ph: '1407/08', ltr: true, date: true, fb: () => mfgD ? stepDate(V.mfg, 24, V.mfg) : (NOW.y + 2) + '/' + String(NOW.m).padStart(2, '0') }),
+      edays: tf('edays', { ph: '90', ltr: true, num: true }),
+      minq: tf('minq', { ph: hasPack && perOk ? String(per * 2) : '10', ltr: true, num: true })
+    };
+    // sell field binds either % or amount
+    const sellK = V.smode === 'pct' ? 'spct' : 'sell';
+    f.sell = tf(sellK, { ph: V.smode === 'pct' ? 'مثلاً 30' : '0', ltr: true, num: true });
+    f.sell.box = boxS(errs.sell && show('sell'), !errs.sell && warns.sell && (show('sell') || V[sellK])); f.sell.msg = msgT('sell'); f.sell.msgS = msgS('sell');
+    f.sell.onBlur = touch('sell');
+    const d = {
+      cat: dd('cat', catOpts, { ph: 'انتخاب کتگوری', create: 'کتگوری', icon: 'category', also: (t) => { const id = Object.keys(CATS).find((c) => CATS[c][1] === t); return !V.unit && id ? { unit: SMALL[id], ucat: 'count' } : {}; } }),
+      ucat: dd('ucat', Object.keys(UCAT).map((k) => ({ t: UCAT[k] })), { also: (t) => ({ unit: '' }) }),
+      unit: dd('unit', UNITS.count.concat(UNITS.weight, UNITS.vol, xs('unit')), { ph: 'بوتل، ورق…', create: 'واحد' }),
+      pack: dd('pack', PACKS.concat(xs('pack')), { ph: 'بدون بسته‌بندی', create: 'بسته‌بندی', clearable: true }),
+      brand: dd('brand', BRANDS.concat(xs('brand')), { ph: 'انتخاب برند', create: 'برند', clearable: true }),
+      gen: dd('gen', GENS.concat(xs('gen')), { ph: 'نام علمی / جنریک', create: 'جنریک', clearable: true }),
+      wh: dd('wh', WHS.map((w, i) => ({ t: w, sub: i === 0 ? 'پیش‌فرض' : '' })), { icon: 'warehouse' })
+    };
+    // ucat stores the label
+    d.ucat.text = UCAT[V.ucat] || V.ucat;
+    d.ucat.opts.forEach((o) => { const key = Object.keys(UCAT).find((k) => UCAT[k] === o.t); o.on = key === V.ucat || o.t === V.ucat; o.style = optS(o.on); o.pick = () => setN({ ucat: key, unit: '', pop: '', q: '' }); });
+    d.ucat.textS = d.ucat.textS.replace('color: var(--subtle); font-weight: 500', 'color: var(--ink); font-weight: 700');
+
+    // currency menus
+    const curMenu = (k) => ({ open: pop === k, toggle: openPop(k), sym: CURS[V[k]][0], name: CURS[V[k]][1],
+      opts: Object.keys(CURS).map((c) => ({ t: CURS[c][1], sub: c === 'AFN' ? '' : '1 ' + CURS[c][0] + ' = ' + CURS[c][2] + ' ؋', sym: CURS[c][0], style: optS(V[k] === c), on: V[k] === c, pick: () => setN({ [k]: c, pop: '' }) })) });
+
+    // ---- form actions ----
+    const KEEP = ['cat', 'ucat', 'unit', 'pack', 'per', 'brand', 'bcur', 'scur', 'smode', 'spct', 'basis', 'wh', 'has', 'edays', 'qunit', 'x'];
+    const save = (again) => () => {
+      if (errKeys.length) { setN({ tried: true, toast: '' }); setTimeout(() => { const el = document.querySelector('[aria-invalid="true"]'); if (el) el.focus(); }, 30); return; }
+      const nm = V.name.trim(), code = V.code.trim() || nextCode;
+      const saved = xs('saved').concat([nm]);
+      const msg = '«' + nm + '» با کد ' + code + ' ذخیره شد' + (V.has ? ' · موجودی اولیه ' + ctnTxt(qtyUnits) : '');
+      if (again) { const keep = {}; KEEP.forEach((k) => { if (N[k] != null) keep[k] = N[k]; }); keep.x = Object.assign({}, X, { saved }); this.setState({ np: Object.assign(keep, { toast: msg, toastAgain: true }) }); setTimeout(() => { const el = document.querySelector('[data-nav="name"]'); if (el) el.focus(); }, 40); }
+      else setN({ x: Object.assign({}, X, { saved }), toast: msg, toastAgain: false, done: true });
+      setTimeout(() => this.setState((st) => ({ np: Object.assign({}, st.np || {}, { toast: '' }) })), 6000);
+    };
+    const reset = () => this.setState({ np: { x: X } });
+    const onFormKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); save(false)(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); save(true)(); }
+      else if (e.key === 'Escape' && pop) closePop();
+    };
+
+    // ---- completeness / preview ----
+    const REQ = [['name', 'نام ' + W1], ['cat', 'کتگوری'], ['unit', 'واحد'], ['buy', 'نرخ خرید'], ['sell', 'نرخ فروش']].concat(V.has ? [['qty', 'تعداد موجودی']].concat(pharm ? [['exp', 'تاریخ انقضاء']] : []) : []);
+    const doneN = REQ.filter(([k]) => !errs[k]).length;
+    const pctDone = Math.round(doneN / REQ.length * 100);
+    const expTone = !expD ? 'var(--subtle)' : expDays < 0 ? 'var(--danger-text)' : expDays < num(V.edays) ? 'var(--warn-text)' : 'var(--ok-text)';
+    const swOn = !!V.has;
+    const catIcon = catId ? CATS[catId][2] : (V.cat ? 'category' : 'medication');
+    const mTone = margin < 0 ? 'var(--danger-text)' : margin < 10 ? 'var(--warn-text)' : 'var(--ok-text)';
+
+    return {
+      W1, pharm, f, d, smodeAmt: V.smode !== 'pct', noImg: !V.img, swOff: !V.has, toastNew: !N.toastAgain, fDesc: V.desc, anyPop: !!pop, closePop, onFormKey, lblS, segS,
+      sufS, bcurM: curMenu('bcur'), scurM: curMenu('scur'),
+      backIcon: 'arrow_forward', title: 'ثبت ' + W1 + ' جدید',
+      savedCount: xs('saved').length, hasSaved: xs('saved').length > 0, savedText: xs('saved').length + ' ' + W1 + ' در این نشست ثبت شد',
+      // name helpers
+      dupe: !!dupe, dupeText: dupe ? 'قبلاً با کد ' + (dupe.code || '—') + ' ثبت شده' : '', similar: similar.map((p) => ({ t: p.n, code: p.code })), hasSimilar: similar.length > 0,
+      genCode: () => setN({ code: nextCode, touched: Object.assign({}, T, { code: true }) }), nextCode,
+      genBatch: () => setN({ batch: (V.name.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'B') + '-' + (NOW.y % 100) + String(NOW.m).padStart(2, '0') + String(xs('saved').length + 1).padStart(2, '0') }),
+      // units
+      hasPack, packWord: V.pack || 'بسته', unitWord: SU, perHint: hasPack && perOk && V.unit ? '1 ' + V.pack + ' = ' + per + ' ' + SU : hasPack ? 'تعداد ' + SU + ' در هر ' + V.pack : 'فروش فقط به ' + SU,
+      basisOpts: hasPack ? [{ t: 'هر ' + PU, on: basisPack, style: segS(basisPack), pick: () => setN({ basis: 'pack' }) }, { t: 'هر ' + SU, on: !basisPack, style: segS(!basisPack), pick: () => setN({ basis: 'unit' }) }] : [],
+      bUnit, smodePct: V.smode === 'pct',
+      smodeOpts: [{ t: '٪', style: segS(V.smode === 'pct'), pick: () => setN({ smode: 'pct', spct: V.spct || (buyAFN && num(V.sell) ? String(Math.round(((num(V.sell) * rate(V.bcur)) / buyAFN - 1) * 100)) : V.spct) }) },
+                  { t: CURS[V.bcur][0], style: segS(V.smode !== 'pct'), pick: () => setN({ smode: 'amt', scur: V.bcur, sell: V.sell || (sellInBuyCur ? String(Math.round(sellInBuyCur * 100) / 100) : '') }) }],
+      buyHint: buyN > 0 ? (basisPack ? 'هر ' + SU + ': ' + fm(toUnit(buyAFN), 2) + ' ؋' : hasPack && perOk ? 'هر ' + PU + ': ' + fm(toPack(buyAFN)) + ' ؋' : '') + (V.bcur !== 'AFN' ? ' · ' + fm(buyAFN, 2) + ' ؋' : '') : 'نرخ آخرین خرید؛ با هر خرید به‌روز می‌شود',
+      sellHint: sellAFN > 0 && buyN > 0 ? (V.smode === 'pct' ? '= ' + fm(sellInBuyCur, CURS[V.bcur][0] === '؋' ? 0 : 2) : fm(markup, 0) + '٪') : '',
+      sellSuffix: V.smode === 'pct' ? '٪' : '',
+      // stock
+      swOn, toggleHas: () => setN({ has: !V.has }), swTrack: 'position: relative; width: 34px; height: 20px; flex-shrink: 0; border-radius: 999px; box-sizing: border-box; transition: background .15s; background: ' + (swOn ? '#2F6FED' : 'var(--surface-3)') + '; box-shadow: inset 0 0 0 1px ' + (swOn ? '#2F6FED' : 'var(--border-strong)'),
+      swKnob: 'position: absolute; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 2px rgba(11,21,48,.3); transition: right .15s; right: ' + (swOn ? '17px' : '3px'),
+      swHint: swOn ? 'موجودی فعلی را هنگام ثبت وارد کنید' : 'موجودی بعداً از طریق بل خرید اضافه می‌شود',
+      qunitOpts: hasPack ? [{ t: PU, style: segS(V.qunit === 'pack'), pick: () => setN({ qunit: 'pack' }) }, { t: SU, style: segS(V.qunit !== 'pack'), pick: () => setN({ qunit: 'unit' }) }] : [], qunitSingle: !hasPack, qunitWord: SU,
+      qtyHint: qtyN > 0 ? '= ' + ctnTxt(qtyUnits) + (buyN > 0 ? ' · ارزش ' + fm(stockVal) + ' ؋' : '') : 'موجودی فعلی در این گدام',
+      expHint: expD ? (expDays < 0 ? 'منقضی شده' : Math.floor(expDays / 30.4) + ' ماه و ' + Math.round(expDays % 30.4) + ' روز مانده') : '↑ ↓ برای تغییر ماه',
+      expHintS: 'font-size: 10.5px; color: ' + (expD ? expTone : 'var(--subtle)') + '; font-weight: ' + (expD ? 700 : 500) + (errs.exp && show('exp') ? '; display: none' : ''),
+      mfgHint: mfgD ? (mfgD.s > nowS ? 'تاریخ آینده است' : 'تولید') : 'اختیاری · ↑ ↓',
+      minUnit: hasPack && perOk ? SU : SU, minHint: num(V.minq) > 0 && hasPack && perOk ? 'هشدار وقتی کمتر از ' + ctnTxt(num(V.minq)) + ' شود' : 'هشدار کم‌موجودی',
+      // description & image
+      descLen: V.desc.length + ' / 500', onDesc: (e) => setN({ desc: e.target.value.slice(0, 500) }),
+      hasImg: !!V.img, img: V.img, imgName: V.imgName, imgErr: N.imgErr || '', hasImgErr: !!N.imgErr,
+      onImg: (e) => { const fl = e.target.files && e.target.files[0]; if (!fl) return; if (!/^image\//.test(fl.type)) { setN({ imgErr: 'فقط فایل تصویر (JPG، PNG، WebP)' }); return; } if (fl.size > 2 * 1024 * 1024) { setN({ imgErr: 'حجم تصویر باید کمتر از 2MB باشد' }); return; } setN({ img: URL.createObjectURL(fl), imgName: fl.name + ' · ' + Math.round(fl.size / 1024) + 'KB', imgErr: '' }); },
+      removeImg: () => setN({ img: '', imgName: '' }),
+      // preview
+      pvName: V.name.trim() || 'نام ' + W1, pvNameS: 'font-family: Inter, sans-serif; font-size: 13px; font-weight: 800; color: ' + (V.name.trim() ? 'var(--ink)' : 'var(--subtle)') + '; overflow-wrap: anywhere; line-height: 1.35',
+      smName: V.name.trim() || 'نام ' + W1, smNameS: 'font-family: Inter, sans-serif; font-size: 13px; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; text-align: right; color: ' + (V.name.trim() ? 'var(--ink)' : 'var(--subtle)'),
+      smCat: V.cat || '—', smBrand: V.brand || '—', smGen: V.gen || '—', smUnit: V.unit && hasPack && perOk ? '1 ' + V.pack + ' = ' + per + ' ' + SU : (V.unit || '—'),
+      smStock: qtyN > 0 ? ctnTxt(qtyUnits) : '—', smVal: qtyN > 0 && buyN > 0 ? fm(stockVal) + ' ؋' : '—', smWh: V.wh || '—',
+      smBatch: V.batch.trim() || '—', smMfg: mfgD ? V.mfg : '—', smExp: expD ? V.exp : '—', smExpS: 'font-family: Inter, sans-serif; font-weight: 700; direction: ltr; color: ' + (expD ? expTone : 'var(--subtle)'),
+      smMin: num(V.minq) > 0 ? fm(num(V.minq)) + ' ' + SU : '—', smEd: num(V.edays) > 0 ? fm(num(V.edays)) + ' روز قبل' : '—',
+      smErr: errKeys.length, smOk: !errKeys.length, smState: errKeys.length ? errKeys.length + ' فیلد ضروری مانده' : 'آماده ثبت',
+      smStateS: 'display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; ' + (errKeys.length ? 'background: var(--warn-soft); color: var(--warn-text)' : 'background: var(--ok-soft); color: var(--ok-text)'),
+      smIcon: errKeys.length ? 'pending' : 'check_circle',
+      smTile: 'width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, ' + (CATC[catId] || '#2F6FED') + ' 14%, transparent); color: ' + (CATC[catId] || '#2F6FED'),
+      smExpChip: 'display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px; border-radius: 999px; font-family: Inter, sans-serif; font-size: 11px; font-weight: 700; direction: ltr; background: color-mix(in srgb, ' + (expD ? (expDays < 0 ? '#D64560' : expDays < num(V.edays) ? '#D9822B' : '#16A34A') : '#94A3B8') + ' 14%, transparent); color: ' + (expD ? expTone : 'var(--subtle)'),
+      smSellBig: sellAFN > 0 ? fm(toPack(sellAFN)) : '—', smBuyBig: buyN > 0 ? fm(toPack(buyAFN)) : '—', smProfit: buyN > 0 && sellAFN > 0 ? fm(toPack(sellAFN - buyAFN)) + ' ؋' : '—',
+      pvIcon: catIcon, pvCat: V.cat || 'بدون کتگوری', pvCode: V.code.trim() || nextCode, pvMeta: [V.brand, V.gen].filter(Boolean).join(' · ') || 'برند و جنریک انتخاب نشده',
+      pvBuy: buyN > 0 ? fm(toPack(buyAFN)) : '—', pvSell: sellAFN > 0 ? fm(toPack(sellAFN)) : '—', pvBuyU: buyN > 0 ? fm(toUnit(buyAFN), 2) : '—', pvSellU: sellAFN > 0 ? fm(toUnit(sellAFN), 2) : '—',
+      pvPU: hasPack ? PU : SU, pvSU: SU, pvShowU: hasPack && perOk,
+      pvMargin: buyN > 0 && sellAFN > 0 ? fm(margin, 1) + '٪' : '—', pvMarginS: 'font-family: Inter, sans-serif; font-size: 12.5px; font-weight: 800; direction: ltr; color: ' + (buyN > 0 && sellAFN > 0 ? mTone : 'var(--subtle)'),
+      pvBar: 'display: block; height: 100%; border-radius: 999px; background: ' + mTone + '; width: ' + Math.max(0, Math.min(100, margin)) + '%',
+      pvProfit: buyN > 0 && sellAFN > 0 ? 'مفاد هر ' + (hasPack ? PU : SU) + ': ' + fm(toPack(sellAFN - buyAFN)) + ' ؋' : 'نرخ‌ها را وارد کنید',
+      pvStock: V.has && qtyN > 0 ? ctnTxt(qtyUnits) : V.has ? '—' : 'بدون موجودی اولیه', pvWh: V.has ? V.wh : '', pvVal: V.has && stockVal > 0 ? fm(stockVal) + ' ؋' : '',
+      pvExp: pharm && V.has && expD ? V.exp : '', pvExpS: 'font-family: Inter, sans-serif; font-size: 11.5px; font-weight: 800; direction: ltr; color: ' + expTone,
+      pvHasExp: pharm && V.has && !!expD,
+      pctDone: pctDone + '٪', doneBar: 'display: block; height: 100%; border-radius: 999px; transition: width .2s; background: ' + (pctDone === 100 ? 'var(--ok-text)' : '#2F6FED') + '; width: ' + pctDone + '%',
+      checks: REQ.map(([k, t]) => ({ t, ok: !errs[k], icon: !errs[k] ? 'check_circle' : 'radio_button_unchecked', style: 'display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: ' + (!errs[k] ? 'var(--text)' : 'var(--muted)'), iconS: 'font-size: 15px; color: ' + (!errs[k] ? 'var(--ok-text)' : 'var(--border-strong)') })),
+      // bar & toast
+      errCount: errKeys.length, showErrBanner: tried && errKeys.length > 0, errBanner: errKeys.length + ' مورد نیاز به اصلاح دارد',
+      errList: errKeys.map((k) => errs[k]).join(' · '),
+      barStatus: errKeys.length ? (REQ.length - doneN) + ' فیلد ضروری باقی مانده' : 'آماده ذخیره', barStatusS: 'display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; color: ' + (errKeys.length ? 'var(--muted)' : 'var(--ok-text)'),
+      barIcon: errKeys.length ? 'pending' : 'task_alt',
+      saveNew: save(true), saveOne: save(false), reset,
+      toast: N.toast || '', hasToast: !!N.toast, toastAgain: !!N.toastAgain, closeToast: () => setN({ toast: '' }),
+      done: !!N.done && !N.toastAgain, newAfter: () => { const keep = {}; KEEP.forEach((k) => { if (N[k] != null) keep[k] = N[k]; }); this.setState({ np: keep }); }
+    };
+
+    })();
+
+    return {
+      prodLabel: this.props.pharmacy !== false ? 'ادویه‌جات' : 'محصولات', prodWord: this.props.pharmacy !== false ? 'ادویه‌جات' : 'محصولات', prodOne: this.props.pharmacy !== false ? 'ادویه' : 'محصول', prodIcon: this.props.pharmacy !== false ? 'medication' : 'inventory_2',
+      cp,
+      notifOpen: s.notifOpen, notifExpanded: s.notifOpen ? 'true' : 'false',
+      toggleNotif: () => this.setState({ notifOpen: !s.notifOpen }), closeNotif: () => this.setState({ notifOpen: false }),
+      markAll: () => this.setState({ allRead: true }),
+      unread, hasUnread: unread > 0, nTabs, nItems,
+      bellLabel: 'اعلان‌ها، ' + unread + ' مورد جدید',
+      bellStyle: 'position: relative; width: 34px; height: 34px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; ' + (s.notifOpen ? 'background: var(--primary-soft); border: 1px solid var(--border-strong); color: var(--link)' : 'background: var(--surface); border: 1px solid var(--border); color: var(--text)'),
+      greet: (() => { const h = new Date().getHours(); return h < 11 ? 'صبح بخیر، hewad' : h < 15 ? 'روز بخیر، hewad' : h < 19 ? 'عصر بخیر، hewad' : 'شب بخیر، hewad'; })(),
+      greetIcon: (() => { const h = new Date().getHours(); return h < 11 ? 'wb_sunny' : h < 15 ? 'light_mode' : h < 19 ? 'wb_twilight' : 'bedtime'; })(),
+      rootClass: 'z-root' + (s.dark ? ' dark' : ''),
+      toggleTheme: () => this.setState({ dark: !s.dark }),
+      themeIcon: s.dark ? 'light_mode' : 'dark_mode',
+      themeLabel: s.dark ? 'حالت روشن' : 'حالت تاریک',
+      lnk: { fa: 'ProductNew.dc.html', ps: '#', en: '#' },
+      sbClass: 'sb' + (s.collapsed ? ' sbc' : '') + (s.mobileOpen ? ' open' : ''),
+      sbIcon: s.mobileOpen ? 'close' : 'menu_open',
+      toggleSb: () => {
+        const mobile = typeof window !== 'undefined' && window.innerWidth < 768;
+        if (mobile) this.setState({ mobileOpen: false }); else this.setState({ collapsed: !s.collapsed });
+      },
+      mobileOpen: s.mobileOpen,
+      openNav: () => this.setState({ mobileOpen: true, collapsed: false }),
+      closeNav: () => this.setState({ mobileOpen: false }),
+      reportsOpen: s.reportsOpen, reportsExpanded: s.reportsOpen ? 'true' : 'false',
+      reportsChevron: 'font-size: 18px; transition: transform .2s; transform: rotate(' + (s.reportsOpen ? '180' : '0') + 'deg)',
+      toggleReports: () => this.setState({ reportsOpen: !s.reportsOpen }),
+      spark, lines, area, ticks, vis, legend, totals, ranges, xlabels,
+      accounts, accTotal, att, panel, donut, rwRanges, whLines, whArea, whTicks, whVis, whCards, whRanges, whX,
+      rates, editing: s.editRates, notEditing: !s.editRates,
+      startEdit: () => this.setState({ editRates: true }), stopEdit: () => this.setState({ editRates: false }),
+      products, debtors, txRows, txTabs,
+      ...pnewVals
+    };
+  }
+}
+
+;(function(){ if (typeof Component === 'undefined' || Component.prototype.__zclk) return; Component.prototype.__zclk = true;
+  const RV = Component.prototype.renderVals;
+  Component.prototype.renderVals = function () { const o = RV.apply(this, arguments) || {};
+    if (!this.__clkTimer && typeof setInterval === 'function') { const self = this; this.__clkTimer = setInterval(function () { try { self.setState({ __clk: Date.now() }); } catch (e) {} }, 20000); }
+    const d = new Date(); let t = '', dt = '';
+    try { t = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kabul' }).format(d);
+      const p = {}; new Intl.DateTimeFormat('fa-AF-u-ca-persian-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kabul' }).formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+      dt = p.weekday + '، ' + p.day + ' ' + p.month + ' ' + p.year; } catch (e) { t = d.toTimeString().slice(0, 5); dt = d.toLocaleDateString(); }
+    return Object.assign(o, { clkTime: t, clkDate: dt, clkFull: dt + ' · ' + t }); };
+})();
+</script>
+</body>
+</html>

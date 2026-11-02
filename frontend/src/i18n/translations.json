@@ -398,6 +398,12 @@
     "Archive": "Archive",
     "Unarchive": "Unarchive",
     "Stock History": "Stock history",
+    "Bill Summary": "Bill summary",
+    "Bill Total": "Bill total",
+    "Received Money": "Received money",
+    "Full": "Full",
+    "Auto": "Auto",
+    "Lock Note": "After confirmation the bill cannot be deleted; corrections go through sale returns.",
     "Select account group": "Select account group"
   },
   "fa": {
@@ -1662,6 +1668,10 @@
     "Choose": "انتخاب",
     "Standard": "استاندارد",
     "Complete": "کامل",
+    "Incomplete": "ناقص",
+    "Registration Summary": "خلاصه ثبت",
+    "No results found": "موردی پیدا نشد",
+    "Clear selection": "پاک کردن انتخاب",
     "Advanced": "پیشرفته",
     "Real-Time": "زمان واقعی",
     "Personal Information": "اطلاعات شخصی",
@@ -2144,6 +2154,13 @@
     "Archive": "آرشیف کردن",
     "Unarchive": "از آرشیف بیرون آوردن",
     "Stock History": "گردش موجودی",
+    "Bill Summary": "خلاصه بل",
+    "Bill Total": "مجموع بل",
+    "Invalid discount": "تخفیف نامعتبر",
+    "Received Money": "رسید پول",
+    "Full": "کامل",
+    "Auto": "خودکار",
+    "Lock Note": "بعد از تایید، بل حذف نمی‌شود؛ اصلاح فقط از راه برگشت فروش.",
     "Select account group": "یک گروه حساب را انتخاب کنید"
   },
   "ps": {
@@ -3405,6 +3422,10 @@
     "Choose": "غوره کړه",
     "Standard": "معیاري",
     "Complete": "بشپړ",
+    "Incomplete": "نیمګړی",
+    "Registration Summary": "د ثبت لنډیز",
+    "No results found": "هیڅ پایله ونه موندل شوه",
+    "Clear selection": "ټاکنه پاکه کړه",
     "Advanced": "پرمختللی",
     "Real-Time": "حقیقي وخت",
     "Personal Information": "شخصي معلومات",
@@ -3888,6 +3909,13 @@
     "Archive": "آرشیف کول",
     "Unarchive": "له آرشیف ویستل",
     "Stock History": "د ذخیرې بهیر",
+    "Bill Summary": "د بل لنډیز",
+    "Bill Total": "د بل ټول",
+    "Invalid discount": "ناسم تخفیف",
+    "Received Money": "ترلاسه شوې پیسې",
+    "Full": "بشپړ",
+    "Auto": "اتومات",
+    "Lock Note": "له تایید وروسته بل له منځه نه ځي؛ سمون یوازې د پلور بیرته ستنېدو له لارې دی.",
     "Select account group": "د حساب کروپ وټاکئ"
   }
 }

@@ -2,9 +2,14 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>فروش‌ها · Zeno</title>
-
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
@@ -1286,12 +1291,7 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
 .wh-sum b{display:block!important;text-align:right!important}
 /*s2look*/.list-page .kpi .kcard .kside{display:flex!important}.list-page .kpi .kcard svg{display:block!important}.list-page .kpi .kcard .kbar{display:block!important}.list-page .stbl tbody tr:nth-child(even) td{background:transparent}.list-page .stbl td{padding-block:6px!important}
 </style>
-
-<style>html,body{margin:0}</style>
-</head>
-<body>
-<div id="dc-root"></div>
-<script type="text/plain" id="dc-template">
+</helmet>
 <div dir="rtl" data-lang="fa" class="{{rootClass}}" style="font-family: 'Vazirmatn', 'Noto Sans Arabic', system-ui, sans-serif; color: var(--text); background: var(--bg); height: 100vh; display: flex; overflow: hidden; font-size: 13px; line-height: 1.55">
 
 <!-- ============ SIDEBAR (fixed) ============ -->
@@ -1316,17 +1316,17 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
 
   <nav class="scroll" style="flex: 1; overflow-y: auto; padding: 2px 12px 10px; display: flex; flex-direction: column; gap: 1px">
     <div class="sec">اصلی</div>
-    <a href="Main.html" class="nav" title="داشبورد"><span class="ms">space_dashboard</span><span class="lbl">داشبورد</span></a>
+    <a href="Main.dc.html" class="nav" title="داشبورد"><span class="ms">space_dashboard</span><span class="lbl">داشبورد</span></a>
 
     <div class="sec">تجارت</div>
-    <a href="Sales.html" class="nav on" aria-current="page" title="فروش‌ها"><span class="ms">shopping_cart</span><span class="lbl">فروش‌ها</span><span class="badge" title="پیش‌نویس‌ها">2</span></a>
-    <a href="Purchases.html" class="nav" title="خریدها"><span class="ms">shopping_bag</span><span class="lbl">خریدها</span><span class="badge" title="پیش‌نویس‌ها">1</span></a>
-    <a href="Products.html" class="nav" title="{{prodLabel}}"><span class="ms">{{prodIcon}}</span><span class="lbl">{{prodLabel}}</span></a>
+    <a href="Sales.dc.html" class="nav on" aria-current="page" title="فروش‌ها"><span class="ms">shopping_cart</span><span class="lbl">فروش‌ها</span><span class="badge" title="پیش‌نویس‌ها">2</span></a>
+    <a href="Purchases.dc.html" class="nav" title="خریدها"><span class="ms">shopping_bag</span><span class="lbl">خریدها</span><span class="badge" title="پیش‌نویس‌ها">1</span></a>
+    <a href="Products.dc.html" class="nav" title="{{prodLabel}}"><span class="ms">{{prodIcon}}</span><span class="lbl">{{prodLabel}}</span></a>
 
     <div class="sec">مالی</div>
-    <a href="Accounts.html" class="nav" title="حساب‌ها"><span class="ms">group</span><span class="lbl">حساب‌ها</span></a>
-    <a href="Journal.html" class="nav" title="روزنامچه"><span class="ms">menu_book</span><span class="lbl">روزنامچه</span></a>
-    <a href="Exchange.html" class="nav" title="صرافی"><span class="ms">currency_exchange</span><span class="lbl">صرافی</span></a>
+    <a href="Accounts.dc.html" class="nav" title="حساب‌ها"><span class="ms">group</span><span class="lbl">حساب‌ها</span></a>
+    <a href="Journal.dc.html" class="nav" title="روزنامچه"><span class="ms">menu_book</span><span class="lbl">روزنامچه</span></a>
+    <a href="Exchange.dc.html" class="nav" title="صرافی"><span class="ms">currency_exchange</span><span class="lbl">صرافی</span></a>
 
     <div class="sec">مدیریت</div>
     <button class="nav" onClick="{{toggleReports}}" aria-expanded="{{reportsExpanded}}" title="گزارشات">
@@ -1335,13 +1335,13 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
     </button>
     <sc-if value="{{reportsOpen}}" hint-placeholder-val="{{ false }}">
       <div class="hide-c" style="display: flex; flex-direction: column; padding: 2px 0 4px">
-        <a href="SalesReport.html" class="sub">گزارش فروش</a>
-        <a href="PurchaseReport.html" class="sub">گزارش خرید</a>
-        <a href="ProfitLoss.html" class="sub">مفاد و زیان</a>
-        <a href="StockReport.html" class="sub">گزارش موجودی</a>
+        <a href="SalesReport.dc.html" class="sub">گزارش فروش</a>
+        <a href="PurchaseReport.dc.html" class="sub">گزارش خرید</a>
+        <a href="ProfitLoss.dc.html" class="sub">مفاد و زیان</a>
+        <a href="StockReport.dc.html" class="sub">گزارش موجودی</a>
       </div>
     </sc-if>
-    <a href="Settings.html" class="nav" title="تنظیمات"><span class="ms">settings</span><span class="lbl">تنظیمات</span></a>
+    <a href="Settings.dc.html" class="nav" title="تنظیمات"><span class="ms">settings</span><span class="lbl">تنظیمات</span></a>
   </nav>
 
   <div style="padding: 10px 12px 12px; border-top: 1px solid #1B2A52">
@@ -1454,7 +1454,8 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
   <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
     <nav aria-label="بخش‌های فروش" style="display: flex; gap: 2px; background: var(--surface-3); border-radius: 10px; padding: 3px; overflow-x: auto; max-width: 100%">
       <a href="#" aria-current="page" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 12.5px; font-weight: 700; box-shadow: 0 1px 3px rgba(11,21,48,.14); white-space: nowrap"><span class="ms" style="font-size: 16px">receipt_long</span>بل‌های فروش</a>
-      <a href="VisitorReport.html" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap"><span class="ms" style="font-size: 16px">badge</span>گزارش ویزیتورها</a>
+      <a href="SalesReport.dc.html" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap"><span class="ms" style="font-size: 16px">bar_chart_4_bars</span>گزارش فروش</a>
+      <a href="VisitorReport.dc.html" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap"><span class="ms" style="font-size: 16px">badge</span>گزارش ویزیتورها</a>
     </nav>
     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
       <div style="position: relative">
@@ -1470,7 +1471,7 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
         </sc-if>
       </div>
       <a href="#" onClick="{{blankBill}}" class="btn" style="display: flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-size: 12.5px; font-weight: 600; color: var(--ink)"><span class="ms" style="font-size: 18px; color: var(--muted)">note_add</span>بل خالی</a>
-      <a href="SaleNew.html" class="btnp" style="display: flex; align-items: center; gap: 5px; height: 34px; padding: 0 14px; background: #2F6FED; border-radius: 10px; font-size: 12.5px; font-weight: 700; color: #FFFFFF; box-shadow: 0 8px 18px -8px rgba(47,111,237,.9)"><span class="ms" style="font-size: 18px">add</span>فروش جدید</a>
+      <a href="SaleNew.dc.html" class="btnp" style="display: flex; align-items: center; gap: 5px; height: 34px; padding: 0 14px; background: #2F6FED; border-radius: 10px; font-size: 12.5px; font-weight: 700; color: #FFFFFF; box-shadow: 0 8px 18px -8px rgba(47,111,237,.9)"><span class="ms" style="font-size: 18px">add</span>فروش جدید</a>
     </div>
   </div>
 
@@ -1621,7 +1622,7 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
     <!-- desktop table: same columns, fixed widths, long values never break the row -->
     <div class="tbl-wrap">
       <table class="stbl stbl-s" style="width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; text-align: start; font-size: 12.5px; font-variant-numeric: tabular-nums">
-        <colgroup><col style="width: 132px"><col style="width: 112px"><col><col style="width: 124px"><col style="width: 156px"><col style="width: 112px"><col style="width: 132px"><col style="width: 112px"><col style="width: 84px"></colgroup>
+        
         
         <thead>
           <tr style="color: var(--muted); font-size: 11.5px">
@@ -1918,6 +1919,11 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
   </sc-if>
 
   
+
+
+
+
+
 
 
 
@@ -2459,16 +2465,15 @@ a{color:var(--link);text-decoration:none}a:hover{color:var(--link)}
 
 <!-- Mobile bottom navigation -->
 <nav class="bnav" aria-label="ناوبری پایین">
-  <a href="Main.html" class="bn"><span class="ms" style="font-size: 22px">space_dashboard</span>داشبورد</a>
-  <a href="Sales.html" class="bn on" aria-current="page"><span class="ms" style="font-size: 22px">shopping_cart</span>فروش‌ها</a>
+  <a href="Main.dc.html" class="bn"><span class="ms" style="font-size: 22px">space_dashboard</span>داشبورد</a>
+  <a href="Sales.dc.html" class="bn on" aria-current="page"><span class="ms" style="font-size: 22px">shopping_cart</span>فروش‌ها</a>
   <a href="#" aria-label="POS" style="width: 52px; height: 52px; border-radius: 16px; background: #2F6FED; color: #FFFFFF; display: flex; align-items: center; justify-content: center; margin-top: -22px; box-shadow: 0 10px 20px -8px rgba(47,111,237,.8); border: 4px solid var(--surface)"><span class="ms f" style="font-size: 24px">point_of_sale</span></a>
   <a href="#" class="bn"><span class="ms" style="font-size: 22px">inventory_2</span>محصولات</a>
   <button onClick="{{openNav}}" class="bn"><span class="ms" style="font-size: 22px">menu</span>بیشتر</button>
 </nav>
 </div>
-
-</script>
-<script type="text/plain" id="dc-logic">
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"pharmacy":{"editor":"boolean","default":true},"bigNumbers":{"editor":"boolean","default":false},"longText":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":900}}'>
 class Component extends DCLogic {
   constructor(props) {
     super(props);
@@ -2960,7 +2965,7 @@ class Component extends DCLogic {
         for (let i = 0; i < n; i++) { const tot = i === n - 1 ? left : Math.round(gross * WS[i] / WT); left -= tot;
           const qty = Math.max(1, Math.min(60, Math.round(tot / 40) || 1)), sell = Math.round(tot / qty * 100) / 100, buy = Math.round(sell * 0.78 * 100) / 100;
           lines.push({ i: String(i + 1), n: NAMES[(sd + i) % NAMES.length], cat: CATS[NAMES[(sd + i) % NAMES.length]], unit: UNITS[(sd + i) % UNITS.length], qty: String(qty), sell: M(sell), buy: M(buy), tot: M(tot), pf: M(tot - buy * qty),
-            batch: 'B-' + (1010 + (sd * 7 + i * 13) % 90), exp: '140' + (6 + (i + sd) % 2) + '/' + String(1 + (sd + i * 5) % 12).padStart(2, '0'), href: 'Products.html', wh: (i === 1 && sd % 2) ? 'گدام فرعی' : (bx.w || W),
+            batch: 'B-' + (1010 + (sd * 7 + i * 13) % 90), exp: '140' + (6 + (i + sd) % 2) + '/' + String(1 + (sd + i * 5) % 12).padStart(2, '0'), href: 'Products.dc.html', wh: (i === 1 && sd % 2) ? 'گدام فرعی' : (bx.w || W),
             label: () => setSL({ gp: bx.no, gpi: i }) }); }
       return { lines, disc, gross };
     };
@@ -3006,7 +3011,7 @@ class Component extends DCLogic {
         const TAB = SL.bvTab || '', tabS = (on) => 'flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; border: 0; font: inherit; font-size: 13px; cursor: pointer; background: transparent; ' + (on ? 'color: var(--link); font-weight: 800; box-shadow: inset 0 -2px 0 #2F6FED' : 'color: var(--muted); font-weight: 600');
         out.bv = Object.assign(billOf(bx), { open: true, close: () => setSL({ bv: '', bvTab: '', bvTools: false }), toolsOpen: !!SL.bvTools, toolsExp: SL.bvTools ? 'true' : 'false', togTools: () => setSL({ bvTools: !SL.bvTools }), closeTools: () => setSL({ bvTools: false }),
           stT: STS[st][0], stIc: STS[st][1], stChip: 'height: 24px; display: inline-flex; align-items: center; gap: 4px; padding: 0 10px; border-radius: 999px; font-size: 11.5px; font-weight: 800; color: ' + STS[st][2] + '; background: ' + STS[st][3],
-          ver: 'نسخه ' + ver, ref: refOf(bx), custHref: 'AccountProfile.html#n=' + bx.c, initial: bx.c.charAt(0),
+          ver: 'نسخه ' + ver, ref: refOf(bx), custHref: 'AccountProfile.dc.html#n=' + bx.c, initial: bx.c.charAt(0),
           hasVis: !!vis, noVis: !vis, vis: vis || {}, d2: bx.g, due: bx.r ? '۲۸ میزان ۱۴۰۵' : '—', due2: bx.r ? '2026-10-20' : '', note: 'نمبر بل ' + (2900 + sd), w: bx.w || W,
           exp: M(sd % 4 === 1 ? Math.round(bx.t * 0.01) : 0), custBal: M(SALES.filter((y) => y.c === bx.c && !y.vd).reduce((t, y) => t + y.r, 0)), custBills: String(SALES.filter((y) => y.c === bx.c).length), kTotal: M(bx.t), kPaid: M(paidNow), kRet: M(retAmt), kRem: M(bx.r), remCls: bx.r > 0 ? 'rem-owed' : 'rem-zero', hasDisc: disc > 0, disc: M(disc), gross: M(gross), profitT: M(profit),
           items: lines, nItems: lines.length + ' قلم', nIt: String(lines.length),
@@ -3017,7 +3022,7 @@ class Component extends DCLogic {
           print: () => setSL({ pv: bx.no, bvTools: false }), wa: () => setSL({ wa: bx.no, waMsg: null, waPdf: true, bvTools: false }),
           receive: () => setSL({ rc: bx.no, rcAmt: null, rcBox: 'cash', rcNote: null, rcDate: null, rcTried: false, rcBoxOpen: false }),
           voidIt: () => setSL({ bvTools: false, vd: bx.no, vdWhy: '', vdNote: '', vdTried: false }),
-          editHref: 'SaleNew.html#edit=' + bx.no, draftHref: 'SaleNew.html#copy=' + bx.no, retHref: 'SaleNew.html#ret=' + bx.no });
+          editHref: 'SaleNew.dc.html#edit=' + bx.no, draftHref: 'SaleNew.dc.html#copy=' + bx.no, retHref: 'SaleNew.dc.html#ret=' + bx.no });
       } else out.bv = { open: false };
       // print
       const px = SL.pv ? byNo(SL.pv) : null, PF = SL.pf || 'a4';
@@ -3102,7 +3107,7 @@ class Component extends DCLogic {
         view: () => setSL({ menu: '', bv: x.no }), print: () => setSL({ menu: '', pv: x.no }),
         nIt: String(nItOf(x)), nItT: nItOf(x) + ' قلم',
         noStyle: 'display: block; max-width: 100%; padding: 0; border: 0; background: transparent; font: inherit; direction: ltr; text-align: start; cursor: pointer; font-size: 12.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: ' + (x.vd ? 'var(--subtle); text-decoration: line-through' : 'var(--link)'),
-        stTip: STS[stOf(x)][0] + (x.vd ? ' · ' + x.vd : ''), isDraft: stOf(x) === 'draft', notDraft: stOf(x) !== 'draft', isOk: stOf(x) === 'ok', stClickTip: STS[stOf(x)][0] + (x.vd ? ' · ' + x.vd : '') + ' · کلیک برای مشاهده', payClickTip: (x.vd ? 'بل باطل شده' : 'تسویه کامل') + ' · کلیک برای مشاهده', isOther: stOf(x) !== 'ok' && stOf(x) !== 'draft', canRcv: x.r > 0 && !x.vd, noRcv: !(x.r > 0 && !x.vd), rcv: () => setSL({ menu: '', rc: x.no, rcAmt: null, rcBox: 'cash', rcNote: null, rcDate: null, rcTried: false, rcBoxOpen: false }), draftHref: 'SaleNew.html#draft=' + x.no, ref: refOf(x), refTip: 'نمبر مرجع ' + refOf(x), stBox: 'width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; margin-inline-end: 10px; color: ' + STS[stOf(x)][2] + '; background: ' + STS[stOf(x)][3],
+        stTip: STS[stOf(x)][0] + (x.vd ? ' · ' + x.vd : ''), isDraft: stOf(x) === 'draft', notDraft: stOf(x) !== 'draft', isOk: stOf(x) === 'ok', stClickTip: STS[stOf(x)][0] + (x.vd ? ' · ' + x.vd : '') + ' · کلیک برای مشاهده', payClickTip: (x.vd ? 'بل باطل شده' : 'تسویه کامل') + ' · کلیک برای مشاهده', isOther: stOf(x) !== 'ok' && stOf(x) !== 'draft', canRcv: x.r > 0 && !x.vd, noRcv: !(x.r > 0 && !x.vd), rcv: () => setSL({ menu: '', rc: x.no, rcAmt: null, rcBox: 'cash', rcNote: null, rcDate: null, rcTried: false, rcBoxOpen: false }), draftHref: 'SaleNew.dc.html#draft=' + x.no, ref: refOf(x), refTip: 'نمبر مرجع ' + refOf(x), stBox: 'width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; margin-inline-end: 10px; color: ' + STS[stOf(x)][2] + '; background: ' + STS[stOf(x)][3],
         regTip: 'ثبت: 12 میزان 1405',
         total: '؋\u200E ' + fmt(x.t), profit: '؋\u200E ' + fmt(x.p), profitFull: 'مفاد: ' + fmt(x.p) + ' ؋', remFull: !x.r ? 'تسویه کامل' : x.r >= x.t ? 'باقی (قرض کامل): ' + fmt(x.r) + ' ؋' : 'قسمتی · ' + paidPct + '% دریافت · باقی ' + fmt(x.r) + ' ؋',
         payLabel: !x.r ? 'تسویه' : x.r >= x.t ? 'باقی' : 'قسمتی', payChip: chipS(P[1], P[2]),
@@ -3121,10 +3126,10 @@ class Component extends DCLogic {
         menuPos: 'position: absolute; ' + (slice.indexOf(x) >= slice.length - 4 && slice.length > 6 ? 'bottom: 32px' : 'top: 32px') + '; inset-inline-end: 0; z-index: 20; width: 176px; padding: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px -12px rgba(11,21,48,.32), 0 2px 6px -2px rgba(11,21,48,.08); text-align: start; white-space: normal',
         menu: [
           ['visibility', 'مشاهده بل', '', () => setSL({ menu: '', bv: x.no }), '#', false],
-          ['edit_document', 'ویرایش بل', '', () => setSL({ menu: '' }), 'SaleNew.html#edit=' + x.no, !!x.vd],
+          ['edit_document', 'ویرایش بل', '', () => setSL({ menu: '' }), 'SaleNew.dc.html#edit=' + x.no, !!x.vd],
           ['receipt', 'رسید بل', x.r ? '؋\u200E ' + fmt(x.r) : '', () => setSL({ menu: '', rc: x.no, rcAmt: null, rcBox: 'cash', rcNote: null, rcDate: null, rcTried: false, rcBoxOpen: false }), '#', !x.r || !!x.vd],
           ['chat', 'ارسال واتساپ', '', () => setSL({ menu: '', wa: x.no, waMsg: null, waPdf: true }), '#', false],
-          ['content_copy', 'کاپی به بل دیگر', '', () => setSL({ menu: '' }), 'SaleNew.html#copy=' + x.no, false]
+          ['content_copy', 'کاپی به بل دیگر', '', () => setSL({ menu: '' }), 'SaleNew.dc.html#copy=' + x.no, false]
         ].map(([icon, t, sub, act, href, dim]) => ({
           icon, t, sub, act: dim ? () => {} : act, href: dim ? '#' : href,
           iconStyle: 'font-size: 15px; color: ' + (dim ? 'var(--disabled)' : 'var(--muted)'),
@@ -3132,7 +3137,7 @@ class Component extends DCLogic {
           subStyle: 'font-size: 10px; font-weight: 700; color: var(--warn-text); white-space: nowrap; font-variant-numeric: tabular-nums'
         })),
         menu2: [
-          ['assignment_return', 'برگشت فروش', 'کالا به گدام و مبلغ به حساب برمی‌گردد', 'var(--warn-text)', 'SaleNew.html#ret=' + x.no, () => setSL({ menu: '' }), !!x.vd],
+          ['assignment_return', 'برگشت فروش', 'کالا به گدام و مبلغ به حساب برمی‌گردد', 'var(--warn-text)', 'SaleNew.dc.html#ret=' + x.no, () => setSL({ menu: '' }), !!x.vd],
           ['block', x.vd ? 'باطل شده' : 'ابطال بل', x.vd ? 'دلیل: ' + x.vd : 'بل حذف نمی‌شود؛ باطل و در سوابق نگه داشته می‌شود', 'var(--danger-text)', '#', () => setSL({ menu: '', vd: x.no, vdWhy: '', vdNote: '', vdTried: false }), !!x.vd]
         ].map(([icon, t, tip, c, href, act, dim]) => ({ icon, t, tip, href: dim ? '#' : href, act: dim ? () => {} : act,
           iconStyle: 'font-size: 15px; color: ' + (dim ? 'var(--disabled)' : c),
@@ -3349,7 +3354,7 @@ class Component extends DCLogic {
       toggleTheme: () => this.setState({ dark: !s.dark }),
       themeIcon: s.dark ? 'light_mode' : 'dark_mode',
       themeLabel: s.dark ? 'حالت روشن' : 'حالت تاریک',
-      lnk: { fa: 'Sales.html', ps: '#', en: '#' },
+      lnk: { fa: 'Sales.dc.html', ps: '#', en: '#' },
       sbClass: 'sb' + (s.collapsed ? ' sbc' : '') + (s.mobileOpen ? ' open' : ''),
       sbIcon: s.mobileOpen ? 'close' : 'menu_open',
       toggleSb: () => {
@@ -3382,151 +3387,6 @@ class Component extends DCLogic {
       dt = p.weekday + '، ' + p.day + ' ' + p.month + ' ' + p.year; } catch (e) { t = d.toTimeString().slice(0, 5); dt = d.toLocaleDateString(); }
     return Object.assign(o, { clkTime: t, clkDate: dt, clkFull: dt + ' · ' + t }); };
 })();
-</script>
-<script type="application/json" id="dc-props">{"dark": false, "pharmacy": true, "bigNumbers": false, "longText": false}</script>
-<script>
-/* Zeno offline runtime — renders a .dc page (sc-for / sc-if / {{bindings}} + DCLogic component)
-   in a plain browser, with live state, events and DOM patching (keeps focus & scroll). */
-(function () {
-  'use strict';
-  var TPL = document.getElementById('dc-template').textContent;
-  var SRC = document.getElementById('dc-logic').textContent;
-  var PROPS = JSON.parse(document.getElementById('dc-props').textContent || '{}');
-  var root = document.getElementById('dc-root');
-
-  /* ---------- component ---------- */
-  var scheduled = false, comp;
-  function DCLogic(props) { this.props = props || {}; this.state = this.state || {}; }
-  DCLogic.prototype.setState = function (o, cb) {
-    if (typeof o === 'function') o = o(this.state, this.props);
-    if (o) this.state = Object.assign({}, this.state, o);
-    schedule(); if (cb) Promise.resolve().then(cb);
-  };
-  function schedule() { if (scheduled) return; scheduled = true; Promise.resolve().then(function () { scheduled = false; paint(); }); }
-  var Component = new Function('DCLogic', SRC + '\n;return Component;')(DCLogic);
-  comp = new Component(PROPS); if (!comp.props) comp.props = PROPS; if (!comp.state) comp.state = {};
-
-  /* ---------- template rendering ---------- */
-  var handlers = [], hid = 0;
-  function get(ctx, p) {
-    p = p.trim();
-    if (p === 'true') return true; if (p === 'false') return false;
-    if (/^-?\d+(\.\d+)?$/.test(p)) return +p;
-    if (/^'.*'$|^".*"$/.test(p)) return p.slice(1, -1);
-    var parts = p.split('.'), o = ctx;
-    for (var i = 0; i < parts.length; i++) { if (o == null) return undefined; o = o[parts[i]]; }
-    return o;
-  }
-  function esc(v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-  function escA(v) { return esc(v).replace(/"/g, '&quot;'); }
-  var EV = { onClick: 'click', onInput: 'input', onChange: 'change', onKeyDown: 'keydown', onKeyUp: 'keyup', onSubmit: 'submit', onFocus: 'focusin', onBlur: 'focusout', onMouseEnter: 'mouseover', onMouseLeave: 'mouseout', onDblClick: 'dblclick' };
-  var BOOL = { disabled: 1, selected: 1, checked: 1, readonly: 1, hidden: 1, autofocus: 1, autoFocus: 1, multiple: 1, required: 1 };
-  function sub(t, ctx) {
-    return t
-      .replace(/(\s)([\w:-]+)="\{\{([^}]*)\}\}"/g, function (m, sp, a, p) {
-        var v = get(ctx, p);
-        if (EV[a]) {
-          if (typeof v !== 'function') return '';
-          var id = 'h' + (hid++); handlers[id] = v;
-          var ev = EV[a]; return sp + 'data-on-' + ev + '="' + id + '"';
-        }
-        if (a === 'defaultValue') a = 'value';
-        if (a === 'autoFocus') a = 'autofocus';
-        if (BOOL[a]) return v && v !== 'false' ? sp + a : '';
-        if (v == null || v === false && a.indexOf('aria-') !== 0) return a === 'value' ? sp + 'value=""' : '';
-        return sp + a + '="' + escA(v) + '"';
-      })
-      .replace(/\{\{([^}]*)\}\}/g, function (m, p) { var v = get(ctx, p); return v == null || v === false ? '' : esc(v); });
-  }
-  function render(t, ctx) {
-    var out = '', i = 0, re = /<sc-(for|if)\b([^>]*)>/g;
-    while (true) {
-      re.lastIndex = i; var r = re.exec(t);
-      if (!r) { out += sub(t.slice(i), ctx); break; }
-      out += sub(t.slice(i, r.index), ctx);
-      var tag = r[1], depth = 1, re2 = new RegExp('<(/?)sc-' + tag + '\\b[^>]*>', 'g'), e; re2.lastIndex = re.lastIndex;
-      while (depth && (e = re2.exec(t))) depth += e[1] ? -1 : 1;
-      var inner = t.slice(re.lastIndex, e.index); i = re2.lastIndex;
-      var attr = function (n) { var a = r[2].match(new RegExp(n + '="\\{\\{([^}]*)\\}\\}"')); return a ? a[1] : null; };
-      if (tag === 'if') { var cv = get(ctx, attr('value')); if (cv && cv !== 'false') out += render(inner, ctx); }
-      else {
-        var list = get(ctx, attr('list')) || [], as = (r[2].match(/as="(\w+)"/) || [])[1];
-        for (var k = 0; k < list.length; k++) { var c2 = Object.create(ctx); c2[as] = list[k]; out += render(inner, c2); }
-      }
-    }
-    return out;
-  }
-
-  /* ---------- DOM patching (minimal morph) ---------- */
-  function syncAttrs(a, b) {
-    var i, n;
-    for (i = a.attributes.length - 1; i >= 0; i--) { n = a.attributes[i].name; if (!b.hasAttribute(n)) a.removeAttribute(n); }
-    for (i = 0; i < b.attributes.length; i++) { n = b.attributes[i]; if (a.getAttribute(n.name) !== n.value) a.setAttribute(n.name, n.value); }
-    var tg = a.tagName;
-    if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT') {
-      var nv = b.getAttribute('value'); if (nv == null && tg === 'TEXTAREA') nv = b.textContent;
-      if (nv != null && a.value !== nv) a.value = nv;
-      if (tg === 'INPUT' && (a.type === 'checkbox' || a.type === 'radio')) a.checked = b.hasAttribute('checked');
-    }
-  }
-  function same(a, b) { return a.nodeType === b.nodeType && a.nodeName === b.nodeName; }
-  function morph(a, b) {
-    if (a.nodeType === 3 || a.nodeType === 8) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
-    syncAttrs(a, b);
-    if (a.tagName === 'TEXTAREA') return;
-    morphChildren(a, b);
-  }
-  function morphChildren(a, b) {
-    var ac = a.firstChild, bc = b.firstChild;
-    while (bc) {
-      var nb = bc.nextSibling;
-      if (!ac) { a.appendChild(bc); }
-      else if (same(ac, bc)) { morph(ac, bc); ac = ac.nextSibling; }
-      else { var na = ac.nextSibling; a.replaceChild(bc, ac); ac = na; }
-      bc = nb;
-    }
-    while (ac) { var x = ac.nextSibling; a.removeChild(ac); ac = x; }
-  }
-
-  /* ---------- events (delegated, React-like bubbling) ---------- */
-  ['click', 'input', 'change', 'keydown', 'keyup', 'submit', 'focusin', 'focusout', 'mouseover', 'mouseout', 'dblclick'].forEach(function (type) {
-    root.addEventListener(type, function (e) {
-      var el = e.target, stopped = false;
-      while (el && el !== root && !stopped) {
-        var id = el.getAttribute && el.getAttribute('data-on-' + type);
-        if (id && handlers[id]) {
-          if ((type === 'mouseover' || type === 'mouseout') && e.relatedTarget && el.contains(e.relatedTarget)) { el = el.parentElement; continue; }
-          var cur = el;
-          var px = new Proxy(e, { get: function (t, k) {
-            if (k === 'currentTarget') return cur;
-            if (k === 'stopPropagation') return function () { stopped = true; t.stopPropagation(); };
-            var v = t[k]; return typeof v === 'function' ? v.bind(t) : v;
-          } });
-          try { handlers[id](px); } catch (err) { console.error(err); }
-        }
-        el = el.parentElement;
-      }
-    });
-  });
-
-  /* ---------- paint ---------- */
-  var seenAF = new WeakSet();
-  function paint() {
-    handlers = {}; hid = 0;
-    var vals;
-    try { vals = comp.renderVals(); } catch (err) { console.error(err); return; }
-    var html = render(TPL, vals);
-    var tmp = document.createElement('div'); tmp.innerHTML = html;
-    var first = !root.firstChild;
-    morphChildren(root, tmp);
-    var afs = root.querySelectorAll('[autofocus]'), nf = null;
-    for (var i = 0; i < afs.length; i++) { if (!seenAF.has(afs[i])) { seenAF.add(afs[i]); nf = afs[i]; } }
-    if (nf) nf.focus();
-  }
-  paint();
-  window.__dc = { comp: comp, paint: paint };
-})();
-
 </script>
 </body>
 </html>

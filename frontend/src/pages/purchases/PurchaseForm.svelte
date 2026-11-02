@@ -4,14 +4,12 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   import PurchaseItemsTable from './PurchaseItemsTable.svelte';
   import AccountModal from '../accounts/AccountModal.svelte';
   import { push } from 'svelte-spa-router';
-  import FilterSelect from '../../components/common/FilterSelect.svelte';
-  import { toast } from '../../ToastUI/toast.js';
+    import { toast } from '../../ToastUI/toast.js';
   import { showDate, getKabulDate } from '../../calendar.js';
   import AppDatePicker from '../../components/common/AppDatePicker.svelte';
   import { accountingDateOfStoredValue } from '../../utils/accountingDate.js';
   import { t, lang, translate_org_type, settings_all } from '../../i18n/i18n';
 import { currencyApi } from '../../api/currencyApi.js';
-import { warehouseApi } from '../../api/warehouseApi.js';
 import { accountApi } from '../../api/accountApi.js';
 import { accountTypeApi } from '../../api/accountTypeApi.js';
 import { purchaseApi } from '../../api/purchaseApi.js';
@@ -303,7 +301,6 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     sessionStorage.removeItem(getPurchaseDraftStorageKey());
   }
 
-  let warehouses = [];
   let suppliers = [];
   let currencies = [];
   let accountTypes = [];
@@ -335,6 +332,8 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   let quickPaymentRateEditing = false;
   let quickPaymentRateSaving = false;
   let quickPaymentRateInput = null;
+  let quickPaymentRateOp = 'mul';
+  let quickPaymentRateInitial = 1;
 
   /*
    * The quick exchange-rate pair is independent from Purchase Details.
@@ -411,6 +410,60 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     return Number((fromRate / toRate).toFixed(6));
   }
 
+  /*
+   * The rate card mirrors the sale form: the typed value reads
+   * «1 USD = 68 AFN» (mul) or «68 USD = 1 AFN» (div).
+   */
+  function quickPaymentRateSymbol(code) {
+    return currencies.find((currency) => currency.code === code)?.symbol || code || '';
+  }
+
+  $: quickPaymentFromSymbol = quickPaymentRateSymbol(quickPaymentFromCurrency);
+  $: quickPaymentToSymbol = quickPaymentRateSymbol(quickPaymentToCurrency);
+  $: quickPaymentRateEdited =
+    Number(quickPaymentExchangeRate) !== Number(quickPaymentRateInitial);
+  $: quickPaymentRateTabs = currencies.filter(
+    (currency) => currency.code !== quickPaymentToCurrency,
+  );
+
+  $: quickPaymentRateFormula = (() => {
+    const rate = Number(quickPaymentExchangeRate);
+
+    if (
+      !quickPaymentFromCurrency ||
+      !quickPaymentToCurrency ||
+      !Number.isFinite(rate) ||
+      rate <= 0
+    ) {
+      return '';
+    }
+
+    const shown = rate.toLocaleString(undefined, {
+      maximumFractionDigits: 4,
+    });
+
+    return quickPaymentRateOp === 'div'
+      ? `${shown} ${quickPaymentFromSymbol} = 1 ${quickPaymentToSymbol}`
+      : `1 ${quickPaymentFromSymbol} = ${shown} ${quickPaymentToSymbol}`;
+  })();
+
+  function toggleQuickPaymentRateOp() {
+    quickPaymentRateOp = quickPaymentRateOp === 'div' ? 'mul' : 'div';
+  }
+
+  function selectQuickPaymentRateCurrency(code) {
+    if (!code || code === quickPaymentToCurrency) return;
+
+    quickPaymentFromCurrency = code;
+    quickPaymentExchangeRate = getQuickPaymentExchangeRate(
+      code,
+      quickPaymentToCurrency,
+      currencies,
+    );
+    quickPaymentRateInitial = Number(quickPaymentExchangeRate);
+    quickPaymentRateOp = 'mul';
+  }
+
   $: if (
     currencies.length &&
     (!quickPaymentFromCurrency || !quickPaymentToCurrency)
@@ -468,6 +521,9 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       currencies,
     );
 
+    quickPaymentRateInitial = Number(quickPaymentExchangeRate);
+    quickPaymentRateOp = 'mul';
+    showPaymentCurrencyMenu = false;
     quickPaymentRateEditing = true;
 
     await tick();
@@ -478,12 +534,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
   function cancelQuickPaymentRateEdit() {
     quickPaymentRateEditing = false;
+    quickPaymentRateOp = 'mul';
 
     quickPaymentExchangeRate = getQuickPaymentExchangeRate(
       quickPaymentFromCurrency,
       quickPaymentToCurrency,
       currencies,
     );
+    quickPaymentRateInitial = Number(quickPaymentExchangeRate);
   }
 
   async function saveQuickPaymentExchangeRate() {
@@ -530,36 +588,49 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     }
 
     const toCurrencyBaseRate = Number(toCurrencyRow.exchangeRate || 1);
-
-    const nextFromBaseRate =
-      enteredRate *
-      (Number.isFinite(toCurrencyBaseRate) && toCurrencyBaseRate > 0
+    const safeToBaseRate =
+      Number.isFinite(toCurrencyBaseRate) && toCurrencyBaseRate > 0
         ? toCurrencyBaseRate
-        : 1);
+        : 1;
+
+    /* «68 USD = 1 AFN» stores the inverse of the typed value */
+    const quotedRate =
+      quickPaymentRateOp === 'div' ? 1 / enteredRate : enteredRate;
+
+    /*
+     * Stored rates are relative to the base currency, so a quote whose
+     * left side is the base itself belongs to the other currency row.
+     */
+    const fromIsBase = Number(fromCurrencyRow.isDefault) === 1;
+    const rateRow = fromIsBase ? toCurrencyRow : fromCurrencyRow;
+    const nextBaseRate = fromIsBase
+      ? Number(fromCurrencyRow.exchangeRate || 1) / quotedRate
+      : quotedRate * safeToBaseRate;
 
     quickPaymentRateSaving = true;
 
     try {
-      await currencyApi.update(fromCurrencyRow.id, {
-        name: fromCurrencyRow.name,
-        code: fromCurrencyRow.code,
-        symbol: fromCurrencyRow.symbol,
-        isDefault: fromCurrencyRow.isDefault,
-        exchangeRate: nextFromBaseRate,
-        exchangeRateDate: fromCurrencyRow.exchangeRateDate,
+      await currencyApi.update(rateRow.id, {
+        name: rateRow.name,
+        code: rateRow.code,
+        symbol: rateRow.symbol,
+        isDefault: rateRow.isDefault,
+        exchangeRate: nextBaseRate,
+        exchangeRateDate: rateRow.exchangeRateDate,
         status: 1,
       });
 
       currencies = currencies.map((currency) =>
-        currency.id === fromCurrencyRow.id
+        currency.id === rateRow.id
           ? {
               ...currency,
-              exchangeRate: nextFromBaseRate,
+              exchangeRate: nextBaseRate,
             }
           : currency,
       );
 
       quickPaymentExchangeRate = enteredRate;
+      quickPaymentRateInitial = enteredRate;
       quickPaymentRateEditing = false;
 
       const maximumPayment = Math.max(
@@ -610,6 +681,7 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     const previousPaymentCurrency = paymentCurrency;
     paymentCurrency = code;
     showPaymentCurrencyMenu = false;
+    paymentCurrencySearch = '';
 
     if (
       previousPaymentCurrency &&
@@ -645,6 +717,10 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
   function handleWindowClick(event) {
     if (showPaymentCurrencyMenu && !event.target.closest('.payment-currency-picker')) {
       showPaymentCurrencyMenu = false;
+    }
+
+    if (showCurrencyMenu && !event.target.closest('.sf-field--currency')) {
+      showCurrencyMenu = false;
     }
   }
 
@@ -704,14 +780,12 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
       treasuryAccount,
       notrackAccount,
       supplierRows,
-      warehousesResponse,
       currenciesResponse,
       accountTypesResponse,
     ] = await Promise.all([
       lookupAccountByCode('TREASURY'),
       lookupAccountByCode('NOTRACK'),
       lookupAccounts({ role: 'supplier' }),
-      warehouseApi.getAll({ status: 1 }),
       currencyApi.getAll({ status: 1 }),
       accountTypeApi.getAll({ status: 1 }),
     ]);
@@ -719,7 +793,6 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     treasury_ID = treasuryAccount?.id || 0;
     notrack_ID = notrackAccount?.id || 0;
     accounts = [treasuryAccount, notrackAccount].filter(Boolean);
-    warehouses = warehousesResponse?.data || [];
     suppliers = supplierRows;
 
     if (accountId) {
@@ -1102,6 +1175,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     return paymentCurrency || form.currency || 'AFN';
   }
 
+  /*
+   * The payment picker reads this value instead of calling
+   * getPaymentCurrencyCode(): Svelte compiles a call inside the markup as
+   * $.untrack, so getCurrencySymbol(getPaymentCurrencyCode()) would keep the
+   * symbol it rendered first and never follow the currency the operator picks.
+   */
+  $: paymentCurrencyCode = paymentCurrency || form.currency || 'AFN';
+
   function getCurrencyLabel(code) {
     return code === 'AFN' ? '؋' : t(code || 'AFN');
   }
@@ -1282,69 +1363,148 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     track_ID;
     savePurchaseFormDraft();
   }
+
+  /*
+   * «ارز» field and the payment currency panel are the sale form's pickers:
+   * a searchable list with symbol chips, the base currency marked and the
+   * active row tinted.
+   */
+  let showCurrencyMenu = false;
+  let currencySearch = '';
+  let currencySearchInput = null;
+  let paymentCurrencySearch = '';
+  let paymentCurrencySearchInput = null;
+
+  $: baseCurrency = currencies.find((c) => c.isDefault == 1) || currencies[0] || null;
+  $: selectedCurrency = currencies.find((c) => c.code === form.currency) || null;
+
+  $: filteredCurrencies = currencies.filter((c) => {
+    const query = currencySearch.trim().toLowerCase();
+    if (!query) return true;
+    return `${c.code} ${t(c.code)} ${c.symbol || ''}`.toLowerCase().includes(query);
+  });
+
+  $: filteredPaymentCurrencies = currencies.filter((c) => {
+    const query = paymentCurrencySearch.trim().toLowerCase();
+    if (!query) return true;
+    return `${c.code} ${t(c.code)} ${c.symbol || ''}`.toLowerCase().includes(query);
+  });
+
+  async function toggleCurrencyMenu() {
+    showCurrencyMenu = !showCurrencyMenu;
+    if (!showCurrencyMenu) return;
+
+    currencySearch = '';
+    await tick();
+    currencySearchInput?.focus();
+  }
+
+  /*
+   * «ارز» sets the bill currency only. The payment currency below has its own
+   * picker and keeps whatever the operator chose there — the two must not move
+   * each other.
+   */
+  function pickPurchaseCurrency(currency) {
+    form.currency = currency.code;
+    showCurrencyMenu = false;
+    currencySearch = '';
+  }
+
+  async function togglePaymentCurrencyMenu() {
+    showPaymentCurrencyMenu = !showPaymentCurrencyMenu;
+    if (!showPaymentCurrencyMenu) return;
+
+    paymentCurrencySearch = '';
+    await tick();
+    paymentCurrencySearchInput?.focus();
+  }
+
+  function currencyRateLabel(currency) {
+    const base = baseCurrency;
+    const rate = Number(currency?.exchangeRate);
+    if (!base || !currency || currency.code === base.code || !isFinite(rate) || rate <= 0) {
+      return '';
+    }
+
+    const rateText = rate.toLocaleString(undefined, { maximumFractionDigits: 4 });
+    return `1 ${currency.symbol || currency.code} = ${rateText} ${base.symbol || base.code}`;
+  }
+
+  function getCurrencySymbol(code) {
+    const key = code && typeof code === 'object' ? code.code : code;
+    if (!key) return '';
+
+    return currencies.find((row) => row.code === key)?.symbol || getCurrencyLabel(key);
+  }
 </script>
 
 <svelte:window on:click={handleWindowClick} />
 
 <div class="purchase-create-page" bind:this={componentRoot} dir={t('dir')}>
 
-  <section class="purchase-section purchase-details-section">
-    <header class="purchase-section-header">
-      <div class="purchase-section-heading">
-        <span class="purchase-section-icon" aria-hidden="true">
-          <i class="bi bi-file-earmark-text"></i>
-        </span>
-          <h2>{t('New Purchase')} <span class="purchase-required-note">
-        <i class="bi bi-asterisk" aria-hidden="true"></i>
-       
-      </span></h2>
+  <!-- ===== Purchase details card (sale form card shell) ===== -->
+  <section class="sf-card sf-details" aria-labelledby="pf-bi">
+    <div class="sf-card__bar">
+      <button
+        type="button"
+        class="sf-back"
+        on:click={() => push('/dashboard/purchases')}
+        aria-label={t('Back')}
+        title={t('Back')}>
+        <i class="ms" aria-hidden="true">{t('dir') === 'rtl' ? 'arrow_forward' : 'arrow_back'}</i>
+      </button>
+  
+      <span class="sf-bar-divider" aria-hidden="true"></span>
+  
+      <i class="ms f sf-bar-icon" aria-hidden="true">receipt_long</i>
+  
+      <h2 id="pf-bi" class="sf-card__title">{t('New Purchase')}</h2>
+  
+      <span class="sf-reqnote" aria-hidden="true">
+        <i class="ms" aria-hidden="true">asterisk</i>
+      </span>
+    </div>
+
+    <div class="sf-dgrid">
+      <div class="sf-field sf-field--date">
+        <span class="sf-field-label">{t('Date')}</span>
+
+        <div class="sf-app-datepicker">
+          <AppDatePicker bind:value={date} required />
+        </div>
       </div>
-     
-    </header>
 
-    <div class="purchase-details-grid">
-      <div class="purchase-field">
-        <span class="purchase-field-label">
-          <i class="bi bi-building" aria-hidden="true"></i>
-          {t('Warehouse')}
-        </span>
+      <div class="sf-field sf-field--bill">
+        <span class="sf-field-label">{t('Bill #')} <em>{t('Auto')}</em></span>
 
-        <FilterSelect
-          variant="outline"
-         
-          value={form.warehouse_id}
-          options={[
-            { value: '', label: t('Select Warehouse') },
-            ...warehouses.map((w) => ({ value: w.id, label: w.name })),
-          ]}
-          on:change={(event) => (form.warehouse_id = event.detail)} />
+        <div class="sf-readonly-field">
+          <span class="sf-readonly-field__hash" aria-hidden="true">#</span>
+          <span dir="ltr" class="sf-readonly-field__value">{form.bill_number}</span>
+          <i class="ms" aria-hidden="true">lock</i>
+        </div>
       </div>
 
-      <div class="purchase-field purchase-field--supplier">
-        <span class="purchase-field-label">
-          <i class="bi bi-person" aria-hidden="true"></i>
+      <div class="sf-field sf-field--customer">
+        <span class="sf-field-label">
           {t('Supplier')}
         </span>
 
         <div class="purchase-supplier-control position-relative">
-          <div class="purchase-supplier-input">
-            <button
-              type="button"
-              class="purchase-supplier-input__icon"
-              class:is-active={!!form.account_id}
-              title={form.account_id ? t('Account') : t('Supplier')}
-              aria-label={form.account_id ? t('Account') : t('Supplier')}
-              disabled={!form.account_id}
-              on:click={() => {
-                if (form.account_id) showAccountModal = true;
-              }}>
-              <i class="bi bi-person" aria-hidden="true"></i>
-            </button>
-
+          <div class="sf-custbox">
             {#if form.account_id}
               <button
                 type="button"
-                class="purchase-selected-supplier"
+                class="sf-custbox__avatar"
+                title={t('Account')}
+                aria-label={t('Account')}
+                on:click={() => (showAccountModal = true)}>
+                {(getAccountName(form.account_id) || '?').trim().charAt(0)}
+              </button>
+
+              <button
+                type="button"
+                class="sf-custbox__main"
+                title={getAccountName(form.account_id)}
                 on:click={async () => {
                   form.account_id = '';
                   form_account_search = '';
@@ -1353,30 +1513,37 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                   await tick();
                   form_account_search_input?.focus();
                 }}>
-                <span class="purchase-selected-supplier__identity">
-                  <span class="purchase-selected-supplier__name">
-                    {getAccountName(form.account_id)}
-                  </span>
-
-                  {#if calculatedBalance}
-                    <span class="purchase-selected-supplier__divider" aria-hidden="true"></span>
-                    <span
-                      class="purchase-selected-supplier__balance"
-                      class:is-negative={calculatedBalance.amount < 0}>
-                      <b dir="ltr">
-                        {calculatedBalance.amount.toLocaleString(undefined, {
-                          maximumFractionDigits: 3,
-                        })}
-                      </b>
-                      <small>{t(calculatedBalance.currency)}</small>
-                    </span>
-                  {/if}
+                <span class="sf-custbox__name">
+                  {getAccountName(form.account_id)}
                 </span>
-                <i class="bi bi-pencil-square" aria-hidden="true"></i>
+
+                {#if calculatedBalance}
+                  <span
+                    class="sf-custbox__bal"
+                    class:is-positive={calculatedBalance.amount > 0}
+                    class:is-negative={calculatedBalance.amount < 0}
+                    title={`${Math.abs(calculatedBalance.amount).toLocaleString(undefined, {
+                      maximumFractionDigits: 3,
+                    })} ${t(calculatedBalance.currency)}`}>
+                    <span class="sf-custbox__bal-amount" dir="ltr">
+                      {Math.abs(calculatedBalance.amount).toLocaleString(undefined, {
+                        maximumFractionDigits: 3,
+                      })}
+                    </span>
+                    <small>{getCurrencyLabel(calculatedBalance.currency)}</small>
+                  </span>
+                {/if}
+
+                <i class="ms sf-custbox__chev" aria-hidden="true">expand_more</i>
               </button>
             {:else}
+              <span class="sf-custbox__person" aria-hidden="true">
+                <i class="ms">person</i>
+              </span>
+
               <input
                 id="form_account_search"
+                class="sf-custbox__input"
                 bind:this={form_account_search_input}
                 type="text"
                 bind:value={form_account_search}
@@ -1388,197 +1555,226 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                   setTimeout(() => (showAccountDropdown = false), 150)} />
             {/if}
 
+            <span class="sf-custbox__divider" aria-hidden="true"></span>
+
             <button
               type="button"
-              class="purchase-add-supplier"
+              class="sf-custbox__add"
               title={t('Add Account')}
               aria-label={t('Add Account')}
               on:click={() => accountModalRef?.openModal()}>
-              <i class="bi bi-plus-lg" aria-hidden="true"></i>
-              <span>{t('Add')}</span>
+              <i class="ms f" aria-hidden="true">person_add</i>
             </button>
           </div>
 
-          {#if showAccountDropdown && filteredAccounts.length > 0}
-            <ul
+          {#if showAccountDropdown}
+            <div
               use:portal
-              class="purchase-supplier-dropdown"
-              style={accountDropdownStyle}>
-              {#each filteredAccounts as acc (acc.id)}
-                <li>
+              class="sale-customer-dropdown"
+              style={accountDropdownStyle}
+              aria-label={t('Select Supplier')}>
+              <div class="sale-customer-dropdown__search">
+                <i class="ms" aria-hidden="true">search</i>
+                <input
+                  type="search"
+                  bind:value={form_account_search}
+                  placeholder={t('Search')}
+                  aria-label={t('Search')}
+                  autocomplete="off"
+                  on:input={handleSupplierSearchInput}
+                  on:blur={() =>
+                    setTimeout(() => (showAccountDropdown = false), 150)} />
+              </div>
+
+              <div
+                class="sale-customer-dropdown__list"
+                role="listbox"
+                aria-label={t('Select Supplier')}>
+                {#each filteredAccounts as acc (acc.id)}
+                  {@const balance = balanceAmount(accountBalanceMap, acc.id, form.currency)}
                   <button
                     type="button"
-                    class="purchase-supplier-option"
+                    role="option"
+                    aria-selected={form.account_id == acc.id}
+                    class="sale-customer-option"
+                    class:is-active={form.account_id == acc.id}
+                    title={accountDisplayName(acc)}
                     on:mousedown={() => {
                       form.account_id = acc.id;
-                      form_account_search =
-                        t('Lang') === 'en'
-                          ? acc.name
-                          : t('Lang') === 'fa'
-                            ? acc.name_fa
-                            : t('Lang') === 'ps'
-                              ? acc.name_ps
-                              : acc.name;
+                      form_account_search = accountDisplayName(acc);
                       showAccountDropdown = false;
                     }}>
-                    <span class="purchase-supplier-option__avatar">
-                      <i class="bi bi-person" aria-hidden="true"></i>
+                    <span class="sale-customer-option__avatar">
+                      {accountDisplayName(acc).trim().charAt(0) || '?'}
                     </span>
 
-                    <span class="purchase-supplier-option__copy">
-                      <strong>
-                        {#if t('Lang') === 'en' && acc.name}{acc.name}{/if}
-                        {#if t('Lang') === 'fa' && acc.name_fa}{acc.name_fa}{/if}
-                        {#if t('Lang') === 'ps' && acc.name_ps}{acc.name_ps}{/if}
-                      </strong>
-
-                      <small>
-                        {#if allAccountTypes.find((at) => Number(at.id) === Number(acc.account_type_id))?.name}
-                          {t('Lang') === 'en'
-                            ? allAccountTypes.find((at) => Number(at.id) === Number(acc.account_type_id))?.name
-                            : t('Lang') === 'fa'
-                              ? allAccountTypes.find((at) => Number(at.id) === Number(acc.account_type_id))?.name_fa
-                              : t('Lang') === 'ps'
-                                ? allAccountTypes.find((at) => Number(at.id) === Number(acc.account_type_id))?.name_ps
-                                : allAccountTypes.find((at) => Number(at.id) === Number(acc.account_type_id))?.name}
-                        {:else}
-                          N/A
-                        {/if}
-                      </small>
+                    <span class="sale-customer-option__copy">
+                      <strong>{accountDisplayName(acc)}</strong>
                     </span>
 
-                    <i class="bi bi-chevron-right purchase-supplier-option__arrow" aria-hidden="true"></i>
+                    <span
+                      class="sale-customer-option__bal"
+                      class:is-positive={balance > 0}
+                      class:is-negative={balance < 0}>
+                      <span dir="ltr">
+                        {Math.abs(balance).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                      </span>
+                      <small>{getCurrencyLabel(form.currency)}</small>
+                    </span>
                   </button>
-                </li>
-              {/each}
-            </ul>
+                {/each}
+
+                {#if !filteredAccounts.length}
+                  <span class="sale-customer-dropdown__empty">{t('No accounts found')}</span>
+                {/if}
+              </div>
+
+              <button
+                type="button"
+                class="sale-customer-dropdown__new"
+                on:mousedown={(event) => {
+                  event.preventDefault();
+                  showAccountDropdown = false;
+                  accountModalRef?.openModal();
+                }}>
+                <i class="ms f" aria-hidden="true">person_add</i>
+                {t('Add Account')}
+              </button>
+            </div>
           {/if}
         </div>
       </div>
 
-      <div class="purchase-field">
-        <span class="purchase-field-label">
-          <i class="bi bi-receipt" aria-hidden="true"></i>
-          {t('Bill #')}
-        </span>
+      <div class="sf-field sf-field--currency">
+        <span class="sf-field-label">{t('Currency')}</span>
 
-        <div class="purchase-readonly-field">
-          <span dir="ltr">{form.bill_number}</span>
-          <i class="bi bi-lock-fill" aria-hidden="true"></i>
+        <div class="sf-curbox sf-curbox--solo" class:is-open={showCurrencyMenu}>
+          <button
+            type="button"
+            class="sf-curbox__cur"
+            aria-haspopup="listbox"
+            aria-expanded={showCurrencyMenu}
+            aria-label={selectedCurrency ? t(selectedCurrency.code) : t('Currency')}
+            on:click|stopPropagation={toggleCurrencyMenu}>
+            <span class="sf-curbox__sym" dir="ltr">
+              {selectedCurrency?.symbol || selectedCurrency?.code || form.currency}
+            </span>
+            <i class="ms" aria-hidden="true">expand_more</i>
+          </button>
         </div>
+
+        {#if showCurrencyMenu}
+          <div class="sf-cumenu" role="dialog" aria-label={t('Currency')}>
+            <label class="sf-cumenu__search">
+              <i class="ms" aria-hidden="true">search</i>
+              <input
+                type="search"
+                bind:this={currencySearchInput}
+                bind:value={currencySearch}
+                placeholder={t('Search')}
+                aria-label={t('Search')} />
+            </label>
+
+            <div class="sf-cumenu__list" role="listbox" aria-label={t('Currency')}>
+              {#each filteredCurrencies as cur (cur.code)}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={form.currency === cur.code}
+                  class="sf-cumenu__opt"
+                  class:is-active={form.currency === cur.code}
+                  class:is-base={cur.code === baseCurrency?.code}
+                  on:click={() => pickPurchaseCurrency(cur)}>
+                  <span class="sf-cumenu__chip" dir="ltr">
+                    {cur.symbol || cur.code}
+                  </span>
+                  <span class="sf-cumenu__cpy">
+                    <span class="sf-cumenu__name">{t(cur.code)}</span>
+                    {#if currencyRateLabel(cur)}
+                      <span class="sf-cumenu__rate" dir="ltr">{currencyRateLabel(cur)}</span>
+                    {/if}
+                  </span>
+                  <span class="sf-cumenu__code" dir="ltr">{cur.code}</span>
+                  <i class="ms sf-cumenu__check" aria-hidden="true">check</i>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
 
-      <div class="purchase-field">
-        <span class="purchase-field-label">
-          <i class="bi bi-calendar3" aria-hidden="true"></i>
-          {t('Date')}
-        </span>
+      <!-- description: full width under the fields (SaleNew.html note box) -->
+      <div class="sf-field sf-field--description sf-field--description-full">
+        <span class="sf-field-label">{t('Description')}</span>
 
-        <div class="purchase-app-datepicker">
-          <AppDatePicker bind:value={date} required />
-        </div>
-      </div>
-
-      <div class="purchase-field">
-        <span class="purchase-field-label">
-          <i class="bi bi-currency-exchange" aria-hidden="true"></i>
-          {t('Currency')}
-        </span>
-
-        <FilterSelect
-          variant="outline"
-          label={t('Currency')}
-          icon="bi-currency-exchange"
-          value={form.currency}
-          options={currencies.map((cur) => ({
-            value: cur.code,
-            label: t(cur.code),
-          }))}
-          on:change={(event) => (form.currency = event.detail)} />
-      </div>
-
-      <div class="purchase-field purchase-field--description">
-        <div class="purchase-description-body purchase-description-body--details">
+        <div class="sf-notebox">
+          <i class="ms sf-notebox__icon" aria-hidden="true">edit_note</i>
           <textarea
             bind:value={form.description}
             rows="2"
+            maxlength="200"
             placeholder={t('Description')}></textarea>
         </div>
       </div>
     </div>
   </section>
 
-  <PurchaseItemsTable
-    bind:items
-    warehouse_id={form.warehouse_id}
-    currency={form.currency} />
+  <section class="sf-card sf-items">
+    <div class="sf-items__table">
+      <PurchaseItemsTable
+        bind:items
+        bind:warehouse_id={form.warehouse_id}
+        currency={form.currency} />
+    </div>
+  </section>
 
-  <section class="purchase-simple-payment">
-    <div class="purchase-simple-payment__total">
-      <span>{t('Payable')}</span>
-      <strong dir="ltr">
-        {Number(total_amount || 0).toLocaleString(undefined, {
-          maximumFractionDigits: 3,
-        })}
-      </strong>
-      <small>{t(form.currency || 'AFN')}</small>
+  <section class="sf-sum sf-sum--purchase" aria-labelledby="pf-sum-title">
+    <div class="sf-sum__cell">
+      <h3 id="pf-sum-title" class="sf-sum__title">
+        <i class="ms f" aria-hidden="true">calculate</i>
+        {t('Bill Summary')}
+      </h3>
+
+      <label class="sf-sum__note">
+        <span class="sf-sum__label">{t('Description')}</span>
+
+        <span class="sf-sum__notebox">
+          <i class="ms" aria-hidden="true">edit_note</i>
+
+          <textarea
+            rows="2"
+            maxlength="200"
+            data-purchase-payment-field="description"
+            bind:value={paymentDescription}
+            placeholder={t('Description')}
+            on:keydown={(event) =>
+              handlePurchasePaymentEnter(event, 'description')}></textarea>
+        </span>
+      </label>
     </div>
 
-    <label class="purchase-simple-payment__field purchase-simple-payment__field--amount">
-      <span>{t('Payment')}</span>
+    <div class="sf-sum__cell sf-sum__pay">
+      <div class="sf-totalbar" title={t('Payable')}>
+        <span class="sf-totalbar__label">{t('Payable')}</span>
 
-      <div class="payment-composite-control">
-        {#if quickPaymentRateEditing}
-          <div
-            class="purchase-exchange-editor payment-quick-rate__editor"
-            dir="ltr">
-            <span>
-              1 {t(quickPaymentFromCurrency)} =
-            </span>
+        <span class="sf-totalbar__amount">
+          <b dir="ltr">
+            {Number(total_amount || 0).toLocaleString(undefined, {
+              maximumFractionDigits: 3,
+            })}
+          </b>
+          <small>{getCurrencySymbol(form.currency || 'AFN')}</small>
+        </span>
+      </div>
 
-            <input
-              bind:this={quickPaymentRateInput}
-              type="number"
-              min="0.000001"
-              step="any"
-              bind:value={quickPaymentExchangeRate}
-              disabled={quickPaymentRateSaving}
-              aria-label={t('Exchange Rate')}
-              on:keydown={handleQuickPaymentRateKeydown} />
+      <span class="sf-sum__label sf-sum__label--received">{t('Payment')}</span>
 
-            <span>{t(quickPaymentToCurrency)}</span>
-
-            <button
-              type="button"
-              class="purchase-exchange-editor__save"
-              disabled={quickPaymentRateSaving}
-              aria-label={t('Save')}
-              on:click={saveQuickPaymentExchangeRate}>
-              {#if quickPaymentRateSaving}
-                <span
-                  class="spinner-border spinner-border-sm"
-                  role="status"
-                  aria-label={t('Loading...')}></span>
-              {:else}
-                <i class="bi bi-check-lg" aria-hidden="true"></i>
-              {/if}
-            </button>
-
-            <button
-              type="button"
-              class="purchase-exchange-editor__cancel"
-              disabled={quickPaymentRateSaving}
-              aria-label={t('Cancel')}
-              on:click={cancelQuickPaymentRateEdit}>
-              <i class="bi bi-x-lg" aria-hidden="true"></i>
-            </button>
-          </div>
-        {:else}
+      <div class="sf-payrow">
+        <div class="payment-composite-control">
           <div class="payment-amount-currency-control">
-            <i class="bi bi-cash" aria-hidden="true"></i>
-
             <input
               id="paymentAmount"
+              dir="ltr"
               type="number"
               min="0"
               step="any"
@@ -1610,20 +1806,20 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
               on:keydown={(event) =>
                 handlePurchasePaymentEnter(event, 'payment')} />
 
+            <span class="sf-paydiv" aria-hidden="true"></span>
+
             <div class="payment-currency-picker purchase-simple-payment__currency">
               {#if currencies.length > 1 &&
                 quickPaymentFromCurrency &&
                 quickPaymentToCurrency}
                 <button
                   type="button"
-                  class="payment-currency-rate-edit"
+                  class="sf-rateedit"
+                  class:is-open={quickPaymentRateEditing}
                   title={t('Exchange Rate')}
                   aria-label={t('Exchange Rate')}
-                  on:click|stopPropagation={() => {
-                    showPaymentCurrencyMenu = false;
-                    startQuickPaymentRateEdit();
-                  }}>
-                  <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                  on:click|stopPropagation={startQuickPaymentRateEdit}>
+                  <i class="ms" aria-hidden="true">edit</i>
                 </button>
               {/if}
 
@@ -1633,137 +1829,216 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
                 aria-expanded={showPaymentCurrencyMenu}
                 aria-haspopup="listbox"
                 aria-label={t('Currency')}
-                on:click|stopPropagation={() =>
-                  (showPaymentCurrencyMenu = !showPaymentCurrencyMenu)}>
-                {paymentCurrency
-                  ? t(paymentCurrency)
-                  : t(form.currency || 'AFN')}
-                <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                on:click|stopPropagation={togglePaymentCurrencyMenu}>
+                <span class="sf-paycur" dir="ltr">{getCurrencySymbol(paymentCurrencyCode)}</span>
+                <i class="ms" aria-hidden="true">expand_more</i>
               </button>
 
               {#if showPaymentCurrencyMenu}
-                <ul class="payment-currency-menu" role="listbox">
-                  {#each currencies as cur (cur.code)}
-                    <li
-                      role="option"
-                      aria-selected={paymentCurrency === cur.code}>
+                <div class="sf-cumenu" role="dialog" aria-label={t('Currency')}>
+                  <label class="sf-cumenu__search">
+                    <i class="ms" aria-hidden="true">search</i>
+                    <input
+                      type="search"
+                      bind:this={paymentCurrencySearchInput}
+                      bind:value={paymentCurrencySearch}
+                      placeholder={t('Search')}
+                      aria-label={t('Search')} />
+                  </label>
+
+                  <div class="sf-cumenu__list" role="listbox" aria-label={t('Currency')}>
+                    {#each filteredPaymentCurrencies as cur (cur.code)}
                       <button
                         type="button"
-                        class="payment-currency-menu__item"
-                        class:selected={paymentCurrency === cur.code}
-                        on:click|stopPropagation={() =>
-                          selectPaymentCurrency(cur.code)}>
-                        {t(cur.code)}
+                        role="option"
+                        aria-selected={paymentCurrencyCode === cur.code}
+                        class="sf-cumenu__opt"
+                        class:is-active={paymentCurrencyCode === cur.code}
+                        class:is-base={cur.code === baseCurrency?.code}
+                        on:click|stopPropagation={() => selectPaymentCurrency(cur.code)}>
+                        <span class="sf-cumenu__chip" dir="ltr">
+                          {cur.symbol || cur.code}
+                        </span>
+                        <span class="sf-cumenu__cpy">
+                          <span class="sf-cumenu__name">{t(cur.code)}</span>
+                          {#if currencyRateLabel(cur)}
+                            <span class="sf-cumenu__rate" dir="ltr">{currencyRateLabel(cur)}</span>
+                          {/if}
+                        </span>
+                        <span class="sf-cumenu__code" dir="ltr">{cur.code}</span>
+                        <i class="ms sf-cumenu__check" aria-hidden="true">check</i>
                       </button>
-                    </li>
-                  {/each}
-                </ul>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+
+              <!-- payment exchange rate: the sale form «نرخ تبادله» card -->
+              {#if quickPaymentRateEditing}
+                <div class="sf-ratebox" role="dialog" aria-label={t('Exchange Rate')}>
+                  <span class="sf-ratebox__head">
+                    <span class="sf-ratebox__title">{t('Exchange Rate')}</span>
+
+                    {#if quickPaymentRateTabs.length > 1}
+                      <span class="sf-ratebox__tabs">
+                        {#each quickPaymentRateTabs as tab (tab.code)}
+                          <button
+                            type="button"
+                            class="sf-ratebox__tab"
+                            class:is-active={tab.code === quickPaymentFromCurrency}
+                            title={t(tab.code)}
+                            disabled={quickPaymentRateSaving}
+                            on:click|stopPropagation={() =>
+                              selectQuickPaymentRateCurrency(tab.code)}>
+                            {tab.symbol || tab.code}
+                          </button>
+                        {/each}
+                      </span>
+                    {/if}
+                  </span>
+
+                  <div class="sf-ratebox__row" class:is-edited={quickPaymentRateEdited}>
+                    <span class="sf-ratebox__lead" dir="ltr">1 {quickPaymentFromSymbol}</span>
+
+                    <button
+                      type="button"
+                      class="sf-ratebox__op"
+                      class:is-div={quickPaymentRateOp === 'div'}
+                      title={quickPaymentRateFormula}
+                      aria-label={t('Exchange Rate')}
+                      disabled={quickPaymentRateSaving}
+                      on:click|stopPropagation={toggleQuickPaymentRateOp}>
+                      {quickPaymentRateOp === 'div' ? '÷' : '×'}
+                    </button>
+
+                    <input
+                      class="sf-ratebox__input"
+                      bind:this={quickPaymentRateInput}
+                      type="number"
+                      min="0.000001"
+                      step="any"
+                      bind:value={quickPaymentExchangeRate}
+                      disabled={quickPaymentRateSaving}
+                      aria-label={t('Exchange Rate')}
+                      on:keydown={handleQuickPaymentRateKeydown} />
+                  </div>
+
+                  {#if quickPaymentRateFormula}
+                    <span class="sf-ratebox__hint" dir="ltr" title={quickPaymentRateFormula}>
+                      <i class="ms" aria-hidden="true">info</i>
+                      <span>{quickPaymentRateFormula}</span>
+                    </span>
+                  {/if}
+
+                  <div class="sf-ratebox__actions">
+                    <button
+                      type="button"
+                      class="sf-ratebox__cancel"
+                      disabled={quickPaymentRateSaving}
+                      on:click|stopPropagation={cancelQuickPaymentRateEdit}>
+                      {t('Cancel')}
+                    </button>
+
+                    <button
+                      type="button"
+                      class="sf-ratebox__save"
+                      disabled={quickPaymentRateSaving}
+                      on:click|stopPropagation={saveQuickPaymentExchangeRate}>
+                      {#if quickPaymentRateSaving}
+                        <span
+                          class="spinner-border spinner-border-sm"
+                          role="status"
+                          aria-label={t('Loading...')}></span>
+                      {:else}
+                        {t('Save')}
+                      {/if}
+                    </button>
+                  </div>
+                </div>
               {/if}
             </div>
           </div>
-        {/if}
-
-        <div
-          class="purchase-simple-payment__method"
-          role="group"
-          aria-label={t('Payment Way')}>
-          <button
-            type="button"
-            class:is-active={second_entry_account == treasury_ID}
-            on:click={selectTreasuryPayment}>
-            <span>
-              {t('Treasury')}
-              {#if second_entry_account == treasury_ID}
-                <small
-                  class="purchase-simple-payment__method-balance"
-                  dir="ltr">
-                  {formatBalanceAmount(treasuryAvailableCash)}
-                  {getCurrencyLabel(treasuryPaymentBalance.currency)}
-                </small>
-              {/if}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            class:is-active={second_entry_account == track_ID}
-            on:click={openTrackModal}>
-            <span>
-              {#if second_entry_account == track_ID && track_ID}
-                {getAccountName(track_ID)}
-              {:else}
-                {t('Track')}
-              {/if}
-
-              {#if second_entry_account == track_ID && track_ID}
-                <small
-                  class="purchase-simple-payment__method-balance"
-                  dir="ltr">
-                  {formatBalanceAmount(trackedPaymentBalance.amount)}
-                  {getCurrencyLabel(trackedPaymentBalance.currency)}
-                </small>
-              {/if}
-            </span>
-          </button>
         </div>
       </div>
-    </label>
 
-    {#if isTreasuryPaymentLocked}
-      <div class="purchase-treasury-status purchase-treasury-status--warning" role="alert">
-        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
-        <span>
-          {t('Treasury has no available balance. Payment is set to 0. Use Track to pay from another account, or save this bill unpaid.')}
-        </span>
+      <div class="sf-acct" role="group" aria-label={t('Payment Way')}>
+        <button
+          type="button"
+          class="sf-acct__btn"
+          class:is-wide={second_entry_account == treasury_ID}
+          aria-pressed={second_entry_account == treasury_ID}
+          title={t('Treasury')}
+          on:click={selectTreasuryPayment}>
+          <i class="ms" aria-hidden="true">account_balance</i>
+
+          {#if second_entry_account == treasury_ID}
+            <span class="sf-acct__name">{t('Treasury')}</span>
+            <small class="sf-acct__bal">
+              <span dir="ltr">{formatBalanceAmount(treasuryAvailableCash)}</span>
+              <span dir="ltr">{getCurrencySymbol(treasuryPaymentBalance.currency)}</span>
+            </small>
+          {/if}
+        </button>
+
+        <button
+          type="button"
+          class="sf-acct__btn"
+          class:is-wide={second_entry_account == track_ID && Boolean(track_ID)}
+          aria-pressed={second_entry_account == track_ID}
+          title={t('Track')}
+          on:click={openTrackModal}>
+          <i class="ms" aria-hidden="true">account_balance_wallet</i>
+
+          {#if second_entry_account == track_ID && track_ID}
+            <span class="sf-acct__name">{getAccountName(track_ID)}</span>
+            <small class="sf-acct__bal">
+              <span dir="ltr">{formatBalanceAmount(trackedPaymentBalance.amount)}</span>
+              <span dir="ltr">{getCurrencySymbol(trackedPaymentBalance.currency)}</span>
+            </small>
+          {/if}
+        </button>
       </div>
-    {/if}
 
-    <label class="purchase-simple-payment__field purchase-simple-payment__field--note">
-      <span>{t('Description')}</span>
-      <div>
-        <i class="bi bi-card-text" aria-hidden="true"></i>
-        <input
-          type="text"
-          data-purchase-payment-field="description"
-          bind:value={paymentDescription}
-          placeholder={t('Description')}
-          on:keydown={(event) =>
-            handlePurchasePaymentEnter(event, 'description')} />
+      {#if isTreasuryPaymentLocked}
+        <div class="sf-alert" role="alert">
+          <i class="ms" aria-hidden="true">warning</i>
+          <span>
+            {t('Treasury has no available balance. Payment is set to 0. Use Track to pay from another account, or save this bill unpaid.')}
+          </span>
+        </div>
+      {/if}
+
+      <div class="sf-actions">
+        <button
+          type="button"
+          class="sf-action sf-action--draft"
+          on:click={() => savePurchase(false)}
+          disabled={loading}>
+          {#if loading}
+            <span class="spinner-border spinner-border-sm" role="status"></span>
+          {:else}
+            <i class="ms f" aria-hidden="true">bookmark</i>
+          {/if}
+
+          <span>{t('Save Draft')}</span>
+        </button>
+
+        <button
+          type="button"
+          class="sf-action sf-action--confirm"
+          on:click={() => savePurchase(true)}
+          disabled={loading}>
+          {#if loading}
+            <span class="spinner-border spinner-border-sm" role="status"></span>
+          {:else}
+            <i class="ms" aria-hidden="true">check_circle</i>
+          {/if}
+
+          <span>{t('Confirm Purchase')}</span>
+        </button>
       </div>
-    </label>
-  </section>
-
-  <footer class="purchase-actions">
-    <div class="purchase-actions__buttons">
-      <button
-        type="button"
-        class="purchase-action-button purchase-action-button--draft purchase-action-button--edit"
-        on:click={() => savePurchase(false)}
-        disabled={loading}>
-        {#if loading}
-          <span class="spinner-border spinner-border-sm" role="status"></span>
-        {:else}
-          <i class="bi bi-pencil-square" aria-hidden="true"></i>
-        {/if}
-
-        <span>{t('Save Draft')}</span>
-      </button>
-
-      <button
-        type="button"
-        class="purchase-action-button purchase-action-button--confirm"
-        on:click={() => savePurchase(true)}
-        disabled={loading}>
-        {#if loading}
-          <span class="spinner-border spinner-border-sm" role="status"></span>
-        {:else}
-          <i class="bi bi-check2-circle" aria-hidden="true"></i>
-        {/if}
-
-        <span>{t('Confirm Purchase')}</span>
-      </button>
     </div>
-  </footer>
+  </section>
 
   <AccountModal
     bind:this={modalRef}
@@ -1971,6 +2246,14 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
     display: flex;
     flex-direction: column;
+    /*
+     * The dashboard shell puts this page inside <main>, which is a flex
+     * column with overflow-y: auto. A shrinkable flex item is squeezed to
+     * the viewport height instead of overflowing, so <main> never grows a
+     * scrollbar and the bill summary under the item table becomes
+     * unreachable. Keep the page at its natural height.
+     */
+    flex: 0 0 auto;
     gap: 1rem;
     width: 100%;
     max-width: 100%;
@@ -2844,93 +3127,6 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
     flex: 1 1 auto;
     min-width: 0;
     height: 100%;
-  }
-
-  .purchase-exchange-editor {
-    display: flex;
-    align-items: stretch;
-    flex: 1 1 auto;
-    width: auto;
-    min-width: 0;
-    height: 100%;
-    overflow: hidden;
-    border: 0;
-    border-radius: 0;
-    background: #ffffff;
-    box-shadow: none;
-  }
-
-  .purchase-exchange-editor > span {
-    display: inline-flex;
-    align-items: center;
-    padding-inline: 0.45rem;
-    border-inline-end: 1px solid #e2e8f0;
-    background: #f7f9fc;
-    color: #64748b;
-    font-size: 0.58rem;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .purchase-exchange-editor > span:first-child {
-    flex: 1 1 auto;
-    min-width: 4.5rem;
-  }
-
-  .purchase-exchange-editor > span:nth-of-type(2) {
-    flex: 0 1 auto;
-    min-width: 3.5rem;
-  }
-
-  .purchase-simple-payment__field .purchase-exchange-editor > input {
-    flex: 1 1 4rem;
-    width: auto;
-    min-width: 3.5rem;
-    padding-inline: 0.35rem;
-    border: 0;
-    outline: 0;
-    background: transparent;
-    color: #26364b;
-    font-size: 0.68rem;
-    font-weight: 750;
-    text-align: center;
-  }
-
-  .purchase-exchange-editor__save,
-  .purchase-exchange-editor__cancel {
-    display: inline-grid;
-    flex: 0 0 2rem;
-    width: 2rem;
-    padding: 0;
-    place-items: center;
-    border: 0;
-    border-inline-start: 1px solid #e2e8f0;
-    cursor: pointer;
-  }
-
-  .purchase-exchange-editor__save {
-    background: #ecfdf5;
-    color: var(--purchase-green);
-  }
-
-  .purchase-exchange-editor__cancel {
-    background: #fef2f2;
-    color: #dc2626;
-  }
-
-  .purchase-exchange-editor__save i,
-  .purchase-exchange-editor__cancel i {
-    flex: 0 0 auto;
-    width: auto;
-    color: inherit;
-    font-size: 0.78rem;
-    pointer-events: none;
-  }
-
-  .purchase-exchange-editor .spinner-border {
-    width: 0.75rem;
-    height: 0.75rem;
-    border-width: 0.1rem;
   }
 
   .purchase-simple-payment__currency > .payment-currency-picker__main {
@@ -4204,6 +4400,1995 @@ import { fetchProductsByIds } from '../../lib/fetchProductsByIds.js';
 
   :global(html.dark) .purchase-account-view-body {
     background: var(--erp-bg, #0b1120);
+  }
+
+  .sale-customer-dropdown {
+    z-index: 1200;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--z-border);
+    border-radius: 12px;
+    background: var(--z-surface);
+    box-shadow: 0 18px 40px -14px rgba(11, 21, 48, 0.35);
+  }
+
+  .sale-customer-dropdown__search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    margin: 6px;
+    padding: 0 9px;
+    border: 1px solid var(--z-border-soft);
+    border-radius: 8px;
+    background: var(--z-surface-2);
+    color: var(--z-muted);
+  }
+
+  .sale-customer-dropdown__search .ms {
+    font-size: 17px;
+  }
+
+  .sale-customer-dropdown__search input {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink);
+    font-family: inherit;
+    font-size: 11.5px;
+  }
+
+  .sale-customer-dropdown__list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-height: calc(var(--sale-cust-max, 220px) - 92px);
+    overflow-y: auto;
+    padding: 0 6px 6px;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .sale-customer-dropdown__list::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .sale-customer-dropdown__empty {
+    padding: 10px;
+    color: var(--z-muted);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .sale-customer-dropdown__new {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    border: 0;
+    border-top: 1px solid var(--z-border-soft);
+    background: var(--z-surface-2);
+    color: var(--z-link);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .sale-customer-dropdown__new .ms {
+    font-size: 17px;
+  }
+
+  .sale-customer-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 4px 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--z-ink);
+    font-family: inherit;
+    font-size: 12px;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .sale-customer-option:hover {
+    background: var(--z-surface-2);
+  }
+
+  .sale-customer-option.is-active {
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+  }
+
+  .sale-customer-option__avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2f6fed, #1b3a8a);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .sale-customer-option__copy {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+  }
+
+  .sale-customer-option__copy strong {
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sale-customer-option__copy small {
+    overflow: hidden;
+    color: var(--z-muted);
+    font-size: 10.5px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sale-customer-option__bal {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    flex-shrink: 0;
+    margin-inline-start: auto;
+    color: var(--z-subtle);
+    font-family: Inter, sans-serif;
+    font-size: 11px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .sale-customer-option__bal.is-positive {
+    color: var(--z-ok);
+  }
+
+  .sale-customer-option__bal.is-negative {
+    color: var(--z-danger);
+  }
+
+  .sale-customer-option__bal small {
+    font-size: 9.5px;
+    font-weight: 700;
+  }
+  :global(html.dark) .sale-customer-dropdown {
+    border-color: var(--z-border);
+    background: var(--z-surface);
+    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.38);
+  }
+
+  :global(html.dark) .sale-customer-option {
+    color: var(--z-text);
+  }
+
+  :global(html.dark) .sale-customer-option:hover {
+    background: #1d2b40;
+  }
+
+  :global(html.dark) .sale-customer-option__copy small {
+    color: var(--z-muted);
+  }
+
+  /* ================================================================
+     SaleNew.html reference design — cards, bill summary, mobile bar.
+     Appended after the legacy block: later source order wins ties.
+     Palette: app.css --z-* tokens (identical to the reference sheet).
+     ================================================================ */
+
+  /* ---- shared card shell ---- */
+  .sf-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--z-border);
+    border-radius: var(--z-r-xl, 14px);
+    background: var(--z-surface);
+    box-shadow:
+      0 1px 2px rgba(11, 21, 48, 0.04),
+      0 4px 14px -8px rgba(11, 21, 48, 0.1);
+  }
+
+  .sf-card__bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--z-border-soft);
+  }
+
+  .sf-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 1px solid var(--z-border);
+    border-radius: 7px;
+    background: var(--z-surface);
+    color: var(--z-text);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .sf-back:hover {
+    border-color: var(--z-border-strong);
+    background: var(--z-surface-2);
+    color: var(--z-ink);
+  }
+
+  .sf-bar-divider {
+    width: 1px;
+    height: 16px;
+    flex-shrink: 0;
+    background: var(--z-border);
+  }
+
+  .sf-bar-icon {
+    flex-shrink: 0;
+    color: var(--z-link);
+    font-size: var(--z-fs-xl, 17px);
+    line-height: 1;
+  }
+
+  .sf-card__title {
+    margin: 0;
+    flex-shrink: 0;
+    color: var(--z-ink);
+    font-size: var(--z-fs-base, 12.5px);
+    font-weight: 800;
+    line-height: 1.3;
+  }
+
+  /* ---- details grid ---- */
+  .sf-dgrid {
+    --sale-control-height: 30px;
+
+    display: grid;
+    grid-template-columns:
+      minmax(0, 0.95fr) minmax(0, 0.9fr) minmax(0, 1.9fr) minmax(0, 1.3fr);
+    gap: 8px;
+    align-items: start;
+    padding: 8px 12px 10px;
+  }
+
+  .sf-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .sf-field-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--z-text);
+    font-size: var(--z-fs-xs, 10.5px);
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+
+  .sf-field-label em {
+    color: var(--z-subtle);
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 500;
+  }
+
+  .sf-field--bill .sf-field-label em {
+    margin-inline-start: auto;
+  }
+
+  .sf-field--description {
+    grid-column: span 3;
+  }
+
+  .sf-field--description-full {
+    grid-column: 1 / -1;
+  }
+
+  /* ---- readonly bill number ---- */
+  .sf-readonly-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    padding: 0 9px;
+    border: 1px solid var(--z-border);
+    border-radius: var(--z-r-sm, 8px);
+    background: var(--z-surface-2);
+    box-sizing: border-box;
+  }
+
+  .sf-readonly-field__hash {
+    color: var(--z-subtle);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .sf-readonly-field__value {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--z-ink);
+    font-size: 12px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sf-readonly-field i {
+    flex-shrink: 0;
+    color: var(--z-subtle);
+    font-size: 11px;
+  }
+
+  .sf-app-datepicker :global(.app-date-field) {
+    gap: 0;
+  }
+
+  .sf-app-datepicker :global(.app-date-field input) {
+    height: 30px !important;
+    min-height: 30px !important;
+    padding-inline: 8px !important;
+    border: 1px solid var(--z-border) !important;
+    border-radius: 7px !important;
+    background: var(--z-surface) !important;
+    color: var(--z-ink) !important;
+    font-size: 12px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sf-app-datepicker :global(.app-date-field input:focus) {
+    border-color: var(--z-brand-300) !important;
+    box-shadow: var(--z-ring) !important;
+  }
+
+  /* customer box — avatar initial · name · balance · chevron | add */
+  .sf-custbox {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 30px;
+    min-width: 0;
+    padding-inline-end: 3px;
+    border: 1px solid var(--z-border);
+    border-radius: 7px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+  }
+
+  .sf-custbox:focus-within {
+    border-color: var(--z-brand-300);
+    box-shadow: var(--z-ring);
+  }
+
+  .sf-custbox__avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-inline-start: 5px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2f6fed, #1b3a8a);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .sf-custbox__main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .sf-custbox__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--z-ink);
+    font-size: 11.5px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sf-custbox__bal {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    flex-shrink: 0;
+    color: var(--z-subtle);
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .sf-custbox__bal > .sf-custbox__bal-amount {
+    font-family: Inter, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sf-custbox__bal.is-positive {
+    color: var(--z-ok);
+  }
+
+  .sf-custbox__bal.is-negative {
+    color: var(--z-danger);
+  }
+
+  .sf-custbox__bal small {
+    font-size: 9.5px;
+    font-weight: 700;
+  }
+
+  .sf-custbox__chev {
+    flex-shrink: 0;
+    margin-inline-start: auto;
+    color: var(--z-muted);
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .sf-custbox__person {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    margin-inline-start: 5px;
+    flex-shrink: 0;
+    color: var(--z-muted);
+  }
+
+  .sf-custbox__input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink);
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+
+  .sf-custbox__input::placeholder {
+    color: var(--z-subtle);
+    font-weight: 500;
+  }
+
+  .sf-custbox__divider {
+    width: 1px;
+    height: 18px;
+    flex-shrink: 0;
+    background: var(--z-border);
+  }
+
+  .sf-custbox__add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    cursor: pointer;
+  }
+
+  .sf-custbox__add:hover {
+    background: var(--z-brand-100, var(--z-brand-soft));
+  }
+
+  /* currency + rate in one box (details card) */
+  .sf-curbox {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    height: 30px;
+    overflow: hidden;
+    border: 1px solid var(--z-border);
+    border-radius: 7px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+  }
+
+  .sf-curbox:focus-within {
+    border-color: var(--z-brand-300);
+    box-shadow: var(--z-ring);
+  }
+
+  .sf-curbox.is-open {
+    border-color: var(--z-brand-300);
+    box-shadow: var(--z-ring);
+  }
+
+  .sf-curbox__cur {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 1 auto;
+    min-width: 0;
+    height: 28px;
+    padding: 0 4px;
+    padding-inline-start: 8px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .sf-curbox__cur:hover {
+    background: var(--z-brand-soft);
+  }
+
+  .sf-curbox__sym {
+    max-width: 84px;
+    overflow: hidden;
+    color: var(--z-link);
+    font-family: Inter, sans-serif;
+    font-size: 12.5px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sf-curbox__cur .ms {
+    color: var(--z-muted);
+    font-size: 14px;
+  }
+
+  .sf-curbox__divider {
+    width: 1px;
+    flex-shrink: 0;
+    background: var(--z-border);
+  }
+
+  .sf-curbox__rate {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 6px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .sf-curbox__rate:hover {
+    background: var(--z-brand-soft);
+  }
+
+  .sf-curbox__rate .ms {
+    color: var(--z-muted);
+    font-size: 14px;
+  }
+
+  .sf-curbox__rate-value {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 5px;
+    background: var(--z-surface-3);
+    color: var(--z-ink);
+    font-family: Inter, sans-serif;
+    font-size: 11px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  /* currency dropdown — SaleNew.html «ارز» menu */
+  .sf-cumenu {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-start: 0;
+    z-index: 31;
+    width: 248px;
+    max-width: calc(100vw - 24px);
+    overflow: hidden;
+    border: 1px solid var(--z-border);
+    border-radius: 12px;
+    background: var(--z-surface);
+    box-shadow: 0 18px 40px -14px rgba(11, 21, 48, 0.35);
+  }
+
+  .sf-cumenu__search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    margin: 6px;
+    padding: 0 9px;
+    border: 1px solid var(--z-border-soft);
+    border-radius: 8px;
+    background: var(--z-surface-2);
+    color: var(--z-muted);
+  }
+
+  .sf-cumenu__search .ms {
+    font-size: 16px;
+  }
+
+  .sf-cumenu__search input {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink);
+    font-family: inherit;
+    font-size: 11.5px;
+  }
+
+  .sf-cumenu__list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 0 6px 6px;
+  }
+
+  .sf-cumenu__opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 4px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--z-ink);
+    font-family: inherit;
+    font-size: 12px;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .sf-cumenu__opt:hover {
+    background: var(--z-surface-2);
+  }
+
+  .sf-cumenu__opt.is-active {
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+  }
+
+  .sf-cumenu__chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    padding: 0;
+    border-radius: 8px;
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font-family: Inter, sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+    box-sizing: border-box;
+  }
+
+  .sf-cumenu__opt.is-base .sf-cumenu__chip {
+    background: var(--z-surface-3);
+    color: var(--z-muted);
+  }
+
+  .sf-cumenu__cpy {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+  }
+
+  .sf-cumenu__name {
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sf-cumenu__opt.is-active .sf-cumenu__name {
+    color: var(--z-link);
+    font-weight: 700;
+  }
+
+  .sf-cumenu__rate {
+    color: var(--z-muted);
+    font-family: Inter, sans-serif;
+    font-size: 10px;
+    font-weight: 500;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sf-cumenu__code {
+    color: var(--z-subtle);
+    font-family: Inter, sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+
+  .sf-cumenu__check {
+    color: var(--z-link);
+    font-size: 17px;
+    visibility: hidden;
+  }
+
+  .sf-cumenu__opt.is-active .sf-cumenu__check {
+    visibility: visible;
+  }
+
+  /* rate editor — floating card from SaleNew.html «نرخ تبادله» */
+  .sf-field--currency {
+    position: relative;
+  }
+
+  .sf-ratebox {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-end: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 260px;
+    max-width: calc(100vw - 24px);
+    padding: 10px;
+    border: 1px solid var(--z-border);
+    border-radius: 12px;
+    background: var(--z-surface);
+    box-shadow: 0 18px 40px -14px rgba(11, 21, 48, 0.35);
+    box-sizing: border-box;
+  }
+
+  .sf-ratebox__title {
+    color: var(--z-ink);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.3;
+  }
+
+  .sf-ratebox__row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    padding: 0 3px 0 8px;
+    padding-inline-start: 8px;
+    padding-inline-end: 3px;
+    border: 1px solid var(--z-border);
+    border-radius: 7px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+  }
+
+  .sf-ratebox__lead {
+    flex-shrink: 0;
+    color: var(--z-ink);
+    font-size: 11.5px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .sf-ratebox__row.is-edited {
+    border-color: var(--z-warn);
+  }
+
+  .sf-ratebox__op {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font-family: Inter, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .sf-ratebox__op.is-div {
+    background: var(--z-warn-soft);
+    color: var(--z-warn);
+  }
+
+  .sf-ratebox__op:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .sf-ratebox__input {
+    flex: 1 1 auto;
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink);
+    font-family: Inter, sans-serif;
+    font-size: 12.5px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  .sf-ratebox__head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .sf-ratebox__tabs {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 2px;
+    margin-inline-start: auto;
+  }
+
+  .sf-ratebox__tab {
+    height: 20px;
+    min-width: 22px;
+    padding: 0 5px;
+    border: 1px solid var(--z-border);
+    border-radius: 5px;
+    background: var(--z-surface);
+    color: var(--z-muted);
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .sf-ratebox__tab.is-active {
+    border-color: var(--z-ink);
+    background: var(--z-ink);
+    color: var(--z-surface);
+  }
+
+  .sf-ratebox__tab:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .sf-ratebox__hint {
+    display: flex;
+    gap: 5px;
+    color: var(--z-muted);
+    font-size: 10.5px;
+    line-height: 1.5;
+  }
+
+  .sf-ratebox__hint .ms {
+    flex-shrink: 0;
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .sf-ratebox__actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .sf-ratebox__cancel,
+  .sf-ratebox__save {
+    flex: 1 1 0;
+    height: 28px;
+    border-radius: 7px;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .sf-ratebox__cancel {
+    border: 1px solid var(--z-border);
+    background: var(--z-surface);
+    color: var(--z-text);
+    font-weight: 600;
+  }
+
+  .sf-ratebox__save {
+    border: 0;
+    background: #2f6fed;
+    color: #fff;
+    font-weight: 700;
+  }
+
+  .sf-ratebox__cancel:disabled,
+  .sf-ratebox__save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /*
+   * description (details card) — SaleNew.html note box: the icon and a
+   * two-line textarea sit in a content-driven box the user can drag
+   * taller, instead of a fixed 30px control row.
+   */
+  .sf-notebox {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 7px 4px 4px 9px;
+    padding-inline-start: 9px;
+    padding-inline-end: 4px;
+    border: 1px solid var(--z-border);
+    border-radius: 7px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+  }
+
+  .sf-notebox:focus-within {
+    border-color: var(--z-brand-300);
+    box-shadow: var(--z-ring);
+  }
+
+  .sf-notebox__icon {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--z-muted);
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .sf-notebox textarea {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 34px;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink);
+    font: inherit;
+    font-size: 11.5px;
+    line-height: 1.5;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+
+  .sf-notebox textarea::placeholder {
+    color: var(--z-subtle);
+  }
+
+  .sf-field--description :global(.sale-rich-editor) {
+    border: 1px solid var(--z-border);
+    border-radius: 7px;
+  }
+
+  /* ---- items card ---- */
+
+  /* strip the nested card chrome — the sf-items card provides it */
+  .sf-items__table :global(.purchase-items-card.purchase-items-card) {
+    z-index: auto;
+    margin-top: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* ---- bill summary ---- */
+  .sf-sum {
+    --sale-control-height: 34px;
+
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    min-width: 0;
+    border: 1px solid var(--z-border);
+    border-radius: var(--z-r-xl, 14px);
+    background: var(--z-surface);
+    box-shadow:
+      0 1px 2px rgba(11, 21, 48, 0.04),
+      0 4px 14px -8px rgba(11, 21, 48, 0.1);
+  }
+
+  .sf-sum.is-invalid {
+    border-color: var(--z-danger);
+  }
+
+  .sf-sum__cell {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 12px;
+  }
+
+  .sf-sum__pay {
+    border-inline-start: 1px solid var(--z-border-soft);
+  }
+
+  .sf-sum__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--z-ink);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .sf-sum__title i {
+    color: var(--z-link);
+    font-size: 15px;
+  }
+
+  .sf-sum__pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .sf-sum__field,
+  .sf-sum__note {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .sf-sum__label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    color: var(--z-text);
+    font-size: var(--z-fs-xs, 10.5px);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  /* what a percentage discount is worth in money, right where it is typed */
+  .sf-sum__calc {
+    color: var(--z-ok);
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sf-sum__label--received {
+    margin-bottom: -2px;
+  }
+
+  .sf-sum__box {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    padding-inline-end: 3px;
+    border: 1px solid var(--z-border);
+    border-radius: 7px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+  }
+
+  .sf-sum__box:focus-within {
+    border-color: var(--z-brand-300);
+    box-shadow: var(--z-ring);
+  }
+
+  .sf-sum__box > i {
+    flex-shrink: 0;
+    padding-inline-start: 8px;
+    color: var(--z-muted);
+    font-size: 14px;
+  }
+
+  .sf-sum__box input {
+    flex: 1 1 auto;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    padding: 0 8px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sf-sum__suffix {
+    flex-shrink: 0;
+    padding: 0 9px;
+    border-inline-start: 1px solid var(--z-border-soft);
+    color: var(--z-muted);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .sf-sum__toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    min-width: 32px;
+    flex-shrink: 0;
+    margin-inline-end: 1px;
+    padding: 0 7px;
+    border: 1px solid var(--z-border-strong);
+    border-radius: 6px;
+    background: var(--z-surface);
+    color: var(--z-link);
+    font: inherit;
+    font-size: 10.5px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .sf-sum__toggle:hover,
+  .sf-sum__toggle.is-active {
+    background: var(--z-brand-soft);
+  }
+
+  .sf-sum__notebox {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 9px;
+    border: 1px solid var(--z-border);
+    border-radius: 7px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+  }
+
+  .sf-sum__notebox:focus-within {
+    border-color: var(--z-brand-300);
+    box-shadow: var(--z-ring);
+  }
+
+  .sf-sum__notebox > i {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--z-muted);
+    font-size: 14px;
+  }
+
+  .sf-sum__notebox textarea {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    height: 36px;
+    min-height: 36px;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    resize: vertical;
+    background: transparent;
+    color: var(--z-ink);
+    font: inherit;
+    font-size: var(--z-fs-sm, 11.5px);
+    line-height: 1.55;
+  }
+
+  /* dark gradient payable bar */
+  .sf-totalbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 36px;
+    padding: 6px 12px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #0b1530 0%, #1b3a8a 100%);
+    color: #ffffff;
+    box-sizing: border-box;
+  }
+
+  .sf-totalbar__label {
+    min-width: 0;
+    color: #e0ebff;
+    font-size: var(--z-fs-sm, 11.5px);
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+
+  .sf-totalbar__amount {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  .sf-totalbar__amount b {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sf-totalbar__amount small {
+    color: #e0ebff;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* received money row */
+  .sf-paycur {
+    color: var(--z-link);
+    font-family: Inter, sans-serif;
+    font-size: 12.5px;
+    font-weight: 800;
+  }
+
+  .sf-payrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .sf-payrow .payment-composite-control {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 30px;
+    border: 1px solid var(--z-border);
+    border-radius: var(--z-r-sm, 8px);
+    background: var(--z-surface);
+    overflow: visible;
+  }
+
+  .sf-payrow .payment-composite-control:focus-within {
+    border-color: var(--z-brand-300);
+    box-shadow: var(--z-ring);
+  }
+
+  .sf-payrow .payment-amount-currency-control {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+  }
+
+  .sf-payrow .payment-amount-currency-control > input {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    padding: 0 8px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink);
+    font-size: 13.5px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  .sf-paydiv {
+    flex: 0 0 auto;
+    width: 1px;
+    height: 16px;
+    background: var(--z-border);
+  }
+
+  .sf-payrow .payment-currency-picker {
+    border-inline-start: 0;
+    background: transparent;
+  }
+
+  .sf-payrow .sale-simple-payment__currency {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    align-self: stretch;
+  }
+
+  /* the payment picker reuses the «ارز» panel, anchored to the field itself */
+  .sf-payrow .sf-cumenu {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+    z-index: 1300;
+    width: 240px;
+  }
+
+  .sf-payrow .sf-cumenu__opt.is-active .sf-cumenu__chip {
+    background: var(--z-surface);
+    color: var(--z-link);
+  }
+
+  /*
+   * the sale «نرخ تبادله» card, anchored to the payment currency picker.
+   * The payment row sits at the bottom of the bill summary, so the card
+   * opens upwards to stay inside the page instead of under the action bar.
+   */
+  .sf-payrow .sf-ratebox {
+    top: auto;
+    bottom: calc(100% + 6px);
+    z-index: 1300;
+  }
+
+  .sf-payrow .sale-simple-payment__currency > .payment-currency-picker__main,
+  .sf-payrow .payment-currency-picker__main {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    align-self: stretch;
+    height: auto;
+    min-width: 0;
+    margin: 2px;
+    padding: 0 3px 0 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--z-ink);
+    font-size: 11.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .sf-payrow .payment-currency-picker__main:hover {
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+  }
+
+  .sf-payrow .payment-currency-picker__main .ms {
+    font-size: 14px;
+    color: var(--z-muted);
+  }
+
+  .sf-full {
+    height: 30px;
+    flex-shrink: 0;
+    padding: 0 10px;
+    border: 1px solid var(--z-border-strong);
+    border-radius: var(--z-r-sm, 8px);
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font: inherit;
+    font-size: var(--z-fs-sm, 11.5px);
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .sf-full:hover {
+    border-color: var(--z-brand-300);
+    background: var(--z-brand-300);
+    color: #ffffff;
+  }
+
+  /* account: wide chip (active) + 30px wallet button, as in SaleNew */
+  .sf-acct {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .sf-acct__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex: 0 0 30px;
+    width: 30px;
+    min-width: 0;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--z-border-strong);
+    border-radius: 8px;
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    order: 1;
+  }
+
+  .sf-acct__btn .ms {
+    flex-shrink: 0;
+    font-size: 17px;
+  }
+
+  .sf-acct__btn:hover {
+    border-color: var(--z-brand-300);
+    background: var(--z-brand-300);
+    color: #ffffff;
+  }
+
+  .sf-acct__btn.is-wide {
+    order: 0;
+    flex: 1 1 auto;
+    width: auto;
+    justify-content: flex-start;
+    padding: 0 10px;
+    border-color: var(--z-border-soft);
+    background: var(--z-surface-2);
+    color: var(--z-ink);
+  }
+
+  .sf-acct__btn.is-wide:hover {
+    border-color: var(--z-border-strong);
+    background: var(--z-surface-3);
+    color: var(--z-ink);
+  }
+
+  .sf-acct__btn.is-wide .ms {
+    font-size: 15px;
+    color: var(--z-muted);
+  }
+
+  .sf-acct__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sf-acct__bal {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--z-muted);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sf-acct__bal > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* actions */
+  .sf-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .sf-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 10px;
+    font: inherit;
+    font-size: var(--z-fs-base, 12.5px);
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .sf-action:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .sf-action--draft {
+    flex: 0 0 auto;
+    border: 1px solid var(--z-border-strong);
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+  }
+
+  .sf-action--draft i {
+    display: inline-grid;
+    width: 24px;
+    height: 24px;
+    place-items: center;
+    border-radius: 7px;
+    background: var(--z-surface);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.1);
+    font-size: 15px;
+  }
+
+  .sf-action--confirm {
+    flex: 1 1 auto;
+    gap: 6px;
+    border: 0;
+    background: var(--z-brand);
+    color: #ffffff;
+    font-weight: 800;
+  }
+
+  /* mobile bottom bar */
+  .sf-mobilebar {
+    display: none;
+  }
+
+  /* ---- responsive ---- */
+  @media (max-width: 1100px) {
+    .sf-dgrid {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .sf-field--description,
+    .sf-field--description-full {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 991px) {
+    .sf-sum {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sf-sum__pay {
+      border-inline-start: 0;
+      border-top: 1px solid var(--z-border-soft);
+    }
+  }
+
+  @media (max-width: 575px) {
+    .sf-dgrid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sf-field--description,
+    .sf-field--description-full {
+      grid-column: 1 / -1;
+    }
+
+    .sf-card__bar {
+      flex-wrap: wrap;
+    }
+
+    .sf-head-visitor {
+      width: 100%;
+    }
+
+    .sf-head-visitor :global(.filter-select) {
+      width: 100%;
+    }
+
+    .sf-sum__pair {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 767px) {
+    .sale-create-page {
+      padding-bottom: 5.5rem;
+    }
+
+    .sf-mobilebar {
+      display: flex;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 900;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--z-border);
+      background: var(--z-surface);
+      box-shadow: 0 -6px 18px rgba(11, 21, 48, 0.08);
+    }
+
+    .sf-mobilebar__total {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-width: 0;
+      line-height: 1.25;
+    }
+
+    .sf-mobilebar__total small {
+      color: var(--z-muted);
+      font-size: 11px;
+    }
+
+    .sf-mobilebar__total b {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+      min-width: 0;
+      color: var(--z-ink);
+      font-size: 17px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .sf-mobilebar__total b span {
+      overflow: hidden;
+      font-variant-numeric: tabular-nums;
+      text-overflow: ellipsis;
+    }
+
+    .sf-mobilebar__total em {
+      color: var(--z-muted);
+      font-size: 11px;
+      font-style: normal;
+      font-weight: 600;
+    }
+
+    .sf-mobilebar__draft {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      padding: 0;
+      border: 1px solid var(--z-border);
+      border-radius: 12px;
+      background: var(--z-surface);
+      color: var(--z-text);
+      font-size: 19px;
+      cursor: pointer;
+    }
+
+    .sf-mobilebar__draft:disabled {
+      opacity: 0.6;
+    }
+
+    .sf-mobilebar__confirm {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 44px;
+      flex-shrink: 0;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--z-brand);
+      color: #ffffff;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .sf-mobilebar__confirm:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+  }
+
+  /* ---- Material Symbols sizing (SaleNew.html glyph parity) ---- */
+  .sf-back .ms {
+    font-size: 17px;
+  }
+
+  .sale-customer-input__icon .ms {
+    font-size: 15px;
+  }
+
+  .sale-add-customer .ms {
+    font-size: 15px;
+  }
+
+  .payment-currency-picker__main .ms {
+    font-size: 12px;
+  }
+
+  .sf-mobilebar__confirm .ms {
+    font-size: 18px;
+  }
+
+  /* track / account-view modal glyphs */
+  .sale-track-heading > span .ms,
+  .sale-account-view-modal > header > div > span .ms {
+    font-size: 17px;
+  }
+
+  .sale-track-search > i {
+    font-size: 15px;
+  }
+
+  .sale-track-search button .ms {
+    font-size: 15px;
+  }
+
+  .sale-track-close .ms,
+  .sale-account-view-modal > header > button .ms {
+    font-size: 15px;
+  }
+
+  .sale-track-account__icon .ms {
+    font-size: 15px;
+  }
+
+  .sale-track-footer button .ms {
+    font-size: 13px;
+  }
+
+  .sf-custbox__person .ms,
+  .sf-custbox__add .ms {
+    font-size: 15px;
+  }
+
+  /* visitor chip in the details header (SaleNew.html) */
+  .sf-head-visitor {
+    flex-shrink: 0;
+    margin-inline-start: auto;
+    min-width: 0;
+  }
+
+  .sf-head-visitor :global(.filter-select) {
+    width: auto;
+  }
+
+  .sf-head-visitor :global(.filter-select__trigger) {
+    height: 26px;
+    min-height: 26px;
+    padding: 0 8px;
+    border-radius: 8px;
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+
+  .sf-head-visitor:not(.has-value) :global(.filter-select__trigger) {
+    border-style: dashed;
+    border-color: var(--z-border-strong);
+    background: transparent;
+    color: var(--z-muted);
+  }
+
+  .sf-head-visitor.has-value :global(.filter-select__trigger) {
+    border-color: var(--z-border-strong);
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+  }
+
+  .sf-head-visitor :global(.filter-select__value) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .sf-head-visitor :global(.filter-select__value)::before {
+    content: 'person_add_alt';
+    font-family: 'Material Symbols Rounded';
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1;
+  }
+
+  .sf-head-visitor.has-value :global(.filter-select__value)::before {
+    content: 'badge';
+  }
+
+  .sf-head-visitor :global(.filter-select__caret) {
+    font-size: 14px;
+  }
+
+  /* dark theme: --z tokens already flip; a few legacy classes need a nudge */
+  :global(html.dark) .sf-payrow .payment-currency-picker__main {
+    background: transparent;
+    color: var(--z-text);
+  }
+
+  /* ================================================================
+     Purchase adapters — the sale form design system above, fitted to
+     the purchase fields. The details grid runs date · bill · supplier ·
+     currency, the same order and column weights as the sale form, so it
+     reuses the shared .sf-dgrid rules unchanged. The warehouse lives in
+     the items header.
+     ================================================================ */
+  .sf-reqnote {
+    display: inline-flex;
+    align-items: center;
+    margin-inline-start: auto;
+    color: var(--z-danger);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .sf-reqnote .ms {
+    font-size: 11px;
+  }
+
+  /* no rate column beside it: the button owns the whole box */
+  .sf-curbox--solo .sf-curbox__cur {
+    flex: 1 1 auto;
+    justify-content: space-between;
+  }
+
+  /*
+   * Currency is the last grid column, so the shared rule (anchored to the
+   * field's inline-start edge) pushed the panel out of the card. Anchor it
+   * to the opposite edge so it always opens inwards, in both directions.
+   */
+  .sf-field--currency .sf-cumenu {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+  }
+
+  /* pencil that opens the payment exchange-rate editor */
+  .sf-rateedit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+    margin-inline-start: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    cursor: pointer;
+  }
+
+  .sf-rateedit:hover {
+    background: var(--z-brand-300);
+    color: #ffffff;
+  }
+
+  /* the card is open: the pencil keeps the pressed look */
+  .sf-rateedit.is-open {
+    background: var(--z-brand-300);
+    color: #ffffff;
+  }
+
+  .sf-rateedit .ms {
+    font-size: 14px;
+  }
+
+  .sf-payrow .purchase-simple-payment__currency {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    align-self: stretch;
+    /* the legacy mobile rule stretched this to full width */
+    width: auto;
+    border-top: 0;
+  }
+
+  .sf-payrow .purchase-simple-payment__currency > .payment-currency-picker__main {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .sf-payrow .payment-amount-currency-control > input {
+    min-height: 0;
+  }
+
+  /* the inline exchange-rate editor swaps in for the amount field */
+  .sf-payrow .purchase-exchange-editor {
+    min-height: 0;
+    background: transparent;
+  }
+
+  .sf-payrow .purchase-exchange-editor > span {
+    border-inline-end-color: var(--z-border-soft);
+    background: var(--z-surface-2);
+    color: var(--z-muted);
+    font-size: 10px;
+  }
+
+  .sf-payrow .purchase-exchange-editor > input {
+    flex: 1 1 4rem;
+    width: auto;
+    min-width: 3.5rem;
+    height: 100%;
+    padding-inline: 6px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink);
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  /* both summary cells keep the same height so the divider runs full */
+  .sf-sum--purchase {
+    align-items: stretch;
+  }
+
+  /* treasury-balance warning under the account chips */
+  .sf-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px solid var(--z-warn);
+    border-radius: 8px;
+    background: var(--z-warn-soft);
+    color: var(--z-warn);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+
+  .sf-alert .ms {
+    flex-shrink: 0;
+    font-size: 15px;
+  }
+
+  .sf-alert span {
+    min-width: 0;
   }
 
 </style>

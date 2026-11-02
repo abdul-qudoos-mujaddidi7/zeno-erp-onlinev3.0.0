@@ -138,6 +138,31 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     refreshAvailableProducts();
   });
 
+  /* F2 is advertised on the search bar, so it must actually focus it. */
+  function handleShortcutKey(event) {
+    if (event.key !== 'F2' || event.ctrlKey || event.altKey || event.metaKey) return;
+
+    event.preventDefault();
+    activateProductCellSearch();
+  }
+
+  onMount(() => {
+    window.addEventListener('keydown', handleShortcutKey);
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleShortcutKey);
+      document.removeEventListener('mousedown', handleDocumentMouseDown);
+    };
+  });
+
+  function handleDocumentMouseDown(event) {
+    if (!warehouseOpen) return;
+    if (event.target instanceof Element && event.target.closest('.sfi-wh')) return;
+
+    warehouseOpen = false;
+  }
+
   // Build lookup map
   $: unitMap = Object.fromEntries(units.map((u) => [u.id, u]));
 
@@ -614,6 +639,19 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
   }
 
   /*
+   * The item rows name their amounts with the currency symbol the operator
+   * configured (؋, $, €), the same way the header and the receipt do — the
+   * translated word belongs on the printed bill, not beside a table figure.
+   */
+  function currencySymbol(code) {
+    const key = code && typeof code === 'object' ? code.code : code;
+    if (!key) return '';
+
+    const match = currencies.find((row) => row.code === key);
+    return match?.symbol || match?.code || key;
+  }
+
+  /*
    * Product sell prices are stored in the product's own currency.
    * Convert them into the Sale Details currency as soon as the product
    * is added, so the price label matches the header on the first pick
@@ -719,7 +757,6 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     });
 
     search_input?.focus();
-    positionProductDropdown();
   }
 
   function closeProductCellSearch() {
@@ -938,6 +975,12 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     return Math.floor(getVisibleProductStock(item) / multiplier);
   }
 
+  function adjustQuantity(item, index, delta) {
+    const next = Number(item.quantity || 0) + delta;
+    item.quantity = Math.max(0, Number.isFinite(next) ? next : 0);
+    recalc(index);
+  }
+
   function recalc(index) {
     const item = items[index];
 
@@ -1038,47 +1081,23 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
   let search_input = null;
 
   let showProductDropdown = false;
-  let productDropdownStyle = '';
   let isProductCellEditing = false;
 
-  function portal(node) {
-    document.body.appendChild(node);
-    return { destroy() { node.remove(); } };
-  }
+  /*
+   * Warehouse is the one setting the items card owns (SaleNew shows it as a
+   * field in the card header); everything else about it lives in the parent.
+   */
+  let warehouseOpen = false;
 
-  function positionProductDropdown() {
-    if (!search_input) return;
+  $: selectedWarehouseName =
+    warehouses.find((row) => String(row.id) === String(warehouse_id))?.name || '';
 
-    const anchor =
-      search_input.closest('.purchase-item-search-cell') ||
-      search_input;
+  function pickWarehouse(row) {
+    warehouseOpen = false;
 
-    const rect = anchor.getBoundingClientRect();
+    if (String(row.id) === String(warehouse_id)) return;
 
-    /*
-     * Always open the product dropdown below the search field.
-     * The available height is limited to the remaining viewport,
-     * and the dropdown becomes internally scrollable when needed.
-     */
-    const availableHeight = Math.max(
-      90,
-      window.innerHeight - rect.bottom - 12,
-    );
-
-    const maxHeight = Math.min(
-      250,
-      availableHeight,
-    );
-
-    productDropdownStyle =
-      `position:fixed;` +
-      `left:${rect.left}px;` +
-      `width:${rect.width}px;` +
-      `top:${rect.bottom + 5}px;` +
-      `bottom:auto;` +
-      `max-height:${maxHeight}px;` +
-      `overflow:auto;` +
-      `z-index:100000;`;
+    warehouse_id = row.id;
   }
 
   $: {
@@ -1120,61 +1139,220 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
       stock = 0;
     }
   }
-
-  $: if (showProductDropdown) {
-    tick().then(positionProductDropdown);
-  }
 </script>
 <div class="card shadow-2 mt-4 purchase-items-card">
   <div class="card-body">
-    <div class="d-flex align-items-center mb-3">
-      <h5 class="mb-0 purchase-items-title">{t('Sale Items')}</h5>
-    </div>
-
     <input type="text" class="position-absolute opacity-0" bind:value={barcodeInput} on:keydown={handleBarcode} />
 
-    <div class="table-responsive sale-items-scroll-area">
-      <table class="table table-hover align-middle purchase-items-table">
-        <thead class="table-light">
+    <div class="sfi-head">
+      <h3 class="sfi-head__title">
+        <i class="ms f" aria-hidden="true">medication</i>
+        <span>{t('Sale Items')}</span>
+      </h3>
+
+      <div class="sfi-wh">
+        <button
+          type="button"
+          class="sfi-wh__field"
+          class:is-open={warehouseOpen}
+          aria-haspopup="listbox"
+          aria-expanded={warehouseOpen}
+          title={t('Warehouse')}
+          aria-label={t('Warehouse')}
+          on:click={() => (warehouseOpen = !warehouseOpen)}>
+          <i class="ms" aria-hidden="true">warehouse</i>
+          <span class="sfi-wh__name">{selectedWarehouseName || t('Select Warehouse')}</span>
+          <i class="ms sfi-wh__chev" aria-hidden="true">expand_more</i>
+        </button>
+
+        {#if warehouseOpen}
+          <div class="sfi-wh__menu" role="listbox" aria-label={t('Warehouse')}>
+            {#each warehouses as wh (wh.id)}
+              {@const active = String(warehouse_id) === String(wh.id)}
+              <button
+                type="button"
+                role="option"
+                aria-selected={active}
+                class="sfi-wh__opt"
+                class:is-active={active}
+                title={wh.name}
+                on:click={() => pickWarehouse(wh)}>
+                <span class="sfi-wh__opt-name">{wh.name}</span>
+                <i class="ms sfi-wh__check" aria-hidden="true">check</i>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <div class="sfi-sbar" class:is-open={showProductDropdown}>
+        <i class="ms sfi-sbar__icon" aria-hidden="true">search</i>
+
+        <input
+          type="text"
+          id="form_product_search"
+          class="sfi-sbar__input"
+          bind:this={search_input}
+          bind:value={search}
+          role="combobox"
+          aria-expanded={showProductDropdown}
+          aria-controls="sale-product-suggestions"
+          aria-autocomplete="list"
+          aria-label={t('Select Product')}
+          placeholder={t('Search product by name, barcode, or SKU...')}
+          autocomplete="off"
+          on:input={handleProductSearchInput}
+          on:focus={() => {
+            showProductDropdown = true;
+            refreshAvailableProducts();
+          }}
+          on:keydown={(event) => {
+            if (event.key === 'Enter') {
+              const match =
+                filteredProducts[0] ||
+                products.find((row) => productMatchesSearch(row, search));
+
+              if (match) {
+                event.preventDefault();
+                selectAndAddProduct(match);
+              }
+            }
+
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              closeProductCellSearch();
+            }
+          }}
+          on:blur={() =>
+            setTimeout(() => {
+              if (!selectingProduct) {
+                showProductDropdown = false;
+              }
+            }, 180)} />
+
+        {#if showProductDropdown && filteredProducts.length > 0}
+          <div
+            id="sale-product-suggestions"
+            role="listbox"
+            aria-label={t('Select Product')}
+            class="sfi-suggest">
+            <div class="sfi-suggest__scroll">
+              {#each filteredProducts as prod (prod.id)}
+                {@const stock = Number(prod.warehouse_stock || 0)}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  class="sfi-suggest__row"
+                  title={prod.name}
+                  on:mousedown|preventDefault={() => selectAndAddProduct(prod)}>
+                  <span class="sfi-suggest__copy">
+                    <strong>{prod.name}</strong>
+
+                    <small>
+                      {categories.find((category) => category.id === prod.category_id)?.name || t('Category')}
+                    </small>
+                  </span>
+
+                  {#if prod.type === 'service'}
+                    <span class="sfi-suggest__service">{t('Service')}</span>
+                  {:else}
+                    <span
+                      class="sfi-suggest__stock"
+                      class:is-low={stock > 0 && stock <= 5}
+                      class:is-negative={stock <= 0}
+                      title={t('Stock')}>
+                      <strong dir="ltr">
+                        {stock.toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                      </strong>
+
+                      <small>
+                        {units.find((item) => item.id === prod.product_unit_id)?.name || t('Unit')}
+                      </small>
+                    </span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+
+            <div class="sfi-suggest__hint" aria-hidden="true">
+              <span>↑↓ {t('Select')} · Enter · Esc</span>
+              <span class="sfi-suggest__count" dir="ltr">{filteredProducts.length}</span>
+            </div>
+          </div>
+        {/if}
+
+        {#if showProductDropdown && warehouse_id && search.trim() && filteredProducts.length === 0}
+          <div class="sfi-suggest sfi-suggest--empty">
+            <i class="ms" aria-hidden="true">search_off</i>
+            <span class="sfi-suggest__empty-text">«{search}» {t('No products available')}</span>
+            <button type="button" class="sfi-suggest__new" on:click={openCreateProductModal}>
+              <i class="ms" aria-hidden="true">add</i>
+              {t('New Product')}
+            </button>
+          </div>
+        {/if}
+
+        <kbd class="sfi-kbd" title={t('Press F2 to search')}>F2</kbd>
+        <span class="sfi-divider" aria-hidden="true"></span>
+
+        <button
+          type="button"
+          class="sfi-new"
+          title={t('New Product')}
+          aria-label={t('New Product')}
+          on:click={openCreateProductModal}>
+          <i class="ms" aria-hidden="true">add_circle</i>
+          <span class="sfi-new__label">{t('New Product')}</span>
+        </button>
+      </div>
+    </div>
+
+    {#if items.length > 0}
+      <div class="sfi-table-wrap">
+        <table class="sfi-table">
+        <thead>
           <tr>
-            <th class="purchase-item-col-product">{t('Product')}</th>
+            <th class="sfi-col-idx">#</th>
+            <th class="sfi-col-name">{t('Product')}</th>
             {#if enable_batch}
-              <th class="text-center purchase-item-col-expiry">{t('Expiry Date')}</th>
-              <th class="text-center purchase-item-col-batch">{t('Batch')}</th>
+              <th class="sfi-col-batch">{t('Batch')}</th>
+              <th class="sfi-col-exp">{t('Expiry Date')}</th>
             {/if}
-            <th class="text-center purchase-item-col-quantity">{t('Quantity')}</th>
-            <th class="text-center purchase-item-col-price">{t('Sell Price')}</th>
-            <th class="text-center purchase-item-col-subtotal">{t('Subtotal')}</th>
-            <th class="text-center purchase-item-col-actions">{t('Actions')}</th>
+            <th class="sfi-col-qty">{t('Quantity')}</th>
+            <th class="sfi-col-price">{t('Sell Price')}</th>
+            <th class="sfi-col-total">{t('Subtotal')}</th>
+            <th class="sfi-col-act"><span class="sfi-sr">{t('Actions')}</span></th>
           </tr>
         </thead>
         <tbody>
           {#each items as item, index}
             <tr>
-              <td class="purchase-item-product-cell">
-                <div class="purchase-item-product">
-                  <span class="purchase-item-product-copy">
-                    <strong class="purchase-item-product-name">{item.product_name}</strong>
-                    {#if item.type !== 'service'}
-                      <small>
-                        {t('Present in Warehouse')}:
-                        {Number(getCalculatedStock(item) || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                        {units.find((u) => u.id === item.product_unit_id)?.name || t('Unit')}
-                      </small>
+              <td class="sfi-col-idx"><span dir="ltr">{index + 1}</span></td>
+              <td class="sfi-col-name">
+                <span class="sfi-name" title={item.product_name}>{item.product_name}</span>
+                {#if item.type !== 'service'}
+                  <span class="sfi-meta">
+                    {#if item.batch}
+                      <span class="sfi-meta__code" dir="ltr">{item.batch}</span>
                     {/if}
+                    <span
+                      class="sfi-meta__stock"
+                      class:is-low={Number(getCalculatedStock(item) || 0) <= 5}
+                      title={t('Present in Warehouse')}>
+                      {Number(getCalculatedStock(item) || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                      {units.find((u) => u.id === item.product_unit_id)?.name || t('Unit')}
+                    </span>
                   </span>
-                </div>
+                {/if}
               </td>
               {#if enable_batch}
-                <td class="text-center purchase-item-col-expiry">
-                  <span class="purchase-item-readonly">{item.type === 'service' ? '-' : item.expiry_date || '-'}</span>
-                </td>
-                <td class="text-center purchase-item-col-batch">
+                <td class="sfi-col-batch">
                   {#if item.type === 'service'}
-                    <span class="purchase-item-readonly">-</span>
+                    <span class="sfi-readonly">-</span>
                   {:else}
                     <select
-                      class="purchase-item-batch-select"
+                      class="sfi-batch-select"
                       value={item.batch_option_id || item.stock_batch_id || item.batch || ''}
                       aria-label={t('Batch')}
                       on:mousedown={() => handleBatchDropdownFocus(item)}
@@ -1194,15 +1372,30 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
                     </select>
                   {/if}
                 </td>
+                <td class="sfi-col-exp">
+                  <span class="sfi-readonly" dir="ltr">{item.type === 'service' ? '-' : item.expiry_date || '-'}</span>
+                </td>
               {/if}
-              <td class="text-center purchase-item-col-quantity">
-                <div class="input-group input-group-sm purchase-unified-input-group purchase-item-cell-group">
+              <td class="sfi-col-qty">
+                <span class="sfi-qty">
+                  <button
+                    type="button"
+                    class="sfi-qty__btn"
+                    aria-label={t('Increase')}
+                    on:click={() => adjustQuantity(item, index, 1)}>
+                    <i class="ms" aria-hidden="true">add</i>
+                  </button>
+
                   <input
                     type="number"
-                    class="form-control form-control-sm"
+                    class="sfi-qty__input"
+                    min="0"
+                    step="any"
                     data-sale-item-index={index}
                     data-sale-item-field="quantity"
                     bind:value={item.quantity}
+                    aria-label={t('Quantity')}
+                    dir="ltr"
                     on:input={() => recalc(index)}
                     on:keydown={(event) =>
                       handleSaleItemEnter(
@@ -1210,24 +1403,38 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
                         index,
                         'price',
                       )} />
+
+                  <button
+                    type="button"
+                    class="sfi-qty__btn"
+                    aria-label={t('Decrease')}
+                    on:click={() => adjustQuantity(item, index, -1)}>
+                    <i class="ms" aria-hidden="true">remove</i>
+                  </button>
+
+                  <span class="sfi-qty__divider" aria-hidden="true"></span>
+
                   {#if item.availableUnits?.length > 1}
                     <FilterSelect compact value={item.product_unit_id}
                       label={t('Unit')} options={item.availableUnits.map((unit)=>({value:unit.id,label:unit.name}))}
                       on:change={(event)=>changeUnit(item,event.detail)} />
                   {:else}
-                    <span class="input-group-text"
+                    <span class="sfi-qty__unit"
                       >{item.availableUnits?.[0]?.name || units.find((u) => u.id === item.product_unit_id)?.name || t('Unit')}</span>
                   {/if}
-                </div>
+                </span>
               </td>
-              <td class="text-center purchase-item-col-price">
-                <div class="input-group input-group-sm purchase-unified-input-group purchase-item-cell-group">
+              <td class="sfi-col-price">
+                <span class="sfi-price">
                   <input
                     type="number"
-                    class="form-control form-control-sm"
+                    class="sfi-price__input"
+                    step="any"
                     data-sale-item-index={index}
                     data-sale-item-field="price"
                     bind:value={item.calculated_price}
+                    aria-label={t('Sell Price')}
+                    dir="ltr"
                     on:input={() => recalc(index)}
                     on:keydown={(event) =>
                       handleSaleItemEnter(
@@ -1235,277 +1442,110 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
                         index,
                         'product',
                       )} />
-                  <span class="input-group-text">{t(item.currency)}</span>
-                </div>
+
+                  <span class="sfi-price__cur">{currencySymbol(item.currency)}</span>
+                </span>
+
                 {#if enable_show_buy_price_and_latest_sale_price_in_item}
-                  <div class="purchase-item-stock">
+                  <span class="sfi-price__sub">
                     {#if enable_show_buy_price}
-                      {t('Buy Price')}: {Number(item.buy_price || 0).toLocaleString(undefined, {
-                        maximumFractionDigits: 3,
-                      })}
-                      {t(item.buy_price_currency)}
+                      <span>
+                        {t('Buy Price')}:
+                        <b dir="ltr">{Number(item.buy_price || 0).toLocaleString(undefined, {
+                          maximumFractionDigits: 3,
+                        })}</b>
+                        {currencySymbol(item.buy_price_currency)}
+                      </span>
                     {/if}
                     {#if enable_show_latest_sale_price && item.latestPrice}
-                      <br />
-                      {t('Last Sold Price')}:
-                      <button
-                        type="button"
-                        class="btn btn-link p-0 purchase-item-stock-link"
-                        on:click={() => {
-                          const priced = priceInFormCurrency(
-                            item.latestPrice.price,
-                            item.latestPrice.currency,
-                          );
-                          item.calculated_price = priced.price;
-                          item.unit_price = priced.price;
-                          item.currency = priced.currency;
-                          recalc(index);
-                        }}>
-                        {Number(item.latestPrice.price || 0).toLocaleString(undefined, {
-                          maximumFractionDigits: 3,
-                        })}
-                        {t(item.latestPrice.currency)}
-                      </button>
+                      <span>
+                        {t('Last Sold Price')}:
+                        <button
+                          type="button"
+                          class="sfi-price__link"
+                          on:click={() => {
+                            const priced = priceInFormCurrency(
+                              item.latestPrice.price,
+                              item.latestPrice.currency,
+                            );
+                            item.calculated_price = priced.price;
+                            item.unit_price = priced.price;
+                            item.currency = priced.currency;
+                            recalc(index);
+                          }}>
+                          {Number(item.latestPrice.price || 0).toLocaleString(undefined, {
+                            maximumFractionDigits: 3,
+                          })}
+                          {currencySymbol(item.latestPrice.currency)}
+                        </button>
+                      </span>
                     {/if}
-                  </div>
+                  </span>
                 {/if}
               </td>
-              <td class="text-center purchase-item-col-subtotal">
-                <div class="purchase-item-money">
+              <td class="sfi-col-total">
+                <span class="sfi-total">
                   {#if item.currency != currency?.code}
-                    <strong>{exchangeRate(item.subtotal, item.currency, currency).toLocaleString(undefined, {
+                    <strong dir="ltr">{exchangeRate(item.subtotal, item.currency, currency).toLocaleString(undefined, {
                       maximumFractionDigits: 3,
                     })}</strong>
-                    <small>{t(currency?.code)}</small>
+                    <small>{currencySymbol(currency?.code)}</small>
+                    <em class="sfi-total__conv" dir="ltr">
+                      {Number(item.subtotal || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                      {currencySymbol(item.currency)}
+                    </em>
                   {:else}
-                    <strong>{Number(item.subtotal || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}</strong>
-                    <small>{t(item.currency)}</small>
+                    <strong dir="ltr">{Number(item.subtotal || 0).toLocaleString(undefined, { maximumFractionDigits: 3 })}</strong>
+                    <small>{currencySymbol(item.currency)}</small>
                   {/if}
-                </div>
+                </span>
               </td>
-              <td class="text-center purchase-item-actions purchase-item-col-actions">
+              <td class="sfi-col-act">
                 <button
                   type="button"
-                  class="btn btn-sm btn-outline-danger"
+                  class="sfi-del"
                   title={t('Delete')}
                   aria-label={t('Delete')}
-                  on:click={() => removeItem(index)}><i class="bi bi-trash" aria-hidden="true"></i></button>
+                  on:click={() => removeItem(index)}>
+                  <i class="ms" aria-hidden="true">delete</i>
+                </button>
               </td>
             </tr>
           {/each}
 
-          <!--
-            Permanent blank row:
-            click the Product TD, choose a product, this row becomes filled,
-            and a new blank row remains below it.
-          -->
-          <tr class="purchase-item-search-row">
-            <td
-              class="purchase-item-product-cell purchase-item-search-cell"
-              class:purchase-item-search-cell--editing={isProductCellEditing}
-              role="button"
-              tabindex="0"
-              aria-label={t('Select Product')}
-              on:click={() => {
-                if (!isProductCellEditing) {
-                  activateProductCellSearch();
-                }
-              }}
-              on:keydown={(event) => {
-                if (
-                  !isProductCellEditing &&
-                  (event.key === 'Enter' || event.key === ' ')
-                ) {
-                  event.preventDefault();
-                  activateProductCellSearch();
-                }
-              }}>
-              {#if isProductCellEditing}
-                <div class="purchase-item-inline-search">
-                  <span class="purchase-item-search-icon" aria-hidden="true">
-                    <i class="bi bi-search"></i>
-                  </span>
 
-                  <input
-                    type="text"
-                    id="form_product_search"
-                    class="purchase-item-search-input"
-                    bind:this={search_input}
-                    bind:value={search}
-                    on:click|stopPropagation
-                    on:input={handleProductSearchInput}
-                    on:focus={() => {
-                      showProductDropdown = true;
-                      refreshAvailableProducts();
-                    }}
-                    on:keydown={(event) => {
-                      if (event.key === 'Enter') {
-                        const match =
-                          filteredProducts[0] ||
-                          products.find((row) =>
-                            productMatchesSearch(row, search),
-                          );
-
-                        if (match) {
-                          event.preventDefault();
-                          selectAndAddProduct(match);
-                        }
-                      }
-
-                      if (event.key === 'Escape') {
-                        event.preventDefault();
-                        closeProductCellSearch();
-                      }
-                    }}
-                    on:blur={() =>
-                      setTimeout(() => {
-                        if (isProductCellEditing && !selectingProduct) {
-                          closeProductCellSearch();
-                        }
-                      }, 180)}
-                    placeholder={t('Search product by name, barcode, or SKU...')}
-                    autocomplete="off" />
-
-                  {#if showProductDropdown && filteredProducts.length > 0}
-                    <div
-                      use:portal
-                      class="list-group shadow purchase-items-dropdown"
-                      style={productDropdownStyle}>
-                      {#each filteredProducts as prod (prod.id)}
-                        <button
-                          type="button"
-                          class="list-group-item list-group-item-action"
-                          on:mousedown|preventDefault={() => selectAndAddProduct(prod)}>
-                          <div class="sale-product-option">
-                            <span class="sale-product-option__copy">
-                              <strong>{prod.name}</strong>
-
-                              <small>
-                                {categories.find(
-                                  (category) => category.id === prod.category_id,
-                                )?.name || t('Category')}
-                              </small>
-                            </span>
-
-                            {#if prod.type === 'service'}
-                              <span class="sale-product-option__service">
-                                <i class="bi bi-tools" aria-hidden="true"></i>
-                                {t('Service')}
-                              </span>
-                            {:else}
-                              <span
-                                class="sale-product-option__stock"
-                                title={t('Present in Warehouse')}>
-                                <i class="bi bi-box-seam" aria-hidden="true"></i>
-
-                                <strong dir="ltr">
-                                  {Number(
-                                    prod.warehouse_stock || 0,
-                                  ).toLocaleString(undefined, {
-                                    maximumFractionDigits: 3,
-                                  })}
-                                </strong>
-
-                                <small>
-                                  {units.find(
-                                    (item) => item.id === prod.product_unit_id,
-                                  )?.name || t('Unit')}
-                                  {#if enable_batch && prod.batch_count > 1}
-                                    / {prod.batch_count} {t('Batch')}
-                                  {/if}
-                                </small>
-                              </span>
-                            {/if}
-                          </div>
-                        </button>
-                      {/each}
-                    </div>
-                  {/if}
-
-                  {#if
-                    showProductDropdown &&
-                    warehouse_id &&
-                    search.trim() &&
-                    filteredProducts.length === 0}
-                    <div
-                      use:portal
-                      class="purchase-items-dropdown sale-product-empty"
-                      style={productDropdownStyle}>
-                      <span class="sale-product-empty__icon" aria-hidden="true">
-                        <i class="bi bi-box-seam"></i>
-                      </span>
-
-                      <strong>{t('No products available')}</strong>
-
-                      <small>
-                        {enable_stock_minus
-                          ? t('No products match your search.')
-                          : t('No stock is available in the selected warehouse.')}
-                      </small>
-                    </div>
-                  {/if}
-                </div>
-              {:else}
-                <div class="purchase-item-empty-product">
-                  <button
-                    type="button"
-                    class="purchase-item-empty-product__icon"
-                    title={t('New Product')}
-                    aria-label={t('New Product')}
-                    on:click|stopPropagation={openCreateProductModal}>
-                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
-                  </button>
-
-                  <span class="purchase-item-empty-product__copy">
-                    <strong>
-                      {warehouse_id
-                        ? t('Select Product')
-                        : t('Select Warehouse')}
-                    </strong>
-
-                    {#if warehouse_id}
-                      <small>{t('Product')}</small>
-                    {/if}
-                  </span>
-                </div>
-              {/if}
-            </td>
-
-            {#if enable_batch}
-              <td class="text-center purchase-item-col-expiry"></td>
-              <td class="text-center purchase-item-col-batch"></td>
-            {/if}
-            <td class="text-center purchase-item-col-quantity"></td>
-            <td class="text-center purchase-item-col-price"></td>
-            <td class="text-center purchase-item-col-subtotal"></td>
-            <td class="text-center purchase-item-col-actions"></td>
-          </tr>
         </tbody>
-      </table>
-    </div>
+        </table>
+      </div>
 
-    {#if items.length > 0}
-      <footer class="purchase-items-total-row">
-        <button
-          type="button"
-          class="purchase-items-clear-btn"
-          on:click={clearItems}>
-          <i class="bi bi-trash3" aria-hidden="true"></i>
-          <span>{t('Clear All')}</span>
-        </button>
+      <footer class="sfi-foot">
+        <span class="sfi-foot__stats">
+          <span>{t('Items')} <b dir="ltr">{items.length}</b></span>
+        </span>
 
-        <div class="purchase-items-grand-total">
+        <span class="sfi-foot__total">
           <span>{t('Total')}</span>
-
           <strong dir="ltr">
             {Number(total || 0).toLocaleString(undefined, {
               maximumFractionDigits: 3,
             })}
           </strong>
+          <small>{currencySymbol(currency?.code || currency || 'AFN')}</small>
+        </span>
 
-          <small>{t(currency?.code || currency || 'AFN')}</small>
-        </div>
+        <button type="button" class="sfi-foot__clear" on:click={clearItems}>
+          <i class="ms" aria-hidden="true">delete_sweep</i>
+          <span>{t('Clear All')}</span>
+        </button>
       </footer>
+    {:else}
+      <div class="sfi-empty">
+        <span class="sfi-empty__icon" aria-hidden="true">
+          <i class="ms">barcode_scanner</i>
+        </span>
+        <strong>{t('No items yet. Search for a product above to add it.')}</strong>
+        <small>{t('Search product by name, barcode, or SKU...')}</small>
+      </div>
     {/if}
   </div>
 </div>
@@ -1849,43 +1889,6 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
   .purchase-item-search-input::placeholder {
     color: #9aa7b8;
     font-weight: 500;
-  }
-
-  /* Product dropdown */
-  :global(.purchase-items-dropdown) {
-    z-index: 1000 !important;
-    overflow-x: hidden;
-    overflow-y: auto;
-    max-height: 20rem;
-    padding: 0.3rem;
-    border: 1px solid #dce4ef;
-    border-radius: 0.75rem;
-    background: #ffffff !important;
-    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16) !important;
-  }
-
-  :global(.purchase-items-dropdown .list-group-item) {
-    min-height: 3rem;
-    padding: 0.55rem 0.65rem;
-    border: 0;
-    border-radius: 0.5rem;
-    background: transparent;
-    color: #26364b;
-    font-size: 0.78rem;
-    font-weight: 700;
-    text-align: start;
-  }
-
-  :global(.purchase-items-dropdown .list-group-item:hover),
-  :global(.purchase-items-dropdown .list-group-item:focus) {
-    background: #f0f6ff;
-    color: var(--sale-primary);
-  }
-
-  :global(.purchase-items-dropdown .list-group-item small) {
-    color: #8491a4;
-    font-size: 0.64rem;
-    font-weight: 600;
   }
 
   /*
@@ -2638,122 +2641,6 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     }
   }
 
-  /* Product search results with available warehouse stock */
-  :global(.purchase-items-dropdown .sale-product-option) {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    width: 100%;
-    min-width: 0;
-  }
-
-  :global(.purchase-items-dropdown .sale-product-option__copy) {
-    display: grid;
-    flex: 1 1 auto;
-    min-width: 0;
-    gap: 0.1rem;
-    text-align: start;
-  }
-
-  :global(.purchase-items-dropdown .sale-product-option__copy strong) {
-    overflow: hidden;
-    color: #26364b;
-    font-size: 0.78rem;
-    font-weight: 800;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  :global(.purchase-items-dropdown .sale-product-option__copy small) {
-    overflow: hidden;
-    color: #8491a4;
-    font-size: 0.63rem;
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  :global(.purchase-items-dropdown .sale-product-option__stock) {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: baseline;
-    gap: 0.25rem;
-    min-height: 1.75rem;
-    padding: 0.25rem 0.5rem;
-    border: 1px solid #cce9dc;
-    border-radius: 0.45rem;
-    background: #f2fbf7;
-    color: #087a54;
-    white-space: nowrap;
-  }
-
-  :global(.purchase-items-dropdown .sale-product-option__stock i) {
-    font-size: 0.68rem;
-  }
-
-  :global(.purchase-items-dropdown .sale-product-option__stock strong) {
-    color: #087a54;
-    font-size: 0.7rem;
-    font-weight: 850;
-  }
-
-  :global(.purchase-items-dropdown .sale-product-option__stock small) {
-    color: #54806c !important;
-    font-size: 0.57rem !important;
-    font-weight: 700;
-  }
-
-  :global(.purchase-items-dropdown .sale-product-option__service) {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 0.3rem;
-    min-height: 1.7rem;
-    padding-inline: 0.5rem;
-    border: 1px solid #d8e4f8;
-    border-radius: 999px;
-    background: #f3f7fe;
-    color: #2f6fed;
-    font-size: 0.6rem;
-    font-weight: 750;
-    white-space: nowrap;
-  }
-
-  :global(.sale-product-empty) {
-    display: grid;
-    min-height: 7.5rem;
-    place-items: center;
-    align-content: center;
-    gap: 0.3rem;
-    padding: 1rem;
-    color: #8491a4;
-    text-align: center;
-  }
-
-  :global(.sale-product-empty__icon) {
-    display: inline-grid;
-    width: 2.5rem;
-    height: 2.5rem;
-    place-items: center;
-    border-radius: 0.625rem;
-    background: #f1f5f9;
-    color: #94a3b8;
-    font-size: 1rem;
-  }
-
-  :global(.sale-product-empty strong) {
-    color: #526176;
-    font-size: 0.75rem;
-    font-weight: 800;
-  }
-
-  :global(.sale-product-empty small) {
-    color: #8491a4;
-    font-size: 0.63rem;
-    font-weight: 600;
-  }
-
   #form_product_search:disabled {
     background: #f7f9fc !important;
     color: #94a3b8;
@@ -2773,242 +2660,988 @@ import { mergeById, lookupProducts } from '../../lib/formLookups.js';
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2) !important;
   }
 
-  :global(html.dark) .purchase-items-card :global(.card-body > .d-flex.align-items-center.mb-3) {
-    border-color: var(--sale-border);
-    background: var(--erp-surface, #111827);
-  }
-
-  :global(html.dark) .purchase-items-title {
-    color: var(--sale-text);
-  }
-
-  :global(html.dark) .purchase-items-title::before {
-    background: rgba(47, 111, 237, 0.16);
-  }
-
-  :global(html.dark) .purchase-item-search-row,
-  :global(html.dark) .purchase-item-search-row > td,
-  :global(html.dark) .purchase-item-search-cell,
-  :global(html.dark) .purchase-items-total-row {
-    border-color: var(--sale-border) !important;
-    background: #0f1726 !important;
-  }
-
-  :global(html.dark) .purchase-item-search-row:hover,
-  :global(html.dark) .purchase-item-search-row:hover .purchase-item-search-cell {
-    background: #1a2638 !important;
-  }
-
-  :global(html.dark) .purchase-item-search-cell:focus-visible,
-  :global(html.dark) .purchase-item-search-cell--editing {
-    background: #172338 !important;
-    box-shadow:
-      inset 0 0 0 1px rgba(96, 165, 250, 0.28),
-      1px 0 0 var(--sale-border);
-  }
-
-  :global(html.dark) .purchase-item-empty-product__icon {
-    background: rgba(96, 165, 250, 0.14);
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .purchase-item-empty-product__copy strong {
-    color: var(--sale-text);
-  }
-
-  :global(html.dark) .purchase-item-empty-product__copy small {
-    color: var(--sale-muted);
-  }
-
-  :global(html.dark) .purchase-item-search-icon {
-    color: #93c5fd;
-  }
-
-  :global(html.dark) .purchase-item-search-input {
-    color: var(--sale-text);
-  }
-
-  :global(html.dark) .purchase-item-search-input::placeholder {
-    color: #718198;
-  }
-
-  :global(html.dark) .purchase-unified-input-group,
-  :global(html.dark) .purchase-items-table .purchase-item-cell-group {
-    border-color: var(--sale-border);
-    background: var(--erp-surface-soft, #172033);
-  }
-
-  :global(html.dark) .purchase-unified-input-group:hover {
-    border-color: #42546d;
-  }
-
-  :global(html.dark) .purchase-unified-input-group :global(.form-control),
-  :global(html.dark) .purchase-unified-input-group :global(.form-select),
-  :global(html.dark) .purchase-items-table .purchase-item-cell-group :global(.form-control) {
-    color: var(--sale-text);
-  }
-
-  :global(html.dark) .purchase-unified-input-group :global(.form-control::placeholder) {
-    color: #718198;
-  }
-
-  :global(html.dark) .purchase-unified-input-group :global(.input-group-text),
-  :global(html.dark) .purchase-items-table .purchase-item-cell-group :global(.input-group-text),
-  :global(html.dark) .purchase-item-col-quantity :global(.filter-select__trigger) {
-    border-color: var(--sale-border) !important;
-    background: #202b3d !important;
-    color: #a9b7ca !important;
-  }
-
-  :global(html.dark) .sale-product-search-icon {
-    border-color: var(--sale-border) !important;
-    background: var(--erp-surface-soft, #172033) !important;
-    color: #a9b7ca !important;
-  }
-
-  :global(html.dark) .purchase-items-card :global(.table-responsive) {
-    background: var(--erp-surface, #111827);
-    scrollbar-color: #52647d transparent;
-  }
-
-  :global(html.dark) .purchase-items-card :global(.table-responsive::-webkit-scrollbar-thumb) {
-    background: #52647d;
-  }
-
-  :global(html.dark) .purchase-items-table {
-    color: #c8d3e2;
-  }
-
-  :global(html.dark) .purchase-items-table :global(thead th),
-  :global(html.dark) .purchase-items-table :global(thead .purchase-item-col-product) {
-    border-color: var(--sale-border);
-    background: #172033 !important;
-    color: #a9b7ca;
-    box-shadow: 1px 0 0 var(--sale-border);
-  }
-
-  :global(html.dark) .purchase-items-table :global(tbody tr) {
-    background: var(--erp-surface, #111827);
-  }
-
-  :global(html.dark) .purchase-items-table :global(tbody tr:nth-child(even)) {
-    background: #141d2c;
-  }
-
-  :global(html.dark) .purchase-items-table :global(tbody tr:hover) {
-    background: #1a2638 !important;
-  }
-
-  :global(html.dark) .purchase-items-table :global(tbody td) {
-    border-color: var(--sale-border);
-    color: #c8d3e2;
-  }
-
-  :global(html.dark) .purchase-item-product-cell {
-    background: var(--erp-surface, #111827) !important;
-    box-shadow: 1px 0 0 var(--sale-border);
-  }
-
-  :global(html.dark) .purchase-items-table tbody tr:nth-child(even) .purchase-item-product-cell {
-    background: #141d2c !important;
-  }
-
-  :global(html.dark) .purchase-items-table tbody tr:hover .purchase-item-product-cell {
-    background: #1a2638 !important;
-  }
-
-  :global(html.dark) .purchase-item-product-name,
-  :global(html.dark) .purchase-item-money strong {
-    color: var(--sale-text);
-  }
-
-  :global(html.dark) .purchase-item-product-copy small,
-  :global(html.dark) .purchase-item-stock,
-  :global(html.dark) .purchase-item-money small,
-  :global(html.dark) .purchase-items-grand-total > span,
-  :global(html.dark) .purchase-items-grand-total > small {
-    color: var(--sale-muted);
-  }
-
-  :global(html.dark) .purchase-items-table :global(.btn-outline-danger) {
-    border-color: #74333c !important;
-    background: #321c25 !important;
-    color: #ff8d98 !important;
-  }
-
-  :global(html.dark) .purchase-items-table :global(.btn-outline-danger:hover) {
-    border-color: #9a4350 !important;
-    background: #44222c !important;
-    color: #ffabb3 !important;
-  }
-
-  :global(html.dark) .purchase-items-clear-btn {
-    border-color: #74333c;
-    background: var(--erp-surface, #111827);
-    color: #ff8d98;
-  }
-
-  :global(html.dark) .purchase-items-clear-btn:hover {
-    border-color: #9a4350;
-    background: #321c25;
-  }
-
   :global(html.dark) #form_product_search:disabled {
     background: #202b3d !important;
     color: #718198;
   }
 
-  :global(html.dark) :global(.purchase-items-dropdown) {
-    border-color: var(--erp-border, #2b3a4f);
-    background: var(--erp-surface, #111827) !important;
-    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.4) !important;
+  /* ===== Items section (SaleNew «ادویه‌ها» layout) ===== */
+  .sfi-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--z-border-soft, #edf1f6);
   }
 
-  :global(html.dark) :global(.purchase-items-dropdown .list-group-item) {
-    color: var(--erp-text, #e5edf8);
+  .sfi-head__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--z-ink, #172033);
+    font-size: 12.5px;
+    font-weight: 800;
+    white-space: nowrap;
   }
 
-  :global(html.dark) :global(.purchase-items-dropdown .list-group-item:hover),
-  :global(html.dark) :global(.purchase-items-dropdown .list-group-item:focus) {
-    background: #1d2b40;
+  .sfi-head__title .ms {
+    color: var(--z-link, #2f6fed);
+    font-size: 17px;
   }
 
-  :global(html.dark) :global(.purchase-items-dropdown .list-group-item small),
-  :global(html.dark) :global(.purchase-items-dropdown .sale-product-option__copy small) {
-    color: var(--erp-muted, #94a3b8);
+  /* warehouse: a setting, drawn as a field with its label (SaleNew) */
+  .sfi-wh {
+    position: relative;
+    flex-shrink: 0;
   }
 
-  :global(html.dark) :global(.purchase-items-dropdown .sale-product-option__copy strong) {
-    color: var(--erp-text, #e5edf8);
+  .sfi-wh__field {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 180px;
+    height: 34px;
+    padding: 0 6px 0 9px;
+    border: 1px solid var(--z-border-strong, #cfd9e6);
+    border-radius: 10px;
+    background: var(--z-brand-soft, #edf4ff);
+    color: var(--z-link, #2f6fed);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    box-sizing: border-box;
   }
 
-  :global(html.dark) :global(.purchase-items-dropdown .sale-product-option__stock) {
-    border-color: #205b49;
-    background: #12372d;
-    color: #8bd5ba;
+  .sfi-wh__field .ms {
+    font-size: 17px;
   }
 
-  :global(html.dark) :global(.purchase-items-dropdown .sale-product-option__stock strong) {
-    color: #8bd5ba;
+  .sfi-wh__field.is-open {
+    border-color: #2f6fed;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
   }
 
-  :global(html.dark) :global(.purchase-items-dropdown .sale-product-option__stock small) {
-    color: #73b99f !important;
+  .sfi-wh__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  :global(html.dark) :global(.purchase-items-dropdown .sale-product-option__service) {
-    border-color: #2d4770;
-    background: #16243a;
-    color: #8bb7ff;
+  .sfi-wh__chev {
+    font-size: 15px !important;
   }
 
-  :global(html.dark) :global(.sale-product-empty__icon) {
-    background: #202b3d;
-    color: #94a3b8;
+  .sfi-wh__menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-start: 0;
+    z-index: 30;
+    width: max(100%, 180px);
+    padding: 3px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 10px;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 14px 32px -14px rgba(11, 21, 48, 0.35);
+    box-sizing: border-box;
   }
 
-  :global(html.dark) :global(.sale-product-empty strong) {
-    color: var(--erp-text, #e5edf8);
+  .sfi-wh__opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 30px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: start;
+    cursor: pointer;
   }
 
+  .sfi-wh__opt:hover,
+  .sfi-wh__opt.is-active {
+    background: var(--z-brand-soft, #edf4ff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .sfi-wh__opt-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-wh__check {
+    flex-shrink: 0;
+    font-size: 16px;
+    color: var(--z-link, #2f6fed);
+    visibility: hidden;
+  }
+
+  .sfi-wh__opt.is-active .sfi-wh__check {
+    visibility: visible;
+  }
+
+  .sfi-sbar {
+    position: relative;
+    display: flex;
+    flex: 1 1 220px;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 11px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 10px;
+    background: var(--z-surface-2, #f5f8fc);
+    box-sizing: border-box;
+  }
+
+  .sfi-sbar.is-open {
+    border-color: #2f6fed;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.12);
+  }
+
+  .sfi-sbar__icon {
+    flex-shrink: 0;
+    color: var(--z-muted, #718096);
+    font-size: 18px;
+  }
+
+  .sfi-sbar__input {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .sfi-sbar__input::placeholder {
+    color: var(--z-subtle, #94a3b8);
+    font-weight: 500;
+  }
+
+  /* the shortcut chip and the add button live inside the search field */
+  .sfi-kbd {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 20px;
+    padding: 0 5px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-subtle, #94a3b8);
+    font: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    box-sizing: border-box;
+  }
+
+  .sfi-divider {
+    flex-shrink: 0;
+    width: 1px;
+    height: 16px;
+    background: var(--z-border, #dfe6ef);
+  }
+
+  .sfi-new {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 9px 0 6px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--z-brand-soft, #edf4ff);
+    color: var(--z-link, #2f6fed);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 800;
+    white-space: nowrap;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+
+  .sfi-new:hover {
+    background: #dbeafe;
+  }
+
+  .sfi-new .ms {
+    font-size: 17px;
+  }
+
+  /*
+   * Results panel — SaleNew draws it as a 360px card attached to the inline
+   * start of the search bar, with a scrolling list and a keyboard legend.
+   */
+  .sfi-suggest {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline-start: 0;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    width: 380px;
+    max-width: calc(100vw - 48px);
+    padding: 4px;
+    overflow: hidden;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 12px;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 18px 42px -16px rgba(11, 21, 48, 0.32);
+    box-sizing: border-box;
+    text-align: start;
+  }
+
+  .sfi-suggest__scroll {
+    display: flex;
+    /* keep the scroll box from collapsing under the legend */
+    flex: 0 1 auto;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 232px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* no scrollbar track or arrow buttons, as on the customer dropdown */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .sfi-suggest__scroll::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .sfi-suggest__row {
+    display: flex;
+    /* the list is a capped column flexbox: rows must never compress */
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 4px 8px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12px;
+    text-align: start;
+    box-sizing: border-box;
+    cursor: pointer;
+  }
+
+  .sfi-suggest__row:hover {
+    background: var(--z-brand-soft, #edf4ff);
+  }
+
+  /* name over category, typed like the customer dropdown options */
+  .sfi-suggest__copy {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+    text-align: start;
+  }
+
+  .sfi-suggest__copy strong {
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-suggest__copy small {
+    overflow: hidden;
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-suggest__stock {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: baseline;
+    gap: 3px;
+    color: var(--z-ok, #15803d);
+    font-family: Inter, sans-serif;
+    font-size: 11px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .sfi-suggest__stock strong {
+    font-size: 11px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sfi-suggest__stock small {
+    font-size: 9.5px;
+    font-weight: 700;
+    opacity: 0.78;
+  }
+
+  .sfi-suggest__stock.is-low {
+    color: var(--z-warn, #92400e);
+  }
+
+  .sfi-suggest__stock.is-negative {
+    color: #b91c1c;
+  }
+
+  .sfi-suggest__service {
+    flex: 0 0 auto;
+    color: var(--z-link, #2f6fed);
+    font-size: 10.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .sfi-suggest__hint {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+    height: 20px;
+    padding: 0 7px;
+    border-top: 1px solid var(--z-border-soft, #edf1f6);
+    color: var(--z-subtle, #94a3b8);
+    font-size: 9.5px;
+  }
+
+  .sfi-suggest__count {
+    margin-inline-start: auto;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sfi-suggest--empty {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0;
+    padding-inline-start: 10px;
+    padding-inline-end: 6px;
+  }
+
+  .sfi-suggest--empty .ms {
+    color: var(--z-subtle, #94a3b8);
+    font-size: 16px;
+  }
+
+  .sfi-suggest__empty-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--z-muted, #718096);
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-suggest__new {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 3px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--z-border-strong, #cfd9e6);
+    border-radius: 7px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-link, #2f6fed);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .sfi-suggest__new .ms {
+    font-size: 14px;
+  }
+
+  /* table */
+  .sfi-table-wrap {
+    max-height: 284px;
+    overflow-x: auto;
+    overflow-y: auto;
+    /*
+     * Deliberately `auto`, not `contain`: the item list is a short window
+     * inside a scrolling page, so the wheel has to keep going down to the
+     * bill summary once the last row is reached.
+     */
+    overscroll-behavior: auto;
+  }
+
+  .sfi-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+    text-align: start;
+  }
+
+  .sfi-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: 30px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--z-border-soft, #edf1f6);
+    background: var(--z-surface-2, #f5f8fc);
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 700;
+    text-align: start;
+    white-space: nowrap;
+  }
+
+  .sfi-table tbody td {
+    height: 48px;
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--z-border-soft, #edf1f6);
+    vertical-align: top;
+  }
+
+  /*
+   * Cells are top-aligned so the 28px controls (quantity stepper, price box)
+   * stay on one line even when the sell cell grows its buy-price / last-sold
+   * sub-lines. The product cell stacks two lines, so it takes a little less
+   * block padding to keep the row at its 48px height.
+   */
+  .sfi-table tbody td.sfi-col-name {
+    padding-block: 6px;
+  }
+
+  .sfi-table tbody tr:hover td {
+    background: var(--z-surface-2, #f8fafc);
+  }
+
+  .sfi-col-idx {
+    width: 30px;
+    padding-inline-start: 8px !important;
+    text-align: start;
+  }
+
+  .sfi-col-idx span {
+    color: var(--z-subtle, #94a3b8);
+    font-size: 9.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sfi-col-name {
+    min-width: 0;
+  }
+
+  .sfi-col-batch {
+    width: 132px;
+  }
+
+  .sfi-col-exp {
+    width: 96px;
+  }
+
+  .sfi-col-qty {
+    width: 186px;
+  }
+
+  .sfi-table thead .sfi-col-price,
+  .sfi-table thead .sfi-col-total,
+  .sfi-table thead .sfi-col-act {
+    text-align: end;
+  }
+
+  .sfi-col-price {
+    width: 132px;
+    text-align: end;
+  }
+
+  .sfi-col-total {
+    width: 126px;
+    text-align: end;
+  }
+
+  .sfi-col-act {
+    width: 48px;
+    padding-inline-end: 12px !important;
+    text-align: end;
+  }
+
+  .sfi-name {
+    display: block;
+    overflow: hidden;
+    color: var(--z-ink, #172033);
+    font-size: 12.5px;
+    font-weight: 700;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 6px;
+    margin-top: 2px;
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+  }
+
+  .sfi-meta__code {
+    font-family: Inter, sans-serif;
+  }
+
+  .sfi-meta__stock {
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: var(--z-surface-3, #eef2f8);
+    color: var(--z-muted, #718096);
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .sfi-meta__stock.is-low {
+    background: var(--z-warn-soft, #fef3c7);
+    color: var(--z-warn, #92400e);
+  }
+
+  .sfi-readonly {
+    color: var(--z-muted, #718096);
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+
+  .sfi-batch-select {
+    width: 100%;
+    height: 28px;
+    padding: 0 4px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 7px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* quantity + unit */
+  .sfi-qty {
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+    height: 28px;
+    overflow: hidden;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 8px;
+    background: var(--z-surface, #ffffff);
+    box-sizing: border-box;
+  }
+
+  .sfi-qty:focus-within {
+    border-color: #2f6fed;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+  }
+
+  .sfi-qty__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--z-muted, #718096);
+    cursor: pointer;
+  }
+
+  .sfi-qty__btn:hover {
+    background: var(--z-surface-2, #f5f8fc);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .sfi-qty__btn .ms {
+    font-size: 14px;
+  }
+
+  .sfi-qty__input {
+    width: 44px;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 800;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .sfi-qty__input::-webkit-outer-spin-button,
+  .sfi-qty__input::-webkit-inner-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+  }
+
+  .sfi-qty__divider {
+    flex-shrink: 0;
+    width: 1px;
+    height: 16px;
+    background: var(--z-border, #dfe6ef);
+  }
+
+  .sfi-qty__unit {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 7px;
+    overflow: hidden;
+    color: var(--z-muted, #718096);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sfi-qty :global(.filter-select) {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+  }
+
+  .sfi-qty :global(.filter-select__trigger) {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 0;
+    background: var(--z-surface-2, #f5f8fc);
+    color: var(--z-ink, #172033);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* price */
+  .sfi-price {
+    display: flex;
+    align-items: center;
+    max-width: 116px;
+    height: 28px;
+    margin-inline-start: auto;
+    padding: 0 7px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 7px;
+    background: var(--z-surface, #ffffff);
+    box-sizing: border-box;
+  }
+
+  .sfi-price:focus-within {
+    border-color: #2f6fed;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+  }
+
+  .sfi-price__input {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink, #172033);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 800;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .sfi-price__input::-webkit-outer-spin-button,
+  .sfi-price__input::-webkit-inner-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+  }
+
+  .sfi-price__cur {
+    flex-shrink: 0;
+    margin-inline-start: 4px;
+    padding-inline-start: 4px;
+    border-inline-start: 1px solid var(--z-border-soft, #edf1f6);
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  .sfi-price__sub {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 2px;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 10px;
+    text-align: end;
+  }
+
+  .sfi-price__link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--z-link, #2f6fed);
+    font: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* total */
+  .sfi-total {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 3px;
+    max-width: 100%;
+  }
+
+  .sfi-total strong {
+    overflow: hidden;
+    color: var(--z-ink, #172033);
+    font-family: Inter, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+  }
+
+  .sfi-total small {
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  .sfi-total__conv {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    color: var(--z-muted, #718096);
+    font-size: 10px;
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* delete */
+  .sfi-del {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-inline-start: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: var(--z-danger-soft, #fee2e2);
+    color: var(--z-danger, #b91c1c);
+    cursor: pointer;
+  }
+
+  .sfi-del:hover {
+    background: #fecaca;
+  }
+
+  .sfi-del .ms {
+    font-size: 16px;
+  }
+
+  /* footer */
+  .sfi-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px 14px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--z-border-soft, #edf1f6);
+    background: var(--z-surface-2, #f5f8fc);
+    border-radius: 0 0 14px 14px;
+  }
+
+  .sfi-foot__stats {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-inline-end: auto;
+    color: var(--z-muted, #718096);
+    font-size: 11.5px;
+  }
+
+  .sfi-foot__stats b {
+    color: var(--z-ink, #172033);
+    font-size: 12.5px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sfi-foot__total {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    color: var(--z-muted, #718096);
+    font-size: 11.5px;
+  }
+
+  .sfi-foot__total strong {
+    color: var(--z-ink, #172033);
+    font-family: Inter, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sfi-foot__total small {
+    color: var(--z-muted, #718096);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  .sfi-foot__clear {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--z-border, #dfe6ef);
+    border-radius: 7px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-danger, #b91c1c);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .sfi-foot__clear:hover {
+    background: var(--z-danger-soft, #fee2e2);
+  }
+
+  .sfi-foot__clear .ms {
+    font-size: 15px;
+  }
+
+  /* empty state */
+  .sfi-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 28px 16px;
+    text-align: center;
+  }
+
+  .sfi-empty__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    background: var(--z-brand-soft, #edf4ff);
+    color: var(--z-link, #2f6fed);
+  }
+
+  .sfi-empty__icon .ms {
+    font-size: 23px;
+  }
+
+  .sfi-empty strong {
+    color: var(--z-ink, #172033);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .sfi-empty small {
+    color: var(--z-muted, #718096);
+    font-size: 11.5px;
+  }
+
+  .sfi-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 767.98px) {
+    .sfi-table {
+      min-width: 720px;
+    }
+
+    .sfi-kbd,
+    .sfi-divider,
+    .sfi-new__label {
+      display: none;
+    }
+
+    .sfi-new {
+      justify-content: center;
+      width: 26px;
+      padding: 0;
+    }
+  }
 </style>

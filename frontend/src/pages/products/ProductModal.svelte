@@ -1134,6 +1134,20 @@ import { userApi } from '../../api/userApi.js';
     })),
   ];
 
+  /* The unit category picker is the same widget as the category picker above:
+   * "همه واحدها" stays at the top as the way back to every category, and the
+   * rest of the list follows the search box. */
+  let unitCategorySearch = '';
+  let openUnitCategoryMenu = false;
+  $: filteredUnitCategoryOptions = filterBySearch(
+    unitCategoryOptions,
+    unitCategorySearch,
+    (row) => row.label,
+  );
+  $: pageUnitCategoryLabel =
+    unitCategoryOptions.find((row) => String(row.value) === String(unit_category_id))?.label ||
+    t('All Units');
+
   /*
    * The unit picker is narrowed by the chosen category first and by the typed
    * search second. Those rules live in unitCategoryFilter.js so they can be
@@ -1188,6 +1202,156 @@ import { userApi } from '../../api/userApi.js';
   let showUserDropdown = false;
   let filteredUsers = users;
   let form_user_search_input = null;
+
+  /* ===================================================================
+     PRODUCT PAGE (ProductNew.dc.html)
+     The page shell shows every value it needs twice: once in a field and
+     once in the “خلاصه ثبت” panel. Everything the panel prints is derived
+     here instead of inside the markup, because Svelte compiles a call in
+     the markup as $.untrack and the printed value would then never follow
+     the field again.
+     =================================================================== */
+  let openBuyCurrencyMenu = false;
+  let openSellCurrencyMenu = false;
+  let openWarehouseMenu = false;
+  let buyCurrencySearch = '';
+  let sellCurrencySearch = '';
+
+  $: pageCategoryName = categories.find((row) => String(row.id) === String(category_id))?.name || '';
+  $: pageUnitName = units.find((row) => String(row.id) === String(product_unit_id))?.name || '';
+  $: pageUnitWord = pageUnitName || t('Unit');
+  $: pageBrandName = brands.find((row) => String(row.id) === String(brand_id))?.name || '';
+  $: pageGenericName = generics.find((row) => String(row.id) === String(generic_id))?.name || '';
+  $: pageWarehouseName =
+    warehouses.find((row) => String(row.id) === String(selectedWarehouseId))?.name || '';
+  $: pageDepartmentName =
+    departments.find((row) => String(row.id) === String(department_id))?.name || '';
+  $: pageUser = users.find((row) => String(row.id) === String(user_id)) || null;
+  $: pageUserName = pageUser
+    ? `${pageUser.first_name || ''} ${pageUser.last_name || ''}`.trim() || pageUser.username
+    : '';
+
+  $: pageBuyCurrency = buy_currency || defaultCurrency;
+  $: pageSellCurrency = sell_currency || defaultCurrency;
+  $: pageBuySymbol =
+    currencies.find((row) => row.code === pageBuyCurrency)?.symbol || pageBuyCurrency;
+  $: pageSellSymbol =
+    currencies.find((row) => row.code === pageSellCurrency)?.symbol || pageSellCurrency;
+
+  $: filteredBuyCurrencies = filterBySearch(
+    currencies,
+    buyCurrencySearch,
+    (row) => `${t(row.code)} ${row.code}`,
+  );
+  $: filteredSellCurrencies = filterBySearch(
+    currencies,
+    sellCurrencySearch,
+    (row) => `${t(row.code)} ${row.code}`,
+  );
+
+  /* Same second line the Sale form shows: the base currency has no rate, every
+     other one reads "1 € = 70 ؋". */
+  function pageCurrencyRate(row) {
+    const base = currencies.find((cur) => cur.isDefault == 1);
+    const rate = Number(row?.exchangeRate);
+    if (!row || !base || row.code === base.code || !Number.isFinite(rate) || rate <= 0) return '';
+
+    return `1 ${row.symbol || row.code} = ${rate.toLocaleString(undefined, {
+      maximumFractionDigits: 4,
+    })} ${base.symbol || base.code}`;
+  }
+
+  $: pageBuyText = (Number(buy_price) || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  $: pageSellText = (Number(sell_price) || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  $: pageProfit = (Number(sell_price) || 0) - (Number(buy_price) || 0);
+  $: pageProfitText = Math.abs(pageProfit).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  $: pageProfitSign = pageProfit < 0 ? '-' : '+';
+  $: pageMargin = Number(sell_price) > 0 ? (pageProfit / Number(sell_price)) * 100 : 0;
+  $: pageMarginText = `${Math.abs(pageMargin).toFixed(1)}%`;
+  $: pageMarginWidth = `${Math.min(100, Math.max(0, Math.abs(pageMargin)))}%`;
+  $: pageMarginPositive = pageMargin >= 0;
+
+  /* The Sell box prints the same two hints as the reference: the markup over
+     cost while the price is typed as an amount, the resulting amount while it is
+     typed as a percentage. A price quoted in another currency is converted into
+     the buy currency first, like the reference's `rate()` does. */
+  $: pageBuyRate = Number(currencies.find((row) => row.code === pageBuyCurrency)?.exchangeRate) || 1;
+  $: pageSellRate =
+    Number(currencies.find((row) => row.code === pageSellCurrency)?.exchangeRate) || 1;
+  $: pageSellInBuy = ((Number(sell_price) || 0) * pageSellRate) / pageBuyRate;
+  $: pageMarkup =
+    Number(buy_price) > 0 ? ((pageSellInBuy - Number(buy_price)) / Number(buy_price)) * 100 : 0;
+  $: pageSellHint =
+    Number(buy_price) > 0 && Number(sell_price) > 0
+      ? enablePercent
+        ? `= ${pageSellInBuy.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+        : `${Math.round(pageMarkup).toLocaleString('en-US')}٪`
+      : '';
+
+  $: pageStockQuantity = Number(warehouseQuantity) || 0;
+  $: pageStockText = pageStockQuantity.toLocaleString('en-US', { maximumFractionDigits: 3 });
+  $: pageStockValueText = (pageStockQuantity * (Number(buy_price) || 0)).toLocaleString('en-US', {
+    maximumFractionDigits: 2,
+  });
+
+  /* Name, code, category and unit are the four fields the save guard and the
+     database both insist on, so they drive the completeness meter. */
+  $: pageFilledFields = [name, code, category_id, product_unit_id].filter((value) =>
+    String(value ?? '').trim(),
+  ).length;
+  $: pageProgressWidth = `${Math.round((pageFilledFields / 4) * 100)}%`;
+  $: pageComplete = pageFilledFields === 4;
+
+  /** Keeps the two “نرخ فروش” modes in step with the price they derive. */
+  function setPercentMode(enabled) {
+    if (enablePercent === enabled) return;
+
+    enablePercent = enabled;
+
+    if (enabled) {
+      /* A percentage is added to the cost, so it is quoted in the buy currency.
+         Switching a price that is already typed over keeps that price: the
+         percentage is derived from it, like the reference does, and the stored
+         percentage only ever fills an empty form. */
+      sell_currency = buy_currency;
+
+      const buyAmount = parseFloat(buy_price) || 0;
+      if (buyAmount > 0) {
+        if (Number(sell_price) > 0) {
+          percentage = String(Math.round(((pageSellInBuy - buyAmount) / buyAmount) * 100));
+        }
+        sell_price = (buyAmount * (1 + (parseFloat(percentage) || 0) / 100)).toFixed(3);
+      }
+      return;
+    }
+
+    if (buy_price && sell_price < buy_price) {
+      sell_price = buy_price;
+    }
+    sell_currency = buy_currency;
+  }
+
+  /* One click anywhere outside a picker closes it, so two panels can never
+     stay open at the same time. */
+  function handlePageShellClick(event) {
+    const picker = event.target.closest?.('[data-pick]')?.getAttribute('data-pick') || '';
+
+    if (picker !== 'cat') showCategoryDropdown = false;
+    if (picker !== 'brand') showBrandDropdown = false;
+    if (picker !== 'generic') showGenericDropdown = false;
+    if (picker !== 'unit') showUnitDropdown = false;
+    if (picker !== 'unitcat') openUnitCategoryMenu = false;
+    if (picker !== 'wh') openWarehouseMenu = false;
+    if (picker !== 'buycur') openBuyCurrencyMenu = false;
+    if (picker !== 'sellcur') openSellCurrencyMenu = false;
+  }
+
+  function filterBySearch(rows, search, labelOf = (row) => row.name) {
+    const needle = String(search || '').trim().toLowerCase();
+    if (!needle) return rows;
+
+    return rows.filter((row) => String(labelOf(row) || '').toLowerCase().includes(needle));
+  }
 </script>
 
 <div
@@ -1229,6 +1393,1125 @@ import { userApi } from '../../api/userApi.js';
       {/if}
 
       <div class={asPage ? 'product-form-body' : 'modal-body product-modal-body'}>
+        {#if asPage}
+        <!-- Product page — geometry copied from ProductNew.dc.html -->
+        <div class="pf-page" on:click={handlePageShellClick}>
+          <!-- The sheet starts with its first card: no title block, no icon. The
+               heading stays for screen readers and the product stepper keeps the
+               corner it used to sit in, because it only exists while editing. -->
+          <h1 class="pf-vh">
+            {editingId
+              ? t(type === 'service' ? 'Update Service' : 'Update Product')
+              : t(type === 'service' ? 'New Service' : 'New Product')}
+          </h1>
+          {#if editingId}
+            <div class="pf-nav">
+              <button
+                type="button"
+                class="pf-iconbtn"
+                disabled={!previousProductId}
+                title={t('Previous')}
+                aria-label={t('Previous')}
+                on:click={() => navigateProductNeighbor(previousProductId)}>
+                <i class="ms" aria-hidden="true">chevron_right</i>
+              </button>
+              <button
+                type="button"
+                class="pf-iconbtn"
+                disabled={!nextProductId}
+                title={t('Next')}
+                aria-label={t('Next')}
+                on:click={() => navigateProductNeighbor(nextProductId)}>
+                <i class="ms" aria-hidden="true">chevron_left</i>
+              </button>
+            </div>
+          {/if}
+
+          <div class="pf-layout">
+            <div class="pf-main">
+              <section class="pf-card" aria-labelledby="pf-sec-basic">
+                <h3 id="pf-sec-basic" class="pf-card__hd">
+                  <i class="ms f" aria-hidden="true">badge</i>{t('Basic Information')}
+                </h3>
+
+                <div class="pf-grid">
+                  <div class="pf-f pf-f--2">
+                    <div class="pf-label">
+                      <label for="pf-name">{t('Name')}<span class="pf-req" aria-hidden="true">*</span></label>
+                    </div>
+                    <div class="pf-box">
+                      <input
+                        id="pf-name"
+                        type="text"
+                        autocomplete="off"
+                        placeholder={t('Name')}
+                        bind:value={name} />
+                    </div>
+                  </div>
+
+                  {#if _translate_org_type != 'exchange'}
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <label for="pf-code">{t('Code')}<span class="pf-req" aria-hidden="true">*</span></label>
+                        <button
+                          type="button"
+                          class="pf-mini"
+                          title={t('Create Code')}
+                          on:click={() => (code = generateEAN13())}>
+                          <i class="ms" aria-hidden="true">auto_awesome</i>{t('Auto')}
+                        </button>
+                      </div>
+                      <div class="pf-box">
+                        <input
+                          id="pf-code"
+                          type="text"
+                          dir="ltr"
+                          autocomplete="off"
+                          placeholder={t('Code')}
+                          bind:value={code}
+                          on:keydown={(event) => {
+                            if (event.key === 'Enter') {
+                              selectImage = true;
+                              loadProductData(code);
+                            }
+                          }} />
+                      </div>
+                    </div>
+                  {/if}
+
+                  <div class="pf-f" data-pick="cat">
+                    <div class="pf-label">
+                      <span id="pf-l-cat">{t('Category')}<span class="pf-req" aria-hidden="true">*</span></span>
+                      <button
+                        type="button"
+                        class="pf-mini"
+                        title={t('Create Product Category')}
+                        aria-label={t('Create Product Category')}
+                        on:click={() => catModalRef.openProductCategoryModal()}>
+                        <i class="ms" aria-hidden="true">add</i>
+                      </button>
+                    </div>
+                    <div class="pf-pick">
+                      <button
+                        type="button"
+                        class="pf-box pf-box--btn"
+                        aria-labelledby="pf-l-cat"
+                        aria-haspopup="listbox"
+                        aria-expanded={showCategoryDropdown}
+                        on:click={() => {
+                          category_search = '';
+                          filteredCategories = categories;
+                          showCategoryDropdown = !showCategoryDropdown;
+                        }}>
+                        <span class="pf-pick__t" class:is-empty={!pageCategoryName}>
+                          {pageCategoryName || t('Select Category')}
+                        </span>
+                        <i class="ms pf-pick__caret" aria-hidden="true">expand_more</i>
+                      </button>
+
+                      {#if showCategoryDropdown}
+                        <div class="pf-menu" role="listbox" aria-labelledby="pf-l-cat">
+                          <label class="pf-menu__search">
+                            <i class="ms" aria-hidden="true">search</i>
+                            <input
+                              type="search"
+                              placeholder={t('Search')}
+                              autocomplete="off"
+                              bind:value={category_search}
+                              on:input={() => (filteredCategories = filterBySearch(categories, category_search))} />
+                          </label>
+                          <div class="pf-menu__list">
+                            {#each filteredCategories as row (row.id)}
+                              <button
+                                type="button"
+                                role="option"
+                                aria-selected={String(category_id) === String(row.id)}
+                                class="pf-menu__opt"
+                                class:is-on={String(category_id) === String(row.id)}
+                                on:click={() => {
+                                  category_id = row.id;
+                                  category_search = '';
+                                  showCategoryDropdown = false;
+                                }}>
+                                <span class="pf-menu__name">{row.name}</span>
+                                {#if String(category_id) === String(row.id)}
+                                  <i class="ms" aria-hidden="true">check</i>
+                                {/if}
+                              </button>
+                            {/each}
+                            {#if !filteredCategories.length}
+                              <span class="pf-menu__empty">{t('No results found')}</span>
+                            {/if}
+                          </div>
+                          {#if category_id}
+                            <button
+                              type="button"
+                              class="pf-menu__clear"
+                              on:click={() => {
+                                category_id = '';
+                                category_search = '';
+                                filteredCategories = categories;
+                                showCategoryDropdown = false;
+                              }}>
+                              <i class="ms" aria-hidden="true">backspace</i>{t('Clear selection')}
+                            </button>
+                          {/if}
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+
+                  {#if enable_brands && type != 'service'}
+                    <div class="pf-f" data-pick="brand">
+                      <div class="pf-label">
+                        <span id="pf-l-brand">{t('Brand')}</span>
+                        <button
+                          type="button"
+                          class="pf-mini"
+                          title={t('Create Product Brand')}
+                          aria-label={t('Create Product Brand')}
+                          on:click={() => brandModalRef.openProductBrandModal()}>
+                          <i class="ms" aria-hidden="true">add</i>
+                        </button>
+                      </div>
+                      <div class="pf-pick">
+                        <button
+                          type="button"
+                          class="pf-box pf-box--btn"
+                          aria-labelledby="pf-l-brand"
+                          aria-haspopup="listbox"
+                          aria-expanded={showBrandDropdown}
+                          on:click={() => {
+                            brand_search = '';
+                            filteredBrands = brands;
+                            showBrandDropdown = !showBrandDropdown;
+                          }}>
+                          <span class="pf-pick__t" class:is-empty={!pageBrandName}>
+                            {pageBrandName || t('Select Brand')}
+                          </span>
+                          <i class="ms pf-pick__caret" aria-hidden="true">expand_more</i>
+                        </button>
+
+                        {#if showBrandDropdown}
+                          <div class="pf-menu" role="listbox" aria-labelledby="pf-l-brand">
+                            <label class="pf-menu__search">
+                              <i class="ms" aria-hidden="true">search</i>
+                              <input
+                                type="search"
+                                placeholder={t('Search')}
+                                autocomplete="off"
+                                bind:value={brand_search}
+                                on:input={() => (filteredBrands = filterBySearch(brands, brand_search))} />
+                            </label>
+                            <div class="pf-menu__list">
+                              {#each filteredBrands as row (row.id)}
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={String(brand_id) === String(row.id)}
+                                  class="pf-menu__opt"
+                                  class:is-on={String(brand_id) === String(row.id)}
+                                  on:click={() => {
+                                    brand_id = row.id;
+                                    brand_search = '';
+                                    showBrandDropdown = false;
+                                  }}>
+                                  <span class="pf-menu__name">{row.name}</span>
+                                  {#if String(brand_id) === String(row.id)}
+                                    <i class="ms" aria-hidden="true">check</i>
+                                  {/if}
+                                </button>
+                              {/each}
+                              {#if !filteredBrands.length}
+                                <span class="pf-menu__empty">{t('No results found')}</span>
+                              {/if}
+                            </div>
+                            {#if brand_id}
+                              <button
+                                type="button"
+                                class="pf-menu__clear"
+                                on:click={() => {
+                                  brand_id = '';
+                                  brand_search = '';
+                                  filteredBrands = brands;
+                                  showBrandDropdown = false;
+                                }}>
+                                <i class="ms" aria-hidden="true">backspace</i>{t('Clear selection')}
+                              </button>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if enable_generics && type != 'service'}
+                    <div class="pf-f" data-pick="generic">
+                      <div class="pf-label">
+                        <span id="pf-l-gen">{t('Generic')}</span>
+                        <button
+                          type="button"
+                          class="pf-mini"
+                          title={t('Create Product Generic')}
+                          aria-label={t('Create Product Generic')}
+                          on:click={() => genericModalRef.openProductGenericModal()}>
+                          <i class="ms" aria-hidden="true">add</i>
+                        </button>
+                      </div>
+                      <div class="pf-pick">
+                        <button
+                          type="button"
+                          class="pf-box pf-box--btn"
+                          aria-labelledby="pf-l-gen"
+                          aria-haspopup="listbox"
+                          aria-expanded={showGenericDropdown}
+                          on:click={() => {
+                            generic_search = '';
+                            filteredGenerics = generics;
+                            showGenericDropdown = !showGenericDropdown;
+                          }}>
+                          <span class="pf-pick__t" class:is-empty={!pageGenericName}>
+                            {pageGenericName || t('Select Generic')}
+                          </span>
+                          <i class="ms pf-pick__caret" aria-hidden="true">expand_more</i>
+                        </button>
+
+                        {#if showGenericDropdown}
+                          <div class="pf-menu" role="listbox" aria-labelledby="pf-l-gen">
+                            <label class="pf-menu__search">
+                              <i class="ms" aria-hidden="true">search</i>
+                              <input
+                                type="search"
+                                placeholder={t('Search')}
+                                autocomplete="off"
+                                bind:value={generic_search}
+                                on:input={() => (filteredGenerics = filterBySearch(generics, generic_search))} />
+                            </label>
+                            <div class="pf-menu__list">
+                              {#each filteredGenerics as row (row.id)}
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={String(generic_id) === String(row.id)}
+                                  class="pf-menu__opt"
+                                  class:is-on={String(generic_id) === String(row.id)}
+                                  on:click={() => {
+                                    generic_id = row.id;
+                                    generic_search = '';
+                                    showGenericDropdown = false;
+                                  }}>
+                                  <span class="pf-menu__name">{row.name}</span>
+                                  {#if String(generic_id) === String(row.id)}
+                                    <i class="ms" aria-hidden="true">check</i>
+                                  {/if}
+                                </button>
+                              {/each}
+                              {#if !filteredGenerics.length}
+                                <span class="pf-menu__empty">{t('No results found')}</span>
+                              {/if}
+                            </div>
+                            {#if generic_id}
+                              <button
+                                type="button"
+                                class="pf-menu__clear"
+                                on:click={() => {
+                                  generic_id = '';
+                                  generic_search = '';
+                                  filteredGenerics = generics;
+                                  showGenericDropdown = false;
+                                }}>
+                                <i class="ms" aria-hidden="true">backspace</i>{t('Clear selection')}
+                              </button>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  {/if}
+
+                  <div class="pf-f" data-pick="unit">
+                    <div class="pf-label">
+                      <span id="pf-l-unit">{t('Unit')}<span class="pf-req" aria-hidden="true">*</span></span>
+                      <button
+                        type="button"
+                        class="pf-mini"
+                        title={t('Create Unit')}
+                        aria-label={t('Create Unit')}
+                        on:click={() => unitModalRef.openUnitModal()}>
+                        <i class="ms" aria-hidden="true">add</i>
+                      </button>
+                    </div>
+                    <div class="pf-pick">
+                      <button
+                        type="button"
+                        class="pf-box pf-box--btn"
+                        aria-labelledby="pf-l-unit"
+                        aria-haspopup="listbox"
+                        aria-expanded={showUnitDropdown}
+                        on:click={() => {
+                          unit_search = '';
+                          filteredUnits = listUnits('');
+                          showUnitDropdown = !showUnitDropdown;
+                        }}>
+                        <span class="pf-pick__t" class:is-empty={!pageUnitName}>
+                          {pageUnitName || t('Select Unit')}
+                        </span>
+                        <i class="ms pf-pick__caret" aria-hidden="true">expand_more</i>
+                      </button>
+
+                      {#if showUnitDropdown}
+                        <div class="pf-menu" role="listbox" aria-labelledby="pf-l-unit">
+                          <label class="pf-menu__search">
+                            <i class="ms" aria-hidden="true">search</i>
+                            <input
+                              type="search"
+                              placeholder={t('Search')}
+                              autocomplete="off"
+                              bind:value={unit_search}
+                              on:input={() => (filteredUnits = listUnits())} />
+                          </label>
+                          <div class="pf-menu__list">
+                            {#each filteredUnits as row (row.id)}
+                              <button
+                                type="button"
+                                role="option"
+                                aria-selected={String(product_unit_id) === String(row.id)}
+                                class="pf-menu__opt"
+                                class:is-on={String(product_unit_id) === String(row.id)}
+                                on:click={() => {
+                                  product_unit_id = row.id;
+                                  unit_search = '';
+                                  applyUnitCategoryFromUnit(row.id);
+                                  showUnitDropdown = false;
+                                }}>
+                                <span class="pf-menu__name">{row.name}</span>
+                                {#if String(product_unit_id) === String(row.id)}
+                                  <i class="ms" aria-hidden="true">check</i>
+                                {/if}
+                              </button>
+                            {/each}
+                            {#if !filteredUnits.length}
+                              <span class="pf-menu__empty">{t('No results found')}</span>
+                            {/if}
+                          </div>
+                          {#if product_unit_id}
+                            <button
+                              type="button"
+                              class="pf-menu__clear"
+                              on:click={() => {
+                                product_unit_id = '';
+                                unit_search = '';
+                                filteredUnits = listUnits('');
+                                showUnitDropdown = false;
+                              }}>
+                              <i class="ms" aria-hidden="true">backspace</i>{t('Clear selection')}
+                            </button>
+                          {/if}
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+
+                  {#if unitCategories.length}
+                    <div class="pf-f" data-pick="unitcat">
+                      <div class="pf-label">
+                        <span id="pf-l-unit-category">{t('Unit Category')}</span>
+                      </div>
+                      <div class="pf-pick">
+                        <button
+                          type="button"
+                          class="pf-box pf-box--btn"
+                          aria-labelledby="pf-l-unit-category"
+                          aria-haspopup="listbox"
+                          aria-expanded={openUnitCategoryMenu}
+                          on:click={() => {
+                            unitCategorySearch = '';
+                            openUnitCategoryMenu = !openUnitCategoryMenu;
+                          }}>
+                          <span class="pf-pick__t" class:is-empty={!unit_category_id}>{pageUnitCategoryLabel}</span>
+                          <i class="ms pf-pick__caret" aria-hidden="true">expand_more</i>
+                        </button>
+
+                        {#if openUnitCategoryMenu}
+                          <div class="pf-menu" role="listbox" aria-labelledby="pf-l-unit-category">
+                            <label class="pf-menu__search">
+                              <i class="ms" aria-hidden="true">search</i>
+                              <input
+                                type="search"
+                                placeholder={t('Search')}
+                                autocomplete="off"
+                                bind:value={unitCategorySearch} />
+                            </label>
+                            <div class="pf-menu__list">
+                              {#each filteredUnitCategoryOptions as row (row.value)}
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={String(unit_category_id) === String(row.value)}
+                                  class="pf-menu__opt"
+                                  class:is-on={String(unit_category_id) === String(row.value)}
+                                  on:click={() => {
+                                    selectUnitCategory(row.value);
+                                    unitCategorySearch = '';
+                                    openUnitCategoryMenu = false;
+                                  }}>
+                                  <span class="pf-menu__name">{row.label}</span>
+                                  {#if String(unit_category_id) === String(row.value)}
+                                    <i class="ms" aria-hidden="true">check</i>
+                                  {/if}
+                                </button>
+                              {/each}
+                              {#if !filteredUnitCategoryOptions.length}
+                                <span class="pf-menu__empty">{t('No results found')}</span>
+                              {/if}
+                            </div>
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if type == 'service'}
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <label for="pf-department">{t('Department')}</label>
+                      </div>
+                      <div class="pf-box pf-box--select">
+                        <select id="pf-department" bind:value={department_id}>
+                          <option value="">{t('Select Department')}</option>
+                          {#each departments as row (row.id)}
+                            <option value={row.id}>{row.name}</option>
+                          {/each}
+                        </select>
+                        <i class="ms pf-pick__caret" aria-hidden="true">expand_more</i>
+                      </div>
+                    </div>
+
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <label for="pf-user">{t('User')}</label>
+                      </div>
+                      <div class="pf-box pf-box--select">
+                        <select id="pf-user" bind:value={user_id}>
+                          <option value="">{t('Select User')}</option>
+                          {#each users as row (row.id)}
+                            <option value={row.id}>
+                              {`${row.first_name || ''} ${row.last_name || ''}`.trim() || row.username}
+                            </option>
+                          {/each}
+                        </select>
+                        <i class="ms pf-pick__caret" aria-hidden="true">expand_more</i>
+                      </div>
+                    </div>
+
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <label for="pf-duration">{t('Service Duration')}</label>
+                      </div>
+                      <div class="pf-box">
+                        <input
+                          id="pf-duration"
+                          type="text"
+                          inputmode="numeric"
+                          autocomplete="off"
+                          bind:value={service_duration} />
+                        <span class="pf-suffix">{t(service_duration_unit)}</span>
+                      </div>
+                    </div>
+
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <span>{t('Select Time Unit')}</span>
+                      </div>
+                      <div class="pf-box pf-box--select">
+                        <select bind:value={service_duration_unit}>
+                          {#each time_units as row}
+                            <option value={row}>{t(row)}</option>
+                          {/each}
+                        </select>
+                        <i class="ms pf-pick__caret" aria-hidden="true">expand_more</i>
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+              </section>
+
+              <section class="pf-card" aria-labelledby="pf-sec-pricing">
+                <h3 id="pf-sec-pricing" class="pf-card__hd">
+                  <i class="ms f" aria-hidden="true">payments</i>{t('Pricing & Stock')}
+                </h3>
+
+                <div class="pf-grid">
+                  <div class="pf-f" data-pick="buycur">
+                    <div class="pf-label">
+                      <label for="pf-buy">
+                        {type != 'service' ? t('Buy Price') : t('Cost Price')}{#if enable_require_buy_sell_price}<span
+                            class="pf-req"
+                            aria-hidden="true">*</span
+                          >{/if}
+                      </label>
+                    </div>
+                    <div class="pf-box pf-box--cur">
+                      <input
+                        id="pf-buy"
+                        type="number"
+                        inputmode="decimal"
+                        autocomplete="off"
+                        placeholder="0.00"
+                        bind:value={buy_price}
+                        on:input={() => {
+                          if (enablePercent) {
+                            sell_price = Number(
+                              (parseFloat(buy_price) || 0) +
+                                ((parseFloat(buy_price) || 0) * (parseFloat(percentage) || 0)) / 100,
+                            ).toFixed(3);
+                          }
+                        }} />
+                      <div class="pf-cur">
+                        <button
+                          type="button"
+                          class="pf-cur__btn"
+                          aria-haspopup="listbox"
+                          aria-label={t('Currency')}
+                          aria-expanded={openBuyCurrencyMenu}
+                          title={pageBuyCurrency}
+                          on:click={() => {
+                            buyCurrencySearch = '';
+                            openBuyCurrencyMenu = !openBuyCurrencyMenu;
+                          }}>
+                          <span dir="ltr">{pageBuySymbol}</span>
+                          <i class="ms" aria-hidden="true">expand_more</i>
+                        </button>
+                        {#if openBuyCurrencyMenu}
+                          <div class="pf-cumenu" role="dialog" aria-label={t('Currency')}>
+                            <label class="pf-cumenu__search">
+                              <i class="ms" aria-hidden="true">search</i>
+                              <input
+                                type="search"
+                                autocomplete="off"
+                                placeholder={t('Search')}
+                                aria-label={t('Search')}
+                                bind:value={buyCurrencySearch} />
+                            </label>
+                            <div class="pf-cumenu__list" role="listbox" aria-label={t('Currency')}>
+                              {#each filteredBuyCurrencies as row (row.code)}
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={pageBuyCurrency === row.code}
+                                  class="pf-cumenu__opt"
+                                  class:is-on={pageBuyCurrency === row.code}
+                                  class:is-base={row.isDefault == 1}
+                                  on:click={() => {
+                                    buy_currency = row.code;
+                                    if (enablePercent) sell_currency = row.code;
+                                    openBuyCurrencyMenu = false;
+                                  }}>
+                                  <span class="pf-cumenu__chip" dir="ltr"
+                                    >{row.symbol || row.code}</span
+                                  >
+                                  <span class="pf-cumenu__cpy">
+                                    <span class="pf-cumenu__name">{t(row.code)}</span>
+                                    {#if pageCurrencyRate(row)}
+                                      <span class="pf-cumenu__rate" dir="ltr"
+                                        >{pageCurrencyRate(row)}</span
+                                      >
+                                    {/if}
+                                  </span>
+                                  <span class="pf-cumenu__code" dir="ltr">{row.code}</span>
+                                  <i class="ms pf-cumenu__check" aria-hidden="true">check</i>
+                                </button>
+                              {/each}
+                              {#if !filteredBuyCurrencies.length}
+                                <span class="pf-menu__empty">{t('No results found')}</span>
+                              {/if}
+                            </div>
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="pf-f" data-pick="sellcur">
+                    <div class="pf-label">
+                      <label for="pf-sell">
+                        {t('Sell Price')}{#if enable_require_buy_sell_price}<span class="pf-req" aria-hidden="true"
+                            >*</span
+                          >{/if}
+                      </label>
+                    </div>
+                    <div class="pf-box pf-box--cur">
+                      {#if enablePercent}
+                        <input
+                          id="pf-sell"
+                          type="number"
+                          inputmode="decimal"
+                          autocomplete="off"
+                          placeholder="0"
+                          value={percentage}
+                          on:input={(event) => {
+                            percentage = event.currentTarget.value;
+                            sell_price = (
+                              (parseFloat(buy_price) || 0) *
+                              (1 + (parseFloat(percentage) || 0) / 100)
+                            ).toFixed(3);
+                          }} />
+                      {:else}
+                        <input
+                          id="pf-sell"
+                          type="number"
+                          inputmode="decimal"
+                          autocomplete="off"
+                          placeholder="0.00"
+                          bind:value={sell_price}
+                          on:blur={() => {
+                            if (sell_currency == buy_currency && +sell_price < +buy_price) {
+                              sell_price = buy_price;
+                            }
+                          }} />
+                      {/if}
+
+                      {#if pageSellHint}
+                        <span
+                          class="pf-hint"
+                          class:is-neg={pageMarkup < 0}
+                          dir="ltr"
+                          aria-hidden="true">{pageSellHint}</span>
+                      {/if}
+
+                      <span class="pf-seg" role="group" aria-label={t('Sell Price')}>
+                        <button
+                          type="button"
+                          class:is-on={enablePercent}
+                          title={t('Percent')}
+                          on:click={() => {
+                            openSellCurrencyMenu = false;
+                            setPercentMode(true);
+                          }}>٪</button>
+                        <button
+                          type="button"
+                          class="pf-seg__pick"
+                          class:is-on={!enablePercent}
+                          aria-haspopup="listbox"
+                          aria-label={t('Currency')}
+                          aria-expanded={openSellCurrencyMenu}
+                          title={pageSellCurrency}
+                          on:click={() => {
+                            if (enablePercent) {
+                              setPercentMode(false);
+                              return;
+                            }
+                            sellCurrencySearch = '';
+                            openSellCurrencyMenu = !openSellCurrencyMenu;
+                          }}>
+                          <span dir="ltr">{pageSellSymbol}</span>
+                          <i class="ms" aria-hidden="true">expand_more</i>
+                        </button>
+                      </span>
+
+                      {#if openSellCurrencyMenu}
+                        <div class="pf-cumenu" role="dialog" aria-label={t('Currency')}>
+                          <label class="pf-cumenu__search">
+                            <i class="ms" aria-hidden="true">search</i>
+                            <input
+                              type="search"
+                              autocomplete="off"
+                              placeholder={t('Search')}
+                              aria-label={t('Search')}
+                              bind:value={sellCurrencySearch} />
+                          </label>
+                          <div class="pf-cumenu__list" role="listbox" aria-label={t('Currency')}>
+                            {#each filteredSellCurrencies as row (row.code)}
+                              <button
+                                type="button"
+                                role="option"
+                                aria-selected={pageSellCurrency === row.code}
+                                class="pf-cumenu__opt"
+                                class:is-on={pageSellCurrency === row.code}
+                                class:is-base={row.isDefault == 1}
+                                on:click={() => {
+                                  if (!enablePercent) sell_currency = row.code;
+                                  openSellCurrencyMenu = false;
+                                }}>
+                                <span class="pf-cumenu__chip" dir="ltr">{row.symbol || row.code}</span>
+                                <span class="pf-cumenu__cpy">
+                                  <span class="pf-cumenu__name">{t(row.code)}</span>
+                                  {#if pageCurrencyRate(row)}
+                                    <span class="pf-cumenu__rate" dir="ltr"
+                                      >{pageCurrencyRate(row)}</span
+                                    >
+                                  {/if}
+                                </span>
+                                <span class="pf-cumenu__code" dir="ltr">{row.code}</span>
+                                <i class="ms pf-cumenu__check" aria-hidden="true">check</i>
+                              </button>
+                            {/each}
+                            {#if !filteredSellCurrencies.length}
+                              <span class="pf-menu__empty">{t('No results found')}</span>
+                            {/if}
+                          </div>
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+
+                  {#if (type == 'product' || type == 'sale') && (!editingId || oldProductinitial_warehouse_id == 0)}
+                    <div class="pf-f" data-pick="wh">
+                      <div class="pf-label">
+                        <span id="pf-l-wh">{t('Warehouse')}</span>
+                      </div>
+                      <div class="pf-pick">
+                        <button
+                          type="button"
+                          class="pf-box pf-box--btn"
+                          aria-labelledby="pf-l-wh"
+                          aria-haspopup="listbox"
+                          aria-expanded={openWarehouseMenu}
+                          on:click={() => (openWarehouseMenu = !openWarehouseMenu)}>
+                          <span class="pf-pick__t" class:is-empty={!pageWarehouseName}>
+                            {pageWarehouseName || t('Select Warehouse')}
+                          </span>
+                          <i class="ms pf-pick__caret" aria-hidden="true">expand_more</i>
+                        </button>
+
+                        {#if openWarehouseMenu}
+                          <div class="pf-menu" role="listbox" aria-labelledby="pf-l-wh">
+                            <div class="pf-menu__list">
+                              {#each warehouses as row (row.id)}
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={String(selectedWarehouseId ?? '') === String(row.id)}
+                                  class="pf-menu__opt"
+                                  class:is-on={String(selectedWarehouseId ?? '') === String(row.id)}
+                                  on:click={() => {
+                                    selectedWarehouseId = row.id;
+                                    openWarehouseMenu = false;
+                                  }}>
+                                  <span class="pf-menu__name">{row.name}</span>
+                                  {#if String(selectedWarehouseId ?? '') === String(row.id)}
+                                    <i class="ms" aria-hidden="true">check</i>
+                                  {/if}
+                                </button>
+                              {/each}
+                              {#if !warehouses.length}
+                                <span class="pf-menu__empty">{t('No results found')}</span>
+                              {/if}
+                            </div>
+                            {#if selectedWarehouseId}
+                              <button
+                                type="button"
+                                class="pf-menu__clear"
+                                on:click={() => {
+                                  selectedWarehouseId = '';
+                                  openWarehouseMenu = false;
+                                }}>
+                                <i class="ms" aria-hidden="true">backspace</i>{t('Clear selection')}
+                              </button>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <label for="pf-stock-qty">{t('Warehouse Quantity')}</label>
+                      </div>
+                      <div class="pf-box">
+                        <input
+                          id="pf-stock-qty"
+                          type="number"
+                          inputmode="decimal"
+                          autocomplete="off"
+                          bind:value={warehouseQuantity} />
+                        <span class="pf-suffix">{pageUnitWord}</span>
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if enable_batch}
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <label for="pf-batch">{t('Batch')}</label>
+                      </div>
+                      <div class="pf-box">
+                        <input id="pf-batch" type="text" autocomplete="off" bind:value={batch} />
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if enable_manufacturing_date}
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <label for="c-manufacturing_date">{t('Manufacturing Date')}</label>
+                      </div>
+                      <div class="pf-box persianDatePicker product-date-picker">
+                        <input
+                          type="date"
+                          id="c-manufacturing_date"
+                          data-bind="manufacturing_date"
+                          bind:value={manufacturing_date} />
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if enable_expiry_date}
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <label for="c-expiry_date">{t('Expiry Date')}</label>
+                      </div>
+                      <div class="pf-box persianDatePicker product-date-picker">
+                        <input
+                          type="date"
+                          id="c-expiry_date"
+                          data-bind="expiry_date"
+                          bind:value={expiry_date} />
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if type != 'service' && enable_expiry_date}
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <label for="pf-alarm-days">{t('Alarm Expiry Days')}</label>
+                      </div>
+                      <div class="pf-box">
+                        <input
+                          id="pf-alarm-days"
+                          type="number"
+                          min="0"
+                          inputmode="numeric"
+                          autocomplete="off"
+                          bind:value={alarm_expiry_days} />
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+              </section>
+
+              <section class="pf-card" aria-labelledby="pf-sec-extra">
+                <h3 id="pf-sec-extra" class="pf-card__hd">
+                  <i class="ms f" aria-hidden="true">notes</i>{t('Extra Information')}
+                </h3>
+
+                <div class="pf-grid">
+                  {#if type != 'service' && _translate_org_type != 'exchange'}
+                    <div class="pf-f">
+                      <div class="pf-label">
+                        <label for="pf-alarm">{t('Alarm Quantity')}</label>
+                      </div>
+                      <div class="pf-box">
+                        <input
+                          id="pf-alarm"
+                          type="text"
+                          inputmode="numeric"
+                          autocomplete="off"
+                          bind:value={alarm_quantity} />
+                        <span class="pf-suffix">{pageUnitWord}</span>
+                      </div>
+                    </div>
+                  {/if}
+
+                  <div class="pf-f pf-f--2">
+                    <div class="pf-label">
+                      <label for="pf-description">{t('Description')}</label>
+                    </div>
+                    <textarea
+                      id="pf-description"
+                      class="pf-textarea"
+                      rows="1"
+                      maxlength="1000"
+                      placeholder={t('Description')}
+                      bind:value={description}></textarea>
+                  </div>
+
+                  <div class="pf-f">
+                    <div class="pf-label">
+                      <span>{t('Image')}</span>
+                    </div>
+
+                    {#if modalImageUrl}
+                      <div class="pf-image">
+                        <img src={modalImageUrl} alt={t('Image')} />
+                        <span class="pf-image__name">{t('Select Image')}</span>
+                        <label class="pf-image__swap" title={t('Select Image')}>
+                          <input
+                            class="pf-sr"
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/*"
+                            on:change={handleImageUpload} />
+                          <i class="ms" aria-hidden="true">sync</i>
+                        </label>
+                        <button
+                          type="button"
+                          class="pf-image__del"
+                          title={t('Clear')}
+                          aria-label={t('Clear')}
+                          on:click={() => {
+                            modalImageUrl = null;
+                            imageBase64 = null;
+                            thumbnailBase64 = null;
+                          }}>
+                          <i class="ms" aria-hidden="true">delete</i>
+                        </button>
+                      </div>
+                    {:else}
+                      <label
+                        class="pf-drop"
+                        on:paste={(event) => handlePasteImage(event)}
+                        on:dragover={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          event.dataTransfer.dropEffect = 'copy';
+                        }}
+                        on:dragenter={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        on:drop={(event) => handleDropImage(event)}>
+                        <input
+                          class="pf-sr"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/*"
+                          on:change={handleImageUpload} />
+                        <i class="ms" aria-hidden="true">add_photo_alternate</i>{t('Select Image')}
+                      </label>
+                    {/if}
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <aside class="pf-side" aria-label={t('Registration Summary')}>
+              <div class="pf-side__hd">
+                <h3>{t('Registration Summary')}</h3>
+                <span class="pf-state" class:pf-state--ok={pageComplete}>
+                  <i class="ms f" aria-hidden="true">{pageComplete ? 'check_circle' : 'pending'}</i>
+                  {pageComplete ? t('Complete') : t('Incomplete')}
+                </span>
+              </div>
+              <span class="pf-progress" aria-hidden="true"
+                ><span style={`width: ${pageProgressWidth}`}></span></span
+              >
+
+              <div class="pf-prev">
+                <div class="pf-prev__body">
+                  <strong class="pf-prev__name" class:is-empty={!name}>{name || t('Name')}</strong>
+                  <span class="pf-prev__chips">
+                    <span class="pf-chip pf-chip--code" dir="ltr">{code || '—'}</span>
+                    <span class="pf-chip">{pageCategoryName || t('Category')}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="pf-side__money">
+                <div class="pf-side__prices">
+                  <div>
+                    <span>{t('Buy Price')}</span>
+                    <b dir="ltr">{pageBuyText} <em>{pageBuySymbol}</em></b>
+                  </div>
+                  <div>
+                    <span>{t('Sell Price')}</span>
+                    <b dir="ltr">{pageSellText} <em>{pageSellSymbol}</em></b>
+                  </div>
+                </div>
+                <span class="pf-side__bar" aria-hidden="true">
+                  <span
+                    class="pf-side__fill"
+                    class:is-neg={!pageMarginPositive}
+                    style={`width: ${pageMarginWidth}`}></span>
+                </span>
+                <div class="pf-side__profit">
+                  <span
+                    >{t('Profit')}
+                    <b dir="ltr">{pageProfitSign}{pageProfitText}</b></span
+                  >
+                  <span class="pf-side__margin" class:is-neg={!pageMarginPositive} dir="ltr">
+                    {pageMarginText}
+                  </span>
+                </div>
+              </div>
+
+              <dl class="pf-side__facts">
+                <dt>{t('Unit')}</dt>
+                <dd>{pageUnitWord}</dd>
+                {#if type == 'service'}
+                  <dt>{t('Department')}</dt>
+                  <dd>{pageDepartmentName || '—'}</dd>
+                  <dt>{t('User')}</dt>
+                  <dd>{pageUserName || '—'}</dd>
+                {:else}
+                  {#if enable_brands}
+                    <dt>{t('Brand')}</dt>
+                    <dd>{pageBrandName || '—'}</dd>
+                  {/if}
+                  {#if enable_generics}
+                    <dt>{t('Generic')}</dt>
+                    <dd>{pageGenericName || '—'}</dd>
+                  {/if}
+                {/if}
+              </dl>
+
+              <div class="pf-side__stock">
+                <div class="pf-side__wh">
+                  <i class="ms" aria-hidden="true">warehouse</i>
+                  <span>{pageWarehouseName || t('Select Warehouse')}</span>
+                </div>
+                <div class="pf-side__stockrow">
+                  <b>{pageStockText} <em>{pageUnitWord}</em></b>
+                  <span dir="ltr">{pageStockValueText} {pageBuySymbol}</span>
+                </div>
+                {#if type != 'service'}
+                  <div class="pf-side__foot">
+                    <span
+                      ><i class="ms" aria-hidden="true">notifications</i>{t('Alarm Quantity')}:
+                      <b dir="ltr">{alarm_quantity || '—'}</b></span
+                    >
+                    {#if enable_expiry_date}
+                      <span
+                        >{t('Alarm Expiry Days')}:
+                        <b dir="ltr">{alarm_expiry_days || '—'}</b></span
+                      >
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            </aside>
+          </div>
+
+          <div class="pf-bar">
+            <button
+              type="button"
+              class="pf-btn pf-btn--ghost pf-bar__cancel"
+              on:click={closeProductForm}>
+              {t('Cancel')}
+            </button>
+            <button
+              type="button"
+              class="pf-btn pf-btn--outline"
+              disabled={editingId && !nextProductId && !previousProductId}
+              title="Ctrl+Enter"
+              on:click={() => saveProduct(editingId ? 'edit-another' : 'again')}>
+              {#if editingId}
+                {type == 'service' ? 'ویرایش خدمت و ویرایش خدمت دیگر' : 'ویرایش محصول و ویرایش محصول دیگر'}
+              {:else}
+                {t(type == 'service' ? 'Save Service and Add Another' : 'Save Product and Add Another')}
+              {/if}
+            </button>
+            <button
+              type="button"
+              class="pf-btn pf-btn--primary"
+              title="Ctrl+S"
+              on:click={() => saveProduct()}>
+              <i class="ms" aria-hidden="true">check</i>
+              {editingId
+                ? t(type == 'service' ? 'Update Service' : 'Update Product')
+                : t(type == 'service' ? 'Save Service' : 'Save Product')}
+            </button>
+          </div>
+        </div>
+        {:else}
         <div class="mb-4 d-flex align-items-center d-none">
           <button class="btn btn-success me-2" on:click={() => loadFromData(myDataIndex)}>Load</button>
           <div class="input-group me-2">
@@ -2946,51 +4229,11 @@ import { userApi } from '../../api/userApi.js';
             </div>
           </div>
         {/if}
+        {/if}
       </div>
-      <div class={asPage ? 'form-actions' : 'modal-footer product-modal-footer'}>
-        {#if asPage}
-          {#if editingId}
-            <div class="product-neighbor-actions">
-              <button
-                type="button"
-                class="btn-neutral product-neighbor-btn"
-                disabled={!previousProductId}
-                on:click={() => navigateProductNeighbor(previousProductId)}>
-                <i class="bi bi-chevron-right"></i>
-                {t('Previous')}
-              </button>
-              <button
-                type="button"
-                class="btn-neutral product-neighbor-btn"
-                disabled={!nextProductId}
-                on:click={() => navigateProductNeighbor(nextProductId)}>
-                {t('Next')}
-                <i class="bi bi-chevron-left"></i>
-              </button>
-            </div>
-          {/if}
-          <button type="button" class="btn-primary" on:click={() => saveProduct()}>
-            {#if type == 'service'}
-              {editingId ? t('Update Service') : t('Save Service')}
-            {:else}
-              {editingId ? t('Update Product') : t('Save Product')}
-            {/if}
-          </button>
-          <button
-            type="button"
-            class="btn-secondary"
-            disabled={editingId && !nextProductId && !previousProductId}
-            on:click={() => saveProduct(editingId ? 'edit-another' : 'again')}>
-            {#if type == 'service'}
-              {editingId ? 'ویرایش خدمت و ویرایش خدمت دیگر' : t('Save Service and Add Another')}
-            {:else}
-              {editingId ? 'ویرایش محصول و ویرایش محصول دیگر' : t('Save Product and Add Another')}
-            {/if}
-          </button>
-          <button type="button" class="btn-neutral" on:click={closeProductForm}>
-            {t('Cancel')}
-          </button>
-        {:else if type == 'service'}
+      {#if !asPage}
+      <div class="modal-footer product-modal-footer">
+        {#if type == 'service'}
         <div class="qa-service-footer">
           <button type="button" class="qa-service-footer__submit" on:click={() => saveProduct()}>
             {editingId ? t('Update Service') : t('Save Service')}
@@ -3036,6 +4279,7 @@ import { userApi } from '../../api/userApi.js';
         </div>
         {/if}
       </div>
+      {/if}
     </div>
   </div>
 </div>
@@ -5094,5 +6338,1362 @@ import { userApi } from '../../api/userApi.js';
     height: var(--control-height);
     min-height: var(--control-height);
     max-height: var(--control-height);
+  }
+  /* ==========================================================================
+     Product form page — every number below is traced from ProductNew.dc.html
+     at 1440px: 1200px sheet, 248px summary rail, 14px cards, 28px boxes.
+     ========================================================================== */
+  :global(main.erp-page-main:has(#productFormPage)) {
+    max-width: none;
+    padding-inline: 16px;
+  }
+
+  /* Page mode only: the sheet has to reach the bottom of the route viewport, so
+     every wrapper between the route and the sheet is a full-height column. The
+     action bar then lands at the end of the page instead of floating right
+     under the last card. shrink is 0 so a long form still scrolls as before. */
+.product-form-page,
+.product-form-page__body,
+.product-form-page__inner,
+.product-form-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 0 auto;
+    min-height: 0;
+  }
+
+.pf-page {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    /* Fills the route viewport so the action bar lands at the end of the page
+       even when the cards are shorter than the screen; it never shrinks below
+       its content, so a long form still scrolls the ordinary way. */
+    flex: 1 0 auto;
+    gap: 8px;
+    color: var(--z-ink);
+    font-family: var(--z-font);
+  }
+
+  /* The title block is gone: the sheet starts with its first card. Only the
+     edit-mode product stepper keeps a row, and the heading stays in the
+     accessibility tree so the page still has one. */
+.pf-vh {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+.pf-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-inline-start: auto;
+  }
+
+.pf-iconbtn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--z-border);
+    border-radius: 8px;
+    background: var(--z-surface);
+    color: var(--z-muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+.pf-iconbtn .ms {
+    font-size: 18px;
+  }
+
+.pf-iconbtn:hover:not(:disabled) {
+    background: var(--z-hover);
+    border-color: var(--z-border-strong);
+    color: var(--z-link);
+  }
+
+.pf-iconbtn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+.pf-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 248px;
+    gap: 10px;
+    align-items: start;
+    /* Takes the leftover height so the action bar is pushed to the page end;
+       the cards themselves stay top-aligned through align-items. */
+    flex: 1 1 auto;
+  }
+
+.pf-main {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+
+.pf-card {
+    background: var(--z-surface);
+    border: 1px solid var(--z-border);
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+.pf-card__hd {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--z-border-soft);
+    border-radius: 14px 14px 0 0;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--z-ink);
+  }
+
+.pf-card__hd .ms {
+    font-size: 15px;
+    color: var(--z-link);
+  }
+
+.pf-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px 10px;
+    padding: 8px 12px 10px;
+  }
+
+.pf-f {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    position: relative;
+  }
+
+.pf-f--2 {
+    grid-column: span 2;
+  }
+
+.pf-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-height: 18px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--z-text);
+  }
+
+.pf-label > label {
+    cursor: default;
+  }
+
+.pf-req {
+    color: var(--z-danger);
+    margin-inline-start: 2px;
+  }
+
+.pf-mini {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 18px;
+    min-width: 18px;
+    padding: 0 3px;
+    border: 0;
+    border-radius: 5px;
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font: inherit;
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+.pf-mini .ms {
+    font-size: 13px;
+  }
+
+.pf-mini:hover {
+    background: var(--z-hover);
+  }
+
+.pf-box {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    border: 1px solid var(--z-border);
+    border-radius: 7px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+    min-width: 0;
+    transition: border-color 0.12s, box-shadow 0.12s;
+  }
+
+.pf-box:focus-within {
+    border-color: var(--z-link);
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+  }
+
+.pf-box input,
+.pf-box select {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    padding: 0 9px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--z-ink);
+  }
+
+.pf-box input[dir='ltr'],
+.pf-box input[type='number'],
+.pf-box input[type='date'] {
+    font-family: var(--z-font-num);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    direction: ltr;
+  }
+
+.pf-box input[type='date'] {
+    /* Keeps a date control from pushing its row 2px taller than the rest. */
+    height: 24px;
+    line-height: 24px;
+}
+
+/*
+ * The date fields swap the native control for the mounted Shamsi picker, whose
+ * own input is 38px tall with a 1px border and a 10px radius. Left alone it
+ * overflows the 28px box and reads as a different-sized field, so it is
+ * flattened into the page skin: same height, no inner frame, same numerals.
+ */
+.pf-box.product-date-picker {
+    height: 28px;
+    min-height: 28px;
+    border-radius: 7px;
+    overflow: hidden;
+}
+
+.pf-box.product-date-picker :global(.legacy-app-date-picker-host) {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 26px;
+    min-height: 0;
+}
+
+.pf-box.product-date-picker :global(.pdp),
+.pf-box.product-date-picker :global(.pdp .pdp-group) {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 26px;
+    min-height: 0;
+}
+
+/*
+ * The picker's own frame: same box, same numerals, no inner border. The
+ * shared date field centres its value and inlines 0.5rem of padding with
+ * !important, so those two are restated here to read like the sibling
+ * number fields: value flush to the right in tabular numerals.
+ */
+.pf-box.product-date-picker :global(.pdp .pdp-group .pdp-input) {
+    height: 26px;
+    min-height: 0;
+    padding: 0 9px !important;
+    border: 0;
+    border-radius: 0 !important;
+    background: transparent;
+    font-family: var(--z-font-num);
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--z-ink);
+    direction: ltr;
+    text-align: right !important;
+}
+
+.pf-box.product-date-picker :global(.pdp .pdp-group .pdp-input.pdp-focus) {
+    /* The box already draws the focus ring. */
+    box-shadow: none;
+}
+
+.pf-box input::placeholder {
+    color: var(--z-subtle);
+    opacity: 0.8;
+    font-weight: 500;
+  }
+
+.pf-box input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+.pf-box input[type='number']::-webkit-outer-spin-button,
+.pf-box input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+.pf-box--btn {
+    width: 100%;
+    padding: 0 9px;
+    font: inherit;
+    font-size: 12px;
+    color: var(--z-ink);
+    text-align: start;
+    cursor: pointer;
+  }
+
+/*
+ * A picker box has to read exactly like the plain inputs beside it: white
+ * fill and the same grey frame. It used to lift on hover and keep a blue ring
+ * after its menu closed, which made the field look like a different control.
+ * Keyboard focus is the one exception, because it has to stay visible.
+ */
+.pf-box--btn:hover,
+.pf-box--btn:focus-within {
+    background: var(--z-surface);
+    border-color: var(--z-border);
+    box-shadow: none;
+  }
+
+.pf-box--btn:focus-visible {
+    border-color: var(--z-link);
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+  }
+
+.pf-box--select {
+    position: relative;
+  }
+
+.pf-box--select select {
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    padding-inline-end: 2px;
+  }
+
+.pf-box--select .pf-pick__caret {
+    margin-inline-end: 6px;
+  }
+
+.pf-pick {
+    position: relative;
+  }
+
+.pf-pick__t {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+.pf-pick__t.is-empty {
+    color: var(--z-subtle);
+    font-weight: 500;
+  }
+
+.pf-pick__caret {
+    font-size: 17px;
+    color: var(--z-muted);
+  }
+
+/*
+ * The panel is anchored to the field on both inline edges, so it has to be free
+ * to follow the field's width. A fixed min-width made it wider than the field
+ * once a column dropped below it (four columns under ~1400px), leaving the
+ * panel hanging past the field's left edge.
+ */
+.pf-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    inset-inline: 0;
+    z-index: 26;
+    min-width: 0;
+    max-width: 100%;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--z-surface);
+    border: 1px solid var(--z-border);
+    border-radius: 11px;
+    box-shadow: 0 16px 40px -14px rgba(11, 21, 48, 0.35);
+  }
+
+.pf-menu__search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 8px;
+    margin-bottom: 2px;
+    border: 1px solid var(--z-border-soft);
+    border-radius: 7px;
+    background: var(--z-surface-2);
+    color: var(--z-subtle);
+  }
+
+.pf-menu__search .ms {
+    font-size: 16px;
+  }
+
+.pf-menu__search input {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+    color: var(--z-ink);
+  }
+
+.pf-menu__list {
+    max-height: 216px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+.pf-menu__opt {
+    width: 100%;
+    min-height: 28px;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--z-ink);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+    text-align: start;
+    cursor: pointer;
+  }
+
+.pf-menu__opt:hover {
+    background: var(--z-hover);
+  }
+
+.pf-menu__opt.is-on {
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font-weight: 700;
+  }
+
+.pf-menu__opt .ms {
+    font-size: 16px;
+  }
+
+.pf-menu__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+.pf-menu__empty {
+    padding: 10px 8px;
+    font-size: 11.5px;
+    color: var(--z-subtle);
+    text-align: center;
+  }
+
+.pf-menu__clear {
+    min-height: 30px;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    border-top: 1px solid var(--z-border-soft);
+    background: transparent;
+    color: var(--z-muted);
+    font: inherit;
+    font-size: 11.5px;
+    text-align: start;
+    cursor: pointer;
+  }
+
+.pf-menu__clear .ms {
+    font-size: 16px;
+  }
+
+.pf-menu__clear:hover {
+    color: var(--z-ink);
+  }
+
+  /* Currency suffix + its popover (reference `sufS`) */
+.pf-cur {
+    display: flex;
+    flex-shrink: 0;
+  }
+
+.pf-cur__btn {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 20px;
+    padding: 0 7px;
+    margin-inline-end: 4px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--z-surface-3);
+    color: var(--z-text);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+.pf-cur__btn > span[dir='ltr'] {
+    font-family: var(--z-font-num);
+  }
+
+.pf-cur__btn .ms {
+    font-size: 14px;
+    color: var(--z-muted);
+  }
+
+.pf-cur__btn:hover {
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+  }
+
+/* The popover hangs off the field, not the little symbol chip, so its right
+   edge lines up with the box. */
+.pf-box--cur {
+    position: relative;
+  }
+
+/*
+ * Currency picker, laid out like the Sale form's `sf-cumenu`: a search row, then
+ * one row per currency with the symbol in a soft chip, the name over its rate,
+ * the ISO code and a check that only the selected row shows.
+ */
+.pf-cumenu {
+    position: absolute;
+    top: 32px;
+    inset-inline-start: 0;
+    z-index: 27;
+    width: 248px;
+    max-width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--z-border);
+    border-radius: 12px;
+    background: var(--z-surface);
+    box-shadow: 0 18px 40px -14px rgba(11, 21, 48, 0.35);
+  }
+
+.pf-cumenu__search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    margin: 6px;
+    padding: 0 9px;
+    border: 1px solid var(--z-border-soft);
+    border-radius: 8px;
+    background: var(--z-surface-2);
+    color: var(--z-muted);
+  }
+
+.pf-cumenu__search .ms {
+    font-size: 16px;
+  }
+
+.pf-cumenu__search input {
+    flex: 1;
+    width: 0;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--z-ink);
+    font-family: inherit;
+    font-size: 11.5px;
+  }
+
+.pf-cumenu__list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 0 6px 6px;
+  }
+
+.pf-cumenu__opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 4px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--z-ink);
+    font: inherit;
+    font-size: 12px;
+    text-align: start;
+    cursor: pointer;
+  }
+
+.pf-cumenu__opt:hover {
+    background: var(--z-surface-2);
+  }
+
+.pf-cumenu__opt.is-on {
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+  }
+
+.pf-cumenu__chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font-family: var(--z-font-num);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+.pf-cumenu__opt.is-base .pf-cumenu__chip {
+    background: var(--z-surface-3);
+    color: var(--z-muted);
+  }
+
+.pf-cumenu__cpy {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+  }
+
+.pf-cumenu__name {
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+.pf-cumenu__opt.is-on .pf-cumenu__name {
+    color: var(--z-link);
+    font-weight: 700;
+  }
+
+.pf-cumenu__rate {
+    color: var(--z-muted);
+    font-family: var(--z-font-num);
+    font-size: 10px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+.pf-cumenu__code {
+    color: var(--z-subtle);
+    font-family: var(--z-font-num);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+
+.pf-cumenu__check {
+    color: var(--z-link);
+    font-size: 17px;
+    visibility: hidden;
+  }
+
+.pf-cumenu__opt.is-on .pf-cumenu__check {
+    visibility: visible;
+  }
+
+  /* Percent / value switcher inside the sell box (reference `segS`) */
+.pf-seg {
+    display: flex;
+    flex-shrink: 0;
+    gap: 1px;
+    padding: 2px;
+    margin-inline-end: 4px;
+    border-radius: 6px;
+    background: var(--z-surface-3);
+  }
+
+.pf-seg button {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 18px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--z-muted);
+    font: inherit;
+    font-size: 10.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+/* The currency side of the switch carries the symbol and a caret; the percent
+   side is the glyph alone, so it does not need the extra room. */
+.pf-seg__pick {
+    padding-inline: 6px 4px;
+  }
+
+.pf-seg button .ms {
+    font-size: 13px;
+    color: var(--z-muted);
+  }
+
+.pf-seg button.is-on .ms {
+    color: var(--z-ink);
+  }
+
+.pf-seg button.is-on {
+    background: var(--z-surface);
+    color: var(--z-ink);
+    font-weight: 800;
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.18);
+  }
+
+.pf-hint {
+    flex-shrink: 0;
+    margin-inline-end: 6px;
+    font-family: var(--z-font-num);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--z-ok);
+    white-space: nowrap;
+  }
+
+.pf-hint.is-neg {
+    color: var(--z-danger);
+  }
+
+.pf-suffix {
+    flex-shrink: 0;
+    margin-inline-end: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--z-muted);
+    white-space: nowrap;
+  }
+
+.pf-textarea {
+    width: 100%;
+    min-height: 30px;
+    height: 30px;
+    resize: vertical;
+    padding: 7px 9px;
+    border: 1px solid var(--z-border);
+    border-radius: 7px;
+    background: var(--z-surface);
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--z-ink);
+    box-sizing: border-box;
+    outline: 0;
+    transition: border-color 0.12s, box-shadow 0.12s;
+  }
+
+.pf-textarea::placeholder {
+    color: var(--z-subtle);
+    opacity: 0.8;
+    font-weight: 500;
+  }
+
+.pf-textarea:focus {
+    border-color: var(--z-link);
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+  }
+
+  /* Drop zone / picked thumbnail */
+.pf-drop {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1.5px dashed var(--z-border-strong);
+    border-radius: 8px;
+    background: var(--z-surface-2);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--z-link);
+    cursor: pointer;
+  }
+
+.pf-drop .ms {
+    font-size: 18px;
+  }
+
+.pf-drop:hover {
+    border-color: var(--z-link);
+    background: var(--z-brand-soft);
+  }
+
+.pf-drop:focus-within {
+    outline: 2px solid var(--z-link);
+    outline-offset: 2px;
+  }
+
+.pf-image {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 4px;
+    border: 1px solid var(--z-border);
+    border-radius: 8px;
+    box-sizing: border-box;
+  }
+
+.pf-image img {
+    width: 24px;
+    height: 24px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--z-surface-3);
+  }
+
+.pf-image__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: ltr;
+    text-align: right;
+    font-size: 11px;
+    color: var(--z-muted);
+  }
+
+.pf-image__swap,
+.pf-image__del {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+  }
+
+.pf-image__swap {
+    color: var(--z-link);
+  }
+
+.pf-image__del {
+    color: var(--z-danger);
+  }
+
+.pf-image__swap:hover,
+.pf-image__del:hover {
+    background: var(--z-surface-3);
+  }
+
+.pf-image__swap .ms,
+.pf-image__del .ms {
+    font-size: 17px;
+  }
+
+.pf-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  /* ===== Summary rail (sticky, 248px) =====
+     The sticky inset is zero on purpose: the page scroller already pads its own
+     top by 10px, and a non-zero inset counted that padding twice, leaving the
+     rail 10px lower than the first card of the main column. */
+.pf-side {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--z-surface);
+    border: 1px solid var(--z-border);
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04), 0 10px 28px -18px rgba(11, 21, 48, 0.35);
+  }
+
+.pf-side__hd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 7px 12px;
+  }
+
+.pf-side__hd h3 {
+    margin: 0;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: var(--z-muted);
+  }
+
+.pf-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 700;
+    background: var(--z-warn-soft);
+    color: var(--z-warn);
+  }
+
+.pf-state .ms {
+    font-size: 13px;
+  }
+
+.pf-state--ok {
+    background: var(--z-ok-soft);
+    color: var(--z-ok);
+  }
+
+.pf-progress {
+    display: block;
+    height: 3px;
+    background: var(--z-surface-3);
+  }
+
+.pf-progress > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--z-brand);
+    transition: width 0.2s;
+  }
+
+.pf-prev {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+  }
+
+.pf-prev__body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1;
+  }
+
+.pf-prev__name {
+    font-family: var(--z-font-num);
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    text-align: right;
+    color: var(--z-ink);
+  }
+
+.pf-prev__name.is-empty {
+    color: var(--z-subtle);
+  }
+
+.pf-prev__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+.pf-chip {
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 6px;
+    border-radius: 5px;
+    background: var(--z-surface-3);
+    color: var(--z-text);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+.pf-chip--code {
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font-family: var(--z-font-num);
+  }
+
+.pf-side__money {
+    margin: 0 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid var(--z-border-soft);
+    border-radius: 11px;
+    background: linear-gradient(135deg, var(--z-brand-soft), var(--z-surface-2) 75%);
+  }
+
+.pf-side__prices {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+.pf-side__prices > div {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+.pf-side__prices span {
+    font-size: 10.5px;
+    color: var(--z-muted);
+  }
+
+.pf-side__prices b {
+    font-family: var(--z-font-num);
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--z-ink);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+.pf-side__prices > div:last-child b {
+    color: var(--z-link);
+  }
+
+.pf-side__prices em {
+    font-style: normal;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--z-muted);
+  }
+
+.pf-side__bar {
+    display: block;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--z-surface-3);
+    overflow: hidden;
+  }
+
+.pf-side__fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--z-brand);
+    transition: width 0.2s;
+  }
+
+.pf-side__fill.is-neg {
+    background: var(--z-danger);
+  }
+
+.pf-side__profit {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--z-muted);
+  }
+
+.pf-side__profit b {
+    font-family: var(--z-font-num);
+    color: var(--z-ink);
+  }
+
+.pf-side__margin {
+    font-family: var(--z-font-num);
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--z-ok);
+  }
+
+.pf-side__margin.is-neg {
+    color: var(--z-danger);
+  }
+
+.pf-side__facts {
+    margin: 0;
+    padding: 10px 12px 4px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 10px;
+    align-items: baseline;
+    font-size: 11.5px;
+  }
+
+.pf-side__facts dt {
+    color: var(--z-muted);
+  }
+
+.pf-side__facts dd {
+    margin: 0;
+    font-weight: 700;
+    color: var(--z-ink);
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
+.pf-side__stock {
+    margin: 6px 12px 12px;
+    padding: 9px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border: 1px solid var(--z-border-soft);
+    border-radius: 11px;
+  }
+
+.pf-side__wh {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--z-muted);
+  }
+
+.pf-side__wh .ms {
+    font-size: 15px;
+  }
+
+.pf-side__wh span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+.pf-side__stockrow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+.pf-side__stockrow b {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--z-ink);
+    white-space: nowrap;
+  }
+
+.pf-side__stockrow em {
+    font-style: normal;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--z-muted);
+  }
+
+.pf-side__stockrow > span {
+    font-family: var(--z-font-num);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--z-muted);
+    white-space: nowrap;
+  }
+
+.pf-side__foot {
+    display: flex;
+    gap: 10px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--z-border-soft);
+    font-size: 10.5px;
+    color: var(--z-subtle);
+  }
+
+.pf-side__foot > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+.pf-side__foot .ms {
+    font-size: 13px;
+  }
+
+.pf-side__foot b {
+    font-family: var(--z-font-num);
+    color: var(--z-text);
+  }
+
+  /* ===== Action bar ===== */
+.pf-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 2px;
+  }
+
+.pf-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 30px;
+    padding: 0 12px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+.pf-btn .ms {
+    font-size: 17px;
+  }
+
+.pf-btn--ghost {
+    border: 1px solid var(--z-border);
+    background: var(--z-surface);
+    color: var(--z-text);
+  }
+
+.pf-btn--ghost:hover {
+    background: var(--z-surface-3);
+    color: var(--z-ink);
+  }
+
+.pf-bar__cancel {
+    margin-inline-end: auto;
+  }
+
+.pf-btn--outline {
+    border: 1px solid var(--z-link);
+    background: var(--z-surface);
+    color: var(--z-link);
+  }
+
+.pf-btn--outline:hover:not(:disabled) {
+    background: var(--z-brand-soft);
+  }
+
+.pf-btn--primary {
+    border: 0;
+    background: var(--z-brand);
+    color: #ffffff;
+    box-shadow: 0 8px 18px -8px rgba(47, 111, 237, 0.9);
+  }
+
+.pf-btn--primary:hover {
+    background: #245fcf;
+  }
+
+.pf-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+    box-shadow: none;
+  }
+
+@media (max-width: 1180px) {
+.pf-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+.pf-side {
+      position: static;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
+}
+
+@media (max-width: 1100px) {
+.pf-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+.pf-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+.pf-f--2 {
+      grid-column: auto;
+    }
+
+.pf-side {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+.pf-bar__cancel {
+      display: none;
+    }
+
+.pf-bar .pf-btn--outline,
+.pf-bar .pf-btn--primary {
+      flex: 1;
+    }
+}
+
+  /* Dark theme only needs the hard-coded shadows softened; every colour above
+     resolves through the global --z-* tokens, so it flips on its own. */
+  :global(html.dark) .pf-card,
+  :global(html.dark) .pf-side {
+    box-shadow: none;
+  }
+
+  :global(html.dark) .pf-btn--primary {
+    box-shadow: 0 8px 18px -10px rgba(47, 111, 237, 0.6);
   }
 </style>

@@ -807,6 +807,20 @@ describe('icon set', () => {
          KPI tiles, warehouse glyph and row menu are Material Symbols. */
       'pages/Sales.svelte',
       'pages/sales/SalesTabs.svelte',
+      /* The sale create page follows the same reference sheet (SaleNew.html):
+         card glyphs, field icons and the bill-summary row are Material Symbols. */
+      'pages/sales/SaleForm.svelte',
+      /* The sale items table is the «ادویه‌ها» card of that same sheet: the
+         header glyph, search icon, quantity stepper, row actions and empty
+         state are all drawn with Material Symbols. */
+      'pages/sales/SaleItemsTable.svelte',
+      /* The purchase create page mirrors the sale form design system: its
+         card glyphs, field icons and bill-summary row are Material Symbols too. */
+      'pages/purchases/PurchaseForm.svelte',
+      /* The purchase items card is the purchase twin of the sale «ادویه‌ها»
+         card, so it draws its header, stepper, row actions and empty state
+         with the same Material Symbols set. */
+      'pages/purchases/PurchaseItemsTable.svelte',
       /* The products sheet follows the same reference: pill sub-navigation,
          KPI tiles and the row menu are drawn with Material Symbols. */
       'pages/products/ProductsIndex.svelte',
@@ -814,6 +828,10 @@ describe('icon set', () => {
       /* The account dialog follows the reference accounts popup: type artwork,
          section glyphs, field icons and the pickers are Material Symbols. */
       'pages/accounts/AccountModal.svelte',
+      /* The product sheet is traced from ProductNew.dc.html: its card glyphs,
+         field mini-buttons, picker chevrons, summary rail and action bar are
+         all drawn with the same Material Symbols set. */
+      'pages/products/ProductModal.svelte',
     ]);
 
     const offenders = FILES.filter(

@@ -357,11 +357,10 @@ import { productUnitApi } from '../../api/productUnitApi.js';
 
     position: relative;
     z-index: 40;
-    /* Match the 2fr width of the Basic Information card.
-       The page grid uses two columns with an 8px gap: 1fr + 2fr. */
-    width: calc(66.666667% - 5.333px);
-    max-width: none;
-    margin: 0 0 8px auto;
+    /* Sit exactly on the 1200px sheet the form below uses. */
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto 8px;
   }
 
   .product-edit-search__cell {
@@ -739,10 +738,10 @@ import { productUnitApi } from '../../api/productUnitApi.js';
     --compact-label: 11px;
 
     width: 100%;
-    max-width: 1480px;
+    max-width: none;
     min-height: 100%;
     margin: 0 auto;
-    padding: 6px 8px 10px !important;
+    padding: 0 !important;
 
     color: #0f172a;
     background: transparent;
@@ -755,7 +754,7 @@ import { productUnitApi } from '../../api/productUnitApi.js';
   .product-form-page-shell
     :global(.product-form-page) {
     width: 100%;
-    padding: 0 0 8px !important;
+    padding: 0 !important;
   }
 
   .product-form-page-shell
