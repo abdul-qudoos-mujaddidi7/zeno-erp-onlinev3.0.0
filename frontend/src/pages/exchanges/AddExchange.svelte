@@ -19,6 +19,8 @@ import { settingsApi } from '../../api/settingsApi.js';
 import { accountApi } from '../../api/accountApi.js';
 import { accountTypeApi } from '../../api/accountTypeApi.js';
   let accounts = [];
+  /* The same list without the house ledgers: what the two lists offer. */
+  let pickableAccounts = [];
   let exchange_account = null;
   let benefit_account = null;
   let benefit_amount = 0;
@@ -46,6 +48,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
       await loadAccounts();
       general = true;
       accounts = accounts.filter((a) => a.account_type_id === 7);
+      pickableAccounts = [...accounts];
       filteredAccounts = [...accounts]; // new reference triggers reactive updates
 
       accountTypes = accountTypes.filter((at) => at.id == 7);
@@ -91,6 +94,12 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   let treasury_balance = 0;
   let treasury_ID = 0;
   let notrack_ID = 0;
+  /* The purchase and sale ledgers: they name the tabs' fields, nothing more. */
+  let purchase_ID = 0;
+  let sales_ID = 0;
+  /* The tab the user picked. It only relabels the form, so the choice has to be
+     remembered separately from the accounts themselves. */
+  let pickedTab = '';
   let track_ID = 0;
   let account = null;
 
@@ -174,11 +183,16 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
       if (acc.code === 'NOTRACK') {
         notrack_ID = acc.id;
       }
+
+      if (acc.code === 'PURCHASE') {
+        purchase_ID = acc.id;
+      }
+
+      if (acc.code === 'SALES') {
+        sales_ID = acc.id;
+      }
     });
 
-    accounts = accounts.filter(
-      (a) => !['NOTRACK', 'RECEIVABLE', 'PAYABLE', 'SALES', 'PURCHASE', 'EXCHANGE'].includes(a.code),
-    );
     enable_notrack =
       (
         (await settingsApi.getAll({ status: 1, key: 'enable_notrack' }))?.data?.[0]
@@ -195,6 +209,13 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     if (general) {
       accounts = accounts.filter((a) => a.account_type_id == 7);
     }
+
+    /* The purchase and sale ledgers take part in an exchange now, but they are
+       still control accounts: the tabs pick them, nobody picks them by hand. */
+    pickableAccounts = accounts.filter(
+      (a) =>
+        !['NOTRACK', 'RECEIVABLE', 'PAYABLE', 'SALES', 'PURCHASE', 'EXCHANGE'].includes(a.code),
+    );
 
     account = accounts.find((a) => a.id === first_entry_account);
   }
@@ -378,6 +399,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     first_entry_debit = null;
     first_entry_credit = null;
     first_entry_account_search = '';
+    pickedTab = '';
     accounts.forEach((acc) => {
       if (acc.code === 'TREASURY') {
         second_entry_account = acc.id;
@@ -560,6 +582,8 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     }, {});
   }
 
+  /* The symbol the closed pickers and the balance rows print; a currency
+     without one falls back to its translated code. */
   function currencySymbol(code) {
     const normalizedCode = String(code ?? '');
     return (
@@ -601,11 +625,21 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     7: ['savings', '#7C5CE0'],
   };
 
+  /* The house ledgers carry their own glyph and colour: a cart for the purchase
+     side, a till for the sale side, the strongroom for the treasury. */
+  const LEDGER_TINTS = {
+    TREASURY: ['account_balance', '#7C5CE0'],
+    PURCHASE: ['shopping_cart', '#2F6FED'],
+    SALES: ['point_of_sale', '#16A34A'],
+  };
+
   function accountTypeTint(selected) {
-    const [icon, color] = ACCOUNT_TYPE_TINTS[Number(selected?.account_type_id)] || [
-      'account_balance_wallet',
-      '#64748B',
-    ];
+    const [icon, color] =
+      LEDGER_TINTS[selected?.code] ||
+      ACCOUNT_TYPE_TINTS[Number(selected?.account_type_id)] || [
+        'account_balance_wallet',
+        '#64748B',
+      ];
 
     return {
       icon,
@@ -627,7 +661,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   function filterAccounts() {
     const query = first_entry_account_search.trim().toLowerCase();
 
-    filteredAccounts = accounts.filter((acc) => {
+    filteredAccounts = pickableAccounts.filter((acc) => {
       if (!query) return true;
 
       return (
@@ -685,23 +719,20 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     showTrackModal = false;
   }
 
-  function pickMode(mode, event) {
-    if (mode === 'treasury') {
-      second_entry_account = treasury_ID;
-      return;
-    }
-
+  /*
+   * A tab only renames the two fields: Purchase calls them the purchase and the
+   * sale account, Sale swaps the two names. Neither tab touches an account, so
+   * both sides are still picked by hand. No Track keeps its old behaviour and
+   * points the partner at the No Track ledger.
+   */
+  function pickMode(mode) {
     if (mode === 'notrack') {
+      pickedTab = '';
       second_entry_account = notrack_ID;
       return;
     }
 
-    if (track_ID) {
-      second_entry_account = track_ID;
-      return;
-    }
-
-    if (event) openSecondAccountPicker(event);
+    pickedTab = mode;
   }
 
   /*
@@ -823,12 +854,48 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     (item) => second_entry_account && Number(item.id) === Number(second_entry_account),
   );
 
+  /* A tab stays active only while both of its sides are in place, so choosing
+     a different partner by hand drops the form back to a plain tracked entry. */
   $: exchangeMode =
-    Number(second_entry_account) === Number(notrack_ID)
+    notrack_ID && Number(second_entry_account) === Number(notrack_ID)
       ? 'notrack'
-      : Number(second_entry_account) === Number(treasury_ID)
-        ? 'treasury'
-        : 'track';
+      : sales_ID &&
+          purchase_ID &&
+          Number(second_entry_account) === Number(sales_ID) &&
+          Number(first_entry_account) === Number(purchase_ID)
+        ? 'purchase'
+        : sales_ID &&
+            purchase_ID &&
+            Number(second_entry_account) === Number(purchase_ID) &&
+            Number(first_entry_account) === Number(sales_ID)
+          ? 'sale'
+          : treasury_ID && Number(second_entry_account) === Number(treasury_ID)
+            ? 'treasury'
+            : 'track';
+
+  /* Sale is the tab the dialog opens on; a saved purchase/sale pair still wins,
+     and No Track keeps the plain labels. */
+  $: tabMode =
+    pickedTab ||
+    (exchangeMode === 'purchase' || exchangeMode === 'sale'
+      ? exchangeMode
+      : exchangeMode === 'notrack'
+        ? ''
+        : 'sale');
+
+  $: firstAccountLabel =
+    tabMode === 'purchase'
+      ? t('Purchase Account')
+      : tabMode === 'sale'
+        ? t('Sale Account')
+        : t('Select Account');
+
+  $: secondAccountLabel =
+    tabMode === 'purchase'
+      ? t('Sale Account')
+      : tabMode === 'sale'
+        ? t('Purchase Account')
+        : t('Account');
 
   $: secondAccountName =
     exchangeMode === 'notrack'
@@ -840,7 +907,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
           : t('Select Account');
 
   $: accountQuery = second_entry_account_search.trim().toLowerCase();
-  $: matchingSecondAccounts = accounts.filter((item) =>
+  $: matchingSecondAccounts = pickableAccounts.filter((item) =>
     matchesSecondAccount(item, accountQuery),
   );
   $: pinnedSecondAccounts = pinnedAccountIds
@@ -878,25 +945,23 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
         <button
           type="button"
           role="tab"
-          aria-selected={exchangeMode === 'track'}
+          aria-selected={tabMode === 'purchase'}
           class="xe-tab"
-          class:is-active={exchangeMode === 'track'}
-          on:click={(event) => pickMode('track', event)}>
-          <span class="ms" aria-hidden="true">{track_ID ? 'person_search' : 'search'}</span>
-          <span class="xe-tab__copy">
-            {exchangeMode === 'track' && track_ID ? getAccountName(track_ID) : t('Track')}
-          </span>
+          class:is-active={tabMode === 'purchase'}
+          on:click={() => pickMode('purchase')}>
+          <span class="ms" aria-hidden="true">shopping_cart</span>
+          <span class="xe-tab__copy">{t('Purchase')}</span>
         </button>
 
         <button
           type="button"
           role="tab"
-          aria-selected={exchangeMode === 'treasury'}
+          aria-selected={tabMode === 'sale'}
           class="xe-tab"
-          class:is-active={exchangeMode === 'treasury'}
-          on:click={() => pickMode('treasury')}>
-          <span class="ms" aria-hidden="true">savings</span>
-          <span class="xe-tab__copy">{t('Treasury')}</span>
+          class:is-active={tabMode === 'sale'}
+          on:click={() => pickMode('sale')}>
+          <span class="ms" aria-hidden="true">point_of_sale</span>
+          <span class="xe-tab__copy">{t('Sale')}</span>
         </button>
 
         {#if enable_notrack}
@@ -918,7 +983,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
          type, the running balance and the unfold_more chevron -->
     <div class="xe-field">
       <span class="xe-label">
-        {t('Select Account')}
+        {firstAccountLabel}
         <span class="xe-req" aria-hidden="true">*</span>
       </span>
 
@@ -927,7 +992,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
         <div class="xe-acc is-locked">
           <span class="xe-acc__tile" style={lockedTint.style} aria-hidden="true">
             <span class="ms">
-              {selectedFirstAccount?.code === 'TREASURY' ? 'savings' : lockedTint.icon}
+              {lockedTint.icon}
             </span>
           </span>
 
@@ -962,19 +1027,19 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
               {@const tint = accountTypeTint(selectedFirstAccount)}
               <span class="xe-acc__tile" style={tint.style} aria-hidden="true">
                 <span class="ms">
-                  {selectedFirstAccount?.code === 'TREASURY' ? 'savings' : tint.icon}
+                  {tint.icon}
                 </span>
               </span>
 
               <button
                 type="button"
                 class="xe-acc__picked"
-                aria-label={t('Select Account')}
+                aria-label={firstAccountLabel}
                 on:click={async () => {
                   first_entry_account = '';
                   first_entry_account_search = '';
                   showAccountDropdown = true;
-                  filteredAccounts = accounts;
+                  filteredAccounts = pickableAccounts;
 
                   await tick();
                   first_entry_account_search_input?.focus();
@@ -1008,8 +1073,8 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
                 id="first_entry_account_search"
                 bind:this={first_entry_account_search_input}
                 bind:value={first_entry_account_search}
-                placeholder={t('Select Account')}
-                aria-label={t('Select Account')}
+                placeholder={firstAccountLabel}
+                aria-label={firstAccountLabel}
                 autocomplete="off"
                 on:input={() => {
                   showAccountDropdown = true;
@@ -1163,9 +1228,9 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
               type="button"
               aria-expanded={currencyMenuFor === 'debit'}
               aria-haspopup="listbox"
-              aria-label={t('Currency')}
+              aria-label={first_currency ? t(first_currency) : t('Currency')}
               on:click|stopPropagation={() => toggleCurrencyMenu('debit')}>
-              <span>{first_currency ? t(first_currency) : t('Currency')}</span>
+              <span>{first_currency ? currencySymbol(first_currency) : t('Currency')}</span>
               <span class="ms" aria-hidden="true">expand_more</span>
             </button>
 
@@ -1257,9 +1322,9 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
               type="button"
               aria-expanded={currencyMenuFor === 'credit'}
               aria-haspopup="listbox"
-              aria-label={t('Currency')}
+              aria-label={second_currency ? t(second_currency) : t('Currency')}
               on:click|stopPropagation={() => toggleCurrencyMenu('credit')}>
-              <span>{second_currency ? t(second_currency) : t('Currency')}</span>
+              <span>{second_currency ? currencySymbol(second_currency) : t('Currency')}</span>
               <span class="ms" aria-hidden="true">expand_more</span>
             </button>
 
@@ -1298,7 +1363,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
             })}
           </b>
 
-          <span class="xe-box__cur">{first_currency ? t(first_currency) : ''}</span>
+          <span class="xe-box__cur">{first_currency ? currencySymbol(first_currency) : ''}</span>
         </div>
       </div>
     </div>
@@ -1306,7 +1371,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     <!-- counterpart account + date -->
     <div class="xe-grid xe-grid--meta">
       <div class="xe-cell">
-        <span class="xe-label">{t('Account')}</span>
+        <span class="xe-label">{secondAccountLabel}</span>
 
         {#if general}
           <span class="xe-chip is-static">
@@ -1319,18 +1384,14 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
               type="button"
               class="xe-account-select"
               class:is-selected={exchangeMode !== 'notrack'}
-              aria-label={t('Account')}
+              aria-label={secondAccountLabel}
               aria-haspopup="dialog"
               aria-expanded={showTrackModal}
               on:click={openSecondAccountPicker}>
               <span class="ms xe-account-select__icon" aria-hidden="true">
-                {exchangeMode === 'treasury'
-                  ? 'savings'
-                  : exchangeMode === 'notrack'
-                    ? 'block'
-                    : selectedSecondAccount?.code === 'TREASURY'
-                      ? 'savings'
-                      : 'account_balance_wallet'}
+                {exchangeMode === 'notrack'
+                  ? 'block'
+                  : accountTypeTint(selectedSecondAccount).icon}
               </span>
 
               <strong class="xe-account-select__name">{secondAccountName}</strong>
@@ -1449,7 +1510,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
                   on:click={() => pickSecondAccount(acc.id)}>
                   <span class="xe-picker__avatar" style={tint.style} aria-hidden="true">
                     <span class="ms">
-                      {acc.code === 'TREASURY' ? 'savings' : tint.icon}
+                      {tint.icon}
                     </span>
                   </span>
 
@@ -1500,7 +1561,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
                   on:click={() => pickSecondAccount(acc.id)}>
                   <span class="xe-picker__avatar" style={tint.style} aria-hidden="true">
                     <span class="ms">
-                      {acc.code === 'TREASURY' ? 'savings' : tint.icon}
+                      {tint.icon}
                     </span>
                   </span>
 
@@ -1643,6 +1704,11 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     font-weight: 800;
     background: var(--z-link);
     box-shadow: 0 4px 10px -4px var(--z-link);
+  }
+
+  /* --z-link turns pale in dark mode, so the ink on top of it has to flip. */
+  :global(html.dark) .xe-tab.is-active {
+    color: #0b1530;
   }
 
   /* ---- field scaffolding ---- */
@@ -2609,6 +2675,10 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     border: 0;
     color: #ffffff;
     background: var(--z-link);
+  }
+
+  :global(html.dark) .xe-btn--save {
+    color: #0b1530;
   }
 
   .xe-btn--save:hover {
