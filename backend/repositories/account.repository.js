@@ -266,6 +266,89 @@ async function findBalances(
 }
 
 /**
+ * Cash on hand per account+currency: SUM(debit) - SUM(credit) over both entry
+ * positions, active journals only. A cash account holds money on its debit
+ * side, so this is the negation of findBalances - kept as its own pass so a
+ * cash check never has to explain a negative number.
+ */
+async function findCashBalances(
+  executor,
+  {
+    orgId,
+    status = 1,
+    accountIds = null,
+  },
+) {
+  const hasAccountFilter =
+    Array.isArray(accountIds) && accountIds.length > 0;
+  const placeholders = hasAccountFilter
+    ? accountIds.map(() => '?').join(', ')
+    : '';
+
+  const baseWhere = 'org_id = ? AND status = ?';
+
+  const firstWhere = hasAccountFilter
+    ? `${baseWhere} AND first_entry_account IN (${placeholders})`
+    : `${baseWhere} AND first_entry_account IS NOT NULL`;
+
+  const secondWhere = hasAccountFilter
+    ? `${baseWhere} AND second_entry_account IN (${placeholders})`
+    : `${baseWhere} AND second_entry_account IS NOT NULL`;
+
+  const baseValues = [orgId, status];
+  const values = hasAccountFilter
+    ? [...baseValues, ...accountIds]
+    : baseValues;
+
+  const [firstPass, secondPass] = await Promise.all([
+    executor.execute(
+      `
+        SELECT
+          first_entry_account AS account_id,
+          currency,
+          SUM(COALESCE(first_entry_debit, 0) - COALESCE(first_entry_credit, 0)) AS cash
+        FROM journals
+        WHERE ${firstWhere}
+        GROUP BY first_entry_account, currency
+      `,
+      values,
+    ),
+    executor.execute(
+      `
+        SELECT
+          second_entry_account AS account_id,
+          currency,
+          SUM(COALESCE(second_entry_debit, 0) - COALESCE(second_entry_credit, 0)) AS cash
+        FROM journals
+        WHERE ${secondWhere}
+        GROUP BY second_entry_account, currency
+      `,
+      values,
+    ),
+  ]);
+
+  /*
+   * A single account may appear as the first entry of some journals
+   * and the second entry of others; merge the two passes by adding
+   * their per-currency cash (mirrors UNION ALL + GROUP BY).
+   */
+  const merged = new Map();
+
+  for (const row of [...firstPass[0], ...secondPass[0]]) {
+    const key = `${row.account_id}|${row.currency}`;
+    const existing = merged.get(key);
+
+    if (existing) {
+      existing.cash = Number(existing.cash) + Number(row.cash);
+    } else {
+      merged.set(key, { ...row });
+    }
+  }
+
+  return [...merged.values()];
+}
+
+/**
  * Credit/debit totals per account+currency via two GROUP BY passes
  * (same shape as findBalances, but keeps credit and debit separate).
  */
@@ -675,6 +758,7 @@ async function softDelete(
 module.exports = {
   findAll,
   findBalances,
+  findCashBalances,
   findCreditDebit,
   findDirectionalBalances,
   findByLocalId,

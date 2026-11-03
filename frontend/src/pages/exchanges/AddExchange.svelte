@@ -18,6 +18,12 @@ import { settingsApi } from '../../api/settingsApi.js';
 
 import { accountApi } from '../../api/accountApi.js';
 import { accountTypeApi } from '../../api/accountTypeApi.js';
+import {
+  cashOnHand,
+  firstTreasuryShortfall,
+  outgoingTreasuryLegs,
+  reversedTreasuryMovement,
+} from '../../utils/treasuryCash.js';
   let accounts = [];
   /* The same list without the house ledgers: what the two lists offer. */
   let pickableAccounts = [];
@@ -92,6 +98,15 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   let reference_type = null;
   let status = 1;
   let treasury_balance = 0;
+  /* Cash the treasury holds per currency, debit - credit, read from the ledger
+     rather than from the exchange vouchers this form already knows about. */
+  let treasuryCash = {};
+  /* Every account's posted balance per currency, credit - debit, exactly as the
+     accounts page, the journal form and the dashboard print it. */
+  let ledgerBalances = {};
+  /* The voucher as stored, so an edit is measured after its own journals are
+     reversed - the same order the server checks in. */
+  let originalExchange = null;
   let treasury_ID = 0;
   let notrack_ID = 0;
   /* The purchase and sale ledgers: they name the tabs' fields, nothing more. */
@@ -157,6 +172,24 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     const toRate = Number(toCurrency.exchangeRate || 1);
     return (amount / toRate) * fromRate;
   }
+  /*
+   * The posted balance of every account, straight from the ledger. An exchange
+   * voucher is one movement among sales, purchase payments, opening balances
+   * and manual journals, so the vouchers alone can never be a balance.
+   */
+  async function loadAccountBalances() {
+    const data = (await accountApi.getBalances({ status: 1 }))?.data || {};
+
+    ledgerBalances = data;
+
+    if (!treasury_ID) return;
+
+    /* A cash account holds money on its debit side, so cash is the negation. */
+    treasuryCash = cashOnHand(
+      data[treasury_ID] || data[String(treasury_ID)] || {},
+    );
+  }
+
   async function loadAccounts() {
     let accountsCount = await ((await accountApi.getAll({ status: 1 }))?.data || []).length;
     if (accountsCount < 10) {
@@ -218,6 +251,8 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     );
 
     account = accounts.find((a) => a.id === first_entry_account);
+
+    await loadAccountBalances();
   }
 
   async function loadCurrencies() {
@@ -268,6 +303,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     if (exchangeId) {
       let exchange = (await exchangeApi.getById(Number(exchangeId)))?.data || null;
       if (exchange) {
+        originalExchange = exchange;
         date = exchange.date.slice(0, 10);
         console.log(date);
         description = exchange.description;
@@ -368,6 +404,46 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
       return;
     }
 
+    /*
+     * The treasury can only give what it holds. Money leaves on the credit side
+     * of the voucher, so only that side is measured, in its own currency: no
+     * conversion, and nothing borrowed from the currency coming in.
+     */
+    const outgoing = outgoingTreasuryLegs({
+      treasuryId: treasury_ID,
+      sides: [
+        {
+          account: first_entry_account,
+          currency: first_currency,
+          credit: sideIsCredit ? firstAmount : 0,
+        },
+        {
+          account: second_entry_account,
+          currency: second_currency,
+          credit: sideIsCredit ? 0 : secondAmount,
+        },
+      ],
+    });
+
+    const shortfall = firstTreasuryShortfall({
+      legs: outgoing,
+      cash: treasuryCash,
+      reversalFor: (currency) =>
+        reversedTreasuryMovement({
+          exchange: originalExchange,
+          treasuryId: treasury_ID,
+          currency,
+        }),
+    });
+
+    if (shortfall) {
+      toast.error(
+        t("Treasury Account doesn't have enough funds."),
+        shortfallMessage(shortfall.available, shortfall.required, shortfall.currency),
+      );
+      return;
+    }
+
     const data = {
       date,
       description,
@@ -409,8 +485,34 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
       showReceipt = true;
     } catch (err) {
       console.error('Failed to save exchange:', err);
+
+      if (err?.code === 'INSUFFICIENT_TREASURY_FUNDS' && err.errors) {
+        toast.error(
+          t("Treasury Account doesn't have enough funds."),
+          shortfallMessage(
+            err.errors.available,
+            err.errors.required,
+            err.errors.currency,
+          ),
+        );
+        return;
+      }
+
       toast.error(t('Error'), t('An error occurred while saving the exchange. Please try again.'));
     }
+  }
+
+  /* The two figures the refusal speaks in: what the treasury holds and what the
+     voucher asks for, in the currency that is short. */
+  function shortfallMessage(available, required, currency) {
+    return `${t('Available')}: ${amountText(available)} ${currency} — ${t('Required')}: ${amountText(required)} ${currency}`;
+  }
+
+  function amountText(value) {
+    return Number(value || 0).toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
   }
 
   function resetForm() {
@@ -437,6 +539,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     second_entry_debit = null;
     second_entry_credit = null;
     status = 1;
+    originalExchange = null;
 
     applyDefaultCurrencies();
   }
@@ -843,33 +946,9 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   }
 
   /* ---- derived state --------------------------------------------------- */
-  $: accountBalances = (() => {
-    const map = {};
-    const add = (accountId, code, amount) => {
-      if (!accountId || !code) return;
-      if (!map[accountId]) map[accountId] = {};
-      map[accountId][code] = (map[accountId][code] || 0) + amount;
-    };
+  $: treasury_balance = Number(ledgerBalances?.[treasury_ID]?.[first_currency] || 0);
 
-    allExchanges.forEach((row) => {
-      add(
-        row.first_entry_account,
-        row.first_currency,
-        Number(row.first_entry_credit || 0) - Number(row.first_entry_debit || 0),
-      );
-      add(
-        row.second_entry_account,
-        row.second_currency,
-        Number(row.second_entry_credit || 0) - Number(row.second_entry_debit || 0),
-      );
-    });
-
-    return map;
-  })();
-
-  $: treasury_balance = Number(accountBalances?.[treasury_ID]?.[first_currency] || 0);
-
-  $: balanceByAccount = buildBalanceMap(accounts, accountBalances, first_currency, _lang);
+  $: balanceByAccount = buildBalanceMap(accounts, ledgerBalances, first_currency, _lang);
 
   $: selectedFirstAccount = accounts.find(
     (item) => first_entry_account && Number(item.id) === Number(first_entry_account),

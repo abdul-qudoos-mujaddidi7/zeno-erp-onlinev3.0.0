@@ -173,6 +173,116 @@ async function getExchange({
 }
 
 /*
+ * Money leaves the treasury on the credit side of a voucher: a sale receipt
+ * debits the treasury and a purchase payment credits it, so the cash it holds
+ * is SUM(debit) - SUM(credit) per currency. A voucher may take out no more
+ * than that, in that currency; no conversion, no netting between currencies,
+ * and a debit on the treasury brings money in so it is never refused.
+ *
+ * The figures come from the posted ledger inside the caller's transaction and
+ * are read before any journal is written. On an edit the voucher's own old
+ * journals have already been cancelled, so the replacement is measured against
+ * the ledger as it will be without them, never against itself.
+ */
+async function assertTreasuryHasFunds(
+  connection,
+  {
+    orgId,
+    data,
+  },
+) {
+  if (Number(data.status ?? 1) !== 1) {
+    return;
+  }
+
+  const treasury =
+    await accountRepository.findByCode(
+      connection,
+      {
+        orgId,
+        code: 'TREASURY',
+      },
+    );
+
+  if (!treasury) {
+    return;
+  }
+
+  const treasuryId = Number(treasury.id);
+  const outgoing = new Map();
+
+  const addOutgoing = (
+    accountId,
+    currency,
+    credit,
+  ) => {
+    const amount = Number(credit || 0);
+
+    if (Number(accountId) !== treasuryId || amount <= 0) {
+      return;
+    }
+
+    const code = currency || 'AFN';
+
+    outgoing.set(
+      code,
+      (outgoing.get(code) || 0) + amount,
+    );
+  };
+
+  addOutgoing(
+    data.first_entry_account,
+    data.first_currency,
+    data.first_entry_credit,
+  );
+  addOutgoing(
+    data.second_entry_account,
+    data.second_currency,
+    data.second_entry_credit,
+  );
+
+  if (!outgoing.size) {
+    return;
+  }
+
+  const rows =
+    await accountRepository.findCashBalances(
+      connection,
+      {
+        orgId,
+        accountIds: [treasuryId],
+      },
+    );
+
+  const held = new Map(
+    rows.map((row) => [
+      row.currency || 'AFN',
+      Number(row.cash || 0),
+    ]),
+  );
+
+  for (const [currency, required] of outgoing) {
+    const available = held.get(currency) || 0;
+
+    if (available + 1e-9 >= required) {
+      continue;
+    }
+
+    throw new AppError(
+      `Treasury has ${available} ${currency} but the exchange needs ${required} ${currency}.`,
+      422,
+      'INSUFFICIENT_TREASURY_FUNDS',
+      {
+        account_id: treasuryId,
+        currency,
+        available,
+        required,
+      },
+    );
+  }
+}
+
+/*
  * Mirrors the journal rows the frontend used to write to Dexie when
  * saving an exchange: one journal per currency side plus an optional
  * benefit journal, all referencing the exchange by
@@ -200,6 +310,18 @@ async function createExchangeJournals(
       orgId,
       date: data.date,
       operation: 'exchange.journal',
+    },
+  );
+
+  /*
+   * The treasury can only give what it holds. The check runs before any journal
+   * is written, so a refused voucher leaves no trace in the ledger.
+   */
+  await assertTreasuryHasFunds(
+    connection,
+    {
+      orgId,
+      data,
     },
   );
 
