@@ -1,60 +1,78 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { exchangeApi } from '../../api/exchangeApi.js';
-  import { toast } from '../../ToastUI/toast.js';
-  import ActionButton from '../../components/common/ActionButton.svelte';
-  import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, readListMeta } from '../../lib/pagination.js';
-
   import { push, querystring } from 'svelte-spa-router';
-  import ExchangeReceiptModal from './ExchangeReceiptModal.svelte';
-  let showReceipt = false;
-  let selectedExchange = null;
+  import { exchangeApi } from '../../api/exchangeApi.js';
+  import { currencyApi } from '../../api/currencyApi.js';
+  import { accountApi } from '../../api/accountApi.js';
+  import { toast } from '../../ToastUI/toast.js';
+  import { auth } from '../../auth/authStore';
+  import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, readListMeta } from '../../lib/pagination.js';
+  import { t, lang, translate_org_type } from '../../i18n/i18n.js';
 
-  import { t, lang, translate_org_type,shortID } from '../../i18n/i18n.js';
+  import ActionButton from '../../components/common/ActionButton.svelte';
+  import FilterToolbar from '../../components/common/FilterToolbar.svelte';
+  import DataTable from '../../components/common/DataTable.svelte';
+  import PaginationBar from '../../components/common/PaginationBar.svelte';
+  import EmptyState from '../../components/common/EmptyState.svelte';
+  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
+  import TableActions from '../../components/common/TableActions.svelte';
+  import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
+  import AddExchange from './AddExchange.svelte';
+  import ExchangeReceiptModal from './ExchangeReceiptModal.svelte';
+  import QuickEntryModal from '../../components/common/QuickEntryModal.svelte';
+
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
+  $: permissions = $auth.permissions;
+
+  export let account_id = null;
 
   let accounts = [];
   let currencies = [];
   let exchanges = [];
 
   let loading = true;
-  let TREASURY_ID = null;
   let accountsLoaded = false;
 
-  let currency = '';
-  import { showDate } from '../../calendar.js';
+  let searchTerm = '';
+  let filtersOpen = false;
+  let filterAccount = 'all';
+  let currentPage = 1;
+  let itemsPerPage = DEFAULT_PAGE_SIZE;
+  let sortColumn = 'date';
+  let sortDirection = 'desc';
+  let reference_type = null;
+  let reference_types = [null];
+  let totalItems = 0;
+  let totalPages = 0;
+  let bootstrapped = false;
+  let lastPageKey = '';
+  let loadRequestId = 0;
+  let searchDebounceTimer = null;
 
-  import AddExchange from './AddExchange.svelte';
-  import QuickEntryModal from '../../components/common/QuickEntryModal.svelte';
-  import FilterToolbar from '../../components/common/FilterToolbar.svelte';
-  import PaginationBar from '../../components/common/PaginationBar.svelte';
-  import DataTable from '../../components/common/DataTable.svelte';
-  import EmptyState from '../../components/common/EmptyState.svelte';
-  import TableSkeleton from '../../components/common/TableSkeleton.svelte';
-  import StatusBadge from '../../components/common/StatusBadge.svelte';
-  import TableActions from '../../components/common/TableActions.svelte';
-  import IndexPageLayout from '../../lib/components/index/IndexPageLayout.svelte';
-  import { auth } from '../../auth/authStore';
-  import { currencyApi } from '../../api/currencyApi.js';
-  import { accountApi } from '../../api/accountApi.js';
-  $: permissions = $auth.permissions;
+  let showReceipt = false;
+  let selectedExchange = null;
+  let showExchangeForm = false;
+  let editingExchangeId = null;
 
-  export let account_id = null;
+  /* ------------------------------------------------------------------ *
+   * Lookups                                                             *
+   * ------------------------------------------------------------------ */
 
   async function loadAccountsForFilter() {
     if (accountsLoaded) return;
-    const [accountsResponse, treasuryResponse] = await Promise.all([
-      accountApi.getAll({ status: 1 }),
-      accountApi.getAll({ status: 1, code: 'TREASURY' }),
-    ]);
+    const accountsResponse = await accountApi.getAll({ status: 1 });
     accounts = (accountsResponse?.data || []).filter((a) =>
       a.account_status ? a.account_status == 'active' : a.status == 1,
     );
-    TREASURY_ID = treasuryResponse?.data?.[0]?.id || null;
     accountsLoaded = true;
   }
 
+  /*
+   * A page only carries the ids of the accounts it shows, so the names of
+   * anything newer than the filter list are fetched one by one — or the whole
+   * list once that would be cheaper.
+   */
   async function ensurePeerAccounts(rows) {
     const needed = new Set();
     for (const row of rows || []) {
@@ -78,11 +96,113 @@
     accounts = [...accounts, ...fetched.filter(Boolean)];
   }
 
+  function nameForLanguage(account, language) {
+    if (!account) return '';
+    if (language === 'en') return account.name || '';
+    if (language === 'ps') return account.name_ps || account.name || '';
+    return account.name_fa || account.name || '';
+  }
+
+  /* Memoised so a translated name is picked up when the language changes. */
+  $: accountNameById = new Map(
+    accounts.map((account) => [String(account.id), nameForLanguage(account, $lang)]),
+  );
+
+  function accountName(id) {
+    const key = String(id ?? '');
+    if (!key) return '—';
+    return accountNameById.get(key) || '…';
+  }
+
   async function loadCurrencies() {
     currencies = (await currencyApi.getAll({ status: 1 }))?.data || [];
-    const defaultCurr = currencies.find((c) => c.isDefault);
-    if (defaultCurr) currency = defaultCurr.code;
   }
+
+  /* ------------------------------------------------------------------ *
+   * Reference formatting                                                *
+   * ------------------------------------------------------------------ */
+
+  /* Three decimals keep the raw ledger value intact (e.g. 6,602.425). */
+  const amountFormatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  });
+  const rateFormatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  });
+  /* The reference prints the Persian day with Latin digits, like the bills. */
+  const persianDateFormatter = new Intl.DateTimeFormat('fa-AF-u-ca-persian-nu-latn', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+  const CURRENCY_SYMBOL_FALLBACKS = { AFN: '؋', USD: '$', EUR: '€', PKR: 'Rs', IRR: '﷼' };
+
+  function asDate(value) {
+    if (!value) return null;
+    const date = value instanceof Date ? value : new Date(String(value).replace(' ', 'T'));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function amountText(value) {
+    const number = Number(value);
+    return amountFormatter.format(Number.isFinite(number) ? number : 0);
+  }
+
+  function persianDate(value) {
+    const date = asDate(value);
+    return date ? persianDateFormatter.format(date) : '—';
+  }
+
+  function isoDate(value) {
+    return value ? String(value).slice(0, 10) : '';
+  }
+
+  function rateText(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number !== 0 ? rateFormatter.format(number) : '—';
+  }
+
+  function currencyUnit(code) {
+    const normalized = String(code ?? '').toUpperCase();
+    if (!normalized) return '';
+    const match = currencies.find(
+      (currency) => String(currency.code ?? '').toUpperCase() === normalized,
+    );
+    return match?.symbol || CURRENCY_SYMBOL_FALLBACKS[normalized] || t(normalized);
+  }
+
+  /*
+   * The two lines of an exchange, read the way the ledger writes them: one
+   * account is debited and the other is credited. A page row stores both
+   * entries, and which side they sit on is decided by the amounts.
+   */
+  function entriesOf(row) {
+    const firstDebit = Number(row.first_entry_debit || 0);
+    const firstCredit = Number(row.first_entry_credit || 0);
+    const secondDebit = Number(row.second_entry_debit || 0);
+    const secondCredit = Number(row.second_entry_credit || 0);
+
+    const firstIsDebit = firstDebit > 0 || (firstCredit === 0 && secondCredit > 0);
+
+    const debit = firstIsDebit
+      ? { amount: firstDebit, currency: row.first_currency, account: row.first_entry_account }
+      : { amount: secondDebit, currency: row.second_currency, account: row.second_entry_account };
+
+    const credit = firstIsDebit
+      ? { amount: secondCredit, currency: row.second_currency, account: row.second_entry_account }
+      : { amount: firstCredit, currency: row.first_currency, account: row.first_entry_account };
+
+    return {
+      debit: { ...debit, currency: String(debit.currency || '').toUpperCase() },
+      credit: { ...credit, currency: String(credit.currency || '').toUpperCase() },
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Data loading                                                        *
+   * ------------------------------------------------------------------ */
 
   async function loadExchanges() {
     const requestId = ++loadRequestId;
@@ -131,22 +251,6 @@
     }
   }
 
-  let searchTerm = '';
-  let filterAccount = 'all';
-  let filterStatus = 'active';
-  let currentPage = 1;
-  let itemsPerPage = DEFAULT_PAGE_SIZE;
-  let sortColumn = 'created_at';
-  let sortDirection = 'desc';
-  let reference_type = null;
-  let reference_types = [null];
-  let totalItems = 0;
-  let totalPages = 0;
-  let bootstrapped = false;
-  let lastPageKey = '';
-  let loadRequestId = 0;
-  let searchDebounceTimer = null;
-
   onMount(async () => {
     if (new URLSearchParams($querystring || '').get('addExchange') === '1') {
       openAddExchange();
@@ -156,11 +260,12 @@
     lastPageKey = `${currentPage}|${itemsPerPage}`;
     bootstrapped = true;
     await Promise.all([loadCurrencies(), loadExchanges()]);
-    // Account filter dropdown can load after first paint.
+    // The account filter can fill in after the first paint.
     loadAccountsForFilter().catch(() => {});
   });
 
   onDestroy(() => {
+    loadRequestId += 1;
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   });
 
@@ -181,6 +286,58 @@
       else loadExchanges();
     }, 300);
   }
+
+  /* ------------------------------------------------------------------ *
+   * Rows, sorting and the pager                                         *
+   * ------------------------------------------------------------------ */
+
+  $: filteredExchanges = (() => {
+    const rows = exchanges.slice();
+
+    rows.sort((a, b) => {
+      let valA;
+      let valB;
+
+      if (sortColumn === 'account') {
+        valA = accountName(entriesOf(a).debit.account);
+        valB = accountName(entriesOf(b).debit.account);
+      } else {
+        valA = a[sortColumn];
+        valB = b[sortColumn];
+      }
+
+      if (valA === undefined || valA === null) return 1;
+      if (valB === undefined || valB === null) return -1;
+
+      if (typeof valA === 'string') valA = valA.toLowerCase();
+      if (typeof valB === 'string') valB = valB.toLowerCase();
+
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return rows;
+  })();
+
+  $: paginatedExchanges = filteredExchanges;
+
+  function setSort(column) {
+    if (sortColumn === column) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortColumn = column;
+      sortDirection = column === 'date' ? 'desc' : 'asc';
+    }
+  }
+
+  function sortAria(column) {
+    if (sortColumn !== column) return 'none';
+    return sortDirection === 'asc' ? 'ascending' : 'descending';
+  }
+
+  $: rangeStart = totalItems ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  $: rangeEnd = Math.min(currentPage * itemsPerPage, totalItems);
 
   function getPageNumbers(current, total) {
     const delta = 2;
@@ -209,54 +366,17 @@
     return rangeWithDots;
   }
 
-  $: filteredExchanges = (() => {
-    let result = exchanges.slice();
-
-    result = result.sort((a, b) => {
-      let valA = a[sortColumn];
-      let valB = b[sortColumn];
-
-      if (sortColumn === 'account') {
-        valA = getAccountName(a.first_entry_account);
-        valB = getAccountName(b.first_entry_account);
-      }
-
-      if (valA === undefined || valA === null) return 1;
-      if (valB === undefined || valB === null) return -1;
-
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
-
-      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  })();
-
-  $: paginatedExchanges = filteredExchanges;
-
-  function setSort(column) {
-    if (sortColumn === column) {
-      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      sortColumn = column;
-      sortDirection = 'asc';
-    }
+  function ordinalOf(index) {
+    return (currentPage - 1) * itemsPerPage + index + 1;
   }
+
+  /* ------------------------------------------------------------------ *
+   * Actions                                                             *
+   * ------------------------------------------------------------------ */
 
   async function deleteExchange(id) {
     await exchangeApi.remove(id);
     await loadExchanges();
-  }
-
-  function getAccountName(id) {
-    const acc = accounts.find((a) => Number(a.id) === Number(id)) || {};
-    if (t('Lang') === 'en') return acc.name || '';
-    if (t('Lang') === 'fa') return acc.name_fa || acc.name || '';
-    if (t('Lang') === 'ps') return acc.name_ps || acc.name || '';
-    return acc.name || '';
   }
 
   function getExchangeActions(exchange) {
@@ -320,7 +440,7 @@
     const actions = [{
       icon: 'bi-printer',
       label: t('Print'),
-      tone: 'view',
+      tone: 'muted',
       onClick: () => {
         showReceipt = true;
         selectedExchange = exchange;
@@ -352,32 +472,10 @@
     return actions;
   }
 
-  function handleExchangeFilterChange(event) {
-    if (event.detail.key === 'account') filterAccount = event.detail.value;
-    if (event.detail.key === 'reference') {
-      reference_type = event.detail.value === 'all' ? null : event.detail.value;
-    }
-    currentPage = 1;
-    lastPageKey = `1|${itemsPerPage}`;
-    loadExchanges();
-  }
-
-  function resetExchangeFilters() {
-    filterAccount = 'all';
-    reference_type = null;
-    searchTerm = '';
-    currentPage = 1;
-    lastPageKey = `1|${itemsPerPage}`;
-    loadExchanges();
-  }
-
   function editExchange(exchange) {
     editingExchangeId = exchange.id;
     showExchangeForm = true;
   }
-
-  let showExchangeForm = false;
-  let editingExchangeId = null;
 
   function openAddExchange() {
     editingExchangeId = null;
@@ -394,21 +492,76 @@
     await loadExchanges();
   }
 
+  /* ------------------------------------------------------------------ *
+   * Filters                                                             *
+   * ------------------------------------------------------------------ */
+
+  function handleExchangeFilterChange(event) {
+    if (event.detail.key === 'account') filterAccount = event.detail.value;
+    if (event.detail.key === 'reference') {
+      reference_type = event.detail.value === 'all' ? null : event.detail.value;
+    }
+    currentPage = 1;
+    loadExchanges();
+  }
+
+  function resetExchangeFilters() {
+    filterAccount = 'all';
+    reference_type = null;
+    searchTerm = '';
+    currentPage = 1;
+    loadExchanges();
+  }
+
+  $: activeChips = (() => {
+    const chips = [];
+
+    if (!account_id && filterAccount !== 'all') {
+      chips.push({
+        key: 'account',
+        label: `${t('Account')}: ${accountName(filterAccount)}`,
+        clear: () => {
+          filterAccount = 'all';
+          currentPage = 1;
+          loadExchanges();
+        },
+      });
+    }
+
+    if (reference_type) {
+      chips.push({
+        key: 'reference',
+        label: `${t('Reference Type')}: ${t(reference_type)}`,
+        clear: () => {
+          reference_type = null;
+          currentPage = 1;
+          loadExchanges();
+        },
+      });
+    }
+
+    return chips;
+  })();
+
+  $: toolbarActiveCount = activeChips.length;
+
   $: exchangeToolbarFilters = [
     {
       key: 'account',
       label: t('Account'),
       value: filterAccount,
+      icon: 'bi-person',
       visible: !account_id,
       options: [
         { value: 'all', label: t('All') },
-        ...accounts.map((account) => ({ value: account.id, label: getAccountName(account.id) })),
+        ...accounts.map((account) => ({ value: account.id, label: accountName(account.id) })),
       ],
     },
     {
       key: 'reference',
       label: t('Reference Type'),
       value: reference_type ?? 'all',
+      icon: 'bi-link-45deg',
       options: [
         { value: 'all', label: t('All') },
         ...reference_types.filter(Boolean).map((type) => ({ value: type, label: t(type) })),
@@ -418,193 +571,235 @@
 </script>
 
 <div class="exchanges-page">
+  {#if showExchangeForm}
+    <QuickEntryModal
+      title={editingExchangeId ? t('Update Exchange') : t('Add Exchange')}
+      subtitle=""
+      icon="bi-currency-exchange"
+      appearance="exchange"
+      dir={t('dir')}
+      on:close={closeExchangeForm}>
+      {#key editingExchangeId}
+        <AddExchange
+          exchangeId={editingExchangeId}
+          selectedAccountID={account_id ? Number(account_id) : null}
+          on:saved={handleExchangeSaved}
+          on:close={closeExchangeForm} />
+      {/key}
+    </QuickEntryModal>
+  {/if}
 
-{#if showExchangeForm}
-  <QuickEntryModal
-    title={editingExchangeId ? t('Update Exchange') : t('Add Exchange')}
-    subtitle=""
-    icon="bi-currency-exchange"
-    appearance="exchange"
+  <IndexPageLayout
     dir={t('dir')}
-    on:close={closeExchangeForm}>
-    {#key editingExchangeId}
-      <AddExchange
-        exchangeId={editingExchangeId}
-        selectedAccountID={account_id ? Number(account_id) : null}
-        on:saved={handleExchangeSaved} />
-    {/key}
-  </QuickEntryModal>
-{/if}
+    ariaLabel={t('Exchanges')}
+    showExtra={true}
+    showFooter={!loading && filteredExchanges.length > 0}
+    dense={true}
+    contentClass="exchanges-index-content"
+    tablePadding={true}>
+    <svelte:fragment slot="extra">
+      <ActionButton
+        icon="add"
+        label={t('Add Exchange')}
+        extraClass="exchanges-create"
+        on:click={openAddExchange} />
+    </svelte:fragment>
 
-<IndexPageLayout
-  dir={t('dir')}
-  ariaLabel={t('Exchanges')}
-  showFooter={!loading && filteredExchanges.length > 0}
-  dense={true}
-  tablePadding={true}>
-  <svelte:fragment slot="actions">
-    <ActionButton icon="bi-plus-lg"
-     label={t('Add Exchange')}
-     on:click={openAddExchange} />
-</svelte:fragment>
-  <svelte:fragment slot="toolbar">
-    <FilterToolbar
-      searchValue={searchTerm}
-      searchPlaceholder={t('Search exchanges...')}
-      filters={exchangeToolbarFilters}
-      filterLabel={t('Filter')}
-      resetLabel={t('Clear Filters')}
-      showReset={true}
-      on:searchChange={(event) => {
-        searchTerm = event.detail;
-        scheduleSearchReload();
-      }}
-      on:filterChange={handleExchangeFilterChange}
-      on:reset={resetExchangeFilters} />
-  </svelte:fragment>
+    <svelte:fragment slot="toolbar">
+      <FilterToolbar
+        bind:filtersOpen
+        searchValue={searchTerm}
+        searchPlaceholder={t('Search exchanges...')}
+        filters={exchangeToolbarFilters}
+        filterLabel={t('Filter')}
+        resetLabel={t('Clear Filters')}
+        applyLabel={t('Show')}
+        activeCount={toolbarActiveCount}
+        showReset={true}
+        on:searchChange={(event) => {
+          searchTerm = event.detail;
+          scheduleSearchReload();
+        }}
+        on:filterChange={handleExchangeFilterChange}
+        on:reset={resetExchangeFilters} />
+    </svelte:fragment>
+
+    {#if activeChips.length}
+      <div class="active-filters">
+        {#each activeChips as chip (chip.key)}
+          <button type="button" class="active-chip" on:click={chip.clear}>
+            {chip.label}
+            <span class="ms" aria-hidden="true">close</span>
+          </button>
+        {/each}
+        <button type="button" class="active-filters__clear" on:click={resetExchangeFilters}>
+          {t('Clear Filters')}
+        </button>
+      </div>
+    {/if}
 
     {#if loading}
       <TableSkeleton
         ariaLabel={t('Loading...')}
-        colCount={9}
-        minWidth="980px" />
+        colCount={7}
+        minWidth="1000px"
+        headerHeight="40px"
+        cellPaddingY="6px" />
     {:else if filteredExchanges.length === 0}
       <div class="index-table-state">
-        <EmptyState icon="bi-inbox" message={t('No exchange entries found.')} />
+        <EmptyState
+          icon="bi-search"
+          message={t('No exchange entries found.')}
+          description={t('Change the range or filters')}>
+          <button type="button" class="empty-clear" on:click={resetExchangeFilters}>
+            {t('Clear Filters')}
+          </button>
+        </EmptyState>
       </div>
     {:else}
       <DataTable
         ariaLabel={t('Exchanges')}
-        minWidth="980px"
+        columns={['76px', '144px', 'auto', '160px', '128px', '160px', '96px']}
+        minWidth="1000px"
         dense={true}
-        striped={true}
+        striped={false}
         hover={false}
         stickyHeader={true}
-        layout="fixed"
-        scrollbar="thin">
-          <svelte:fragment slot="head">
-            <tr>
-              <th class="col-start cursor-pointer" on:click={() => setSort('id')}>
-                {t('#')}
-                {#if sortColumn === 'id'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
-                {/if}
-              </th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('date')}
-                >{t('Date')}
+        headerHeight="40px"
+        cellPaddingY="6px"
+        cellPaddingX="12px"
+        headPaddingX="12px"
+        edgePaddingX="16px"
+        headEdgePaddingX="16px"
+        mobileCards={true}>
+        <svelte:fragment slot="head">
+          <tr>
+            <th class="col-start">{t('Documents')}</th>
+            <th class="col-center" aria-sort={sortAria('date')}>
+              <button type="button" class="th-sort" on:click={() => setSort('date')}>
+                {t('Date')}
                 {#if sortColumn === 'date'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
+                  <span class="ms sort-icon" aria-hidden="true">
+                    {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                  </span>
+                {:else}
+                  <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
                 {/if}
-              </th>
-              <th class="text-center cursor-pointer" on:click={() => setSort('account')}
-                >{t('Account')}
+              </button>
+            </th>
+            <th aria-sort={sortAria('account')}>
+              <button type="button" class="th-sort" on:click={() => setSort('account')}>
+                {t('Account')}
                 {#if sortColumn === 'account'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
+                  <span class="ms sort-icon" aria-hidden="true">
+                    {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                  </span>
+                {:else}
+                  <span class="ms sort-icon sort-icon--idle" aria-hidden="true">swap_vert</span>
                 {/if}
-              </th>
-              <th class="text-center">{t('Description')} </th>
-              <th class="text-center">{t('Debit')} </th>
-              <th class="text-center">{t('Rate')} </th>
-              <th class="text-center">{t('Credit')} </th>
-              <!-- <th class="text-center" on:click={() => setSort('benefit_amount')}> -->
-                <!-- {t('Benefit')}
-                {#if sortColumn === 'benefit_amount'}
-                  <i class="bi bi-arrow-{sortDirection === 'asc' ? 'up' : 'down'} ms-1"></i>
-                {/if} -->
-              <!-- </th> -->
-              <th class="col-end">{t('Actions')}</th>
-            </tr>
-          </svelte:fragment>
-            {#each paginatedExchanges as j, index}
-              <tr>
-                <td class="col-start cell-muted">{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                <td>
-                  <StatusBadge tone="neutral" ghost ltr={true} stacked>{@html showDate(j.date)}</StatusBadge>
-                </td>
-                <td>
-                  <div class="account-pair">
-                    <StatusBadge tone={j.first_entry_credit > 0 ? 'positive' : 'negative'}>
-                      <button
-                        type="button"
-                        class="cell-link"
-                        on:click={() => push(`/dashboard/account/${j.first_entry_account}`)}>
-                        {getAccountName(j.first_entry_account)}
-                      </button>
-                    </StatusBadge>
-                    <StatusBadge tone={j.second_entry_credit > 0 ? 'positive' : 'negative'}>
-                      <button
-                        type="button"
-                        class="cell-link"
-                        on:click={() => push(`/dashboard/account/${j.second_entry_account}`)}>
-                        {getAccountName(j.second_entry_account)}
-                      </button>
-                    </StatusBadge>
-                  </div>
-                </td>
-                <td><span class="description-cell" title={j.description || ''}>{j.description || '—'}</span></td>
-                <td>
-                  {#if j.first_entry_debit != 0}
-                    <StatusBadge tone="negative">
-                      <span dir="ltr">
-                        {Number(j.first_entry_debit).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                      </span>
-                      <span>{t(j.first_currency)}</span>
-                    </StatusBadge>
-                  {:else}
-                    <span class="muted-dash">—</span>
-                  {/if}
-                </td>
-                <td>
-                  <StatusBadge tone="info" ltr={true}>
-                    {Number(parseFloat(j.rate)).toLocaleString(undefined, {
-                      maximumFractionDigits: 6,
-                      minimumFractionDigits: 2,
-                    })}
-                  </StatusBadge>
-                </td>
-                <td>
-                  {#if j.second_entry_credit != 0}
-                    <StatusBadge tone="positive">
-                      <span dir="ltr">
-                        {Number(j.second_entry_credit).toLocaleString(undefined, { maximumFractionDigits: 3 })}
-                      </span>
-                      <span>{t(j.second_currency)}</span>
-                    </StatusBadge>
-                  {:else}
-                    <span class="muted-dash">—</span>
-                  {/if}
-                </td>
-                <!-- <td>
-                  <StatusBadge tone={j.benefit_amount < 0 ? 'negative' : 'positive'} ltr={true}>
-                    {j.benefit_amount.toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 6,
-                      })}
-                    {t(j.first_currency)}
-                  </StatusBadge>
-                </td> -->
-                <td><TableActions actions={getExchangeActions(j)} /></td>
-              </tr>
-            {/each}
+              </button>
+            </th>
+            <th class="col-end">{t('Debit')}</th>
+            <th class="col-center">{t('Rate')}</th>
+            <th class="col-end">{t('Credit')}</th>
+            <!-- The reference leaves this header blank; the label still names
+                 the column for assistive tech. -->
+            <th class="col-end actions-head">{t('Actions')}</th>
+          </tr>
+        </svelte:fragment>
+
+        {#each paginatedExchanges as j, index (j.id)}
+          {@const entry = entriesOf(j)}
+          <tr class="exchange-row">
+            <td class="col-start">
+              <span class="doc-no" dir="ltr">#{ordinalOf(index)}</span>
+            </td>
+            <td class="col-center">
+              <div class="doc-date" title={isoDate(j.date)}>
+                <span class="doc-date__main">{persianDate(j.date)}</span>
+                <span class="doc-date__sub" dir="ltr">{isoDate(j.date)}</span>
+              </div>
+            </td>
+            <td>
+              <div class="party">
+                <span class="party__line">
+                  <span class="party__side party__side--dr">{t('Debit')}</span>
+                  <button
+                    type="button"
+                    class="party__name"
+                    class:is-static={!entry.debit.account}
+                    title={accountName(entry.debit.account)}
+                    on:click={() => entry.debit.account && push(`/dashboard/account/${entry.debit.account}`)}>
+                    {accountName(entry.debit.account)}
+                  </button>
+                </span>
+                <span class="party__line">
+                  <span class="party__side party__side--cr">{t('Credit')}</span>
+                  <button
+                    type="button"
+                    class="party__name"
+                    class:is-static={!entry.credit.account}
+                    title={accountName(entry.credit.account)}
+                    on:click={() => entry.credit.account && push(`/dashboard/account/${entry.credit.account}`)}>
+                    {accountName(entry.credit.account)}
+                  </button>
+                </span>
+              </div>
+            </td>
+            <td class="col-end">
+              {#if entry.debit.amount}
+                <span
+                  class="amount amount--debit"
+                  title={`${t('Debit')}: ${amountText(entry.debit.amount)} ${currencyUnit(entry.debit.currency)}`}>
+                  <span class="amount__value">{amountText(entry.debit.amount)}</span>
+                  <span class="amount__unit">{currencyUnit(entry.debit.currency)}</span>
+                </span>
+              {:else}
+                <span class="muted-dash">—</span>
+              {/if}
+            </td>
+            <td class="col-center">
+              <span class="rate-chip" dir="ltr">{rateText(j.rate)}</span>
+            </td>
+            <td class="col-end">
+              {#if entry.credit.amount}
+                <span
+                  class="amount amount--credit"
+                  title={`${t('Credit')}: ${amountText(entry.credit.amount)} ${currencyUnit(entry.credit.currency)}`}>
+                  <span class="amount__value">{amountText(entry.credit.amount)}</span>
+                  <span class="amount__unit">{currencyUnit(entry.credit.currency)}</span>
+                </span>
+              {:else}
+                <span class="muted-dash">—</span>
+              {/if}
+            </td>
+            <td class="col-end">
+              <TableActions material={true} actions={getExchangeActions(j)} />
+            </td>
+          </tr>
+        {/each}
       </DataTable>
     {/if}
 
-  <svelte:fragment slot="footer">
-    <PaginationBar
-      bind:currentPage
-      {totalPages}
-      {itemsPerPage}
-      totalItems={null}
-      ariaLabel={t('Exchanges pagination')}
-      rowLabel={t('rows')}
-      perPageOptions={PAGE_SIZE_OPTIONS}
-      on:perPageChange={(event) => {
-        itemsPerPage = Number(event.detail);
-        currentPage = 1;
-      }}
-      {getPageNumbers} />
-  </svelte:fragment>
-</IndexPageLayout>
+    <svelte:fragment slot="footer">
+      <PaginationBar
+        bind:currentPage
+        {totalPages}
+        {itemsPerPage}
+        {totalItems}
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        perPageOptions={PAGE_SIZE_OPTIONS}
+        ariaLabel={t('Exchanges')}
+        rowLabel={t('Documents')}
+        perPageRowLabel={t('rows')}
+        on:perPageChange={(event) => {
+          itemsPerPage = Number(event.detail);
+          currentPage = 1;
+        }}
+        {getPageNumbers} />
+    </svelte:fragment>
+  </IndexPageLayout>
 </div>
 
 {#if showReceipt}
@@ -614,102 +809,393 @@
 <style>
   .exchanges-page {
     display: flex;
-    flex: 1 1 auto;
     flex-direction: column;
-    gap: 0.65rem;
     width: 100%;
-    min-height: 0;
     height: 100%;
-    max-height: 100%;
-    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
   }
-  .quick-add-button {
-    min-height: 2.625rem;
-    padding: 0.55rem 1rem;
+
+  /*
+   * The reference keeps the toolbar, table and pager inside one 14px sheet, so
+   * the shared panel is unwrapped here and its children are re-ordered to that
+   * stack.
+   */
+  .exchanges-page :global(.index-panel) {
+    gap: 0;
     border: 0;
-    border-radius: 0.65rem;
-    background: #2f6fed;
-    color: #fff;
-    box-shadow: 0 6px 14px rgba(47, 111, 237, 0.2);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    font-size: 0.82rem;
-    font-weight: 800;
-    white-space: nowrap;
-    transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
   }
-  .quick-add-button:hover { background: #245ed0; box-shadow: 0 8px 18px rgba(47, 111, 237, 0.26); transform: translateY(-1px); }
-  .exchanges-page :global(.filter-toggle) {
-    flex-basis: 1.625rem !important;
-    width: 1.625rem !important;
-    min-width: 1.625rem !important;
-    max-width: 1.625rem !important;
-    height: 1.75rem !important;
-    min-height: 1.75rem !important;
-    max-height: 1.75rem !important;
-    border-radius: 0.4rem !important;
-    background: #0f6efd !important;
-    color: #ffffff !important;
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.18) !important;
+
+  .exchanges-page :global(.index-toolbar) {
+    order: 0;
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    border-radius: var(--z-r-xl, 14px) var(--z-r-xl, 14px) 0 0;
+    background: var(--z-surface, #ffffff);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
   }
-  .exchanges-page :global(.filter-toggle:hover) { background: #1d4ed8 !important; }
-  .exchanges-page :global(.filter-toggle i) {
-    color: #ffffff !important;
-    opacity: 1;
-    -webkit-text-fill-color: #ffffff;
+
+  .exchanges-page :global(.index-toolbar-main) {
+    gap: 8px;
   }
-  .exchanges-page :global(.index-page) { flex: 1 1 auto; height: auto; }
-  .exchanges-toolbar { width: 100%; min-width: 0; padding: 0; background: transparent; }
-  .exchanges-toolbar :global(.row) { width: 100%; margin: 0; }
-  .exchanges-toolbar :global(.col-md-3) { width: 100%; padding: 0; }
-  .exchanges-toolbar :global(.form-outline) {
-    position: relative;
+
+  .exchanges-page :global(.index-toolbar-main .filter-toolbar-row) {
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .exchanges-page :global(.index-content) {
+    order: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    --z-row-border: var(--z-border-soft, #eef2f7);
+    border-inline: 1px solid var(--z-border, #e1e7f0);
+    background: var(--z-surface, #ffffff);
+  }
+
+  .exchanges-page :global(.exchanges-index-content .data-table-wrap) {
+    border: 0;
+  }
+
+  .exchanges-page :global(.index-footer) {
+    order: 2;
+    flex: 0 0 auto;
+    border: 1px solid var(--z-border, #e1e7f0);
+    border-top: 1px solid var(--z-border-soft, #eef2f7);
+    border-radius: 0 0 var(--z-r-xl, 14px) var(--z-r-xl, 14px);
+    background: var(--z-surface-2, #f8fafc);
+    box-shadow: 0 1px 2px rgba(11, 21, 48, 0.04);
+  }
+
+  .exchanges-page :global(.index-footer .pagination-shell) {
+    padding: 10px 16px;
+    border: 0;
+    background: var(--z-surface-2, #f8fafc);
+  }
+
+  /* ---------- active filter chips ---------- */
+  .active-filters {
     display: flex;
-    align-items: center;
-    gap: .5rem;
-    width: 100%;
-    min-height: var(--index-toolbar-control-height, 2.625rem);
-    padding-inline: .75rem .375rem;
-    border: 1px solid #d6e0ed;
-    border-radius: .625rem;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(15,23,42,.025);
-  }
-  .exchange-search-icon { flex: 0 0 auto; color: #9aabc0; font-size: 1rem; }
-  .exchanges-toolbar :global(.exchange-search-input) { flex: 1 1 auto; min-width: 0; height: 2.5rem; min-height: 2.5rem; margin: 0; padding: 0; border: 0; outline: 0; background: transparent; box-shadow: none; font-size: .875rem; }
-  .exchange-search-clear { display: inline-grid; place-items: center; flex: 0 0 1.75rem; width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: .4375rem; background: transparent; color: #94a3b8; font-size: .6875rem; }
-  .exchange-search-clear:hover { background: #f1f5f9; color: #475569; }
-  .account-pair {
-    display: inline-flex;
+    flex: 0 0 auto;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: center;
-    gap: .25rem;
+    gap: 6px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--z-border-soft, #eef2f7);
+    background: var(--z-surface-2, #f8fafc);
   }
-  .cell-link {
-    max-width: 100%;
+
+  .active-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding-inline-start: 10px;
+    padding-inline-end: 6px;
+    border: 1px solid var(--z-border-strong, #dce6f8);
+    border-radius: 999px;
+    background: var(--z-brand-soft, #e3ecff);
+    color: var(--z-link, #2f6fed);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .active-chip .ms {
+    font-size: 14px;
+  }
+
+  .active-filters__clear {
+    height: 26px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--z-muted, #64748b);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .active-filters__clear:hover {
+    color: var(--z-ink, #0b1530);
+  }
+
+  /* ---------- table header ---------- */
+  .th-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 26px;
+    margin-inline-start: -6px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 0.14s ease,
+      color 0.14s ease;
+  }
+
+  .th-sort:hover {
+    color: var(--z-ink, #0b1530);
+  }
+
+  .th-sort .sort-icon {
+    font-size: 14px;
+    margin: 0;
+    opacity: 1;
+  }
+
+  .th-sort .sort-icon--idle {
+    opacity: 0.55;
+  }
+
+  .actions-head {
+    color: transparent;
+    font-size: 0;
+  }
+
+  /* ---------- rows ---------- */
+  .exchange-row {
+    height: auto;
+  }
+
+  .exchange-row:hover {
+    background: var(--z-hover, #f5f9ff);
+  }
+
+  .doc-no {
+    color: var(--z-muted, #64748b);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .doc-date {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.35;
+  }
+
+  .doc-date__main {
+    overflow: hidden;
+    color: var(--z-ink, #0b1530);
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .doc-date__sub {
+    overflow: hidden;
+    color: var(--z-subtle, #94a3b8);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 11px;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* One line per side, so the pair always reads debit then credit. */
+  .party {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .party__line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .party__side {
+    flex: 0 0 auto;
+    border-radius: 5px;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.6;
+    white-space: nowrap;
+  }
+
+  .party__side--dr {
+    background: var(--z-debit-soft, #fdecec);
+    color: var(--z-debit, #dc2626);
+  }
+
+  .party__side--cr {
+    background: var(--z-credit-soft, #e7f6ec);
+    color: var(--z-credit, #16a34a);
+  }
+
+  .party__name {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     padding: 0;
     border: 0;
     background: transparent;
-    color: inherit;
-    font: inherit;
+    color: var(--z-ink, #0b1530);
+    font-family: inherit;
+    font-size: 12.5px;
     font-weight: 700;
+    text-align: start;
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: pointer;
   }
-  .description-cell {
-    display: block;
+
+  .party__name:hover {
+    color: var(--z-link, #2f6fed);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .party__name.is-static {
+    color: var(--z-subtle, #94a3b8);
+    cursor: default;
+    text-decoration: none;
+  }
+
+  /*
+   * The value and the currency are two boxes, not one string: bidi reorders the
+   * Afghani sign and the trailing «€» around the digits differently, which
+   * flipped the pair from row to row. The RTL flex row keeps the number flush
+   * to the start of the cell with the currency hanging after it.
+   */
+  .amount {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    max-width: 100%;
     overflow: hidden;
-    color: #64748b;
-    text-overflow: ellipsis;
+    color: var(--z-ink, #0b1530);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.55;
     white-space: nowrap;
   }
-  .cell-muted,
-  .muted-dash { color: #94a3b8; }
-  .cursor-pointer {
+
+  .amount__value {
+    direction: ltr;
+  }
+
+  .amount--debit {
+    color: var(--z-debit, #dc2626);
+  }
+
+  .amount--credit {
+    color: var(--z-credit, #16a34a);
+  }
+
+  .amount__unit {
+    flex: 0 0 auto;
+    color: var(--z-subtle, #94a3b8);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .rate-chip {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 8px;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-text, #475569);
+    font-family: var(--z-font-num, 'Inter', sans-serif);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.55;
+    white-space: nowrap;
+  }
+
+  .muted-dash {
+    color: var(--z-subtle, #94a3b8);
+  }
+
+  /* The reference row actions are 30px squares with an 8px radius. */
+  .exchanges-page :global(.table-actions .action-btn) {
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border-radius: 8px;
+  }
+
+  .empty-clear {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--z-border-strong, #dce6f8);
+    border-radius: 9px;
+    background: var(--z-surface, #ffffff);
+    color: var(--z-link, #2f6fed);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
     cursor: pointer;
+  }
+
+  .empty-clear:hover {
+    background: var(--z-brand-soft, #e3ecff);
+  }
+
+  /* Reference empty state: glyph in a 48px tile. */
+  .exchanges-page :global(.index-table-state .empty-state i) {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: var(--z-surface-3, #f1f5f9);
+    color: var(--z-muted, #64748b);
+    font-size: 26px;
+  }
+
+  .exchanges-page :global(.index-table-state .empty-state p) {
+    color: var(--z-ink, #0b1530);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  @media (max-width: 900px) {
+    .exchanges-page :global(.index-toolbar-main .filter-toolbar-row) {
+      flex-wrap: wrap;
+    }
+
+    .exchanges-page :global(.filter-tools--grouped) {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    .active-filters {
+      padding-inline: 10px;
+    }
   }
 </style>

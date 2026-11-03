@@ -797,8 +797,14 @@ describe('icon set', () => {
       'components/common/TableActions.svelte',
       'components/Topbar.svelte',
       'pages/journals/AddJournal.svelte',
+      /* The exchange voucher is the journal voucher: its account box, amount
+         pickers, date row, footer and account picker draw the same glyphs. */
+      'pages/exchanges/AddExchange.svelte',
       'pages/journals/JournalsIndex.svelte',
       'pages/journals/ViewJournalModal.svelte',
+      /* The exchanges list was redrawn on the purchases sheet: its KPI tiles,
+         sort chevrons, account pills and row menu are Material Symbols. */
+      'pages/exchanges/ExchangesIndex.svelte',
       /* The purchases and accounts lists were redrawn from their reference
          sheets, whose KPI tiles, warehouse/status glyphs and row menus are
          drawn with Material Symbols. */

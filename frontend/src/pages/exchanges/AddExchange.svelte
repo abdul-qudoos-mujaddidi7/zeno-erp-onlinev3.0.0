@@ -131,6 +131,14 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   let exchangeRateAmount = 1;
   let exchangeRateAmountSystem = 1;
   let exchangeRateMultiple = true;
+  /* Six decimals is as much as a rate ever needs on screen; without it the
+     derived rate fills the box with a seventeen-digit float. */
+  function roundRate(value) {
+    const rate = Number(value);
+
+    return Number.isFinite(rate) && rate !== 0 ? Number(rate.toFixed(6)) : 1;
+  }
+
   function exchangeRate(amount, fromCurrencyCode, toCurrencyCode) {
     if (!fromCurrencyCode || !toCurrencyCode) return amount;
     const fromCurrency = currencies.find((c) => c.code === fromCurrencyCode);
@@ -195,6 +203,22 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     currencies = (await currencyApi.getAll({ status: 1 }))?.data || [];
     const defaultCurr = currencies.find((c) => c.isDefault);
     if (defaultCurr) currency = defaultCurr.code;
+    applyDefaultCurrencies();
+  }
+
+  /* A new voucher opens on a workable pair - the default currency against the
+     first other one - so the amount fields are live straight away, the way the
+     journal form opens ready to type. An existing exchange keeps its own. */
+  function applyDefaultCurrencies() {
+    if (exchangeId || first_currency || !currencies.length) return;
+
+    const primary = currencies.find((c) => c.isDefault) || currencies[0];
+    const secondary = currencies.find((c) => c.code !== primary?.code) || primary;
+
+    first_currency = primary?.code || '';
+    second_currency = secondary?.code || '';
+
+    calculateExchangeAmount();
   }
 
   async function loadExchanges() {
@@ -262,6 +286,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   }
 
   onMount(async () => {
+    pinnedAccountIds = readPinnedAccounts();
     loadCurrencies();
 
     await loadAccounts();
@@ -365,6 +390,8 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     second_entry_debit = null;
     second_entry_credit = null;
     status = 1;
+
+    applyDefaultCurrencies();
   }
 
   function format(value) {
@@ -404,23 +431,11 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   function calculateExchangeAmount() {
     if (first_currency && second_currency) {
       if (exchangeRateMultiple) {
-        exchangeRateAmount = exchangeRate(1, first_currency, second_currency);
+        exchangeRateAmount = roundRate(exchangeRate(1, first_currency, second_currency));
         exchangeRateAmountSystem = exchangeRateAmount;
-        // if (first_entry_debit) {
-        //   onFirstDebitInput(exchangeRate(first_entry_debit, first_currency, second_currency));
-        // }
-        // if (first_entry_credit) {
-        //   onFirstCreditInput(exchangeRate(first_entry_credit, first_currency, second_currency));
-        // }
       } else {
-        exchangeRateAmount = exchangeRate(1, second_currency, first_currency);
+        exchangeRateAmount = roundRate(exchangeRate(1, second_currency, first_currency));
         exchangeRateAmountSystem = exchangeRateAmount;
-        // if (first_entry_debit) {
-        //   onFirstDebitInput(exchangeRate(first_entry_debit, second_currency, first_currency));
-        // }
-        // if (first_entry_credit) {
-        //   onFirstCreditInput(exchangeRate(first_entry_credit, second_currency, first_currency));
-        // }
       }
     }
   }
@@ -435,72 +450,32 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
       : first_entry_debit * exchangeRateAmountSystem;
 
     benefit_amount = exchangeRate(system_amount - second_entry_credit, second_currency, first_currency);
-    // first_entry_credit = null;
-    setTimeout(() => {
-      if (window.mdb) {
-        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
-      }
-    }, 100);
   }
 
   function onFirstDebitInput(value) {
     const amount = normalize(value);
 
     first_entry_debit = amount;
-    // first_entry_credit = null;
     calculateAmount();
-
-    // second_entry_credit = amount;
-    // second_entry_debit = null;
-    setTimeout(() => {
-      if (window.mdb) {
-        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
-      }
-    }, 100);
   }
   function onFirstCreditInput(value) {
     const amount = normalize(value);
 
     first_entry_credit = amount;
-    // first_entry_debit = null;
-
     second_entry_debit = amount;
-    // second_entry_credit = null;
-    setTimeout(() => {
-      if (window.mdb) {
-        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
-      }
-    }, 100);
   }
 
   function onSecondDebitInput(value) {
     const amount = normalize(value);
 
     second_entry_debit = amount;
-    // second_entry_credit = null;
-
     first_entry_credit = amount;
-    // first_entry_debit = null;
-    setTimeout(() => {
-      if (window.mdb) {
-        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
-      }
-    }, 100);
   }
 
   function onSecondCreditInput(value) {
     const amount = normalize(value);
 
     second_entry_credit = amount;
-    // second_entry_debit = null;
-
-    // first_entry_debit = amount;
-    // first_entry_credit = null;
-    setTimeout(() => {
-      if (window.mdb) {
-        document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
-      }
-    }, 100);
   }
 
   function onlyNumbers(e) {
@@ -519,7 +494,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   let filteredAccounts = [];
 
   let second_entry_account_search = '';
-  let filteredSecondAccounts = [];
+  let trackPickerStyle = '';
 
   let currencyMenuFor = null; // 'debit' | 'credit'
   let first_entry_account_search_input = null;
@@ -551,612 +526,1032 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
   }
 
   function handleWindowClick(event) {
-    if (currencyMenuFor && !event.target.closest('.exchange-currency-picker')) {
+    if (currencyMenuFor && !event.target.closest('.xe-currency')) {
       currencyMenuFor = null;
     }
   }
 
-  function calculateAccountBalance(accountId, currency) {
-    let balance = {};
-    // is treasury account, show balance of all linked accounts
+  /* ---- account balances ------------------------------------------------
+   * Every exchange row moves credit − debit in its own currency, so the map
+   * is keyed by account and then currency, exactly like the journal form.
+   * The tiles, the field and the picker rows all read from it.
+   */
+  function buildBalanceMap(list, balances, code) {
+    return list.reduce((map, item) => {
+      if (!item) return map;
 
-    allExchanges.forEach((j) => {
-      if (j.first_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.first_entry_credit || 0) - Number(j.first_entry_debit || 0));
-      }
-      if (j.second_entry_account === accountId) {
-        const currency = j.currency || 'AFN';
-        balance[currency] =
-          (balance[currency] || 0) + (Number(j.second_entry_credit || 0) - Number(j.second_entry_debit || 0));
-      }
+      const bucket = balances?.[item.id] || {};
+      const value = Number(bucket[code] || 0);
+      const settled = Math.abs(value) < 0.01;
+
+      map[item.id] = {
+        /* Symbol and digits stay separate so the row can lay them out from
+           the inline start without bidi surprises. */
+        symbol: currencySymbol(code),
+        amount: Math.abs(value).toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
+        label: settled ? t('Balance') : value < 0 ? t('Debit') : t('Credit'),
+        tone: settled ? 'settled' : value < 0 ? 'debit' : 'credit',
+      };
+
+      return map;
+    }, {});
+  }
+
+  function currencySymbol(code) {
+    const normalizedCode = String(code ?? '');
+    return (
+      currencies.find((item) => String(item.code ?? '') === normalizedCode)?.symbol ||
+      t(normalizedCode)
+    );
+  }
+
+  function accountSearchName(selected) {
+    if (!selected) return '';
+    if (t('Lang') === 'fa') return selected.name_fa || selected.name || selected.name_ps || '';
+    if (t('Lang') === 'ps') return selected.name_ps || selected.name || selected.name_fa || '';
+    return selected.name || selected.name_fa || selected.name_ps || '';
+  }
+
+  function accountTypeLabel(selected) {
+    if (!selected) return '';
+    const type = accountTypes.find(
+      (item) => Number(item.id) === Number(selected.account_type_id),
+    );
+
+    if (!type) return 'N/A';
+
+    if (t('Lang') === 'fa') return type.name_fa || type.name || '';
+    if (t('Lang') === 'ps') return type.name_ps || type.name || '';
+
+    return type.name || '';
+  }
+
+  /* The reference paints each account row from its class: one icon and one
+     colour per class, mixed into a 13% tile. */
+  const ACCOUNT_TYPE_TINTS = {
+    1: ['account_balance_wallet', '#2F6FED'],
+    2: ['request_quote', '#D64560'],
+    3: ['request_quote', '#D64560'],
+    4: ['account_balance_wallet', '#2F6FED'],
+    5: ['receipt_long', '#D9822B'],
+    6: ['trending_up', '#16A34A'],
+    7: ['savings', '#7C5CE0'],
+  };
+
+  function accountTypeTint(selected) {
+    const [icon, color] = ACCOUNT_TYPE_TINTS[Number(selected?.account_type_id)] || [
+      'account_balance_wallet',
+      '#64748B',
+    ];
+
+    return {
+      icon,
+      style: `background: color-mix(in srgb, ${color} 13%, transparent); color: ${color};`,
+    };
+  }
+
+  /* House accounts lead the picker; the party ledgers follow them. */
+  function accountRank(selected) {
+    const isParty =
+      Number(selected?.can_be_customer) === 1 ||
+      Number(selected?.can_be_supplier) === 1 ||
+      Number(selected?.account_type_id) === 3 ||
+      Number(selected?.account_type_id) === 4;
+
+    return isParty ? 1 : 0;
+  }
+
+  function filterAccounts() {
+    const query = first_entry_account_search.trim().toLowerCase();
+
+    filteredAccounts = accounts.filter((acc) => {
+      if (!query) return true;
+
+      return (
+        accountSearchName(acc).toLowerCase().includes(query) ||
+        String(acc.code || '').toLowerCase().includes(query)
+      );
     });
+  }
 
-    if (accounts.find((a) => a.id === accountId)?.code === 'TREASURY') {
-      treasury_balance = balance[currency] || 0;
+  /* ---- counterpart account picker -------------------------------------
+   * Mirrors the journal form: a search row with a "new account" chip, the
+   * pinned accounts (a local preference shared with AddJournal) and every
+   * other account with its type and balance in the debit currency.
+   */
+  const PIN_STORAGE_KEY = 'zeno.jvPins';
+  let pinnedAccountIds = [];
+
+  function readPinnedAccounts() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(PIN_STORAGE_KEY) || '[]');
+
+      return Array.isArray(stored) ? stored.map(String) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function toggleAccountPin(accountId) {
+    const value = String(accountId);
+
+    pinnedAccountIds = pinnedAccountIds.includes(value)
+      ? pinnedAccountIds.filter((item) => item !== value)
+      : pinnedAccountIds.concat([value]);
+
+    try {
+      localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pinnedAccountIds));
+    } catch (error) {
+      /* Blocked storage must not stop the picker from working. */
+    }
+  }
+
+  function matchesSecondAccount(selected, query) {
+    if (!query) return true;
+
+    return (
+      accountSearchName(selected).toLowerCase().includes(query) ||
+      String(selected.code || '').toLowerCase().includes(query) ||
+      String(selected.id) === query
+    );
+  }
+
+  function pickSecondAccount(accountId) {
+    second_entry_account = accountId;
+    track_ID = accountId;
+    showTrackModal = false;
+  }
+
+  function pickMode(mode, event) {
+    if (mode === 'treasury') {
+      second_entry_account = treasury_ID;
+      return;
     }
 
-    console.log('Calculated balance for account', accountId, accounts.length, balance, allExchanges.length);
-    return balance.toString
-      ? Object.entries(balance)
-          .map(([cur, amt]) =>
-            cur == currency
-              ? t('Balance') +
-                `: <span dir='ltr' class='text-${amt > 0 ? 'success' : 'danger'}'>${amt.toFixed(2)}</span> ${t(cur)}`
-              : '',
-          )
-          .join('')
-      : '';
+    if (mode === 'notrack') {
+      second_entry_account = notrack_ID;
+      return;
+    }
+
+    if (track_ID) {
+      second_entry_account = track_ID;
+      return;
+    }
+
+    if (event) openSecondAccountPicker(event);
   }
+
+  /*
+   * The list always drops down from the field. A field that sits low in the
+   * dialog leaves no room below, so the form itself scrolls by the missing
+   * amount first; the panel only flips up when nothing is left to scroll.
+   */
+  function revealRoomBelow(trigger, needed) {
+    let rect = trigger.getBoundingClientRect();
+    let node = trigger.parentElement;
+
+    while (node && node !== document.body) {
+      const style = getComputedStyle(node);
+      const scrollable =
+        /(auto|scroll)/.test(style.overflowY) &&
+        node.scrollHeight > node.clientHeight + 1;
+
+      if (scrollable) {
+        const deficit = rect.bottom + needed - window.innerHeight;
+
+        if (deficit > 0) {
+          node.scrollTop += Math.min(
+            deficit,
+            node.scrollHeight - node.clientHeight - node.scrollTop,
+          );
+          rect = trigger.getBoundingClientRect();
+        }
+
+        break;
+      }
+
+      node = node.parentElement;
+    }
+
+    return rect;
+  }
+
+  function openSecondAccountPicker(event) {
+    second_entry_account_search = '';
+
+    /* Both the chip and the icon button open the list; anchor it to the row
+       so the panel spans the field exactly like the reference. */
+    const anchor = event.currentTarget.closest('.xe-account-row') || event.currentTarget;
+    const viewportPadding = 8;
+    const gap = 4;
+    const preferredHeight = Math.min(420, window.innerHeight - viewportPadding * 2);
+    /* Room for the search row plus a couple of accounts. */
+    const minimumBelow = Math.min(280, preferredHeight);
+    const rect = revealRoomBelow(anchor, minimumBelow + gap + viewportPadding);
+    const maxWidth = Math.max(0, window.innerWidth - viewportPadding * 2);
+    const width = Math.min(Math.max(rect.width, Math.min(360, maxWidth)), maxWidth);
+    const left = Math.max(
+      viewportPadding,
+      Math.min(rect.left, window.innerWidth - width - viewportPadding),
+    );
+    const spaceBelow = Math.max(
+      0,
+      window.innerHeight - rect.bottom - viewportPadding - gap,
+    );
+    const spaceAbove = Math.max(0, rect.top - viewportPadding - gap);
+    /* Down is the default; up only when below is unusable and above is not. */
+    const openBelow = spaceBelow >= 160 || spaceAbove < 160;
+    const maxHeight = Math.max(
+      120,
+      Math.min(preferredHeight, openBelow ? spaceBelow : spaceAbove),
+    );
+    const top = openBelow
+      ? rect.bottom + gap
+      : Math.max(viewportPadding, rect.top - maxHeight - gap);
+
+    trackPickerStyle = `top:${Math.max(viewportPadding, top)}px;left:${left}px;width:${width}px;max-height:${maxHeight}px`;
+    showTrackModal = true;
+  }
+
+  function closeForm() {
+    resetForm();
+    dispatch('close');
+  }
+
   function getAccountTypeColor(type) {
     const colors = ['dark', 'danger', 'secondary', 'primary', 'success', 'info', 'warning', 'dark', 'info', 'success'];
     return colors[type];
   }
+
+  /* ---- derived state --------------------------------------------------- */
+  $: accountBalances = (() => {
+    const map = {};
+    const add = (accountId, code, amount) => {
+      if (!accountId || !code) return;
+      if (!map[accountId]) map[accountId] = {};
+      map[accountId][code] = (map[accountId][code] || 0) + amount;
+    };
+
+    allExchanges.forEach((row) => {
+      add(
+        row.first_entry_account,
+        row.first_currency,
+        Number(row.first_entry_credit || 0) - Number(row.first_entry_debit || 0),
+      );
+      add(
+        row.second_entry_account,
+        row.second_currency,
+        Number(row.second_entry_credit || 0) - Number(row.second_entry_debit || 0),
+      );
+    });
+
+    return map;
+  })();
+
+  $: treasury_balance = Number(accountBalances?.[treasury_ID]?.[first_currency] || 0);
+
+  $: balanceByAccount = buildBalanceMap(accounts, accountBalances, first_currency, _lang);
+
+  $: selectedFirstAccount = accounts.find(
+    (item) => first_entry_account && Number(item.id) === Number(first_entry_account),
+  );
+
+  $: selectedSecondAccount = accounts.find(
+    (item) => second_entry_account && Number(item.id) === Number(second_entry_account),
+  );
+
+  $: exchangeMode =
+    Number(second_entry_account) === Number(notrack_ID)
+      ? 'notrack'
+      : Number(second_entry_account) === Number(treasury_ID)
+        ? 'treasury'
+        : 'track';
+
+  $: secondAccountName =
+    exchangeMode === 'notrack'
+      ? t('No Track')
+      : exchangeMode === 'treasury'
+        ? t('Treasury')
+        : selectedSecondAccount
+          ? accountSearchName(selectedSecondAccount)
+          : t('Select Account');
+
+  $: accountQuery = second_entry_account_search.trim().toLowerCase();
+  $: matchingSecondAccounts = accounts.filter((item) =>
+    matchesSecondAccount(item, accountQuery),
+  );
+  $: pinnedSecondAccounts = pinnedAccountIds
+    .map((value) => matchingSecondAccounts.find((item) => String(item.id) === value))
+    .filter(Boolean)
+    .sort((a, b) => accountRank(a) - accountRank(b));
+  $: unpinnedSecondAccounts = matchingSecondAccounts
+    .filter((item) => !pinnedAccountIds.includes(String(item.id)))
+    .sort((a, b) => accountRank(a) - accountRank(b));
+  $: showPinnedSection = pinnedSecondAccounts.length > 0;
+  $: customerAccountRows = [...filteredAccounts].sort(
+    (a, b) =>
+      accountRank(a) - accountRank(b) ||
+      Number(pinnedAccountIds.includes(String(b.id))) -
+        Number(pinnedAccountIds.includes(String(a.id))),
+  );
 </script>
 
 <svelte:window on:click={handleWindowClick} />
 
+<!-- =========================================================================
+     Add Exchange — traced from the Add Journal voucher (Journal.dc.html via
+     AddJournal.svelte): 10px stacked sections, 40px boxes, 11px labels,
+     32px date/counter row and the same footer actions. Every colour reads
+     from the shared --z-* tokens, so dark mode comes for free.
+     ========================================================================= -->
 <div class="exchange-form-page" bind:this={componentRoot}>
-  <div class="card shadow-sm exchange-form-card">
-    <div class="card-body exchange-form-fields">
-      <div class="row g-2 exchange-form-row">
-        
-
-        {#if selectedAccountID}
-          <div class="col-md-3 exchange-account-field">
-            <label class="exchange-field-label">{t('Select Account')}</label>
-            <div class="exchange-unified-input-group">
-              <span class="form-control form-control-sm exchange-account-selected-name">
-                {getAccountName(first_entry_account, accounts)}
-              </span>
-            </div>
-          </div>
-        {:else}
-          <div class="col-md-3 exchange-account-field">
-  <label class="exchange-field-label">{t('Select Account')}</label>
-
-  <div class="exchange-account-anchor">
-    <div class="exchange-account-control" class:is-open={showAccountDropdown}>
-      <span class="exchange-account-control__icon" aria-hidden="true">
-        <i class="bi bi-person"></i>
-      </span>
-
-      {#if first_entry_account}
+  <div class="xe-body">
+    {#if !general}
+      <div
+        class="xe-tabs"
+        class:xe-tabs--two={!enable_notrack}
+        role="tablist"
+        aria-label={t('Account')}>
         <button
           type="button"
-          class="exchange-selected-account"
-          aria-label={t('Select Account')}
-          aria-haspopup="listbox"
-          aria-expanded={showAccountDropdown}
-          aria-controls="exchange-account-listbox"
-          on:click={async () => {
-            first_entry_account = '';
-            first_entry_account_search = '';
-            showAccountDropdown = true;
-            filteredAccounts = accounts;
-            await tick();
-            first_entry_account_search_input?.focus();
-          }}>
-          <span class="exchange-selected-account__name">
-            {getAccountName(first_entry_account, accounts)}
+          role="tab"
+          aria-selected={exchangeMode === 'track'}
+          class="xe-tab"
+          class:is-active={exchangeMode === 'track'}
+          on:click={(event) => pickMode('track', event)}>
+          <span class="ms" aria-hidden="true">{track_ID ? 'person_search' : 'search'}</span>
+          <span class="xe-tab__copy">
+            {exchangeMode === 'track' && track_ID ? getAccountName(track_ID) : t('Track')}
           </span>
-          <i class="bi bi-pencil-square" aria-hidden="true"></i>
         </button>
-      {:else}
-        <input
-          type="text"
-          class="exchange-account-search-input"
-          id="first_entry_account_search"
-          bind:this={first_entry_account_search_input}
-          bind:value={first_entry_account_search}
-          placeholder={t('Select Account')}
-          aria-label={t('Select Account')}
-          aria-autocomplete="list"
-          aria-controls="exchange-account-listbox"
-          autocomplete="off"
-          on:input={() => {
-            showAccountDropdown = true;
-            filteredAccounts = accounts.filter((acc) => {
-              const name =
-                t('Lang') === 'en'
-                  ? acc.name
-                  : t('Lang') === 'fa'
-                    ? acc.name_fa
-                    : t('Lang') === 'ps'
-                      ? acc.name_ps
-                      : acc.name;
 
-              return (
-                name &&
-                name.toLowerCase().includes(
-                  first_entry_account_search.trim().toLowerCase(),
-                )
-              );
-            });
-          }}
-          on:focus={() => {
-            showAccountDropdown = true;
+        <button
+          type="button"
+          role="tab"
+          aria-selected={exchangeMode === 'treasury'}
+          class="xe-tab"
+          class:is-active={exchangeMode === 'treasury'}
+          on:click={() => pickMode('treasury')}>
+          <span class="ms" aria-hidden="true">savings</span>
+          <span class="xe-tab__copy">{t('Treasury')}</span>
+        </button>
 
-            if (first_entry_account_search.trim()) {
-              filteredAccounts = accounts.filter((acc) => {
-                const name =
-                  t('Lang') === 'en'
-                    ? acc.name
-                    : t('Lang') === 'fa'
-                      ? acc.name_fa
-                      : t('Lang') === 'ps'
-                        ? acc.name_ps
-                        : acc.name;
-
-                return (
-                  name &&
-                  name.toLowerCase().includes(
-                    first_entry_account_search.trim().toLowerCase(),
-                  )
-                );
-              });
-            } else {
-              filteredAccounts = accounts;
-            }
-          }}
-          on:blur={() =>
-            setTimeout(() => {
-              showAccountDropdown = false;
-            }, 150)} />
-      {/if}
-
-      <button
-        type="button"
-        class="exchange-account-add"
-        title={t('Add Account')}
-        aria-label={t('Add Account')}
-        on:click={() => modalRefAdd.openModal()}>
-        <i class="bi bi-plus-lg" aria-hidden="true"></i>
-        <span>{t('Add')}</span>
-      </button>
-    </div>
-
-    <input type="hidden" bind:value={first_entry_account} />
-
-    {#if showAccountDropdown && filteredAccounts.length > 0}
-      <ul
-        id="exchange-account-listbox"
-        class="exchange-account-dropdown"
-        role="listbox">
-        {#each filteredAccounts as acc (acc.id)}
-          <li role="option" aria-selected={first_entry_account === acc.id}>
-            <button
-              type="button"
-              class="exchange-account-option"
-              class:is-selected={first_entry_account === acc.id}
-              on:mousedown|preventDefault={() => {
-                first_entry_account = acc.id;
-                first_entry_account_search = getAccountName(acc.id);
-                showAccountDropdown = false;
-              }}>
-              <span class="exchange-account-option__avatar" aria-hidden="true">
-                <i class="bi bi-person"></i>
-              </span>
-
-              <span class="exchange-account-option__copy">
-                <strong>{getAccountName(acc.id)}</strong>
-                <small>
-                  {#if accountTypes.find((at) => at.id === acc.account_type_id)?.name}
-                    {t('Lang') === 'en'
-                      ? accountTypes.find((at) => at.id === acc.account_type_id)?.name
-                      : t('Lang') === 'fa'
-                        ? accountTypes.find((at) => at.id === acc.account_type_id)?.name_fa
-                        : t('Lang') === 'ps'
-                          ? accountTypes.find((at) => at.id === acc.account_type_id)?.name_ps
-                          : accountTypes.find((at) => at.id === acc.account_type_id)?.name}
-                  {:else}
-                    N/A
-                  {/if}
-                </small>
-              </span>
-
-              <i
-                class="bi bi-chevron-right exchange-account-option__arrow"
-                aria-hidden="true"></i>
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </div>
-
-  <AccountModal
-    bind:this={modalRefAdd}
-    {accountTypes}
-    on:saved={async (e) => {
-      await loadAccounts();
-      first_entry_account = e.detail.account.id;
-      first_entry_account_search = '';
-    }} />
-
-  {#if first_entry_account}
-    <div class="exchange-account-balance">
-      <i class="bi bi-wallet2" aria-hidden="true"></i>
-      <span>
-        {@html first_currency
-          ? calculateAccountBalance(first_entry_account, first_currency)
-          : ''}
-      </span>
-    </div>
-  {/if}
-</div>
-
+        {#if enable_notrack}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={exchangeMode === 'notrack'}
+            class="xe-tab"
+            class:is-active={exchangeMode === 'notrack'}
+            on:click={() => pickMode('notrack')}>
+            <span class="ms" aria-hidden="true">block</span>
+            <span class="xe-tab__copy">{t('No Track')}</span>
+          </button>
         {/if}
-        <div class="col-md-3 exchange-date-field">
-          <label class="exchange-field-label">{t('Date')}</label>
-          <div class="input-group input-group-sm persianDatePicker exchange-unified-input-group">
-            <input type="date" class="form-control form-control-sm" data-bind="date" bind:value={date} />
-            <span class="input-group-text persian-date-text"></span>
-          </div>
-        </div>
-        
+      </div>
+    {/if}
 
-        <div class="col-md-2 exchange-amount-field">
-          <label class="exchange-field-label">{t('Debit')}</label>
-          <div
-            class="exchange-amount-row exchange-amount-row--debit"
-            style="border-color: var(--exchange-debit-border, #e2e8f0) !important; background: var(--exchange-debit-bg, #feecec); box-shadow: none !important; outline: none !important;">
-            <div
-              class="input-group input-group-sm exchange-unified-input-group exchange-unified-input-group--inline"
-              style="border-color: transparent !important; background: var(--exchange-debit-bg, #feecec); box-shadow: none !important; outline: none !important;">
-              <input
-                disabled={!first_currency || !second_currency}
-                type="text"
-                inputmode="numeric"
-                pattern="[0-9,]*"
-                id="first_entry_debit"
-                class="form-control form-control-sm"
-                style="background: var(--exchange-debit-bg, #feecec) !important; background-color: var(--exchange-debit-bg, #feecec) !important; color: var(--exchange-debit-color, #b91c1c); border-color: transparent !important; box-shadow: none !important; outline: none !important;"
-                placeholder={t('Debit')}
-                value={format(first_entry_debit)}
-                on:keydown={onlyNumbers}
-                on:input={(e) => onFirstDebitInput(normalize(e.target.value))} />
-            </div>
-            <div class="exchange-currency-picker" style="border-inline-start-color: var(--exchange-debit-border, #fecaca);">
-              <button
-                class="exchange-currency-picker__btn"
-                style="background: var(--exchange-debit-bg, #feecec) !important; color: var(--exchange-debit-color, #b91c1c);"
-                type="button"
-                aria-expanded={currencyMenuFor === 'debit'}
-                aria-haspopup="listbox"
-                aria-label={t('Currency')}
-                on:click|stopPropagation={() => toggleCurrencyMenu('debit')}>
-                {first_currency ? t(first_currency) : t('Currency')}
-                <i class="bi bi-chevron-down" aria-hidden="true"></i>
-              </button>
-              {#if currencyMenuFor === 'debit'}
-                <ul class="exchange-currency-menu" role="listbox">
-                  {#each currencies as cur}
-                    <li role="option" aria-selected={first_currency === cur.code}>
-                      <button
-                        class="exchange-currency-menu__item"
-                        class:selected={first_currency === cur.code}
-                        on:click|stopPropagation={() => selectFirstCurrency(cur.code)}
-                        type="button">
-                        {t(cur.code)}
-                      </button>
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
-            </div>
-          </div>
-        </div>
+    <!-- account — the reference account box: tinted icon tile, name over
+         type, the running balance and the unfold_more chevron -->
+    <div class="xe-field">
+      <span class="xe-label">
+        {t('Select Account')}
+        <span class="xe-req" aria-hidden="true">*</span>
+      </span>
 
-        <div class="col-md-2 exchange-rate-field">
-          <label class="exchange-field-label">{t('Rate')}</label>
-          <div class="exchange-unified-input-group">
-            <input
-              disabled={!first_currency || !second_currency}
-              type="text"
-              inputmode="numeric"
-              pattern="[0-9,]*"
-              id="exrate"
-              class="form-control form-control-sm"
-              placeholder={t('Rate')}
-              bind:value={exchangeRateAmount}
-              on:keydown={onlyNumbers}
-              on:input={(e) => {
-                normalize(e.target.value);
-                calculateAmount();
-              }} />
-            <button
-              class="exchange-rate-toggle {exchangeRateMultiple ? 'text-success' : 'text-danger'}"
-              type="button"
-              on:click={() => {
-                exchangeRateMultiple = !exchangeRateMultiple;
-                calculateExchangeAmount();
-                calculateAmount();
-              }}>
-              {@html exchangeRateMultiple ? '&times;' : '&divide;'}
-            </button>
-          </div>
-          <div class="form-text mt-0 exchange-balance-text">
-            {#if exchangeRateAmount != exchangeRateAmountSystem}
-              {@html exchangeRateAmountSystem
-                ? t('System Rate') +
-                  `: <span dir='ltr' class='text-${exchangeRateAmountSystem > 1 ? 'success' : 'danger'}'>${exchangeRateAmountSystem.toFixed(4)}</span>`
-                : ''}
+      {#if selectedAccountID}
+        {@const lockedTint = accountTypeTint(selectedFirstAccount)}
+        <div class="xe-acc is-locked">
+          <span class="xe-acc__tile" style={lockedTint.style} aria-hidden="true">
+            <span class="ms">
+              {selectedFirstAccount?.code === 'TREASURY' ? 'savings' : lockedTint.icon}
+            </span>
+          </span>
+
+          <span class="xe-acc__picked">
+            <span class="xe-acc__name">{getAccountName(first_entry_account)}</span>
+            {#if selectedFirstAccount}
+              <span class="xe-acc__meta">{accountTypeLabel(selectedFirstAccount)}</span>
             {/if}
-          </div>
-        </div>
+          </span>
 
-        <div class="col-md-2 exchange-amount-field">
-          <label class="exchange-field-label">{t('Credit')}</label>
+          {#if balanceByAccount[first_entry_account]}
+            <span
+              class="xe-acc__bal"
+              class:is-debit={balanceByAccount[first_entry_account].tone === 'debit'}
+              class:is-credit={balanceByAccount[first_entry_account].tone === 'credit'}
+              class:is-settled={balanceByAccount[first_entry_account].tone === 'settled'}>
+              <b dir="rtl">
+                {balanceByAccount[first_entry_account].amount}
+                <span class="xe-acc__cur">{balanceByAccount[first_entry_account].symbol}</span>
+              </b>
+              <small>{balanceByAccount[first_entry_account].label}</small>
+            </span>
+          {/if}
+        </div>
+      {:else}
+        <div class="xe-cell">
           <div
-            class="exchange-amount-row exchange-amount-row--credit"
-            style="border-color: var(--exchange-credit-border, #e2e8f0) !important; background: var(--exchange-credit-bg, #e9f9ef); box-shadow: none !important; outline: none !important;">
-            <div
-              class="input-group input-group-sm exchange-unified-input-group exchange-unified-input-group--inline"
-              style="border-color: transparent !important; background: var(--exchange-credit-bg, #e9f9ef); box-shadow: none !important; outline: none !important;">
-              <input
-                disabled={!first_currency || !second_currency}
-                type="text"
-                inputmode="numeric"
-                pattern="[0-9,]*"
-                id="second_entry_credit"
-                class="form-control form-control-sm"
-                style="background: var(--exchange-credit-bg, #e9f9ef) !important; background-color: var(--exchange-credit-bg, #e9f9ef) !important; color: var(--exchange-credit-color, #047857); border-color: transparent !important; box-shadow: none !important; outline: none !important;"
-                placeholder={t('Credit')}
-                value={format(second_entry_credit)}
-                on:keydown={onlyNumbers}
-                on:input={(e) => onFirstCreditInput(normalize(e.target.value))} />
-            </div>
-            <div class="exchange-currency-picker" style="border-inline-start-color: var(--exchange-credit-border, #bbf7d0);">
+            class="xe-acc"
+            class:is-open={showAccountDropdown}
+            class:is-empty={!first_entry_account}>
+            {#if first_entry_account}
+              {@const tint = accountTypeTint(selectedFirstAccount)}
+              <span class="xe-acc__tile" style={tint.style} aria-hidden="true">
+                <span class="ms">
+                  {selectedFirstAccount?.code === 'TREASURY' ? 'savings' : tint.icon}
+                </span>
+              </span>
+
               <button
-                class="exchange-currency-picker__btn"
-                style="background: var(--exchange-credit-bg, #e9f9ef) !important; color: var(--exchange-credit-color, #047857);"
                 type="button"
-                aria-expanded={currencyMenuFor === 'credit'}
-                aria-haspopup="listbox"
-                aria-label={t('Currency')}
-                on:click|stopPropagation={() => toggleCurrencyMenu('credit')}>
-                {second_currency ? t(second_currency) : t('Currency')}
-                <i class="bi bi-chevron-down" aria-hidden="true"></i>
-              </button>
-              {#if currencyMenuFor === 'credit'}
-                <ul class="exchange-currency-menu" role="listbox">
-                  {#each currencies as cur}
-                    <li role="option" aria-selected={second_currency === cur.code}>
-                      <button
-                        class="exchange-currency-menu__item"
-                        class:selected={second_currency === cur.code}
-                        on:click|stopPropagation={() => selectSecondCurrency(cur.code)}
-                        type="button">
-                        {t(cur.code)}
-                      </button>
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
-            </div>
-          </div>
-        </div>
+                class="xe-acc__picked"
+                aria-label={t('Select Account')}
+                on:click={async () => {
+                  first_entry_account = '';
+                  first_entry_account_search = '';
+                  showAccountDropdown = true;
+                  filteredAccounts = accounts;
 
-        <div class="col-md-2 exchange-benefit-field">
-          <label class="exchange-field-label">{t('Benefit')}</label>
-          <div class="exchange-benefit-row">
-            <div class="badge badge-{benefit_amount < 0 ? 'danger' : 'success'}">
-              <span dir="ltr"
-                >{benefit_amount.toLocaleString('en-US', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 6,
-                })}</span
-              >{' '}
-              {t(first_currency)}
-            </div>
-          </div>
-        </div>
-
-        <div class="col-md-3 exchange-description-field">
-          <label class="exchange-field-label">{t('Description')}</label>
-          <div class="exchange-unified-input-group">
-            <input
-              id="c-description"
-              class="form-control form-control-sm"
-              placeholder={t('Description')}
-              bind:value={description} />
-          </div>
-        </div>
-
-        <div class="col-md-4 exchange-mode-field">
-          <div class="exchange-mode-actions">
-            {#if !general}
-              <button
-                id="second_entry_account_search"
-                class="exchange-mode-btn"
-                class:exchange-mode-btn--active={second_entry_account == track_ID}
-                class:exchange-mode-btn--track={second_entry_account == track_ID}
-                type="button"
-                on:click={() => {
-                  filteredSecondAccounts = accounts;
-                  showTrackModal = true;
+                  await tick();
+                  first_entry_account_search_input?.focus();
                 }}>
-                <i class="bi bi-check-circle"></i>
-                {#if second_entry_account == track_ID}
-                  {getAccountName(track_ID)}
-                {:else}
-                  {t('Track')}
+                <span class="xe-acc__name">{getAccountName(first_entry_account)}</span>
+
+                {#if selectedFirstAccount}
+                  <span class="xe-acc__meta">{accountTypeLabel(selectedFirstAccount)}</span>
                 {/if}
               </button>
+
+              {#if balanceByAccount[first_entry_account]}
+                <span
+                  class="xe-acc__bal"
+                  class:is-debit={balanceByAccount[first_entry_account].tone === 'debit'}
+                  class:is-credit={balanceByAccount[first_entry_account].tone === 'credit'}
+                  class:is-settled={balanceByAccount[first_entry_account].tone === 'settled'}>
+                  <b dir="rtl">
+                    {balanceByAccount[first_entry_account].amount}
+                    <span class="xe-acc__cur">{balanceByAccount[first_entry_account].symbol}</span>
+                  </b>
+                  <small>{balanceByAccount[first_entry_account].label}</small>
+                </span>
+              {/if}
+            {:else}
+              <span class="ms xe-acc__icon" aria-hidden="true">person</span>
+
+              <input
+                type="text"
+                class="xe-acc__input"
+                id="first_entry_account_search"
+                bind:this={first_entry_account_search_input}
+                bind:value={first_entry_account_search}
+                placeholder={t('Select Account')}
+                aria-label={t('Select Account')}
+                autocomplete="off"
+                on:input={() => {
+                  showAccountDropdown = true;
+                  filterAccounts();
+                }}
+                on:focus={() => {
+                  showAccountDropdown = true;
+                  filterAccounts();
+                }}
+                on:blur={(event) => {
+                  /* Focus moving into the panel's own search box keeps it open. */
+                  if (event.relatedTarget?.closest?.('.xe-dd')) return;
+
+                  setTimeout(() => (showAccountDropdown = false), 150);
+                }} />
             {/if}
-            {#if enable_notrack || general}
-              <button
-                class="exchange-mode-btn"
-                class:exchange-mode-btn--active={second_entry_account == notrack_ID}
-                class:exchange-mode-btn--notrack={second_entry_account == notrack_ID}
-                type="button"
-                on:click={() => {
-                  second_entry_account = notrack_ID;
-                }}>
-                <i class="bi bi-x-circle"></i>
-                {t('No Track')}
-              </button>
-            {/if}
-            {#if !general}
-              <button
-                class="exchange-mode-btn"
-                class:exchange-mode-btn--active={second_entry_account == treasury_ID}
-                class:exchange-mode-btn--treasury={second_entry_account == treasury_ID}
-                type="button"
-                on:click={() => {
-                  second_entry_account = treasury_ID;
-                }}>
-                <i class="bi bi-box"></i>
-                {t('Treasury')}
-              </button>
-            {/if}
+
+            <span class="ms xe-acc__chev" aria-hidden="true">unfold_more</span>
           </div>
-          <div class="form-text mt-0 text-end exchange-balance-text">
-            {@html second_entry_account != notrack_ID
-              ? second_currency
-                ? calculateAccountBalance(second_entry_account, second_currency)
-                : ''
-              : ''}
-          </div>
-          {#if showTrackModal}
-            <div
-              use:portal
-              class="track-picker-layer"
-              id="trackModal"
-              tabindex="-1"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="trackModalLabel"
-              on:click|self={() => (showTrackModal = false)}>
-              <div class="modal-dialog modal-dialog-centered track-picker-dialog">
-                <div class="modal-content track-picker-modal">
-                  <div class="modal-header track-picker-header">
-                    <div class="track-picker-heading">
-                      <span><i class="bi bi-person-check"></i></span>
-                      <div><small>{t('Account')}</small><h5 class="modal-title" id="trackModalLabel">{t('Track')}</h5></div>
-                    </div>
-                    <button type="button" class="track-picker-close" aria-label={t('Close')} on:click={() => (showTrackModal = false)}><i class="bi bi-x-lg"></i></button>
+
+          {#if showAccountDropdown}
+            <div class="xe-dd" role="listbox">
+              <div class="xe-dd__head">
+                <label class="xe-dd__search" for="exchange_account_panel_search">
+                  <span class="ms" aria-hidden="true">search</span>
+
+                  <input
+                    id="exchange_account_panel_search"
+                    type="search"
+                    autocomplete="off"
+                    value={first_entry_account_search}
+                    placeholder={t('Search accounts...')}
+                    aria-label={t('Search accounts...')}
+                    on:input={(event) => {
+                      first_entry_account_search = event.currentTarget.value;
+                      filterAccounts();
+                    }} />
+                </label>
+
+                <button
+                  type="button"
+                  class="xe-dd__add"
+                  title={t('Add Account')}
+                  aria-label={t('Add Account')}
+                  on:click={() => modalRefAdd.openModal()}>
+                  <span class="ms" aria-hidden="true">person_add</span>
+                  {t('New')}
+                </button>
+              </div>
+
+              <div class="xe-dd__list">
+                {#each customerAccountRows as acc (acc.id)}
+                  {@const tint = accountTypeTint(acc)}
+                  <div class="xe-opt-row">
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={first_entry_account === acc.id}
+                      class="xe-opt"
+                      class:is-selected={first_entry_account === acc.id}
+                      on:mousedown|preventDefault={() => {
+                        first_entry_account = acc.id;
+                        first_entry_account_search = accountSearchName(acc);
+                        showAccountDropdown = false;
+                      }}>
+                      <span class="xe-opt__tile" style={tint.style} aria-hidden="true">
+                        <span class="ms">{tint.icon}</span>
+                      </span>
+
+                      <span class="xe-opt__copy">
+                        <strong>{accountSearchName(acc)}</strong>
+                        <small>
+                          {accountTypeLabel(acc) === 'N/A' ? '' : accountTypeLabel(acc)}
+                        </small>
+                      </span>
+
+                      {#if balanceByAccount[acc.id]}
+                        <span
+                          class="xe-opt__bal"
+                          class:is-debit={balanceByAccount[acc.id].tone === 'debit'}
+                          class:is-credit={balanceByAccount[acc.id].tone === 'credit'}
+                          class:is-settled={balanceByAccount[acc.id].tone === 'settled'}>
+                          <b dir="rtl">
+                            {balanceByAccount[acc.id].amount}
+                            <span class="xe-opt__cur">{balanceByAccount[acc.id].symbol}</span>
+                          </b>
+                        </span>
+                      {/if}
+                    </button>
+
+                    <button
+                      type="button"
+                      class="xe-opt__pin"
+                      class:is-on={pinnedAccountIds.includes(String(acc.id))}
+                      aria-pressed={pinnedAccountIds.includes(String(acc.id))}
+                      title={pinnedAccountIds.includes(String(acc.id))
+                        ? t('Unpin account')
+                        : t('Pin account')}
+                      aria-label={pinnedAccountIds.includes(String(acc.id))
+                        ? t('Unpin account')
+                        : t('Pin account')}
+                      on:click|stopPropagation={() => toggleAccountPin(acc.id)}>
+                      <span class="ms" aria-hidden="true">keep</span>
+                    </button>
                   </div>
-                  <div class="modal-body track-picker-body">
-                    <div class="mb-3">
-                      <div class="exchange-unified-input-group track-search-group">
-                        <span class="track-search-icon"><i class="bi bi-search"></i></span>
-                        <input
-                          type="text"
-                          class="form-control form-control-sm"
-                          placeholder={t('Search accounts...')}
-                          bind:value={second_entry_account_search}
-                          on:input={() => {
-                            filteredSecondAccounts = accounts.filter((acc) => {
-                              const name =
-                                t('Lang') === 'en'
-                                  ? acc.name
-                                  : t('Lang') === 'fa'
-                                    ? acc.name_fa
-                                    : t('Lang') === 'ps'
-                                      ? acc.name_ps
-                                      : acc.name;
-                              return name && name.toLowerCase().includes(second_entry_account_search.toLowerCase());
-                            });
-                          }} />
-                        <button
-                          class="btn exchange-input-addon-btn"
-                          type="button"
-                          on:click={() => modalRef?.openModal()}>
-                          <i class="bi bi-plus"></i>
-                        </button>
-                      </div>
-                      <div class="track-account-list">
-                        {#each filteredSecondAccounts as acc}
-                          <div class="list-group track-account-group">
-                            <button
-                              type="button"
-                              class="list-group-item list-group-item-action track-account-row"
-                              on:click={() => {
-                                second_entry_account = acc.id;
-                                track_ID = acc.id;
-                                showTrackModal = false;
-                              }}>
-                              <span class="track-account-avatar">{getAccountName(acc.id)?.trim()?.charAt(0) || '?'}</span>
-                              <span class="track-account-name">{getAccountName(acc.id)}</span>
-                              <span class="track-account-type">
-                                {#if accountTypes.find((at) => at.id === acc.account_type_id)?.name}
-                                  {t('Lang') === 'en'
-                                    ? accountTypes.find((at) => at.id === acc.account_type_id)?.name
-                                    : t('Lang') === 'fa'
-                                      ? accountTypes.find((at) => at.id === acc.account_type_id)?.name_fa
-                                      : t('Lang') === 'ps'
-                                        ? accountTypes.find((at) => at.id === acc.account_type_id)?.name_ps
-                                        : accountTypes.find((at) => at.id === acc.account_type_id)?.name}
-                                {:else}
-                                  N/A
-                                {/if}
-                              </span>
-                              <i class="bi bi-chevron-{t('dir') === 'rtl' ? 'left' : 'right'} track-row-arrow"></i>
-                            </button>
-                          </div>
-                        {/each}
-                        {#if filteredSecondAccounts.length === 0}
-                          <div class="track-empty"><i class="bi bi-person-x"></i><span>{t('No accounts found')}</span></div>
-                        {/if}
-                      </div>
-                    </div>
-                  </div>
-                  <div class="modal-footer track-picker-footer">
-                    <button type="button" class="track-cancel-btn" on:click={() => (showTrackModal = false)}
-                      ><i class="bi bi-x-lg"></i>
-                      {t('Close')}</button>
-                  </div>
-                </div>
+                {/each}
+
+                {#if filteredAccounts.length === 0}
+                  <div class="xe-dd__empty">{t('No accounts found')}</div>
+                {/if}
               </div>
             </div>
           {/if}
-          <AccountModal
-            bind:this={modalRef}
-            {accountTypes}
-            on:saved={async (e) => {
-              await loadAccounts();
-              second_entry_account = e.detail.account.id;
-              track_ID = e.detail.account.id;
-              showTrackModal = false;
-              setTimeout(() => {
-                if (window.mdb) {
-                  document.querySelectorAll('[data-mdb-input-init]').forEach((el) => new window.mdb.Input(el));
-                }
-              }, 100);
-            }} />
         </div>
+      {/if}
 
-        <div class="col-md-3 d-none">
-          <label class="form-label">Debit</label>
-          <input
-            readonly
-            type="number"
-            class="form-control"
-            bind:value={second_entry_debit}
-            on:input={(e) => onSecondDebitInput(e.target.value)} />
-        </div>
-        <div class="col-md-3 d-none">
-          <label class="form-label">Credit</label>
-          <input
-            readonly
-            type="number"
-            class="form-control"
-            bind:value={second_entry_credit}
-            on:input={(e) => onSecondCreditInput(e.target.value)} />
-        </div>
+      <AccountModal
+        bind:this={modalRefAdd}
+        {accountTypes}
+        on:saved={async (e) => {
+          await loadAccounts();
+          first_entry_account = e.detail.account.id;
+          first_entry_account_search = '';
+        }} />
+    </div>
 
-        <div class="col-md-3 d-flex align-items-start gap-2 exchange-submit-field">
-          <button class="btn btn-primary btn-sm w-100 exchange-submit-btn" on:click={saveExchange}>
-            <i class="bi bi-check-circle"></i>
-            {exchangeId ? t('Update Exchange') : t('Add Exchange')}
+    <!-- debit + rate -->
+    <div class="xe-grid xe-grid--amount">
+      <div class="xe-cell">
+        <label class="xe-label" for="first_entry_debit">
+          {t('Debit')}
+          <span class="xe-req" aria-hidden="true">*</span>
+        </label>
+
+        <div class="xe-amount">
+          <input
+            disabled={!first_currency || !second_currency}
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9,]*"
+            id="first_entry_debit"
+            class="xe-amount__input"
+            placeholder="0"
+            value={format(first_entry_debit)}
+            on:keydown={onlyNumbers}
+            on:input={(e) => onFirstDebitInput(normalize(e.target.value))} />
+
+          <div class="xe-currency">
+            <button
+              class="xe-currency__btn"
+              type="button"
+              aria-expanded={currencyMenuFor === 'debit'}
+              aria-haspopup="listbox"
+              aria-label={t('Currency')}
+              on:click|stopPropagation={() => toggleCurrencyMenu('debit')}>
+              <span>{first_currency ? t(first_currency) : t('Currency')}</span>
+              <span class="ms" aria-hidden="true">expand_more</span>
+            </button>
+
+            {#if currencyMenuFor === 'debit'}
+              <ul class="xe-menu" role="listbox">
+                {#each currencies as cur}
+                  <li role="option" aria-selected={first_currency === cur.code}>
+                    <button
+                      class="xe-menu__item"
+                      class:selected={first_currency === cur.code}
+                      on:click|stopPropagation={() => selectFirstCurrency(cur.code)}
+                      type="button">
+                      <span>{t(cur.code)}</span>
+                      <small>{cur.symbol}</small>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        </div>
+      </div>
+
+      <div class="xe-cell">
+        <span class="xe-label">{t('Rate')}</span>
+
+        <div class="xe-box">
+          <span class="ms xe-box__icon" aria-hidden="true">swap_horiz</span>
+
+          <input
+            disabled={!first_currency || !second_currency}
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9,]*"
+            id="exrate"
+            class="xe-box__input"
+            placeholder="1"
+            bind:value={exchangeRateAmount}
+            on:keydown={onlyNumbers}
+            on:input={() => calculateAmount()} />
+
+          <button
+            class="xe-rate-toggle"
+            class:is-divide={!exchangeRateMultiple}
+            type="button"
+            title={exchangeRateMultiple ? t('Multiply') : t('Divide')}
+            aria-label={exchangeRateMultiple ? t('Multiply') : t('Divide')}
+            on:click={() => {
+              exchangeRateMultiple = !exchangeRateMultiple;
+              calculateExchangeAmount();
+              calculateAmount();
+            }}>
+            {exchangeRateMultiple ? '×' : '÷'}
           </button>
+        </div>
+
+        {#if exchangeRateAmount != exchangeRateAmountSystem}
+          <span class="xe-note">
+            {t('System Rate')}: <span dir="ltr">{Number(exchangeRateAmountSystem || 0).toFixed(4)}</span>
+          </span>
+        {/if}
+      </div>
+    </div>
+
+    <!-- credit + benefit -->
+    <div class="xe-grid xe-grid--amount">
+      <div class="xe-cell">
+        <label class="xe-label" for="second_entry_credit">
+          {t('Credit')}
+          <span class="xe-req" aria-hidden="true">*</span>
+        </label>
+
+        <div class="xe-amount">
+          <input
+            disabled={!first_currency || !second_currency}
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9,]*"
+            id="second_entry_credit"
+            class="xe-amount__input"
+            placeholder="0"
+            value={format(second_entry_credit)}
+            on:keydown={onlyNumbers}
+            on:input={(e) => onFirstCreditInput(normalize(e.target.value))} />
+
+          <div class="xe-currency">
+            <button
+              class="xe-currency__btn"
+              type="button"
+              aria-expanded={currencyMenuFor === 'credit'}
+              aria-haspopup="listbox"
+              aria-label={t('Currency')}
+              on:click|stopPropagation={() => toggleCurrencyMenu('credit')}>
+              <span>{second_currency ? t(second_currency) : t('Currency')}</span>
+              <span class="ms" aria-hidden="true">expand_more</span>
+            </button>
+
+            {#if currencyMenuFor === 'credit'}
+              <ul class="xe-menu" role="listbox">
+                {#each currencies as cur}
+                  <li role="option" aria-selected={second_currency === cur.code}>
+                    <button
+                      class="xe-menu__item"
+                      class:selected={second_currency === cur.code}
+                      on:click|stopPropagation={() => selectSecondCurrency(cur.code)}
+                      type="button">
+                      <span>{t(cur.code)}</span>
+                      <small>{cur.symbol}</small>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        </div>
+      </div>
+
+      <div class="xe-cell">
+        <span class="xe-label">{t('Benefit')}</span>
+
+        <div class="xe-box is-readonly" class:is-negative={Number(benefit_amount) < 0}>
+          <span class="ms xe-box__icon" aria-hidden="true">
+            {Number(benefit_amount) < 0 ? 'trending_down' : 'trending_up'}
+          </span>
+
+          <b class="xe-box__value" dir="ltr">
+            {Number(benefit_amount || 0).toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 6,
+            })}
+          </b>
+
+          <span class="xe-box__cur">{first_currency ? t(first_currency) : ''}</span>
         </div>
       </div>
     </div>
+
+    <!-- counterpart account + date -->
+    <div class="xe-grid xe-grid--meta">
+      <div class="xe-cell">
+        <span class="xe-label">{t('Account')}</span>
+
+        {#if general}
+          <span class="xe-chip is-static">
+            <span class="ms" aria-hidden="true">block</span>
+            <b>{t('No Track')}</b>
+          </span>
+        {:else}
+          <div class="xe-account-row">
+            <button
+              type="button"
+              class="xe-account-select"
+              class:is-selected={exchangeMode !== 'notrack'}
+              aria-label={t('Account')}
+              aria-haspopup="dialog"
+              aria-expanded={showTrackModal}
+              on:click={openSecondAccountPicker}>
+              <span class="ms xe-account-select__icon" aria-hidden="true">
+                {exchangeMode === 'treasury'
+                  ? 'savings'
+                  : exchangeMode === 'notrack'
+                    ? 'block'
+                    : selectedSecondAccount?.code === 'TREASURY'
+                      ? 'savings'
+                      : 'account_balance_wallet'}
+              </span>
+
+              <strong class="xe-account-select__name">{secondAccountName}</strong>
+            </button>
+
+            <button
+              type="button"
+              class="xe-account-toggle"
+              class:is-on={showTrackModal}
+              aria-label={t('Account')}
+              aria-haspopup="dialog"
+              aria-expanded={showTrackModal}
+              title={t('Account')}
+              on:click={openSecondAccountPicker}>
+              <span class="ms" aria-hidden="true">person_search</span>
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      <div class="xe-cell xe-cell--date">
+        <span class="xe-label">{t('Date')}</span>
+
+        <div class="xe-date persianDatePicker">
+          <input type="date" class="xe-date__input" data-bind="date" bind:value={date} />
+          <span class="input-group-text persian-date-text"></span>
+        </div>
+      </div>
+    </div>
+
+    <label class="xe-desc" for="c-description">
+      <span class="xe-label">{t('Description')}</span>
+
+      <textarea
+        id="c-description"
+        class="xe-desc__box"
+        rows="2"
+        placeholder={t('Description')}
+        bind:value={description}></textarea>
+    </label>
   </div>
+
+  <div class="xe-foot">
+    <button type="button" class="xe-btn xe-btn--cancel" on:click={closeForm}>
+      {t('Cancel')}
+    </button>
+
+    <button type="button" class="xe-btn xe-btn--save" on:click={saveExchange}>
+      <span class="ms xe-btn__icon" aria-hidden="true">check</span>
+      {exchangeId ? t('Update Exchange') : t('Add Exchange')}
+    </button>
+  </div>
+
+  {#if showTrackModal}
+    <!-- The reference draws this as a floating list under the account field,
+         so the panel is positioned from the field rect (trackPickerStyle) and
+         the full-screen layer only exists to catch clicks outside of it. -->
+    <div
+      use:portal
+      class="xe-picker-layer"
+      role="presentation"
+      on:click|self={() => (showTrackModal = false)}>
+      <div
+        class="xe-picker"
+        id="trackModal"
+        role="dialog"
+        aria-label={t('Account')}
+        style={trackPickerStyle}>
+        <div class="xe-picker__body">
+          <div class="xe-picker__search">
+            <label class="xe-picker__box" for="exchange_picker_search">
+              <span class="ms" aria-hidden="true">search</span>
+
+              <input
+                id="exchange_picker_search"
+                type="search"
+                autocomplete="off"
+                placeholder={t('Search accounts...')}
+                bind:value={second_entry_account_search} />
+            </label>
+
+            <button
+              type="button"
+              class="xe-picker__new"
+              title={t('Add Account')}
+              aria-label={t('Add Account')}
+              on:click={() => {
+                /* The account form is an AppModal nested in this dialog, so
+                   the list steps aside while it is open; its saved event
+                   brings the user back with the new account selected. */
+                showTrackModal = false;
+                modalRef?.openModal();
+              }}>
+              <span class="ms" aria-hidden="true">person_add</span>
+              {t('New')}
+            </button>
+          </div>
+
+          <div class="xe-picker__list" role="listbox" aria-label={t('Account')}>
+            {#if showPinnedSection}
+              <span class="xe-picker__sect">
+                <span class="ms" aria-hidden="true">keep</span>
+                {t('Pinned')}
+              </span>
+            {/if}
+
+            {#each pinnedSecondAccounts as acc (acc.id)}
+              {@const tint = accountTypeTint(acc)}
+              <div class="xe-picker__row-wrap">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={Number(second_entry_account) === Number(acc.id)}
+                  class="xe-picker__row"
+                  class:is-selected={Number(second_entry_account) === Number(acc.id)}
+                  on:click={() => pickSecondAccount(acc.id)}>
+                  <span class="xe-picker__avatar" style={tint.style} aria-hidden="true">
+                    <span class="ms">
+                      {acc.code === 'TREASURY' ? 'savings' : tint.icon}
+                    </span>
+                  </span>
+
+                  <span class="xe-picker__copy">
+                    <strong>{accountSearchName(acc)}</strong>
+                    <small>{accountTypeLabel(acc) === 'N/A' ? '' : accountTypeLabel(acc)}</small>
+                  </span>
+
+                  {#if balanceByAccount[acc.id]}
+                    <span
+                      class="xe-picker__bal"
+                      class:is-debit={balanceByAccount[acc.id].tone === 'debit'}
+                      class:is-credit={balanceByAccount[acc.id].tone === 'credit'}
+                      class:is-settled={balanceByAccount[acc.id].tone === 'settled'}>
+                      <b dir="rtl">
+                        {balanceByAccount[acc.id].amount}
+                        <span class="xe-picker__cur">{balanceByAccount[acc.id].symbol}</span>
+                      </b>
+                    </span>
+                  {/if}
+                </button>
+
+                <button
+                  type="button"
+                  class="xe-picker__pin"
+                  class:is-on={true}
+                  title={t('Unpin account')}
+                  aria-label={t('Unpin account')}
+                  on:click={() => toggleAccountPin(acc.id)}>
+                  <span class="ms" aria-hidden="true">keep</span>
+                </button>
+              </div>
+            {/each}
+
+            {#if unpinnedSecondAccounts.length > 0}
+              <span class="xe-picker__sect">{t('All Accounts')}</span>
+            {/if}
+
+            {#each unpinnedSecondAccounts as acc (acc.id)}
+              {@const tint = accountTypeTint(acc)}
+              <div class="xe-picker__row-wrap">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={Number(second_entry_account) === Number(acc.id)}
+                  class="xe-picker__row"
+                  class:is-selected={Number(second_entry_account) === Number(acc.id)}
+                  on:click={() => pickSecondAccount(acc.id)}>
+                  <span class="xe-picker__avatar" style={tint.style} aria-hidden="true">
+                    <span class="ms">
+                      {acc.code === 'TREASURY' ? 'savings' : tint.icon}
+                    </span>
+                  </span>
+
+                  <span class="xe-picker__copy">
+                    <strong>{accountSearchName(acc)}</strong>
+                    <small>{accountTypeLabel(acc) === 'N/A' ? '' : accountTypeLabel(acc)}</small>
+                  </span>
+
+                  {#if balanceByAccount[acc.id]}
+                    <span
+                      class="xe-picker__bal"
+                      class:is-debit={balanceByAccount[acc.id].tone === 'debit'}
+                      class:is-credit={balanceByAccount[acc.id].tone === 'credit'}
+                      class:is-settled={balanceByAccount[acc.id].tone === 'settled'}>
+                      <b dir="rtl">
+                        {balanceByAccount[acc.id].amount}
+                        <span class="xe-picker__cur">{balanceByAccount[acc.id].symbol}</span>
+                      </b>
+                    </span>
+                  {/if}
+                </button>
+
+                <button
+                  type="button"
+                  class="xe-picker__pin"
+                  title={t('Pin account')}
+                  aria-label={t('Pin account')}
+                  on:click={() => toggleAccountPin(acc.id)}>
+                  <span class="ms" aria-hidden="true">keep</span>
+                </button>
+              </div>
+            {/each}
+
+            {#if matchingSecondAccounts.length === 0}
+              <div class="xe-picker__empty">{t('No accounts found')}</div>
+            {/if}
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <AccountModal
+    bind:this={modalRef}
+    {accountTypes}
+    on:saved={async (e) => {
+      await loadAccounts();
+      second_entry_account = e.detail.account.id;
+      track_ID = e.detail.account.id;
+      showTrackModal = false;
+    }} />
 </div>
 
 {#if showReceipt}
@@ -1164,777 +1559,1394 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
 {/if}
 
 <style>
+  /* =========================================================================
+     Add Exchange — the visual contract mirrors the reference "Create Journal"
+     dialog (Journal.dc.html) through AddJournal.svelte: 10px stacked
+     sections, 40px boxes, 30px segmented tabs, 32px date / counter row and
+     32px footer actions. Every value reads from the shared --z-* tokens, so
+     dark mode is free.
+     ========================================================================= */
+
   .exchange-form-page {
-    --exchange-control-height: 2rem;
-    --exchange-label-offset: 1.05rem;
-    background: transparent;
-    padding-bottom: 0;
-    color: #0f172a;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    color: var(--z-text);
+    font-family: var(--z-font);
   }
 
-  .exchange-form-card {
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.045) !important;
-    overflow: hidden;
-    background: #ffffff;
+  .xe-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    padding: 12px 14px;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
-  .exchange-form-card :global(.card-body) {
-    padding: 0.85rem 1rem;
-    overflow: visible;
+  /* ---- mode tabs (track / treasury / no track) ---- */
+  .xe-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2px;
+    padding: 3px;
+    border-radius: 9px;
+    background: var(--z-surface-3);
   }
 
-  .exchange-field-label {
-    display: block;
-    margin-bottom: 0.25rem;
-    color: #64748b;
-    font-size: 0.68rem;
-    font-weight: 750;
-    line-height: 1.2;
+  .xe-tabs--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .exchange-form-fields :global(.form-control),
-  .exchange-form-fields :global(.form-select),
-  .exchange-form-page :global(.form-control),
-  .exchange-form-page :global(.form-select) {
-    border-color: #e2e8f0;
-    border-radius: 8px;
-    background: #ffffff;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: #334155;
-    min-height: var(--exchange-control-height) !important;
-    height: var(--exchange-control-height);
-    padding-block: 0.25rem;
-    padding-inline: 0.625rem;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-  }
-
-  .exchange-form-fields :global(.form-control-sm),
-  .exchange-form-page :global(.form-control-sm) {
-    min-height: var(--exchange-control-height) !important;
-    height: var(--exchange-control-height);
-    font-size: 0.8125rem;
-    padding-block: 0.25rem;
-    padding-inline: 0.625rem;
-  }
-
-  .exchange-form-fields :global(.form-control:focus),
-  .exchange-form-fields :global(.form-select:focus),
-  .exchange-form-page :global(.form-control:focus),
-  .exchange-form-page :global(.form-select:focus) {
-    border-color: #93c5fd;
-    background: #ffffff;
-    box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.1);
-  }
-
-  .exchange-unified-input-group.persianDatePicker {
-    flex-direction: row !important;
-    align-items: stretch !important;
-  }
-
-  .exchange-unified-input-group.persianDatePicker :global(.persian-date-text) {
-    flex: 1 1 50%;
-    min-width: 0;
-    width: auto;
-    border-inline-start: 1px solid #e2e8f0 !important;
-    border-bottom: 0;
+  .xe-tab {
+    display: flex;
+    align-items: center;
     justify-content: center;
-    text-align: center;
-    background: var(--erp-bg) !important;
-    height: var(--exchange-control-height);
-    min-height: var(--exchange-control-height);
-    max-height: var(--exchange-control-height);
-    font-size: 0.78rem;
-    font-weight: 600;
-    line-height: 1.2;
-    padding: 0 0.45rem;
+    gap: 4px;
+    height: 30px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--z-surface);
+    color: var(--z-muted);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease;
   }
 
-  .exchange-unified-input-group.persianDatePicker :global(.input-group-text.badge-warning) {
+  .xe-tab .ms {
     flex: 0 0 auto;
-    width: auto;
-    border-inline-start: 0 !important;
-    border-bottom: 0;
-    border-inline-end: 1px solid #e2e8f0;
-    justify-content: center;
-    height: var(--exchange-control-height);
-    min-height: var(--exchange-control-height);
-    max-height: var(--exchange-control-height);
+    font-size: 15px;
   }
 
-  .exchange-unified-input-group.persianDatePicker :global(.form-control) {
-    flex: 1 1 50%;
+  .xe-tab__copy {
     min-width: 0;
-    width: auto;
-    border-top: 0;
-    height: var(--exchange-control-height);
-    min-height: var(--exchange-control-height);
-    max-height: var(--exchange-control-height);
-    font-size: 0.78rem;
-    line-height: 1.2;
-    padding: 0.25rem 0.45rem;
-  }
-
-  .exchange-unified-input-group {
-    display: flex;
-    align-items: stretch;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #ffffff;
-    min-height: var(--exchange-control-height);
-  }
-
-  .exchange-amount-row {
-    display: flex;
-    align-items: stretch;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    overflow: visible;
-    background: #ffffff;
-    min-height: var(--exchange-control-height);
-  }
-
-  .exchange-amount-row:focus-within {
-    border-color: #93c5fd;
-    box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.1);
-  }
-
-  .exchange-unified-input-group--inline {
-    flex: 1;
-    min-width: 0;
-    border: 0;
-    border-radius: 0;
-    overflow: hidden;
-  }
-
-  .exchange-currency-picker {
-    position: relative;
-    flex-shrink: 0;
-    border-inline-start: 1px solid #e2e8f0;
-  }
-
-  .exchange-currency-picker__btn {
-    height: 100%;
-    min-height: var(--exchange-control-height);
-    border: 0;
-    background: #ffffff;
-    padding: 0 0.55rem;
-    font-weight: 700;
-    font-size: 0.75rem;
-    color: #475569;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .exchange-currency-picker__btn:hover {
-    background: #f8fafc;
-  }
-
-  .exchange-currency-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    inset-inline-end: 0;
-    z-index: 1050;
-    min-width: 130px;
-    margin: 0;
-    padding: 0.35rem 0;
-    list-style: none;
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
-  }
-
-  .exchange-currency-menu__item {
-    display: block;
-    width: 100%;
-    border: 0;
-    background: transparent;
-    padding: 0.45rem 0.85rem;
-    text-align: start;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: #334155;
-    cursor: pointer;
-  }
-
-  .exchange-currency-menu__item:hover,
-  .exchange-currency-menu__item.selected {
-    background: #eff6ff;
-    color: #0f6efd;
-  }
-
-  .exchange-unified-input-group:focus-within {
-    border-color: #93c5fd;
-    box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.1);
-  }
-
-  .exchange-unified-input-group :global(.form-control) {
-    border: 0 !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    flex: 1 1 auto;
-    min-width: 0;
-    background: #ffffff !important;
-    min-height: var(--exchange-control-height) !important;
-    height: var(--exchange-control-height);
-  }
-
-  .exchange-unified-input-group :global(.form-control:focus) {
-    border: 0 !important;
-    box-shadow: none !important;
-    background: #ffffff !important;
-  }
-
-  .exchange-unified-input-group :global(.input-group-text) {
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: #ffffff;
-  }
-
-  .exchange-unified-input-group :global(.input-group-text:not(:first-child)) {
-    border-inline-start: 1px solid #e2e8f0 !important;
-  }
-
-  .exchange-unified-input-group :global(.input-group-text:first-child:not(:last-child)) {
-    border-inline-end: 1px solid #e2e8f0 !important;
-  }
-
-  .exchange-unified-input-group :global(.exchange-input-addon-btn),
-  .exchange-unified-input-group :global(.btn-info) {
-    border: 0 !important;
-    border-inline-start: 1px solid #e2e8f0 !important;
-    border-radius: 0 !important;
-    padding: 0 0.5rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    align-self: stretch;
-    box-shadow: none !important;
-    min-height: var(--exchange-control-height);
-  }
-
-  .exchange-unified-input-group :global(.btn-info) {
-    background: #eff6ff !important;
-    color: #0f6efd;
-  }
-
-  .exchange-unified-input-group :global(.exchange-input-addon-btn:first-child),
-  .exchange-unified-input-group :global(.btn-info.exchange-input-addon-btn:first-child) {
-    border-inline-start: 0 !important;
-  }
-
-  .exchange-unified-input-group--account {
-    direction: ltr;
-  }
-
-  .exchange-unified-input-group--account :global(.exchange-account-search-input),
-  .exchange-unified-input-group--account .exchange-account-selected-name {
-    direction: rtl;
-    text-align: right;
-    flex: 1 1 auto;
-    width: 100%;
-    min-width: 0;
-    border: 0 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    background: #ffffff !important;
-    min-height: var(--exchange-control-height) !important;
-    height: var(--exchange-control-height);
-  }
-
-  .exchange-unified-input-group--account :global(.exchange-account-quick-btn) {
-    border-inline-start: 0 !important;
-    border-inline-end: 1px solid #e2e8f0 !important;
-    flex-shrink: 0;
-    background: #0f6efd !important;
-    color: #ffffff !important;
-    font-size: 0.95rem;
-    font-weight: 700;
-    line-height: 1;
-    min-width: var(--exchange-control-height);
-    width: var(--exchange-control-height);
-    padding: 0;
-  }
-
-  .exchange-unified-input-group--account :global(.exchange-account-quick-btn:hover),
-  .exchange-unified-input-group--account :global(.exchange-account-quick-btn:focus) {
-    background: #1d4ed8 !important;
-    color: #ffffff !important;
-  }
-
-  .exchange-account-selected-name {
-    display: flex;
-    align-items: center;
-    padding: 0 0.625rem;
-    font-weight: 650;
-    font-size: 0.8125rem;
-    color: #334155;
-    cursor: pointer;
-    min-height: var(--exchange-control-height);
-    line-height: 1.2;
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .exchange-account-selected-name:hover {
-    background: #f8fafc !important;
+  .xe-tab:hover {
+    color: var(--z-ink);
   }
 
-  .exchange-form-dropdown {
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
-    z-index: 1050;
-  }
-
-  .exchange-form-dropdown :global(.list-group-item) {
-    border: 0;
-    font-weight: 600;
-    font-size: 0.82rem;
-  }
-
-  .exchange-form-dropdown :global(.list-group-item:hover) {
-    background: #eff6ff;
-    color: #0f6efd;
-  }
-
-  .exchange-form-page :global(.btn) {
-    min-height: var(--exchange-control-height);
-  }
-
-  .exchange-form-page :global(.form-control::placeholder) {
-    color: #94a3b8;
-    font-weight: 500;
-  }
-
-  .exchange-invalid-feedback {
-    margin-top: 4px;
-    font-size: 0.7rem;
-    color: #dc2626;
-    font-weight: 600;
-  }
-
-  .exchange-balance-text {
-    font-size: 0.68rem !important;
-    line-height: 1.25;
-  }
-
-  .exchange-rate-toggle {
-    border: 0 !important;
-    border-inline-start: 1px solid #e2e8f0 !important;
-    border-radius: 0 !important;
-    padding: 0 0.5rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    align-self: stretch;
-    box-shadow: none !important;
-    min-height: var(--exchange-control-height);
-    min-width: var(--exchange-control-height);
-    background: #ffffff;
-    font-size: 0.85rem;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  .exchange-rate-toggle:hover {
-    background: #f8fafc;
-  }
-
-  .exchange-benefit-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    min-height: var(--exchange-control-height);
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #ffffff;
-  }
-
-  .exchange-benefit-row :global(.badge) {
-    display: flex;
-    width: 100%;
-    min-height: var(--exchange-control-height);
-    align-items: center;
-    justify-content: center;
-    border-radius: 0;
-    font-size: 0.76rem;
-    font-weight: 800;
-  }
-
-  .exchange-mode-field,
-  .exchange-submit-field {
-    padding-top: var(--exchange-label-offset);
-  }
-
-  .exchange-mode-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 0.35rem;
-  }
-
-  .exchange-mode-btn {
-    min-height: var(--exchange-control-height);
-    padding: 0.25rem 0.75rem;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    background: #ffffff;
-    box-shadow: none;
-    font-size: 0.72rem;
-    font-weight: 750;
-    color: #475569;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  }
-
-  .exchange-mode-btn:hover {
-    background: #f8fafc;
-  }
-
-  .exchange-mode-btn--active.exchange-mode-btn--track {
-    background: #fef2f2;
-    border-color: #fecaca;
-    color: #dc2626;
-  }
-
-  .exchange-mode-btn--active.exchange-mode-btn--notrack {
-    background: #1e293b;
-    border-color: #1e293b;
+  .xe-tab.is-active {
     color: #ffffff;
-  }
-
-  .exchange-mode-btn--active.exchange-mode-btn--treasury {
-    background: #ecfdf5;
-    border-color: #a7f3d0;
-    color: #059669;
-  }
-
-  .exchange-submit-btn {
-    min-height: var(--exchange-control-height);
-    padding: 0.25rem 0.75rem;
-    border-radius: 8px;
-    border-color: #2f6fed !important;
-    background: #2f6fed !important;
-    color: #fff !important;
-    box-shadow: 0 4px 10px rgba(47, 111, 237, 0.18);
-    font-size: 0.78rem;
     font-weight: 800;
-    line-height: 1.2;
+    background: var(--z-link);
+    box-shadow: 0 4px 10px -4px var(--z-link);
   }
 
-   .exchange-account-field {
+  /* ---- field scaffolding ---- */
+  .xe-field,
+  .xe-cell {
     position: relative;
-    min-width: 0;
-    overflow: visible;
-  }
-
-  .exchange-account-anchor {
-    position: relative;
-    z-index: 120;
-    width: 100%;
-    min-width: 0;
-    overflow: visible;
-  }
-
-  .exchange-account-control {
     display: flex;
-    align-items: stretch;
-    width: 100%;
-    height: 2.375rem;
-    min-height: 2.375rem;
-    overflow: hidden;
-    border: 1px solid #d6dfeb;
-    border-radius: 0.625rem;
-    background: #fff;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
   }
 
-  .exchange-account-control:hover {
-    border-color: #bcc9db;
+  .xe-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
 
-  .exchange-account-control:focus-within,
-  .exchange-account-control.is-open {
-    border-color: #78a4f5;
-    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1);
+  .xe-grid--amount,
+  .xe-grid--meta {
+    grid-template-columns: minmax(0, 1fr) 150px;
+    align-items: end;
   }
 
-  .exchange-account-control__icon {
-    display: inline-grid;
-    flex: 0 0 2.25rem;
-    width: 2.25rem;
-    place-items: center;
-    background: #fff;
-    color: #8c9aad;
+  .xe-grid--meta {
+    grid-template-columns: minmax(0, 1fr) 124px;
+    align-items: start;
   }
 
-  .exchange-account-search-input {
+  .xe-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--z-text);
+  }
+
+  .xe-req {
+    color: var(--z-danger);
+  }
+
+  /* ---- account box ---- */
+  .xe-acc {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 9px;
+    border: 1px solid var(--z-border);
+    border-radius: 8px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .xe-acc.is-empty {
+    border-style: dashed;
+    border-color: var(--z-border-strong);
+    background: var(--z-surface-2);
+  }
+
+  .xe-acc.is-open,
+  .xe-acc:focus-within {
+    border-color: var(--z-link);
+    box-shadow: var(--z-ring);
+  }
+
+  .xe-acc.is-locked {
+    background: var(--z-surface-2);
+  }
+
+  /* Tint and glyph come from the account class (inline style), exactly as
+     the reference paints the account avatar. */
+  .xe-acc__tile {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    font-size: 15px;
+  }
+
+  .xe-acc__icon,
+  .xe-acc__chev {
+    flex: 0 0 auto;
+    font-size: 18px;
+    color: var(--z-subtle);
+  }
+
+  .xe-acc__input {
     flex: 1 1 auto;
-    width: 100%;
+    width: 0;
     min-width: 0;
     height: 100%;
-    margin: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--z-ink);
+  }
+
+  .xe-acc__input::placeholder {
+    color: var(--z-subtle);
+    font-weight: 600;
+  }
+
+  .xe-acc__picked {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    line-height: 1.25;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .xe-acc.is-locked .xe-acc__picked {
+    cursor: default;
+  }
+
+  .xe-acc__name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--z-ink);
+  }
+
+  .xe-acc__meta {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--z-muted);
+  }
+
+  .xe-acc__bal {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    line-height: 1.25;
+    text-align: end;
+  }
+
+  .xe-acc__bal b {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    font-family: var(--z-font-num);
+    font-size: 11.5px;
+    font-weight: 800;
+    white-space: nowrap;
+    color: var(--z-ink);
+  }
+
+  .xe-acc__cur {
+    font-family: var(--z-font);
+    font-weight: 700;
+  }
+
+  .xe-acc__bal small {
+    font-size: 9.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--z-muted);
+  }
+
+  /* Only the amount takes the tone: a debit balance is red, a credit one
+     green and a settled balance muted — the caption stays muted. */
+  .xe-acc__bal.is-debit b {
+    color: var(--z-danger);
+  }
+
+  .xe-acc__bal.is-credit b {
+    color: var(--z-ok);
+  }
+
+  .xe-acc__bal.is-settled b {
+    color: var(--z-muted);
+  }
+
+  /* ---- dropdowns ---- */
+  .xe-dd {
+    position: absolute;
+    top: 44px;
+    inset-inline: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    border: 1px solid var(--z-border);
+    border-radius: 10px;
+    background: var(--z-surface);
+    box-shadow: var(--z-sh-pop);
+  }
+
+  .xe-dd__head {
+    display: flex;
+    gap: 4px;
+  }
+
+  .xe-dd__search {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--z-border-soft);
+    border-radius: 7px;
+    background: var(--z-surface-2);
+    color: var(--z-subtle);
+  }
+
+  .xe-dd__search .ms {
+    flex: 0 0 auto;
+    font-size: 16px;
+  }
+
+  .xe-dd__search input {
+    flex: 1 1 auto;
+    width: 0;
+    min-width: 0;
+    height: 100%;
     padding: 0;
     border: 0;
     outline: 0;
     background: transparent;
-    color: #26364b;
-    font-size: 0.78rem;
-    font-weight: 650;
-    line-height: 1.2;
-    text-align: start;
-    box-shadow: none;
+    font: inherit;
+    font-size: 12px;
+    color: var(--z-ink);
   }
 
-  .exchange-account-search-input:focus {
+  .xe-dd__search input::placeholder {
+    color: var(--z-subtle);
+  }
+
+  .xe-dd__search input::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .xe-dd__add {
+    flex: 0 0 auto;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .xe-dd__add .ms {
+    font-size: 16px;
+  }
+
+  .xe-dd__list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    /* 220px of rows, but never more than the viewport can show under the
+       field - the list drops down and has no room to flip. */
+    max-height: min(220px, 40vh);
+    overflow-y: auto;
+  }
+
+  .xe-dd__empty {
+    padding: 10px;
+    text-align: center;
+    font-size: 11.5px;
+    color: var(--z-subtle);
+  }
+
+  .xe-opt-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .xe-opt {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .xe-opt:hover {
+    background: var(--z-surface-2);
+  }
+
+  .xe-opt.is-selected {
+    background: var(--z-brand-soft);
+  }
+
+  .xe-opt__tile {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+  }
+
+  .xe-opt__tile .ms {
+    font-size: 15px;
+  }
+
+  .xe-opt__copy {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+  }
+
+  .xe-opt__copy strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--z-ink);
+  }
+
+  .xe-opt__copy small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+    color: var(--z-muted);
+  }
+
+  .xe-opt__bal {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+  }
+
+  .xe-opt__bal b {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    font-family: var(--z-font-num);
+    font-size: 11.5px;
+    font-weight: 800;
+    white-space: nowrap;
+    color: var(--z-ink);
+  }
+
+  .xe-opt__cur {
+    font-family: var(--z-font);
+    font-weight: 700;
+  }
+
+  .xe-opt__bal.is-debit b {
+    color: var(--z-danger);
+  }
+
+  .xe-opt__bal.is-credit b {
+    color: var(--z-ok);
+  }
+
+  .xe-opt__bal.is-settled b {
+    color: var(--z-muted);
+  }
+
+  .xe-opt__pin {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-inline-end: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--z-subtle);
+    font: inherit;
+    font-size: 16px;
+    cursor: pointer;
+    opacity: 0.75;
+  }
+
+  .xe-opt__pin:hover {
+    background: var(--z-surface-2);
+    color: var(--z-link);
+  }
+
+  .xe-opt__pin.is-on {
+    color: var(--z-link);
+    opacity: 1;
+  }
+
+  /* ---- amount ---- */
+  .xe-amount {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    border: 1.5px solid var(--z-border);
+    border-radius: 9px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .xe-amount:focus-within {
+    border-color: var(--z-link);
+    box-shadow: var(--z-ring);
+  }
+
+  .xe-amount__input {
+    flex: 1 1 auto;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    padding: 0 12px;
     border: 0;
     outline: 0;
-    box-shadow: none;
+    background: transparent;
+    font-family: var(--z-font-num);
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--z-ink);
+    direction: ltr;
+    text-align: right;
   }
 
-  .exchange-account-search-input::placeholder {
-    color: #9aa7b8;
-    font-weight: 500;
+  .xe-amount__input::placeholder {
+    color: var(--z-subtle);
   }
 
-  .exchange-selected-account {
+  .xe-amount__input:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  /* ---- currency picker ---- */
+  .xe-currency {
+    position: relative;
+    flex: 0 0 auto;
+    margin-inline-end: 5px;
+  }
+
+  .xe-currency__btn {
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    padding: 0 4px 0 7px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--z-surface-3);
+    font-family: var(--z-font-num);
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--z-ink);
+    cursor: pointer;
+  }
+
+  .xe-currency__btn .ms {
+    font-size: 15px;
+    color: var(--z-muted);
+  }
+
+  .xe-menu {
+    position: absolute;
+    top: 32px;
+    inset-inline-end: 0;
+    z-index: 7;
+    width: 150px;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
     display: flex;
-    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 1px;
+    border: 1px solid var(--z-border);
+    border-radius: 10px;
+    background: var(--z-surface);
+    box-shadow: var(--z-sh-pop);
+  }
+
+  .xe-menu__item {
+    width: 100%;
+    min-height: 32px;
+    display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
-    min-width: 0;
-    height: 100%;
-    padding-inline: 0.1rem 0.65rem;
+    gap: 8px;
+    padding: 0 8px;
     border: 0;
-    outline: 0;
+    border-radius: 7px;
     background: transparent;
-    color: #26364b;
-    font-size: 0.78rem;
-    font-weight: 750;
+    color: var(--z-ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
     text-align: start;
     cursor: pointer;
   }
 
-  .exchange-selected-account:hover {
-    color: #1d4ed8;
+  .xe-menu__item small {
+    font-family: var(--z-font-num);
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--z-muted);
   }
 
-  .exchange-selected-account__name {
+  .xe-menu__item:hover {
+    background: var(--z-surface-2);
+  }
+
+  .xe-menu__item.selected {
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font-weight: 800;
+  }
+
+  .xe-menu__item.selected small {
+    color: var(--z-link);
+    opacity: 0.75;
+  }
+
+  /* ---- rate / benefit box ---- */
+  .xe-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 40px;
+    padding: 0 10px;
+    border: 1.5px solid var(--z-border);
+    border-radius: 9px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .xe-box:focus-within {
+    border-color: var(--z-link);
+    box-shadow: var(--z-ring);
+  }
+
+  .xe-box.is-readonly {
+    border-width: 1px;
+    border-color: var(--z-border-soft);
+    background: var(--z-surface-2);
+  }
+
+  .xe-box__icon {
+    flex: 0 0 auto;
+    font-size: 16px;
+    color: var(--z-subtle);
+  }
+
+  .xe-box__input {
+    flex: 1 1 auto;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-family: var(--z-font-num);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--z-ink);
+    direction: ltr;
+    text-align: right;
+  }
+
+  .xe-box__input::placeholder {
+    color: var(--z-subtle);
+    font-weight: 600;
+  }
+
+  .xe-box__input:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .xe-box__value {
+    flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-family: var(--z-font-num);
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--z-ok);
+    text-align: right;
   }
 
-  .exchange-selected-account > i {
-    flex-shrink: 0;
-    color: #94a3b8;
-    font-size: 0.72rem;
-  }
-
-  .exchange-account-add {
-    display: inline-flex;
+  .xe-box__cur {
     flex: 0 0 auto;
+    font-family: var(--z-font);
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--z-muted);
+  }
+
+  .xe-box.is-readonly .xe-box__icon {
+    color: var(--z-ok);
+  }
+
+  /* A loss flips the whole benefit box to the danger tone. */
+  .xe-box.is-negative .xe-box__value,
+  .xe-box.is-negative .xe-box__icon {
+    color: var(--z-danger);
+  }
+
+  .xe-rate-toggle {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.3rem;
-    min-width: 4.2rem;
-    height: 100%;
-    padding-inline: 0.65rem;
+    padding: 0;
     border: 0;
-    border-inline-start: 1px solid #dfe6ef;
-    background: var(--bs-primary, #2f6fed);
-    color: #fff;
-    font-size: 0.68rem;
+    border-radius: 6px;
+    background: var(--z-surface-3);
+    color: var(--z-link);
+    font-family: var(--z-font-num);
+    font-size: 14px;
     font-weight: 800;
     line-height: 1;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .xe-rate-toggle:hover {
+    background: var(--z-brand-soft);
+  }
+
+  .xe-rate-toggle.is-divide {
+    color: var(--z-danger);
+  }
+
+  .xe-note {
+    font-family: var(--z-font-num);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--z-muted);
+  }
+
+  /* ---- counterpart account + date ---- */
+  .xe-account-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .xe-account-select {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 9px;
+    border: 1px dashed var(--z-border-strong);
+    border-radius: 8px;
+    background: var(--z-surface);
+    color: var(--z-subtle);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-align: start;
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .xe-account-select:hover,
+  .xe-account-select[aria-expanded='true'] {
+    border-color: var(--z-link);
+    color: var(--z-link);
+  }
+
+  /* Selected state is the reference chip: brand-soft fill, solid brand
+     border and brand text instead of the dashed empty-field hint. */
+  .xe-account-select.is-selected {
+    border-style: solid;
+    border-color: currentColor;
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+  }
+
+  .xe-account-select__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    font-size: 16px;
+    color: var(--z-subtle);
+  }
+
+  .xe-account-select.is-selected .xe-account-select__icon {
+    color: inherit;
+  }
+
+  .xe-account-select__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 11.5px;
+    font-weight: 800;
+    text-overflow: ellipsis;
     white-space: nowrap;
+    color: inherit;
+  }
+
+  .xe-account-toggle {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed var(--z-border-strong);
+    border-radius: 8px;
+    background: var(--z-surface);
+    color: var(--z-text);
+    font: inherit;
+    font-size: 18px;
+    cursor: pointer;
+  }
+
+  .xe-account-toggle:hover,
+  .xe-account-toggle.is-on {
+    border-style: solid;
+    border-color: var(--z-link);
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+  }
+
+  .xe-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 9px;
+    border: 1px solid var(--z-border-soft);
+    border-radius: 8px;
+    background: var(--z-surface-2);
+    color: var(--z-muted);
+    font-size: 11.5px;
+  }
+
+  .xe-chip .ms {
+    font-size: 16px;
+    color: var(--z-subtle);
+  }
+
+  .xe-chip b {
+    font-weight: 700;
+    color: var(--z-text);
+  }
+
+  .xe-cell--date {
+    width: 124px;
+  }
+
+  .xe-date {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    border: 1px solid var(--z-border);
+    border-radius: 8px;
+    background: var(--z-surface);
+    box-sizing: border-box;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .xe-date:focus-within {
+    border-color: var(--z-link);
+    box-shadow: var(--z-ring);
+  }
+
+  .xe-date > input[type='date'] {
+    display: none;
+  }
+
+  .xe-date :global(.legacy-app-date-picker-host) {
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+  }
+
+  .xe-date :global(.app-date-field) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    gap: 0;
+  }
+
+  .xe-date :global(.app-date-field .date-label) {
+    display: none;
+  }
+
+  .xe-date :global(.pdp),
+  .xe-date :global(.pdp-group) {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .xe-date :global(.pdp-input) {
+    width: 100%;
+    height: 100% !important;
+    min-height: 0 !important;
+    padding: 0 8px !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-family: var(--z-font-num);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--z-ink);
+    direction: ltr;
+    text-align: right !important;
+  }
+
+  /* ---- description ---- */
+  .xe-desc {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .xe-desc__box {
+    width: 100%;
+    min-height: 52px;
+    padding: 7px 9px;
+    border: 1px solid var(--z-border);
+    border-radius: 8px;
+    background: var(--z-surface);
+    color: var(--z-ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.6;
+    resize: vertical;
+    box-sizing: border-box;
+    outline: 0;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .xe-desc__box:focus {
+    border-color: var(--z-link);
+    box-shadow: var(--z-ring);
+  }
+
+  .xe-desc__box::placeholder {
+    color: var(--z-subtle);
+  }
+
+  /* ---- footer ---- */
+  .xe-foot {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 9px 14px;
+    border-top: 1px solid var(--z-border-soft);
+    border-radius: 0 0 14px 14px;
+    background: var(--z-surface-2);
+  }
+
+  .xe-btn {
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 12px;
+    border: 1px solid var(--z-border);
+    border-radius: 8px;
+    background: var(--z-surface);
+    color: var(--z-text);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .xe-btn--cancel:hover {
+    border-color: var(--z-border-strong);
+    color: var(--z-ink);
+  }
+
+  .xe-btn--save {
+    padding: 0 14px;
+    border: 0;
+    color: #ffffff;
+    background: var(--z-link);
+  }
+
+  .xe-btn--save:hover {
+    filter: brightness(1.06);
+  }
+
+  .xe-btn__icon {
+    font-size: 16px;
+  }
+
+  /* ---- counterpart account picker --------------------------------
+   * The reference draws this as a floating list under the account field,
+   * so the panel is positioned from the field rect (trackPickerStyle) and
+   * the full-screen layer only exists to catch clicks outside of it. */
+  .xe-picker-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 10060;
+    pointer-events: auto;
+  }
+
+  .xe-picker {
+    position: fixed;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--z-border);
+    border-radius: 10px;
+    background: var(--z-surface);
+    box-shadow: 0 16px 40px -14px rgba(11, 21, 48, 0.35);
+    pointer-events: auto;
+  }
+
+  .xe-picker__body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+    padding: 4px;
+  }
+
+  .xe-picker__search {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .xe-picker__box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--z-border-soft);
+    border-radius: 7px;
+    background: var(--z-surface-2);
+    color: var(--z-subtle);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .xe-picker__box .ms {
+    flex: 0 0 auto;
+    font-size: 16px;
+  }
+
+  .xe-picker__box:focus-within {
+    border-color: var(--z-link);
+    box-shadow: var(--z-ring);
+  }
+
+  .xe-picker__box input {
+    flex: 1 1 auto;
+    width: 0;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+    color: var(--z-ink);
+  }
+
+  .xe-picker__box input::placeholder {
+    color: var(--z-subtle);
+  }
+
+  .xe-picker__box input::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .xe-picker__new {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    flex: 0 0 auto;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: var(--z-brand-soft);
+    color: var(--z-link);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .xe-picker__new .ms {
+    font-size: 16px;
+  }
+
+  .xe-picker__new:hover {
+    border-color: var(--z-brand-300);
+  }
+
+  .xe-picker__list {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 1px;
+    min-height: 0;
+    max-height: 220px;
+    padding: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .xe-picker__sect {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    padding: 6px 8px 2px;
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--z-subtle);
+  }
+
+  .xe-picker__sect .ms {
+    font-size: 12px;
+    color: var(--z-link);
+  }
+
+  .xe-picker__row-wrap {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+  }
+
+  .xe-picker__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 34px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--z-ink);
+    font: inherit;
+    text-align: start;
     cursor: pointer;
     transition: background 0.15s ease;
   }
 
-  .exchange-account-add:hover,
-  .exchange-account-add:focus-visible {
-    background: #1d4ed8;
-    color: #fff;
+  .xe-picker__row:hover {
+    background: var(--z-surface-2);
   }
 
-  .exchange-account-dropdown {
-    position: absolute;
-    top: calc(100% + 0.35rem);
-    bottom: auto;
-    inset-inline: 0;
-    z-index: 9999;
-    width: 100%;
-    min-width: 100%;
-    max-height: 18rem;
-    margin: 0;
-    padding: 0.3rem;
-    overflow-x: hidden;
-    overflow-y: auto;
-    list-style: none;
-    border: 1px solid #dce4ef;
-    border-radius: 0.75rem;
-    background: #fff;
-    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
-    scrollbar-width: none;
+  .xe-picker__row.is-selected {
+    background: var(--z-brand-soft);
   }
 
-  .exchange-account-dropdown::-webkit-scrollbar {
-    display: none;
-  }
-
-  .exchange-account-dropdown > li {
-    width: 100%;
-    margin: 0;
-    padding: 0;
-  }
-
-  .exchange-account-option {
-    display: flex;
+  .xe-picker__avatar {
+    display: inline-flex;
     align-items: center;
-    gap: 0.55rem;
-    width: 100%;
-    min-height: 3rem;
-    padding: 0.4rem 0.5rem;
-    border: 0;
-    border-radius: 0.5rem;
-    background: transparent;
-    color: #26364b;
-    text-align: start;
-    cursor: pointer;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    background: var(--z-surface-3);
+    color: var(--z-muted);
   }
 
-  .exchange-account-option:hover,
-  .exchange-account-option:focus-visible,
-  .exchange-account-option.is-selected {
-    background: #f0f6ff;
+  .xe-picker__avatar .ms {
+    font-size: 15px;
   }
 
-  .exchange-account-option__avatar {
-    display: inline-grid;
-    flex: 0 0 1.9rem;
-    width: 1.9rem;
-    height: 1.9rem;
-    place-items: center;
-    border-radius: 0.5rem;
-    background: #edf4ff;
-    color: var(--bs-primary, #2f6fed);
-  }
-
-  .exchange-account-option__copy {
-    display: grid;
+  .xe-picker__copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
     flex: 1 1 auto;
     min-width: 0;
-    gap: 0.05rem;
   }
 
-  .exchange-account-option__copy strong {
+  .xe-picker__copy strong {
     overflow: hidden;
-    color: #26364b;
-    font-size: 0.75rem;
-    font-weight: 800;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .exchange-account-option__copy small {
-    overflow: hidden;
-    color: #8794a7;
-    font-size: 0.61rem;
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .exchange-account-option__arrow {
-    flex-shrink: 0;
-    color: #a0acbc;
-    font-size: 0.58rem;
-  }
-
-  .exchange-account-option.is-selected .exchange-account-option__arrow {
-    color: var(--bs-primary, #2f6fed);
-  }
-
-  .exchange-account-balance {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    min-height: 1.2rem;
-    margin-top: 0.25rem;
-    color: #718096;
-    font-size: 0.66rem;
-    font-weight: 650;
+    font-size: 12px;
+    font-weight: 700;
     line-height: 1.25;
-    text-align: start;
+    color: var(--z-ink);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .exchange-account-balance > i {
-    flex-shrink: 0;
-    color: var(--bs-primary, #2f6fed);
-    font-size: 0.68rem;
+  .xe-picker__copy small {
+    overflow: hidden;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.25;
+    color: var(--z-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .exchange-account-field,
-  .exchange-account-anchor,
-  .exchange-form-page,
-  .exchange-form-card,
-  .exchange-form-fields {
-    overflow: visible !important;
+  .xe-picker__bal {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
   }
 
-  :global(html[dir='rtl']) .exchange-account-option__arrow {
-    transform: scaleX(-1);
+  .xe-picker__bal b {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    font-family: var(--z-font-num);
+    font-size: 11.5px;
+    font-weight: 800;
+    white-space: nowrap;
+    color: var(--z-ink);
+  }
+
+  .xe-picker__cur {
+    font-family: var(--z-font);
+    font-weight: 700;
+  }
+
+  .xe-picker__bal.is-debit b {
+    color: var(--z-danger);
+  }
+
+  .xe-picker__bal.is-credit b {
+    color: var(--z-ok);
+  }
+
+  .xe-picker__bal.is-settled b {
+    color: var(--z-muted);
+  }
+
+  .xe-picker__pin {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--z-subtle);
+    opacity: 0.55;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease,
+      opacity 0.15s ease;
+  }
+
+  .xe-picker__pin .ms {
+    font-size: 16px;
+  }
+
+  .xe-picker__pin:hover {
+    background: var(--z-surface-3);
+    opacity: 1;
+  }
+
+  .xe-picker__pin.is-on {
+    color: var(--z-link);
+    opacity: 1;
+  }
+
+  .xe-picker__pin.is-on:hover {
+    background: var(--z-brand-soft);
+  }
+
+  .xe-picker__empty {
+    padding: 10px;
+    text-align: center;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--z-subtle);
   }
 
   @media (max-width: 480px) {
-    .exchange-account-add {
-      width: 2.65rem;
-      min-width: 2.65rem;
-      padding: 0;
+    .xe-grid--amount {
+      grid-template-columns: minmax(0, 1fr) 118px;
     }
 
-    .exchange-account-add span {
-      display: none;
+    .xe-grid--meta {
+      grid-template-columns: minmax(0, 1fr) 106px;
     }
 
-    .exchange-account-control__icon {
-      flex-basis: 2rem;
-      width: 2rem;
+    .xe-cell--date {
+      width: 106px;
     }
-  }
 
-  .track-picker-layer{position:fixed;z-index:100000;inset:0;display:grid;place-items:center;padding:1rem;background:rgba(15,23,42,.16);backdrop-filter:blur(1px)}
-  .track-picker-dialog{width:min(100%,380px);max-width:380px;min-height:0!important;margin:0!important;transform:none!important}.track-picker-modal{display:flex;max-height:calc(100vh - 2rem);overflow:hidden;flex-direction:column;border:1px solid #dce4ef;border-radius:15px;background:var(--mdb-body-bg,#fff);box-shadow:0 20px 55px rgba(15,23,42,.24)}
-  .track-picker-header{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #e5eaf2;background:#fbfcfe}.track-picker-heading{display:flex;align-items:center;gap:10px}.track-picker-heading>span{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:#eaf1ff;color:#0f6efd;font-size:16px}.track-picker-heading div{display:flex;flex-direction:column}.track-picker-heading small{color:#8491a5;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.track-picker-heading h5{margin:0;color:#18243a;font-size:15px;font-weight:800}.track-picker-close{display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:8px;background:transparent;color:#7b8798}.track-picker-close:hover{background:#eef2f7;color:#df3f4c}
-  .track-picker-body{min-height:0;padding:14px 16px 8px;overflow:hidden}.track-picker-body>.mb-3{display:flex;min-height:0;height:100%;margin-bottom:0!important;flex-direction:column}.track-search-group{flex:0 0 auto;overflow:hidden;border:1px solid #dbe4ef!important;border-radius:10px!important;background:#fff!important;box-shadow:0 2px 8px rgba(31,55,90,.04)}.track-search-icon{display:grid;place-items:center;padding-inline-start:11px;color:#8b9ab0}.track-search-group input{height:40px!important;border:0!important;background:transparent!important;box-shadow:none!important;font-size:12px}.track-search-group .exchange-input-addon-btn{width:38px;border:0!important;border-inline-start:1px solid #edf1f6!important;background:transparent!important;color:#0f6efd!important}
-  .track-account-list{min-height:0;max-height:min(260px,calc(100vh - 230px));margin-top:10px;padding-inline-end:3px;overflow:auto;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}.track-account-group{margin-bottom:4px}.track-account-row{display:flex;align-items:center;gap:8px;min-height:42px;padding:5px 7px!important;border:1px solid #e3e8f0!important;border-radius:9px!important;background:#fff!important;color:#273449!important;text-align:start;transition:border-color .15s ease,background .15s ease,transform .15s ease}.track-account-row:hover{z-index:1;border-color:#b9cdf4!important;background:#f7faff!important;transform:translateY(-1px)}.track-account-avatar{display:grid;place-items:center;flex:0 0 27px;width:27px;height:27px;border-radius:8px;background:#edf3ff;color:#2f63cc;font-size:11px;font-weight:850}.track-account-name{min-width:0;flex:1;overflow:hidden;font-size:11px;font-weight:750;text-overflow:ellipsis;white-space:nowrap}.track-account-type{flex:0 0 auto;padding:3px 6px;border-radius:999px;background:#eef7fa;color:#24718a;font-size:8px;font-weight:750}.track-row-arrow{flex:0 0 auto;color:#a6b0bf;font-size:9px}.track-empty{display:flex;min-height:110px;align-items:center;justify-content:center;flex-direction:column;gap:7px;color:#8a97aa;font-size:11px}.track-empty i{font-size:22px}
-  .track-picker-footer{padding:9px 16px 13px;border-top:0;background:#fff}.track-cancel-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid #dce3ec;border-radius:8px;background:#fff;color:#526177;font-size:11px;font-weight:750}.track-cancel-btn:hover{background:#f5f7fa}
-  .track-picker-header{padding:9px 12px}.track-picker-heading>span{width:32px;height:32px}.track-picker-body{padding:9px 12px 5px}.track-search-group input{height:34px!important}.track-account-list{max-height:min(190px,calc(100vh - 210px));margin-top:7px}.track-account-row{min-height:37px;padding:4px 6px!important}.track-picker-footer{padding:6px 12px 9px}.track-cancel-btn{padding:5px 9px}
-
-  @media (max-width: 767px) {
-    .exchange-mode-field,
-    .exchange-submit-field {
-      padding-top: 0;
+    .xe-amount__input {
+      font-size: 16px;
+      padding: 0 9px;
     }
-    .track-picker-dialog{margin:.65rem}.track-picker-body{padding:12px}.track-account-list{max-height:55vh}
+
+    .xe-picker__body {
+      gap: 2px;
+      padding: 6px;
+    }
   }
 </style>
