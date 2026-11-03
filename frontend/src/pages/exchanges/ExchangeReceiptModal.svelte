@@ -12,6 +12,7 @@ import WhatsappModal from '../WhatsappModal.svelte';
 import { settingsApi } from '../../api/settingsApi.js';
 import { amountInWords } from '../../utils/amountInWords.js';
 import { currencyLabels } from '../../utils/currencyLabel.js';
+import { firstSideAmount, secondSideAmount } from '../../utils/exchangeSides.js';
 
   export let exchange = {};
 
@@ -21,12 +22,12 @@ import { currencyLabels } from '../../utils/currencyLabel.js';
    * spelled out in the language the slip is printed in.
    */
   $: debitInWords = amountInWords(
-    exchange?.first_entry_debit,
+    firstSideAmount(exchange),
     $lang,
     currencyLabels(exchange?.first_currency, t),
   );
   $: creditInWords = amountInWords(
-    exchange?.second_entry_credit,
+    secondSideAmount(exchange),
     $lang,
     currencyLabels(exchange?.second_currency, t),
   );
@@ -234,10 +235,10 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
               <span class="fw-bold"
                 >{getAccountName(accounts.find((a) => a.id === exchange?.first_entry_account)) || '-'}</span>
             </div>
-            {#if exchange?.first_entry_debit > 0}<div>
-                {t('Debit')}:
+            {#if firstSideAmount(exchange) > 0}<div>
+                {t(exchange?.first_entry_credit > 0 ? 'Credit' : 'Debit')}:
                 <span class="fw-bold"
-                  >{Number(exchange?.first_entry_debit || 0).toLocaleString(undefined, {
+                  >{firstSideAmount(exchange).toLocaleString(undefined, {
                     maximumFractionDigits: 3,minimumFractionDigits: 2,
                   })}
                   {t(exchange?.first_currency)}</span>
@@ -274,11 +275,11 @@ th {border-bottom: 2px solid #000 !important;border-top: 2px solid #000 !importa
             </div>
             {/if}
 
-            {#if exchange?.second_entry_credit > 0}
+            {#if secondSideAmount(exchange) > 0}
               <div>
-                {t('Credit')}:
+                {t(exchange?.second_entry_debit > 0 ? 'Debit' : 'Credit')}:
                 <span class="fw-bold"
-                  >{Number(exchange?.second_entry_credit || 0).toLocaleString(undefined, {
+                  >{secondSideAmount(exchange).toLocaleString(undefined, {
                     maximumFractionDigits: 3,minimumFractionDigits: 2,
                   })}
                   {t(exchange?.second_currency)}</span>

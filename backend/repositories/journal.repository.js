@@ -2,8 +2,15 @@ const {
   storageCalendarDay,
 } = require('../utils/accountingDate');
 
+/*
+ * `id` is the local (offline) id the clients send, so it is a random number and
+ * says nothing about recency. `row_id` is the auto-increment key: it is the only
+ * column that grows with every insert, so it is what a statement orders by when
+ * two vouchers share a date.
+ */
 const JOURNAL_COLUMNS = `
   local_id AS id,
+  journals.id AS row_id,
   local_id,
   date,
   \`reference\`,
@@ -160,7 +167,12 @@ async function findAll(
     tableSql: 'journals',
     whereSql: conditions.join(' AND '),
     values,
-    orderBySql: 'ORDER BY date DESC, local_id DESC',
+    /*
+     * Newest first: the voucher date leads, then the insertion order. `local_id`
+     * cannot break that tie — it is generated at random, so a voucher created a
+     * minute ago can sort below one from this morning.
+     */
+    orderBySql: 'ORDER BY journals.date DESC, journals.id DESC',
     columnsSql: JOURNAL_COLUMNS,
     pagination,
     skipCount,
@@ -237,7 +249,7 @@ async function findOpeningBalanceTotals(
       WHERE ${conditions.join(' AND ')}
         AND (
           date < ?
-          OR (date <=> ? AND local_id < ?)
+          OR (date <=> ? AND journals.id < ?)
         )
       GROUP BY currency
     `,
@@ -249,7 +261,7 @@ async function findOpeningBalanceTotals(
       ...values,
       cursor.date,
       cursor.date,
-      cursor.local_id,
+      cursor.row_id,
     ],
   );
 
@@ -298,7 +310,7 @@ async function findAccountNewerMovements(executor, {
       AND (n.first_entry_account = ? OR n.second_entry_account = ?)
       AND (
         n.date > j.date
-        OR (n.date <=> j.date) AND n.local_id > j.local_id
+        OR (n.date <=> j.date) AND n.id > j.id
         OR j.date IS NULL AND n.date IS NOT NULL
       )
       ${endCondition}

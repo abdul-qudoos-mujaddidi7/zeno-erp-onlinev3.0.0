@@ -108,7 +108,12 @@ async function findAll(
     tableSql: 'exchanges',
     whereSql: conditions.join(' AND '),
     values,
-    orderBySql: 'ORDER BY date DESC, local_id DESC',
+    /*
+     * Newest first: the voucher date leads, then the insertion order. `local_id`
+     * is generated at random, so on its own it puts today's vouchers in an order
+     * nobody can predict.
+     */
+    orderBySql: 'ORDER BY exchanges.date DESC, exchanges.id DESC',
     columnsSql: EXCHANGE_COLUMNS,
     pagination,
     skipCount,

@@ -57,7 +57,9 @@ test('running balance includes newer movements in every currency for each page r
   assert.deepEqual(captured.values, [1, 1, 7, 1, 1, 1, '2026-12-31', 7, 1, 1, 1, 42, 41]);
   assert.match(captured.sql, /GROUP BY j.local_id, n.currency/);
   assert.match(captured.sql, /n.date > j.date/);
-  assert.match(captured.sql, /n.date <=> j.date\) AND n.local_id > j.local_id/);
+  // Ties inside one voucher date follow the insertion key, not the random
+  // offline id, so "newer" agrees with the order the statement prints.
+  assert.match(captured.sql, /n.date <=> j.date\) AND n.id > j.id/);
   assert.match(captured.sql, /j.date IS NULL AND n.date IS NOT NULL/);
   assert.doesNotMatch(captured.sql, /n.currency = j.currency/);
   assert.match(captured.sql, /j.local_id IN/);

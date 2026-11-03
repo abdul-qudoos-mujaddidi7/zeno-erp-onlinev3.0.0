@@ -17,6 +17,7 @@
   import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../lib/pagination.js';
   import { generatePDF } from '../generatePDF.js';
   import { generateExcel } from '../generateExcel.js';
+  import { firstSideAmount, secondSideAmount } from '../../utils/exchangeSides.js';
 
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
@@ -100,9 +101,9 @@
       const debitCurrency = row.first_currency || '';
       const creditCurrency = row.second_currency || '';
       if (debitCurrency)
-        result.sent[debitCurrency] = (result.sent[debitCurrency] || 0) + Number(row.first_entry_debit || 0);
+        result.sent[debitCurrency] = (result.sent[debitCurrency] || 0) + firstSideAmount(row);
       if (creditCurrency)
-        result.received[creditCurrency] = (result.received[creditCurrency] || 0) + Number(row.second_entry_credit || 0);
+        result.received[creditCurrency] = (result.received[creditCurrency] || 0) + secondSideAmount(row);
       return result;
     },
     { sent: {}, received: {} },
@@ -288,7 +289,7 @@
             <td
               ><StatusBadge tone="negative"
                 ><span dir="ltr"
-                  >{Number(exchange.first_entry_debit || 0).toLocaleString(undefined, {
+                  >{firstSideAmount(exchange).toLocaleString(undefined, {
                     maximumFractionDigits: 3,
                   })}</span
                 ><span>{t(exchange.first_currency)}</span></StatusBadge
@@ -300,7 +301,7 @@
             <td
               ><StatusBadge tone="positive"
                 ><span dir="ltr"
-                  >{Number(exchange.second_entry_credit || 0).toLocaleString(undefined, {
+                  >{secondSideAmount(exchange).toLocaleString(undefined, {
                     maximumFractionDigits: 3,
                   })}</span
                 ><span>{t(exchange.second_currency)}</span></StatusBadge

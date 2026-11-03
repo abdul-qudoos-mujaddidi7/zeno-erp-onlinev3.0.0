@@ -242,6 +242,22 @@ async function createExchangeJournals(
 
   const createdJournals = [];
 
+  /*
+   * The voucher states its own direction: a sale credits the first account (its
+   * ledger) and debits the partner, a purchase does the reverse. The exchange
+   * account always takes the opposite side, so the movement still balances.
+   */
+  const firstAmount =
+    Number(data.first_entry_debit || 0) ||
+    Number(data.first_entry_credit || 0);
+  const firstIsDebit =
+    Number(data.first_entry_debit || 0) > 0;
+  const secondAmount =
+    Number(data.second_entry_credit || 0) ||
+    Number(data.second_entry_debit || 0);
+  const secondIsCredit =
+    Number(data.second_entry_credit || 0) > 0;
+
   if (exchangeAccount) {
     const firstJournal =
       await journalRepository.create(
@@ -259,11 +275,15 @@ async function createExchangeJournals(
             reference_type: 'exchange',
             currency: data.first_currency,
             first_entry_account: data.first_entry_account,
-            first_entry_debit: data.first_entry_debit || 0,
-            first_entry_credit: 0,
+            first_entry_debit:
+              firstIsDebit ? firstAmount : 0,
+            first_entry_credit:
+              firstIsDebit ? 0 : firstAmount,
             second_entry_account: exchangeAccount.id,
-            second_entry_debit: 0,
-            second_entry_credit: data.first_entry_debit || 0,
+            second_entry_debit:
+              firstIsDebit ? 0 : firstAmount,
+            second_entry_credit:
+              firstIsDebit ? firstAmount : 0,
             status: data.status ?? 1,
           },
         },
@@ -314,11 +334,15 @@ async function createExchangeJournals(
             reference_type: 'exchange',
             currency: data.second_currency,
             first_entry_account: data.second_entry_account,
-            first_entry_debit: 0,
-            first_entry_credit: data.second_entry_credit || 0,
+            first_entry_debit:
+              secondIsCredit ? 0 : secondAmount,
+            first_entry_credit:
+              secondIsCredit ? secondAmount : 0,
             second_entry_account: exchangeAccount.id,
-            second_entry_debit: data.second_entry_credit || 0,
-            second_entry_credit: 0,
+            second_entry_debit:
+              secondIsCredit ? secondAmount : 0,
+            second_entry_credit:
+              secondIsCredit ? 0 : secondAmount,
             status: data.status ?? 1,
           },
         },

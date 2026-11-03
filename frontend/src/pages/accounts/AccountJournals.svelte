@@ -85,7 +85,7 @@
       }
       return j;
     });
-    journals = journals.reverse(); // show latest first
+    /* The API answers newest first, so the rows are already in the order to show. */
     loading = false;
   }
 

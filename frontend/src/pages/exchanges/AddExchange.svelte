@@ -273,12 +273,27 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
         description = exchange.description;
         first_currency = exchange.first_currency;
         first_entry_account = exchange.first_entry_account;
-        first_entry_debit = exchange.first_entry_debit;
-        first_entry_credit = exchange.first_entry_credit;
+        /*
+         * A voucher posts its first amount on one side only. The form reads the
+         * side that carries the figure and opens on the tab that names it.
+         */
+        const storedCreditFirst =
+          Number(exchange.first_entry_credit || 0) > 0 &&
+          !Number(exchange.first_entry_debit || 0);
+
+        first_entry_debit = storedCreditFirst
+          ? exchange.first_entry_credit
+          : exchange.first_entry_debit;
+        first_entry_credit = null;
+
+        pickedTab = storedCreditFirst ? 'sale' : 'purchase';
+
         second_currency = exchange.second_currency;
         second_entry_account = exchange.second_entry_account;
-        second_entry_debit = exchange.second_entry_debit;
-        second_entry_credit = exchange.second_entry_credit;
+        second_entry_debit = null;
+        second_entry_credit = storedCreditFirst
+          ? exchange.second_entry_debit
+          : exchange.second_entry_credit;
         reference_id = exchange.reference_id;
         reference_type = exchange.reference_type;
         exchangeRateAmount = exchange.rate;
@@ -338,7 +353,17 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
       return;
     }
 
-    if (!first_entry_debit || !second_entry_credit) {
+    /*
+     * The two inputs always type into `first_entry_debit` and
+     * `second_entry_credit`; on the Sale tab those figures belong on the credit
+     * and the debit side, so they are sent where their labels point.
+     */
+    const firstAmount =
+      parseFloat(first_entry_debit) || parseFloat(first_entry_credit) || 0;
+    const secondAmount =
+      parseFloat(second_entry_credit) || parseFloat(second_entry_debit) || 0;
+
+    if (!firstAmount || !secondAmount) {
       toast.error(t('Error'), t('Please enter amounts for both entries.'));
       return;
     }
@@ -350,11 +375,11 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
       reference_type,
       first_currency: first_currency,
       first_entry_account,
-      first_entry_debit: parseFloat(first_entry_debit) || 0,
-      first_entry_credit: parseFloat(first_entry_credit) || 0,
+      first_entry_debit: sideIsCredit ? 0 : firstAmount,
+      first_entry_credit: sideIsCredit ? firstAmount : 0,
       second_entry_account,
-      second_entry_debit: parseFloat(second_entry_debit) || 0,
-      second_entry_credit: parseFloat(second_entry_credit) || 0,
+      second_entry_debit: sideIsCredit ? secondAmount : 0,
+      second_entry_credit: sideIsCredit ? 0 : secondAmount,
       second_currency: second_currency,
       multiple: exchangeRateMultiple,
       rate: exchangeRateAmount,
@@ -897,6 +922,15 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
         ? t('Purchase Account')
         : t('Account');
 
+  /* The Sale tab credits the first account (its ledger) and debits the partner:
+     each amount posts on the side its label names, so طلبکار is a real credit. */
+  $: sideIsCredit = general
+    ? Number(first_entry_credit) > 0
+    : tabMode === 'sale';
+
+  $: firstAmountLabel = sideIsCredit ? t('Credit') : t('Debit');
+  $: secondAmountLabel = sideIsCredit ? t('Debit') : t('Credit');
+
   $: secondAccountName =
     exchangeMode === 'notrack'
       ? t('No Track')
@@ -968,9 +1002,9 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
           <button
             type="button"
             role="tab"
-            aria-selected={exchangeMode === 'notrack'}
+            aria-selected={tabMode === ''}
             class="xe-tab"
-            class:is-active={exchangeMode === 'notrack'}
+            class:is-active={tabMode === ''}
             on:click={() => pickMode('notrack')}>
             <span class="ms" aria-hidden="true">block</span>
             <span class="xe-tab__copy">{t('No Track')}</span>
@@ -1205,7 +1239,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     <div class="xe-grid xe-grid--amount">
       <div class="xe-cell">
         <label class="xe-label" for="first_entry_debit">
-          {t('Debit')}
+          {firstAmountLabel}
           <span class="xe-req" aria-hidden="true">*</span>
         </label>
 
@@ -1299,7 +1333,7 @@ import { accountTypeApi } from '../../api/accountTypeApi.js';
     <div class="xe-grid xe-grid--amount">
       <div class="xe-cell">
         <label class="xe-label" for="second_entry_credit">
-          {t('Credit')}
+          {secondAmountLabel}
           <span class="xe-req" aria-hidden="true">*</span>
         </label>
 

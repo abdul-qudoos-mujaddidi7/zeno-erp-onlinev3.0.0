@@ -2,6 +2,10 @@
 import { productUnitApi } from '../api/productUnitApi.js';
 import { settingsApi } from '../api/settingsApi.js';
 import { accountGroupApi } from '../api/accountGroupApi.js';
+import {
+  firstSideAmount,
+  secondSideAmount,
+} from '../utils/exchangeSides.js';
 import vazirTTF from '../assets/fonts/vazirmatn/Vazirmatn-Regular.ttf?url';
 import vazirBoldTTF from '../assets/fonts/vazirmatn/Vazirmatn-Bold.ttf?url';
 
@@ -3106,13 +3110,13 @@ function buildReportMetrics({
       if (debitCurrency) {
         sent[debitCurrency] =
           Number(sent[debitCurrency] || 0) +
-          Number(row.first_entry_debit || 0);
+          firstSideAmount(row);
       }
 
       if (creditCurrency) {
         received[creditCurrency] =
           Number(received[creditCurrency] || 0) +
-          Number(row.second_entry_credit || 0);
+          secondSideAmount(row);
       }
     });
 
@@ -3658,12 +3662,13 @@ function buildExchangesTable(
 
   const body = items.map(
     (exchange, index) => {
-      const debit = Number(
-        exchange.first_entry_debit || 0,
-      );
-      const credit = Number(
-        exchange.second_entry_credit || 0,
-      );
+      /*
+       * A sale posts its first figure as a credit and its second as a debit,
+       * a purchase the other way round, so each side is read from both of its
+       * columns instead of assuming which one carries the number.
+       */
+      const debit = firstSideAmount(exchange);
+      const credit = secondSideAmount(exchange);
       const rate = Number(exchange.rate || 0);
 
       const row = [
