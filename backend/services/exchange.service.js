@@ -590,6 +590,34 @@ async function updateExchange({
         },
       );
 
+    /*
+     * The ledger is rebuilt from the edited voucher. Its journals are cancelled
+     * and posted again from the row as it now stands, so the journal list and
+     * the account statement follow the amounts and the side they sit on instead
+     * of keeping the posting the voucher was created with. The row is the source
+     * of the repost because an update may carry only some of the fields.
+     */
+    await journalRepository.softDeleteByReference(
+      connection,
+      {
+        orgId,
+        referenceId: exchangeId,
+        referenceType: 'exchange',
+        userId,
+      },
+    );
+
+    await createExchangeJournals(
+      connection,
+      {
+        orgId,
+        userId,
+        requestContext,
+        data: updatedExchange,
+        exchangeId,
+      },
+    );
+
     await activityRepository.create(
       connection,
       {
