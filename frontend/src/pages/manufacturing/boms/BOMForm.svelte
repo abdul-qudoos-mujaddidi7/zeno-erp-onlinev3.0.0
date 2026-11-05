@@ -105,10 +105,53 @@
     status: 1,
   };
 
+  /*
+   * The produced quantity is counted in the product's own unit; when that unit
+   * has a sub unit (a box of 20 tablets), the sub unit is offered next to it so
+   * the BOM can say how many tablets one run makes.
+   */
+  $: unitMap = Object.fromEntries(units.map((unit) => [unit.id, unit]));
+
+  function getUnitHierarchy(unitId) {
+    const chain = [];
+
+    function traverse(id, multiplier = 1) {
+      const unit = unitMap[id];
+      if (!unit) return;
+
+      chain.push({
+        ...unit,
+        multiplier,
+      });
+
+      if (unit.subunit_id) {
+        traverse(unit.subunit_id, multiplier / (unit.subunit_multiple || 1));
+      }
+    }
+
+    traverse(unitId);
+    return chain;
+  }
+
+  $: formProduct = form.product_id
+    ? products.find((p) => p.id == form.product_id) || null
+    : null;
+
+  /* `unitMap` is read here so the chain rebuilds as soon as the unit list
+     arrives, not only when the product changes. */
+  $: formProductUnits = unitMap
+    ? getUnitHierarchy(formProduct?.product_unit_id || form.product_unit_id)
+    : [];
+
+  /*
+   * The unit follows the chosen product once, when the product changes. The
+   * statement deliberately does not read `form.product_unit_id`, so picking a
+   * sub unit afterwards is not snapped back to the base unit.
+   */
   $: if (form.product_id && products.length && !bomId) {
     const selectedProduct = products.find((p) => p.id == form.product_id);
 
-    if (selectedProduct && form.product_unit_id !== selectedProduct.product_unit_id) {
+    if (selectedProduct) {
       form.product_unit_id = selectedProduct.product_unit_id;
     }
   }
@@ -425,10 +468,16 @@
 
         <div class="sale-quantity-control">
           <input type="text" class="form-control" id="inp_quantity" bind:value={form.quantity} />
-          {#if units.find((u) => u.id == form.product_unit_id)}
-            <span class="sale-quantity-suffix">
-              {units.find((u) => u.id == form.product_unit_id)?.name}
-            </span>
+
+          {#if formProductUnits.length > 1}
+            <FilterSelect
+              compact
+              value={form.product_unit_id}
+              label={t('Unit')}
+              options={formProductUnits.map((unit) => ({ value: unit.id, label: unit.name }))}
+              on:change={(event) => (form.product_unit_id = event.detail)} />
+          {:else if formProductUnits.length === 1}
+            <span class="sale-quantity-suffix">{formProductUnits[0].name}</span>
           {/if}
         </div>
       </div>
@@ -533,6 +582,20 @@
     font-size: 0.7rem;
     font-weight: 750;
     white-space: nowrap;
+  }
+
+  /* The unit picker matches the quantity field's height and keeps a fixed
+     width, so the number input keeps the rest of the row. */
+  .sale-quantity-control :global(.filter-select) {
+    flex: 0 0 auto;
+    width: 6.5rem;
+  }
+
+  .sale-quantity-control :global(.filter-select__trigger) {
+    height: var(--sale-control-height, 2.625rem);
+    min-height: var(--sale-control-height, 2.625rem);
+    padding: 0 0.5rem;
+    font-size: 0.72rem;
   }
 
 </style>

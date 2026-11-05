@@ -42,8 +42,11 @@
           (p) => Number(p.id) === Number(bom.product_id),
         ) || null;
 
-      const unitData = product?.product_unit_id
-        ? (await productUnitApi.getById(product.product_unit_id))?.data || null
+      /* The produced quantity may be stated in a sub unit of the product, so
+         the stored BOM unit wins over the product's base unit. */
+      const headerUnitId = bom?.product_unit_id || product?.product_unit_id;
+      const unitData = headerUnitId
+        ? (await productUnitApi.getById(headerUnitId))?.data || null
         : null;
       unit = unitData?.status === 1 ? unitData : null;
 

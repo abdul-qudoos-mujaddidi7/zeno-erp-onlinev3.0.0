@@ -232,15 +232,23 @@ import { userApi } from '../../api/userApi.js';
       });
   }
 
+  /*
+   * "Search Image" hands the typed name to Google Images in a new tab, where
+   * the picture is picked and saved with the form.
+   */
   function searchImageOnGoogle() {
-    const query = name?.trim();
+    const query = String(name || '').trim();
+
     if (!query) {
       toast.error(t('Error'), t('Please enter product name first'));
       return;
     }
 
-    const url = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(
+      `https://www.google.com/search?q=${encodeURIComponent(query)}&udm=2`,
+      '_blank',
+      'noopener,noreferrer',
+    );
   }
 
   $: enable_expiry_date = $settings_all.find((s) => s.key === 'enable_expiry_date')?.value == 1;
@@ -2329,6 +2337,14 @@ import { userApi } from '../../api/userApi.js';
                   <div class="pf-f">
                     <div class="pf-label">
                       <span>{t('Image')}</span>
+                      <button
+                        type="button"
+                        class="pf-mini pf-mini--image"
+                        title={t('Search Image')}
+                        disabled={!name?.trim()}
+                        on:click={searchImageOnGoogle}>
+                        <i class="ms" aria-hidden="true">image_search</i>{t('Search Image')}
+                      </button>
                     </div>
 
                     {#if modalImageUrl}
@@ -7253,6 +7269,17 @@ import { userApi } from '../../api/userApi.js';
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
+  }
+
+.pf-mini--image {
+    max-width: 96px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+.pf-mini:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   /* ===== Summary rail (sticky, 248px) =====

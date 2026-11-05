@@ -10,6 +10,7 @@
   import { warehouseApi } from '../../../api/warehouseApi.js';
   import { productApi } from '../../../api/productApi.js';
   import { warehouseProductApi } from '../../../api/warehouseProductApi.js';
+  import FilterSelect from '../../../components/common/FilterSelect.svelte';
   $: _lang = $lang;
   $: _translate_org_type = $translate_org_type;
 
@@ -94,10 +95,99 @@
     showProductDropdown = false;
   }
 
+  /*
+   * A unit may carry a sub unit (a box of 20 tablets, for example), so a
+   * material is counted in whichever unit the person picks: each row follows
+   * the whole chain, base unit first and then its sub units.
+   */
+  $: unitMap = Object.fromEntries(units.map((unit) => [unit.id, unit]));
+
+  function getUnitHierarchy(unitId) {
+    const chain = [];
+
+    function traverse(id, multiplier = 1) {
+      const unit = unitMap[id];
+      if (!unit) return;
+
+      chain.push({
+        ...unit,
+        multiplier,
+      });
+
+      if (unit.subunit_id) {
+        traverse(unit.subunit_id, multiplier / (unit.subunit_multiple || 1));
+      }
+    }
+
+    traverse(unitId);
+    return chain;
+  }
+
+  function rowUnits(item) {
+    return item.availableUnits?.length
+      ? item.availableUnits
+      : getUnitHierarchy(item.product_unit_id);
+  }
+
+  /* Rows loaded from a saved BOM arrive without the unit chain, so it is
+   * attached as soon as both the rows and the unit list are in place. Rows
+   * whose product has no resolvable unit are left untouched. */
+  $: if (units.length) {
+    const pending = items.filter(
+      (item) =>
+        !item.availableUnits?.length &&
+        getUnitHierarchy(item.product_unit_id).length > 0,
+    );
+
+    if (pending.length) {
+      items = items.map((item) =>
+        pending.includes(item)
+          ? { ...item, availableUnits: getUnitHierarchy(item.product_unit_id) }
+          : item,
+      );
+    }
+  }
+
+  function rowUnitName(item) {
+    return rowUnits(item).find(
+      (unit) => Number(unit.id) === Number(item.product_unit_id),
+    )?.name ||
+      units.find((unit) => unit.id === item.product_unit_id)?.name ||
+      t('Unit');
+  }
+
+  /* Switching the row's unit rescales the price, which is kept per selected
+   * unit: a sub unit costs the base price divided by its multiple. */
+  function changeUnit(item, unitId) {
+    const chain = rowUnits(item);
+    const current = chain.find((unit) => Number(unit.id) === Number(item.product_unit_id));
+    const next = chain.find((unit) => Number(unit.id) === Number(unitId));
+
+    if (!next) return;
+
+    const currentMultiplier = Number(current?.multiplier) || 1;
+    const nextMultiplier = Number(next.multiplier) || 1;
+    const basePrice = Number(item.unit_price || 0) / currentMultiplier;
+
+    item.product_unit_id = Number(unitId);
+    item.unit_price = Number((basePrice * nextMultiplier).toFixed(6));
+    item.subtotal = Number(item.quantity || 0) * item.unit_price;
+
+    items = [...items];
+
+    dispatch('update', { items });
+  }
+
   function addItem() {
     if (!selectedProduct) return;
 
-    const existingIndex = items.findIndex((i) => i.product_id === selectedProduct.id);
+    /* Only the same product in the same unit is merged; the same material
+       counted in a sub unit stays a row of its own. */
+    const existingIndex = items.findIndex(
+      (i) =>
+        i.product_id === selectedProduct.id &&
+        Number(i.product_unit_id) === Number(selectedProduct.product_unit_id),
+    );
 
     if (existingIndex !== -1) {
       items[existingIndex].quantity += Number(quantity);
@@ -310,7 +400,7 @@
                 <div class="purchase-item-product">
                   <span class="purchase-item-product-copy">
                     <strong class="purchase-item-product-name">{item.product_name}</strong>
-                    <small>{units.find((u) => u.id === item.product_unit_id)?.name || t('Unit')}</small>
+                    <small>{rowUnitName(item)}</small>
                   </span>
                 </div>
               </td>
@@ -341,8 +431,16 @@
                     bind:value={item.quantity}
                     on:input={() => recalc(index)} />
 
-                  <span class="input-group-text"
-                    >{units.find((u) => u.id === item.product_unit_id)?.name || t('Unit')}</span>
+                  {#if rowUnits(item).length > 1}
+                    <FilterSelect
+                      compact
+                      value={item.product_unit_id}
+                      label={t('Unit')}
+                      options={rowUnits(item).map((rowUnit) => ({ value: rowUnit.id, label: rowUnit.name }))}
+                      on:change={(event) => changeUnit(item, event.detail)} />
+                  {:else}
+                    <span class="input-group-text">{rowUnitName(item)}</span>
+                  {/if}
                 </div>
               </td>
 
@@ -1194,6 +1292,45 @@
     white-space: nowrap;
   }
 
+  /*
+   * Unit picker inside the quantity pill: it borrows the cell's frame instead
+   * of drawing a second control, so the unit reads as the pill's suffix.
+   */
+  .purchase-items-table .purchase-item-cell-group :global(.filter-select) {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 6.5rem;
+    height: 100%;
+    gap: 0;
+  }
+
+  .purchase-items-table .purchase-item-cell-group :global(.filter-select__control) {
+    height: 100%;
+  }
+
+  .purchase-items-table .purchase-item-cell-group :global(.filter-select__trigger) {
+    height: 100%;
+    min-height: 0;
+    padding: 0 0.4rem;
+    border: 0;
+    border-inline-start: 1px solid #e3e8ef;
+    border-radius: 0;
+    background: #f7f9fc;
+    color: #718096;
+    font-size: 0.62rem;
+    font-weight: 750;
+    box-shadow: none;
+  }
+
+  .purchase-items-table .purchase-item-cell-group :global(.filter-select__trigger:hover) {
+    border-inline-start-color: #e3e8ef;
+    background: #f1f5fb;
+  }
+
+  .purchase-items-table .purchase-item-cell-group :global(.filter-select__chevron) {
+    font-size: 9px;
+  }
+
   /* Subtotal */
   .purchase-item-money {
     display: inline-flex;
@@ -1537,6 +1674,12 @@
     border-color: var(--sale-border) !important;
     background: #202b3d !important;
     color: #a9b7ca !important;
+  }
+
+  :global(html.dark) .purchase-items-table .purchase-item-cell-group :global(.filter-select__trigger) {
+    border-inline-start-color: var(--sale-border);
+    background: #202b3d;
+    color: #a9b7ca;
   }
 
   :global(html.dark) .purchase-items-card :global(.table-responsive) {
